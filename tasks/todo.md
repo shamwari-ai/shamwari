@@ -1,4 +1,21 @@
-# Shamwari AI — Data Model Architecture Plan
+# Shamwari AI — Task Tracking
+
+## Frontend: Turborepo Monorepo Setup
+
+- [x] Create `.gitignore` (Node.js + Python combined)
+- [x] Create root `package.json` with npm workspaces (`apps/*`, `packages/*`)
+- [x] Create `turbo.json` pipeline config (build, dev, lint, check-types)
+- [x] Scaffold `apps/web` — Next.js 16 + shadcn/ui (Stone theme, Noto Sans, Lucide, large radius)
+- [x] Adapt `apps/web` for monorepo — `@shamwari/web` namespace, `transpilePackages`, tsconfig paths
+- [x] Scaffold `apps/platform` — Same shadcn preset, port 3001, `@shamwari/platform` namespace
+- [x] Create `packages/ui` — Shared component library (`@shamwari/ui`) with `cn()` utility, theme CSS, exports map
+- [x] Add `vercel.json` to both apps — workspace-aware install/build commands
+- [x] Verify: `npm install` resolves all workspaces, TypeScript type-checks pass
+- [x] Commit and push to `claude/add-claude-documentation-4BVFW`
+
+---
+
+# Data Model Architecture Plan
 
 ## Architecture Overview
 
