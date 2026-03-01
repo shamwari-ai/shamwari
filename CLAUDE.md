@@ -25,13 +25,20 @@ Shamwari is not trying to be GPT. It's the AI that actually works for Africa: sm
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| Compute | Cloudflare Workers | All serverless backend — API gateway, auth, rate limiting, serving chat and platform interfaces |
+| Frontend | Next.js 16 (App Router) | Both web properties — shamwari.ai and platform.shamwari.ai |
+| UI | shadcn/ui + Tailwind CSS v4 | Component library — Stone theme, Noto Sans, Lucide icons, large radius |
+| Monorepo | Turborepo + npm workspaces | Build orchestration across apps and packages |
+| Compute | Cloudflare Workers | All serverless backend — API gateway, auth, rate limiting |
+| Backend | Python (FastAPI) | Business logic, API endpoints, Stytch SDK, Beanie ODM |
+| Inference | Rust | Model loading (GGUF/ONNX), token generation, quantized inference |
 | Database | MongoDB | User accounts, API keys, usage tracking, conversation history, billing (NOT SQL/D1) |
 | Storage | Cloudflare R2 | Model artifacts, file uploads, static assets |
 | Model | Custom (1B–7B) | On-device + cloud inference, African language focus |
+| Deployment | Vercel | Two projects — `shamwari-web` and `shamwari-platform` |
 
 ### Architecture Principles
 
+- **Turborepo monorepo** with npm workspaces — `apps/*` for deployable apps, `packages/*` for shared code
 - **Cloudflare Workers** for all backend services — no traditional server infrastructure
 - **MongoDB** as the sole data layer — do not use SQL, D1, or other relational databases
 - **R2** for all object/blob storage needs — model weights, uploads, assets
@@ -41,18 +48,61 @@ Shamwari is not trying to be GPT. It's the AI that actually works for Africa: sm
 
 ```
 shamwari-ai/
-├── CLAUDE.md              # This file — guidance for AI assistants
-├── LICENSE                # MIT License
-├── README.md              # Project description
+├── apps/
+│   ├── web/               # shamwari.ai — consumer chat (Next.js, @shamwari/web)
+│   │   ├── app/           # App Router pages and layouts
+│   │   ├── components/    # App-specific React components
+│   │   ├── lib/           # App-specific utilities
+│   │   ├── components.json # shadcn/ui config for this app
+│   │   └── vercel.json    # Vercel deployment config (shamwari-web project)
+│   └── platform/          # platform.shamwari.ai — developer portal (Next.js, @shamwari/platform)
+│       ├── app/           # App Router pages and layouts
+│       ├── components/    # App-specific React components
+│       ├── lib/           # App-specific utilities
+│       ├── components.json # shadcn/ui config for this app
+│       └── vercel.json    # Vercel deployment config (shamwari-platform project)
+├── packages/
+│   └── ui/                # Shared component library (@shamwari/ui)
+│       ├── src/
+│       │   ├── components/ # Shared shadcn/ui components
+│       │   ├── hooks/     # Shared React hooks
+│       │   ├── lib/       # Shared utilities (cn, etc.)
+│       │   └── styles/    # Shared theme CSS (Stone theme tokens)
+│       └── components.json # shadcn/ui config for shared components
+├── src/                   # Python backend (FastAPI + Beanie ODM)
+│   ├── auth/              # Stytch authentication integration
+│   ├── db/                # MongoDB database initialization
+│   └── models/            # Beanie document models (13 collections)
+├── tests/                 # Test files mirroring src/ structure
 ├── tasks/
 │   ├── todo.md            # Current task tracking with checkable items
 │   └── lessons.md         # Accumulated lessons and patterns from corrections
-├── src/                   # Source code (as project grows)
-├── tests/                 # Test files mirroring src/ structure
-└── docs/                  # Extended documentation
+├── package.json           # Root npm workspace config (Turborepo)
+├── turbo.json             # Turborepo pipeline configuration
+├── pyproject.toml         # Python project configuration
+├── CLAUDE.md              # This file — guidance for AI assistants
+├── LICENSE                # MIT License
+└── README.md              # Project description
 ```
 
-This is a greenfield repository. Structure will evolve as development progresses. Follow the conventions in this document when adding code.
+### Workspace Packages
+
+| Package | Path | Description | Deploys to |
+|---------|------|-------------|------------|
+| `@shamwari/web` | `apps/web` | Consumer chat app (shamwari.ai) | Vercel: `shamwari-web` |
+| `@shamwari/platform` | `apps/platform` | Developer portal (platform.shamwari.ai) | Vercel: `shamwari-platform` |
+| `@shamwari/ui` | `packages/ui` | Shared shadcn/ui component library | (internal package) |
+
+### Frontend Commands
+
+```bash
+npm run dev              # Start all apps (Turbo)
+npm run dev:web          # Start shamwari.ai only (port 3000)
+npm run dev:platform     # Start platform.shamwari.ai only (port 3001)
+npm run build            # Build all apps
+npm run lint             # Lint all apps
+npm run check-types      # Type-check all apps
+```
 
 ## Core Principles
 
@@ -138,9 +188,11 @@ This is a greenfield repository. Structure will evolve as development progresses
 
 ### File Organization
 
-- Place source code in `src/`.
-- Place tests alongside source files or in `tests/`, mirroring the source structure.
-- Place configuration files at the project root.
+- Place Python backend code in `src/`.
+- Place frontend app code in `apps/web/` or `apps/platform/` as appropriate.
+- Place shared frontend components, hooks, and utilities in `packages/ui/`.
+- Place tests in `tests/`, mirroring the source structure.
+- Place root configuration files (turbo.json, pyproject.toml, etc.) at the project root.
 - Place extended documentation in `docs/`.
 - Keep the root directory clean.
 
