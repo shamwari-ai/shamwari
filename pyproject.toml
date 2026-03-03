@@ -1,0 +1,51 @@
+[project]
+name = "shamwari-ai"
+version = "0.1.0"
+description = "Shamwari AI — Africa's open source AI platform by Nyuchi Africa"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Bryan Fawcett"},
+    {name = "Nyuchi Web Services"},
+]
+keywords = ["ai", "africa", "nlp", "shona", "ndebele", "language-model"]
+
+dependencies = [
+    "beanie==1.26.0",
+    "motor==3.6.0",
+    "pydantic==2.10.4",
+    "pydantic-settings==2.7.1",
+    "fastapi==0.115.6",
+    "uvicorn[standard]==0.34.0",
+    "stytch==11.5.0",
+    "httpx==0.28.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.4",
+    "pytest-asyncio==0.24.0",
+    "ruff==0.8.6",
+    "mypy==1.14.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

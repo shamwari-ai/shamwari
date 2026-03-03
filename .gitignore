@@ -1,0 +1,39 @@
+# === Node.js ===
+node_modules/
+.next/
+out/
+dist/
+.turbo/
+.cache/
+*.tsbuildinfo
+
+# npm debug logs
+npm-debug.log*
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Environment ===
+.env
+.env.local
+.env.*.local
