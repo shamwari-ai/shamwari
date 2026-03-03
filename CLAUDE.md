@@ -28,19 +28,24 @@ Shamwari is not trying to be GPT. It's the AI that actually works for Africa: sm
 | Frontend | Next.js 16 (App Router) | Both web properties — shamwari.ai and platform.shamwari.ai |
 | UI | shadcn/ui + Tailwind CSS v4 | Component library — Stone theme, Noto Sans, Lucide icons, large radius |
 | Monorepo | Turborepo + npm workspaces | Build orchestration across apps and packages |
-| Compute | Cloudflare Workers | All serverless backend — API gateway, auth, rate limiting |
-| Backend | Python (FastAPI) | Business logic, API endpoints, Stytch SDK, Beanie ODM |
+| Edge | Cloudflare Workers | API gateway, rate limiting, API key validation, cron jobs, caching |
+| App Backend | Vercel Serverless (Next.js Route Handlers / Server Actions) | Auth flows, CRUD, conversations, billing — direct MongoDB access |
+| AI Backend | Python (FastAPI) on Fly.io | AI inference, model management, training pipelines, heavy compute — direct MongoDB via Beanie |
 | Inference | Rust | Model loading (GGUF/ONNX), token generation, quantized inference |
-| Database | MongoDB | User accounts, API keys, usage tracking, conversation history, billing (NOT SQL/D1) |
+| Database | MongoDB Atlas | User accounts, API keys, usage tracking, conversation history, billing (NOT SQL/D1) |
 | Storage | Cloudflare R2 | Model artifacts, file uploads, static assets |
 | Model | Custom (1B–7B) | On-device + cloud inference, African language focus |
-| Deployment | Vercel | Two projects — `shamwari-web` and `shamwari-platform` |
+| Frontend Hosting | Vercel | Two projects — `shamwari-web` and `shamwari-platform` |
+| AI Hosting | Fly.io | Python FastAPI backend (linked to GitHub repo) |
 
 ### Architecture Principles
 
 - **Turborepo monorepo** with npm workspaces — `apps/*` for deployable apps, `packages/*` for shared code
-- **Cloudflare Workers** for all backend services — no traditional server infrastructure
-- **MongoDB** as the sole data layer — do not use SQL, D1, or other relational databases
+- **Three-tier backend**: Cloudflare Workers (edge), Vercel Serverless (app logic + DB), Fly.io (AI + heavy compute)
+- **Vercel Serverless** for all database access from frontend apps — Next.js Route Handlers and Server Actions connect directly to MongoDB Atlas via the Node.js driver
+- **Cloudflare Workers** for edge concerns only — API gateway, rate limiting, API key validation, caching, cron triggers. Workers do NOT connect directly to MongoDB (no TCP support)
+- **Fly.io** for Python FastAPI backend — AI inference, model management, training pipelines. Connects to MongoDB via Motor/Beanie
+- **MongoDB Atlas** as the sole data layer — do not use SQL, D1, or other relational databases. MongoDB App Services (Data API, Triggers, Functions) is EOL — all processing handled by Vercel Serverless, CF Workers Cron Triggers, or Fly.io
 - **R2** for all object/blob storage needs — model weights, uploads, assets
 - **Fully open source** — every component from model weights to platform code designed for open distribution and community contribution
 
@@ -69,7 +74,7 @@ shamwari-ai/
 │       │   ├── lib/       # Shared utilities (cn, etc.)
 │       │   └── styles/    # Shared theme CSS (Stone theme tokens)
 │       └── components.json # shadcn/ui config for shared components
-├── src/                   # Python backend (FastAPI + Beanie ODM)
+├── src/                   # Python backend (FastAPI + Beanie ODM) — deploys to Fly.io
 │   ├── auth/              # Stytch authentication integration
 │   ├── db/                # MongoDB database initialization
 │   └── models/            # Beanie document models (13 collections)
@@ -77,9 +82,12 @@ shamwari-ai/
 ├── tasks/
 │   ├── todo.md            # Current task tracking with checkable items
 │   └── lessons.md         # Accumulated lessons and patterns from corrections
+├── .env.example           # Root env template (Python backend vars)
 ├── package.json           # Root npm workspace config (Turborepo)
 ├── turbo.json             # Turborepo pipeline configuration
 ├── pyproject.toml         # Python project configuration
+├── fly.toml               # Fly.io deployment config (Python FastAPI)
+├── Dockerfile             # Docker image for Fly.io deployment
 ├── CLAUDE.md              # This file — guidance for AI assistants
 ├── LICENSE                # MIT License
 └── README.md              # Project description
@@ -87,11 +95,12 @@ shamwari-ai/
 
 ### Workspace Packages
 
-| Package | Path | Description | Deploys to |
-|---------|------|-------------|------------|
+| Package / Service | Path | Description | Deploys to |
+|-------------------|------|-------------|------------|
 | `@shamwari/web` | `apps/web` | Consumer chat app (shamwari.ai) | Vercel: `shamwari-web` |
 | `@shamwari/platform` | `apps/platform` | Developer portal (platform.shamwari.ai) | Vercel: `shamwari-platform` |
 | `@shamwari/ui` | `packages/ui` | Shared shadcn/ui component library | (internal package) |
+| Python backend | `src/` | FastAPI + Beanie ODM (AI inference, model mgmt) | Fly.io (linked to GitHub repo) |
 
 ### Frontend Commands
 
@@ -243,7 +252,9 @@ Shamwari is a product with a developer ecosystem. When working on platform featu
 4. Never commit secrets, API keys, or credentials.
 5. Run tests after making changes if a test framework is configured.
 6. Use MongoDB for all data persistence — never introduce SQL or D1.
-7. Use Cloudflare Workers for backend — never introduce traditional server frameworks.
+7. Use Vercel Serverless (Route Handlers / Server Actions) for app-level database access from Next.js apps.
+8. Use Cloudflare Workers for edge concerns only (API gateway, rate limiting, caching, cron) — Workers cannot connect to MongoDB directly.
+9. Use Fly.io for Python FastAPI backend — AI inference, model management, training pipelines.
 
 ### After Finishing
 

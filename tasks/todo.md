@@ -19,6 +19,9 @@
 
 ## Architecture Overview
 
+> **Note**: MongoDB App Services (Data API, Triggers, Functions) reached EOL.
+> All processing now handled by Vercel Serverless, CF Workers Cron Triggers, or Fly.io.
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        CLIENTS                                   │
@@ -27,29 +30,39 @@
                │                       │
                ▼                       ▼
 ┌─────────────────────────────────────────────────────────────────┐
+│              VERCEL SERVERLESS (App Backend)                      │
+│  • Next.js Route Handlers / Server Actions                       │
+│  • Stytch auth flows       • CRUD operations                     │
+│  • Conversations / chat    • Billing / subscriptions             │
+│  • Direct MongoDB access (Node.js driver)                        │
+└──────────────┬───────────────────────┬──────────────────────────┘
+               │                       │
+               ▼                       ▼
+┌─────────────────────────────────────────────────────────────────┐
 │              CLOUDFLARE WORKERS (Edge Layer)                      │
-│  • Stytch JWT validation    • Rate limiting                      │
-│  • Request routing          • CORS / security headers            │
-│  • MongoDB Data API calls   • Static asset serving (R2)          │
+│  • API gateway (api.shamwari.ai)    • Rate limiting              │
+│  • API key validation               • CORS / security headers    │
+│  • Request routing / caching        • Cron Triggers (scheduled)  │
+│  • R2 asset serving                                              │
+│  (NO direct MongoDB — routes to Vercel or Fly.io via HTTP)       │
 └──────────────┬───────────────────────┬──────────────────────────┘
                │                       │
        ┌───────┘                       └────────┐
        ▼                                        ▼
 ┌──────────────────────┐          ┌──────────────────────────────┐
-│   PYTHON (FastAPI)   │          │   RUST (Inference Engine)    │
-│  • Business logic    │          │  • Model loading (GGUF/ONNX) │
-│  • API endpoints     │◄────────►│  • Token generation          │
-│  • Stytch SDK        │          │  • Quantized inference       │
-│  • Beanie ODM        │          │  • Batch processing          │
+│  PYTHON (FastAPI)    │          │   RUST (Inference Engine)    │
+│  Hosted on Fly.io    │          │  • Model loading (GGUF/ONNX) │
+│  • AI inference      │          │  • Token generation          │
+│  • Model management  │◄────────►│  • Quantized inference       │
+│  • Training pipeline │          │  • Batch processing          │
+│  • Beanie ODM        │          │                              │
+│  • Stytch SDK        │          │                              │
 └──────────┬───────────┘          └──────────────────────────────┘
            │
            ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    MONGODB ATLAS                                 │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐ │
-│  │  Data API   │  │  Triggers   │  │  Functions              │ │
-│  │  (REST)     │  │  (DB/Cron)  │  │  (Serverless JS)        │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────────┘ │
+│  (Direct driver connections from Vercel + Fly.io only)           │
 │                                                                  │
 │  Collections: users, organizations, api_keys, conversations,    │
 │  messages, models, billing_plans, subscriptions, invoices,      │
@@ -85,14 +98,17 @@ User → Stytch (Mukoko B2C) → JWT issued
 - MongoDB stores: application data linked by stytch_user_id
 - No passwords stored in MongoDB — Stytch owns the credential layer
 
-## MongoDB App Services Usage (No Built-in Auth)
+## MongoDB App Services — EOL (Replaced)
 
-| Service        | Purpose                                                    |
-|----------------|------------------------------------------------------------|
-| Data API       | Workers edge reads (lightweight queries without drivers)    |
-| DB Triggers    | React to inserts/updates (usage aggregation, notifications) |
-| Scheduled Triggers | Cron jobs (billing cycles, cleanup, reports)           |
-| Functions      | Serverless JS logic (aggregation pipelines, webhooks)       |
+> MongoDB App Services (Data API, Triggers, Functions) reached end-of-life.
+> All functionality has been replaced by the following:
+
+| EOL Service | Replacement | Where |
+|-------------|-------------|-------|
+| Data API | Node.js `mongodb` driver / Beanie ODM | Vercel Serverless + Fly.io |
+| DB Triggers | MongoDB Atlas Change Streams | Fly.io (FastAPI) |
+| Scheduled Triggers | Cloudflare Workers Cron Triggers | CF Workers |
+| Functions | Vercel Serverless functions / CF Workers | Vercel + CF Workers |
 
 ## Collections (13 total)
 
