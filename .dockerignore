@@ -1,0 +1,41 @@
+# Node.js / Frontend (not needed in Python image)
+node_modules/
+apps/
+packages/
+.next/
+.turbo/
+dist/
+out/
+package.json
+package-lock.json
+turbo.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Git
+.git/
+.gitignore
+
+# Docs / Tasks
+*.md
+tasks/
+docs/
+LICENSE

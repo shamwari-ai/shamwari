@@ -1,0 +1,25 @@
+{
+  "name": "shamwari-ai",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "check-types": "turbo check-types",
+    "dev:web": "turbo dev --filter=@shamwari/web",
+    "dev:platform": "turbo dev --filter=@shamwari/platform"
+  },
+  "devDependencies": {
+    "turbo": "^2.4.0",
+    "typescript": "^5.9.3"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "npm@10.9.4"
+}
