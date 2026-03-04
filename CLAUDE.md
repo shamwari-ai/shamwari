@@ -78,15 +78,15 @@ shamwari-ai/
 │   ├── auth/              # Stytch authentication integration
 │   ├── db/                # MongoDB database initialization
 │   └── models/            # Beanie document models (13 collections)
-├── tests/                 # Test files mirroring src/ structure
 ├── tasks/
 │   ├── todo.md            # Current task tracking with checkable items
 │   └── lessons.md         # Accumulated lessons and patterns from corrections
+├── .dockerignore          # Docker build exclusions
 ├── .env.example           # Root env template (Python backend vars)
 ├── package.json           # Root npm workspace config (Turborepo)
 ├── turbo.json             # Turborepo pipeline configuration
 ├── pyproject.toml         # Python project configuration
-├── fly.toml               # Fly.io deployment config (Python FastAPI)
+├── fly.toml               # Fly.io deployment config (Johannesburg region)
 ├── Dockerfile             # Docker image for Fly.io deployment
 ├── CLAUDE.md              # This file — guidance for AI assistants
 ├── LICENSE                # MIT License
@@ -208,7 +208,8 @@ npm run check-types      # Type-check all apps
 ### Testing
 
 - Write tests for all new functionality.
-- Tests should be runnable with a single command documented in the package configuration.
+- Place Python tests in `tests/`, mirroring the `src/` structure. Create the directory when adding the first test.
+- Tests should be runnable with a single command: `pytest` (Python) or via Turbo scripts (frontend).
 - Prefer integration tests for critical paths and unit tests for isolated logic.
 
 ### Dependencies
