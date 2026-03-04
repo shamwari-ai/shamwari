@@ -36,6 +36,7 @@ venv/
 
 # Docs / Tasks
 *.md
+!README.md
 tasks/
 docs/
 LICENSE
