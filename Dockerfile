@@ -3,7 +3,7 @@ FROM python:3.11-slim AS base
 WORKDIR /app
 
 # Install only production dependencies
-COPY pyproject.toml ./
+COPY pyproject.toml README.md ./
 RUN pip install --no-cache-dir .
 
 # Copy application source
