@@ -1,0 +1,3948 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Shamwari AI",
+    "description": "Africa's open source AI platform \u2014 API backend.\n\nShamwari AI provides AI inference, model management, and developer APIs purpose-built for African languages and contexts. Built by Nyuchi Africa.",
+    "contact": {
+      "name": "Nyuchi Web Services",
+      "url": "https://shamwari.ai/",
+      "email": "api@shamwari.ai"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    },
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.shamwari.ai",
+      "description": "Production"
+    },
+    {
+      "url": "http://localhost:8000",
+      "description": "Local development"
+    }
+  ],
+  "paths": {
+    "/v1/chat/completions": {
+      "post": {
+        "tags": [
+          "inference"
+        ],
+        "summary": "Create chat completion",
+        "description": "Generate an AI response given a conversation history. Follows the OpenAI-compatible chat completions format for maximum interoperability with existing client libraries. Supports Shamwari AI models with African language capabilities.",
+        "operationId": "create_chat_completion_v1_chat_completions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatCompletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatCompletionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Model unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "List available AI models",
+        "description": "Returns all AI models with status 'ready'. Each model includes Schema.org SoftwareApplication metadata: supported languages, capabilities, version, and pricing.",
+        "operationId": "list_models_v1_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIModelListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/models/{slug}": {
+      "get": {
+        "tags": [
+          "models"
+        ],
+        "summary": "Get model details",
+        "description": "Returns detailed information about a specific AI model by slug. Includes Schema.org SoftwareApplication structured data.",
+        "operationId": "get_model_v1_models__slug__get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIModelResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Model not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/conversations": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "List conversations",
+        "description": "Returns paginated list of conversations for the authenticated user. Each conversation includes Schema.org Conversation metadata.",
+        "operationId": "list_conversations_v1_conversations_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "title": "Per Page"
+            }
+          },
+          {
+            "name": "archived",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Archived"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_ConversationResponse_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Create conversation",
+        "description": "Start a new chat conversation with the specified AI model.",
+        "operationId": "create_conversation_v1_conversations_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConversationCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid model or parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/conversations/{conversation_id}": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "Get conversation",
+        "description": "Returns a conversation with its full message history. Messages include Schema.org Message structured data.",
+        "operationId": "get_conversation_v1_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conversation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/conversations/{conversation_id}/messages": {
+      "get": {
+        "tags": [
+          "conversations"
+        ],
+        "summary": "List messages in conversation",
+        "description": "Returns paginated messages for a specific conversation.",
+        "operationId": "list_messages_v1_conversations__conversation_id__messages_get",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_MessageResponse_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Conversation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users/me": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Get current user profile",
+        "description": "Returns the authenticated user's profile with Schema.org Person structured data. Includes preferences, role, and organization memberships.",
+        "operationId": "get_current_user_v1_users_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Update current user profile",
+        "description": "Update the authenticated user's display name, avatar, or preferences.",
+        "operationId": "update_current_user_v1_users_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid update parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/organizations/{slug}": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Get organization",
+        "description": "Returns organization details with Schema.org Organization structured data. Requires membership in the organization.",
+        "operationId": "get_organization_v1_organizations__slug__get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not a member of this organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organization not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Update organization",
+        "description": "Update organization name or description. Requires admin or owner role.",
+        "operationId": "update_organization_v1_organizations__slug__patch",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient permissions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organization not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/organizations": {
+      "post": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "Create organization",
+        "description": "Create a new organization. The authenticated user becomes the owner.",
+        "operationId": "create_organization_v1_organizations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrganizationCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrganizationResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Slug already taken",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/organizations/{slug}/members": {
+      "get": {
+        "tags": [
+          "organizations"
+        ],
+        "summary": "List organization members",
+        "description": "Returns all members of an organization with their roles.",
+        "operationId": "list_members_v1_organizations__slug__members_get",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Slug"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_OrganizationMemberResponse_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not a member of this organization",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Organization not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/api-keys": {
+      "get": {
+        "tags": [
+          "api-keys"
+        ],
+        "summary": "List API keys",
+        "description": "Returns all API keys for the authenticated user's organization. Key hashes are never exposed \u2014 only the prefix for identification.",
+        "operationId": "list_api_keys_v1_api_keys_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/APIKeyResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Api Keys V1 Api Keys Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "api-keys"
+        ],
+        "summary": "Create API key",
+        "description": "Create a new API key. The full key is returned exactly once in the response \u2014 it cannot be retrieved again. Store it securely.",
+        "operationId": "create_api_key_v1_api_keys_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/APIKeyCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIKeyCreateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Maximum API keys reached for current plan",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/api-keys/{key_id}": {
+      "delete": {
+        "tags": [
+          "api-keys"
+        ],
+        "summary": "Revoke API key",
+        "description": "Permanently revoke an API key. This action cannot be undone.",
+        "operationId": "revoke_api_key_v1_api_keys__key_id__delete",
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Key Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "API key not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/plans": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "List billing plans",
+        "description": "Returns all active billing plans with Schema.org Offer structured data. Includes pricing, token quotas, rate limits, and feature flags.",
+        "operationId": "list_plans_v1_billing_plans_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BillingPlanResponse"
+                  },
+                  "type": "array",
+                  "title": "Response List Plans V1 Billing Plans Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/subscription": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "Get current subscription",
+        "description": "Returns the current organization's subscription with Schema.org Order structured data. Includes billing period, status, and payment method.",
+        "operationId": "get_subscription_v1_billing_subscription_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No active subscription",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/billing/invoices": {
+      "get": {
+        "tags": [
+          "billing"
+        ],
+        "summary": "List invoices",
+        "description": "Returns paginated invoice history with Schema.org Invoice structured data. Includes line items, payment status, and billing periods.",
+        "operationId": "list_invoices_v1_billing_invoices_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "title": "Per Page"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_InvoiceResponse_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/usage": {
+      "get": {
+        "tags": [
+          "usage"
+        ],
+        "summary": "List usage events",
+        "description": "Returns paginated API usage events with Schema.org UseAction structured data. Filter by date range, model, or API key.",
+        "operationId": "list_usage_v1_usage_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Per Page"
+            }
+          },
+          {
+            "name": "api_key_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Api Key Id"
+            }
+          },
+          {
+            "name": "model_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_UsageResponse_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/usage/summary": {
+      "get": {
+        "tags": [
+          "usage"
+        ],
+        "summary": "Get usage summary",
+        "description": "Returns aggregated usage metrics for the current billing period. Includes total requests, tokens, latency averages, and error rates.",
+        "operationId": "get_usage_summary_v1_usage_summary_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageSummaryResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/datasets": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "List datasets",
+        "description": "Returns paginated list of training datasets with Schema.org Dataset structured data. Filter by language, status, or domain.",
+        "operationId": "list_datasets_v1_datasets_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "title": "Per Page"
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Language"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "domain",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Domain"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_DatasetResponse_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Create dataset",
+        "description": "Register a new training dataset. Upload the data file separately to R2.",
+        "operationId": "create_dataset_v1_datasets_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DatasetCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/datasets/{dataset_id}": {
+      "get": {
+        "tags": [
+          "datasets"
+        ],
+        "summary": "Get dataset details",
+        "description": "Returns detailed dataset information with Schema.org Dataset structured data.",
+        "operationId": "get_dataset_v1_datasets__dataset_id__get",
+        "parameters": [
+          {
+            "name": "dataset_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Dataset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Dataset not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/feedback": {
+      "post": {
+        "tags": [
+          "feedback"
+        ],
+        "summary": "Submit feedback",
+        "description": "Submit a rating (thumbs up/down) on an AI response. Used for model quality tracking and RLHF training data.",
+        "operationId": "submit_feedback_v1_feedback_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Message not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "feedback"
+        ],
+        "summary": "List feedback",
+        "description": "Returns paginated feedback with Schema.org Review structured data. Filter by model, rating, or language.",
+        "operationId": "list_feedback_v1_feedback_get",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "title": "Per Page"
+            }
+          },
+          {
+            "name": "model_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model Id"
+            }
+          },
+          {
+            "name": "rating",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rating"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedResponse_FeedbackResponse_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Health check",
+        "description": "Health check endpoint for Fly.io.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AIModelListResponse": {
+        "properties": {
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/AIModelResponse"
+            },
+            "type": "array",
+            "title": "Models"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of models"
+          }
+        },
+        "type": "object",
+        "required": [
+          "models",
+          "total"
+        ],
+        "title": "AIModelListResponse",
+        "description": "List of AI models response."
+      },
+      "AIModelResponse": {
+        "properties": {
+          "@context": {
+            "type": "string",
+            "title": "@Context",
+            "default": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "title": "@Type",
+            "default": "SoftwareApplication"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Model document ID"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Model name (Schema.org: name)"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "software_version": {
+            "type": "string",
+            "title": "Software Version",
+            "description": "Model version (Schema.org: softwareVersion)"
+          },
+          "application_category": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Application Category",
+            "description": "Model capabilities (Schema.org: applicationCategory)"
+          },
+          "in_language": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "In Language",
+            "description": "Supported languages, ISO 639-1 (Schema.org: inLanguage)"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Schema.org: description",
+            "default": ""
+          },
+          "parameter_count": {
+            "type": "string",
+            "title": "Parameter Count",
+            "description": "e.g., '1B', '3B', '7B'"
+          },
+          "quantization": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantization"
+          },
+          "max_context_length": {
+            "type": "integer",
+            "title": "Max Context Length"
+          },
+          "artifact_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Url",
+            "description": "R2 download path"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "Model status: training, ready, deprecated, archived"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/ModelPricingResponse"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "software_version",
+          "application_category",
+          "in_language",
+          "parameter_count",
+          "max_context_length",
+          "status",
+          "pricing",
+          "created_at"
+        ],
+        "title": "AIModelResponse",
+        "description": "AI model response.\n\nSchema.org @type: SoftwareApplication\nMaps: version \u2192 softwareVersion, capabilities \u2192 applicationCategory,\n      supported_languages \u2192 inLanguage"
+      },
+      "APIKeyCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes",
+            "description": "Permission scopes: inference, fine_tune, datasets, models_read, usage_read"
+          },
+          "rate_limit_rpm": {
+            "type": "integer",
+            "maximum": 10000.0,
+            "minimum": 1.0,
+            "title": "Rate Limit Rpm",
+            "default": 60
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "APIKeyCreateRequest",
+        "description": "Create API key request."
+      },
+      "APIKeyCreateResponse": {
+        "properties": {
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "The full API key (shown once, never again)"
+          },
+          "key_prefix": {
+            "type": "string",
+            "title": "Key Prefix"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "key",
+          "key_prefix",
+          "id",
+          "name"
+        ],
+        "title": "APIKeyCreateResponse",
+        "description": "Response after creating an API key \u2014 includes the plaintext key (shown once)."
+      },
+      "APIKeyResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "API key document ID"
+          },
+          "key_prefix": {
+            "type": "string",
+            "title": "Key Prefix",
+            "description": "First 8 chars for identification: shai_xxxx"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "User-friendly label"
+          },
+          "organization_id": {
+            "type": "string",
+            "title": "Organization Id"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes",
+            "description": "Permission scopes"
+          },
+          "rate_limit_rpm": {
+            "type": "integer",
+            "title": "Rate Limit Rpm"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "active, revoked, expired"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "key_prefix",
+          "name",
+          "organization_id",
+          "scopes",
+          "rate_limit_rpm",
+          "status",
+          "created_at"
+        ],
+        "title": "APIKeyResponse",
+        "description": "API key response (excludes key_hash for security)."
+      },
+      "BillingPlanResponse": {
+        "properties": {
+          "@context": {
+            "type": "string",
+            "title": "@Context",
+            "default": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "title": "@Type",
+            "default": "Offer"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Plan document ID"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Plan name (Schema.org: name)"
+          },
+          "slug": {
+            "type": "string",
+            "title": "Slug"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Schema.org: description",
+            "default": ""
+          },
+          "price": {
+            "type": "number",
+            "title": "Price",
+            "description": "Monthly price in USD (Schema.org: price)"
+          },
+          "price_currency": {
+            "type": "string",
+            "title": "Price Currency",
+            "description": "Schema.org: priceCurrency",
+            "default": "USD"
+          },
+          "price_annual_usd": {
+            "type": "number",
+            "title": "Price Annual Usd"
+          },
+          "eligible_quantity": {
+            "type": "integer",
+            "title": "Eligible Quantity",
+            "description": "Monthly token quota (Schema.org: eligibleQuantity)"
+          },
+          "rate_limit_rpm": {
+            "type": "integer",
+            "title": "Rate Limit Rpm"
+          },
+          "max_api_keys": {
+            "type": "integer",
+            "title": "Max Api Keys"
+          },
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Features"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "price",
+          "price_annual_usd",
+          "eligible_quantity",
+          "rate_limit_rpm",
+          "max_api_keys",
+          "features",
+          "is_active"
+        ],
+        "title": "BillingPlanResponse",
+        "description": "Billing plan response.\n\nSchema.org @type: Offer\nMaps: price_monthly_usd \u2192 price, name \u2192 name"
+      },
+      "ChatCompletionChoice": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "message": {
+            "$ref": "#/components/schemas/ChatMessageInput"
+          },
+          "finish_reason": {
+            "type": "string",
+            "title": "Finish Reason",
+            "description": "stop, length, or content_filter"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "message",
+          "finish_reason"
+        ],
+        "title": "ChatCompletionChoice",
+        "description": "A single completion choice."
+      },
+      "ChatCompletionRequest": {
+        "properties": {
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "Model slug (e.g., 'shamwari-1b-q4')"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/ChatMessageInput"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "max_tokens": {
+            "type": "integer",
+            "maximum": 8192.0,
+            "minimum": 1.0,
+            "title": "Max Tokens",
+            "default": 512
+          },
+          "temperature": {
+            "type": "number",
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Temperature",
+            "default": 0.7
+          },
+          "stream": {
+            "type": "boolean",
+            "title": "Stream",
+            "description": "Enable streaming responses",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "model",
+          "messages"
+        ],
+        "title": "ChatCompletionRequest",
+        "description": "Chat completion request (OpenAI-compatible format).\n\nFollows the de facto industry standard for maximum interoperability\nwith existing client libraries and tools."
+      },
+      "ChatCompletionResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Unique completion ID"
+          },
+          "object": {
+            "type": "string",
+            "title": "Object",
+            "default": "chat.completion"
+          },
+          "created": {
+            "type": "integer",
+            "title": "Created",
+            "description": "Unix timestamp of creation"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model",
+            "description": "Model used for inference"
+          },
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/ChatCompletionChoice"
+            },
+            "type": "array",
+            "title": "Choices"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ChatCompletionUsage"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "created",
+          "model",
+          "choices",
+          "usage"
+        ],
+        "title": "ChatCompletionResponse",
+        "description": "Chat completion response (OpenAI-compatible format).\n\nIntentionally does NOT use Schema.org \u2014 follows industry standard\nfor client library compatibility."
+      },
+      "ChatCompletionUsage": {
+        "properties": {
+          "prompt_tokens": {
+            "type": "integer",
+            "title": "Prompt Tokens"
+          },
+          "completion_tokens": {
+            "type": "integer",
+            "title": "Completion Tokens"
+          },
+          "total_tokens": {
+            "type": "integer",
+            "title": "Total Tokens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens"
+        ],
+        "title": "ChatCompletionUsage",
+        "description": "Token usage for a completion."
+      },
+      "ChatMessageInput": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "user, assistant, or system"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ChatMessageInput",
+        "description": "A single message in a chat completion request (OpenAI-compatible)."
+      },
+      "ConversationCreateRequest": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Title",
+            "default": "New conversation"
+          },
+          "model_slug": {
+            "type": "string",
+            "title": "Model Slug"
+          },
+          "language": {
+            "type": "string",
+            "maxLength": 5,
+            "title": "Language",
+            "default": "en"
+          },
+          "system_prompt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "System Prompt"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model_slug"
+        ],
+        "title": "ConversationCreateRequest",
+        "description": "Create conversation request."
+      },
+      "ConversationResponse": {
+        "properties": {
+          "@context": {
+            "type": "string",
+            "title": "@Context",
+            "default": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "title": "@Type",
+            "default": "Conversation"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Conversation document ID"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Conversation title (Schema.org: name)"
+          },
+          "in_language": {
+            "type": "string",
+            "title": "In Language",
+            "description": "Primary language, ISO 639-1 (Schema.org: inLanguage)"
+          },
+          "model_slug": {
+            "type": "string",
+            "title": "Model Slug"
+          },
+          "message_count": {
+            "type": "integer",
+            "title": "Message Count"
+          },
+          "total_tokens_used": {
+            "type": "integer",
+            "title": "Total Tokens Used"
+          },
+          "is_archived": {
+            "type": "boolean",
+            "title": "Is Archived"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "messages": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Messages",
+            "description": "Included when fetching a single conversation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "in_language",
+          "model_slug",
+          "message_count",
+          "total_tokens_used",
+          "is_archived",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConversationResponse",
+        "description": "Conversation response.\n\nSchema.org @type: Conversation\nMaps: title \u2192 name, language \u2192 inLanguage"
+      },
+      "DatasetCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 1000,
+            "title": "Description",
+            "default": ""
+          },
+          "language": {
+            "type": "string",
+            "maxLength": 5,
+            "title": "Language",
+            "description": "ISO 639-1 code"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Source",
+            "default": ""
+          },
+          "format": {
+            "type": "string",
+            "title": "Format",
+            "description": "jsonl, csv, parquet, txt",
+            "default": "jsonl"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "language"
+        ],
+        "title": "DatasetCreateRequest",
+        "description": "Create dataset request."
+      },
+      "DatasetResponse": {
+        "properties": {
+          "@context": {
+            "type": "string",
+            "title": "@Context",
+            "default": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "title": "@Type",
+            "default": "Dataset"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Dataset document ID"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Dataset name (Schema.org: name)"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Schema.org: description",
+            "default": ""
+          },
+          "in_language": {
+            "type": "string",
+            "title": "In Language",
+            "description": "Language, ISO 639-1 (Schema.org: inLanguage)"
+          },
+          "encoding_format": {
+            "type": "string",
+            "title": "Encoding Format",
+            "description": "File format (Schema.org: encodingFormat)"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Data provenance",
+            "default": ""
+          },
+          "record_count": {
+            "type": "integer",
+            "title": "Record Count"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "title": "Size Bytes"
+          },
+          "artifact_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artifact Url"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "uploading, processing, ready, archived"
+          },
+          "domain": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domain"
+          },
+          "quality_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Score"
+          },
+          "created_by_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created By User Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "in_language",
+          "encoding_format",
+          "record_count",
+          "size_bytes",
+          "status",
+          "created_at"
+        ],
+        "title": "DatasetResponse",
+        "description": "Dataset response.\n\nSchema.org @type: Dataset\nMaps: language \u2192 inLanguage, format \u2192 encodingFormat"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "description": "Machine-readable error code"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail",
+            "description": "Human-readable error description"
+          },
+          "status_code": {
+            "type": "integer",
+            "title": "Status Code",
+            "description": "HTTP status code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error",
+          "status_code"
+        ],
+        "title": "ErrorResponse",
+        "description": "Standard API error response (RFC 7807-inspired)."
+      },
+      "FeedbackCreateRequest": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "title": "Conversation Id"
+          },
+          "rating": {
+            "type": "string",
+            "title": "Rating",
+            "description": "thumbs_up or thumbs_down"
+          },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Categories"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "conversation_id",
+          "rating"
+        ],
+        "title": "FeedbackCreateRequest",
+        "description": "Create feedback request."
+      },
+      "FeedbackResponse": {
+        "properties": {
+          "@context": {
+            "type": "string",
+            "title": "@Context",
+            "default": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "title": "@Type",
+            "default": "Review"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Feedback document ID"
+          },
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "conversation_id": {
+            "type": "string",
+            "title": "Conversation Id"
+          },
+          "review_rating": {
+            "type": "string",
+            "title": "Review Rating",
+            "description": "Rating (Schema.org: reviewRating)"
+          },
+          "review_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Body",
+            "description": "Comment text (Schema.org: reviewBody)"
+          },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Categories"
+          },
+          "in_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Language",
+            "description": "Language of rated message (Schema.org: inLanguage)"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "message_id",
+          "conversation_id",
+          "review_rating",
+          "created_at"
+        ],
+        "title": "FeedbackResponse",
+        "description": "Feedback response.\n\nSchema.org @type: Review\nMaps: rating \u2192 reviewRating, comment \u2192 reviewBody"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InvoiceLineItemResponse": {
+        "properties": {
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "quantity": {
+            "type": "integer",
+            "title": "Quantity"
+          },
+          "unit_price_usd": {
+            "type": "number",
+            "title": "Unit Price Usd"
+          },
+          "amount_usd": {
+            "type": "number",
+            "title": "Amount Usd"
+          }
+        },
+        "type": "object",
+        "required": [
+          "description",
+          "quantity",
+          "unit_price_usd",
+          "amount_usd"
+        ],
+        "title": "InvoiceLineItemResponse",
+        "description": "Invoice line item."
+      },
+      "InvoiceResponse": {
+        "properties": {
+          "@context": {
+            "type": "string",
+            "title": "@Context",
+            "default": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "title": "@Type",
+            "default": "Invoice"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Invoice document ID"
+          },
+          "organization_id": {
+            "type": "string",
+            "title": "Organization Id"
+          },
+          "total_payment_due": {
+            "type": "number",
+            "title": "Total Payment Due",
+            "description": "Invoice amount in USD (Schema.org: totalPaymentDue)"
+          },
+          "payment_status": {
+            "type": "string",
+            "title": "Payment Status",
+            "description": "Invoice status (Schema.org: paymentStatus)"
+          },
+          "currency": {
+            "type": "string",
+            "title": "Currency",
+            "default": "USD"
+          },
+          "line_items": {
+            "items": {
+              "$ref": "#/components/schemas/InvoiceLineItemResponse"
+            },
+            "type": "array",
+            "title": "Line Items"
+          },
+          "period_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period Start"
+          },
+          "period_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Period End"
+          },
+          "due_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due Date"
+          },
+          "paid_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paid At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "organization_id",
+          "total_payment_due",
+          "payment_status",
+          "line_items",
+          "created_at"
+        ],
+        "title": "InvoiceResponse",
+        "description": "Invoice response.\n\nSchema.org @type: Invoice\nMaps: amount_usd \u2192 totalPaymentDue, status \u2192 paymentStatus"
+      },
+      "MessageResponse": {
+        "properties": {
+          "@context": {
+            "type": "string",
+            "title": "@Context",
+            "default": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "title": "@Type",
+            "default": "Message"
+          },
+          "sender": {
+            "type": "string",
+            "title": "Sender",
+            "description": "Message role/sender (Schema.org: sender)"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Message content (Schema.org: text)"
+          },
+          "date_created": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Date Created",
+            "description": "Schema.org: dateCreated"
+          },
+          "tokens_input": {
+            "type": "integer",
+            "title": "Tokens Input",
+            "default": 0
+          },
+          "tokens_output": {
+            "type": "integer",
+            "title": "Tokens Output",
+            "default": 0
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "inference_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inference Type",
+            "description": "on_device or cloud"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sender",
+          "text",
+          "date_created"
+        ],
+        "title": "MessageResponse",
+        "description": "Message response.\n\nSchema.org @type: Message\nMaps: content \u2192 text, role \u2192 sender"
+      },
+      "ModelPricingResponse": {
+        "properties": {
+          "input_per_1k_tokens": {
+            "type": "number",
+            "title": "Input Per 1K Tokens"
+          },
+          "output_per_1k_tokens": {
+            "type": "number",
+            "title": "Output Per 1K Tokens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input_per_1k_tokens",
+          "output_per_1k_tokens"
+        ],
+        "title": "ModelPricingResponse",
+        "description": "Model pricing per 1k tokens."
+      },
+      "OrganizationCreateRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "slug": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 1,
+            "pattern": "^[a-z0-9-]+$",
+            "title": "Slug"
+          },
+          "description": {
+            "type": "string",
+            "maxLength": 500,
+            "title": "Description",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "slug"
+        ],
+        "title": "OrganizationCreateRequest",
+        "description": "Create organization request."
+      },
+      "OrganizationMemberResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "Member role: owner, admin, member, billing"
+          },
+          "joined_at": {
+            "type": "string",
+            "title": "Joined At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "role",
+          "joined_at"
+        ],
+        "title": "OrganizationMemberResponse",
+        "description": "Organization member (public projection)."
+      },
+      "OrganizationResponse": {
+        "properties": {
+          "@context": {
+            "type": "string",
+            "title": "@Context",
+            "default": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "title": "@Type",
+            "default": "Organization"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Organization document ID"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Organization name (Schema.org: name)"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Organization slug (Schema.org: url)"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Schema.org: description",
+            "default": ""
+          },
+          "owner_id": {
+            "type": "string",
+            "title": "Owner Id"
+          },
+          "member_count": {
+            "type": "integer",
+            "title": "Member Count",
+            "description": "Number of members (Schema.org: numberOfEmployees)"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "url",
+          "owner_id",
+          "member_count",
+          "is_active",
+          "created_at"
+        ],
+        "title": "OrganizationResponse",
+        "description": "Organization response.\n\nSchema.org @type: Organization\nMaps: name \u2192 name, slug \u2192 url, description \u2192 description"
+      },
+      "OrganizationUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "title": "OrganizationUpdateRequest",
+        "description": "Update organization request."
+      },
+      "PaginatedResponse_ConversationResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConversationResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of items matching the query"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "Current page number (1-indexed)",
+            "default": 1
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page",
+            "description": "Items per page",
+            "default": 25
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "PaginatedResponse[ConversationResponse]"
+      },
+      "PaginatedResponse_DatasetResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DatasetResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of items matching the query"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "Current page number (1-indexed)",
+            "default": 1
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page",
+            "description": "Items per page",
+            "default": 25
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "PaginatedResponse[DatasetResponse]"
+      },
+      "PaginatedResponse_FeedbackResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of items matching the query"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "Current page number (1-indexed)",
+            "default": 1
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page",
+            "description": "Items per page",
+            "default": 25
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "PaginatedResponse[FeedbackResponse]"
+      },
+      "PaginatedResponse_InvoiceResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InvoiceResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of items matching the query"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "Current page number (1-indexed)",
+            "default": 1
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page",
+            "description": "Items per page",
+            "default": 25
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "PaginatedResponse[InvoiceResponse]"
+      },
+      "PaginatedResponse_MessageResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MessageResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of items matching the query"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "Current page number (1-indexed)",
+            "default": 1
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page",
+            "description": "Items per page",
+            "default": 25
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "PaginatedResponse[MessageResponse]"
+      },
+      "PaginatedResponse_OrganizationMemberResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/OrganizationMemberResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of items matching the query"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "Current page number (1-indexed)",
+            "default": 1
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page",
+            "description": "Items per page",
+            "default": 25
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "PaginatedResponse[OrganizationMemberResponse]"
+      },
+      "PaginatedResponse_UsageResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/UsageResponse"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "description": "Total number of items matching the query"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page",
+            "description": "Current page number (1-indexed)",
+            "default": 1
+          },
+          "per_page": {
+            "type": "integer",
+            "title": "Per Page",
+            "description": "Items per page",
+            "default": 25
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "PaginatedResponse[UsageResponse]"
+      },
+      "PaymentMethodResponse": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "card, mobile_money, bank_transfer"
+          },
+          "last4": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last4"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "title": "PaymentMethodResponse",
+        "description": "Payment method summary."
+      },
+      "SubscriptionResponse": {
+        "properties": {
+          "@context": {
+            "type": "string",
+            "title": "@Context",
+            "default": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "title": "@Type",
+            "default": "Order"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Subscription document ID"
+          },
+          "ordered_item": {
+            "type": "string",
+            "title": "Ordered Item",
+            "description": "Plan ID (Schema.org: orderedItem)"
+          },
+          "order_status": {
+            "type": "string",
+            "title": "Order Status",
+            "description": "Subscription status (Schema.org: orderStatus)"
+          },
+          "organization_id": {
+            "type": "string",
+            "title": "Organization Id"
+          },
+          "current_period_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period Start"
+          },
+          "current_period_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Period End"
+          },
+          "cancel_at_period_end": {
+            "type": "boolean",
+            "title": "Cancel At Period End"
+          },
+          "payment_method": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaymentMethodResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "ordered_item",
+          "order_status",
+          "organization_id",
+          "cancel_at_period_end",
+          "created_at"
+        ],
+        "title": "SubscriptionResponse",
+        "description": "Subscription response.\n\nSchema.org @type: Order\nMaps: plan \u2192 orderedItem, status \u2192 orderStatus"
+      },
+      "UsageResponse": {
+        "properties": {
+          "@context": {
+            "type": "string",
+            "title": "@Context",
+            "default": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "title": "@Type",
+            "default": "UseAction"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Event document ID"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type",
+            "description": "api_call, chat_inference, on_device_sync"
+          },
+          "instrument": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument",
+            "description": "API key ID (Schema.org: instrument)"
+          },
+          "agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent",
+            "description": "User ID (Schema.org: agent)"
+          },
+          "object": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Object",
+            "description": "Model ID (Schema.org: object)"
+          },
+          "model_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Version"
+          },
+          "endpoint": {
+            "type": "string",
+            "title": "Endpoint",
+            "default": ""
+          },
+          "tokens_input": {
+            "type": "integer",
+            "title": "Tokens Input",
+            "default": 0
+          },
+          "tokens_output": {
+            "type": "integer",
+            "title": "Tokens Output",
+            "default": 0
+          },
+          "latency_ms": {
+            "type": "integer",
+            "title": "Latency Ms",
+            "default": 0
+          },
+          "region": {
+            "type": "string",
+            "title": "Region",
+            "default": "jnb"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "success"
+          },
+          "start_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start Time",
+            "description": "Event timestamp (Schema.org: startTime)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "event_type",
+          "start_time"
+        ],
+        "title": "UsageResponse",
+        "description": "Usage event response.\n\nSchema.org @type: UseAction\nMaps: tokens \u2192 result, timestamp \u2192 startTime"
+      },
+      "UsageSummaryResponse": {
+        "properties": {
+          "period_start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period Start"
+          },
+          "period_end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Period End"
+          },
+          "total_requests": {
+            "type": "integer",
+            "title": "Total Requests",
+            "default": 0
+          },
+          "total_tokens_input": {
+            "type": "integer",
+            "title": "Total Tokens Input",
+            "default": 0
+          },
+          "total_tokens_output": {
+            "type": "integer",
+            "title": "Total Tokens Output",
+            "default": 0
+          },
+          "total_tokens": {
+            "type": "integer",
+            "title": "Total Tokens",
+            "default": 0
+          },
+          "average_latency_ms": {
+            "type": "number",
+            "title": "Average Latency Ms",
+            "default": 0.0
+          },
+          "success_count": {
+            "type": "integer",
+            "title": "Success Count",
+            "default": 0
+          },
+          "error_count": {
+            "type": "integer",
+            "title": "Error Count",
+            "default": 0
+          },
+          "rate_limited_count": {
+            "type": "integer",
+            "title": "Rate Limited Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "period_start",
+          "period_end"
+        ],
+        "title": "UsageSummaryResponse",
+        "description": "Aggregated usage summary for a time period."
+      },
+      "UserPreferencesResponse": {
+        "properties": {
+          "language": {
+            "type": "string",
+            "title": "Language",
+            "description": "ISO 639-1 preferred language code"
+          },
+          "theme": {
+            "type": "string",
+            "title": "Theme",
+            "description": "UI theme: light, dark, or system"
+          },
+          "notifications_enabled": {
+            "type": "boolean",
+            "title": "Notifications Enabled"
+          },
+          "default_model_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Model Slug"
+          }
+        },
+        "type": "object",
+        "required": [
+          "language",
+          "theme",
+          "notifications_enabled"
+        ],
+        "title": "UserPreferencesResponse",
+        "description": "User preferences (public projection)."
+      },
+      "UserResponse": {
+        "properties": {
+          "@context": {
+            "type": "string",
+            "title": "@Context",
+            "default": "https://schema.org"
+          },
+          "@type": {
+            "type": "string",
+            "title": "@Type",
+            "default": "Person"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "User identifier"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Display name (Schema.org: name)"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email",
+            "description": "Email address (Schema.org: email)"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image",
+            "description": "Avatar URL (Schema.org: image)"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role",
+            "description": "User role: consumer, developer, admin"
+          },
+          "preferences": {
+            "$ref": "#/components/schemas/UserPreferencesResponse"
+          },
+          "organization_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Organization Ids"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          },
+          "last_active_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Last Active At"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "email",
+          "role",
+          "preferences",
+          "is_active",
+          "last_active_at",
+          "created_at"
+        ],
+        "title": "UserResponse",
+        "description": "User profile response.\n\nSchema.org @type: Person\nMaps: display_name \u2192 name, avatar_url \u2192 image, email \u2192 email"
+      },
+      "UserUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "New display name"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image",
+            "description": "New avatar URL"
+          },
+          "preferences": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserPreferencesResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "UserUpdateRequest",
+        "description": "Update user profile request."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "inference",
+      "description": "AI inference endpoints \u2014 chat completions, embeddings."
+    },
+    {
+      "name": "models",
+      "description": "AI model registry \u2014 list and inspect available models."
+    },
+    {
+      "name": "conversations",
+      "description": "Chat conversation management \u2014 create, list, retrieve."
+    },
+    {
+      "name": "users",
+      "description": "User profile management \u2014 view and update current user."
+    },
+    {
+      "name": "organizations",
+      "description": "Organization management \u2014 teams, members, settings."
+    },
+    {
+      "name": "api-keys",
+      "description": "API key management \u2014 create, list, revoke keys."
+    },
+    {
+      "name": "billing",
+      "description": "Billing and subscription management \u2014 plans, invoices."
+    },
+    {
+      "name": "usage",
+      "description": "API usage analytics \u2014 consumption metrics and summaries."
+    },
+    {
+      "name": "datasets",
+      "description": "Training dataset management \u2014 upload, track, query datasets."
+    },
+    {
+      "name": "feedback",
+      "description": "User feedback on AI responses \u2014 ratings and comments."
+    },
+    {
+      "name": "system",
+      "description": "System health and status endpoints."
+    }
+  ]
+}

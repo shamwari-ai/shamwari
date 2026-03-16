@@ -77,10 +77,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: python
     services:
-      mongo:
-        image: mongo:7
+      couchdb:
+        image: couchdb:3
         ports:
-          - 27017:27017
+          - 5984:5984
+        env:
+          COUCHDB_USER: admin
+          COUCHDB_PASSWORD: password
     steps:
       - uses: actions/checkout@v4
 
@@ -91,18 +94,43 @@ jobs:
 
       - run: pip install -e .
 
-      - name: Test DB initialization with all Beanie models
+      - name: Test CouchDB initialization
         run: python -c "
           import asyncio
           from src.db.init import init_db, close_db
 
           async def main():
-              client = await init_db('mongodb://localhost:27017', database_name='shamwari_test')
-              db = client['shamwari_test']
-              collections = await db.list_collection_names()
-              print(f'Initialized {len(collections)} collections: {sorted(collections)}')
+              couch = await init_db('http://localhost:5984', user='admin', password='password')
+              print('CouchDB connection verified')
               await close_db()
               print('DB init verified successfully')
 
           asyncio.run(main())
+          "
+
+  openapi-check:
+    name: Verify OpenAPI spec
+    runs-on: ubuntu-latest
+    needs: python
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -e .
+
+      - name: Generate OpenAPI spec and verify
+        run: python -c "
+          import json
+          from src.main import app
+
+          spec = app.openapi()
+          print(f'Title: {spec[\"info\"][\"title\"]}')
+          print(f'Version: {spec[\"info\"][\"version\"]}')
+          print(f'Paths: {len(spec.get(\"paths\", {}))}')
+          assert len(spec.get('paths', {})) > 0, 'No API paths defined'
+          print('OpenAPI spec generation verified')
           "

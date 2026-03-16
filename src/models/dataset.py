@@ -1,7 +1,9 @@
 """Dataset model — training data registry for African language models.
 
-Dataset files are stored in Cloudflare R2. This collection tracks metadata,
-provenance, and processing status.
+Dataset files are stored in Cloudflare R2. This document tracks metadata,
+provenance, and processing status. Stored in shamwari_platform CouchDB database.
+
+Schema.org mapping: Dataset
 """
 
 from enum import StrEnum
@@ -30,8 +32,13 @@ class Dataset(TimestampedDocument):
 
     Files stored in R2, metadata tracked here. Language-tagged for
     the multilingual training pipeline (Shona, Ndebele, English, etc.).
+
+    CouchDB database: shamwari_platform
+    Document _id: "dataset_{uuid}"
+    Schema.org @type: Dataset
     """
 
+    type: str = "dataset"
     name: str
     description: str = ""
     language: str = Field(description="ISO 639-1: sn (Shona), nd (Ndebele), en, etc.")
@@ -47,11 +54,3 @@ class Dataset(TimestampedDocument):
     )
     quality_score: float | None = Field(default=None, ge=0.0, le=1.0)
     created_by_user_id: str | None = None
-
-    class Settings:
-        name = "datasets"
-        use_state_management = True
-        indexes = [
-            [("language", 1), ("status", 1)],
-            [("domain", 1)],
-        ]

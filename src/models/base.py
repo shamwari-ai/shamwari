@@ -1,21 +1,19 @@
-"""Base document model with common fields for all Shamwari AI collections."""
+"""Base document model with common fields for all Shamwari AI CouchDB documents."""
 
 from datetime import UTC, datetime
 
-from beanie import Document
 from pydantic import Field
 
+from src.db.couch import CouchDocument
 
-class TimestampedDocument(Document):
+
+class TimestampedDocument(CouchDocument):
     """Base document with created_at and updated_at timestamps.
 
-    All Shamwari AI collections inherit from this to get consistent
-    timestamp tracking. updated_at is refreshed on every save via
-    Beanie's save() override or update operations.
+    All Shamwari AI document types inherit from this for consistent
+    timestamp tracking. Maps to CouchDB documents with _id, _rev,
+    type discriminator, and timestamps.
     """
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-    class Settings:
-        use_state_management = True
