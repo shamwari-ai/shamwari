@@ -1,13 +1,14 @@
 """Feedback model — user ratings on AI responses.
 
-Separate collection (not embedded in messages) for independent analytics
-queries: model quality tracking, language-specific performance, RLHF data.
+Stored in shamwari_events CouchDB database for analytics pipeline consumption.
+Used for model quality tracking, language-specific performance, and RLHF data.
+
+Schema.org mapping: Review
 """
 
 from datetime import UTC, datetime
 from enum import StrEnum
 
-from beanie import Indexed
 from pydantic import Field
 
 from src.models.base import TimestampedDocument
@@ -32,23 +33,19 @@ class Feedback(TimestampedDocument):
 
     Used for model quality analytics and RLHF training data.
     Language-tagged for per-language performance tracking.
+
+    CouchDB database: shamwari_events
+    Document _id: "fb_{uuid}"
+    Schema.org @type: Review
     """
 
+    type: str = "feedback"
     message_id: str
     conversation_id: str
     user_id: str
-    model_id: Indexed(str)  # type: ignore[valid-type]
+    model_id: str
     rating: FeedbackRating
     categories: list[FeedbackCategory] = Field(default_factory=list)
     comment: str | None = None
     language: str | None = Field(default=None, description="Language of the rated message")
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-    class Settings:
-        name = "feedback"
-        use_state_management = True
-        indexes = [
-            [("model_id", 1), ("created_at", -1)],
-            [("rating", 1)],
-            [("language", 1), ("rating", 1)],
-        ]
