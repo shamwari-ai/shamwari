@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.security import APIKeyHeader
 
-from src.db.init import close_db, init_db
+from src.db.init import close_db, init_db, is_db_ready
 
 # Security scheme for API key authentication
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -130,4 +130,6 @@ app.include_router(feedback.router)
 @app.get("/health", tags=["system"], summary="Health check")
 async def health() -> dict[str, str]:
     """Health check endpoint for Fly.io."""
-    return {"status": "ok"}
+    if is_db_ready():
+        return {"status": "ok"}
+    return {"status": "degraded", "reason": "couchdb_unavailable"}

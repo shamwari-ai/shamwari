@@ -12,6 +12,8 @@ Usage:
     db = await get_user_db("user-live-xxx")
 """
 
+import logging
+
 from aiocouch import CouchDB
 
 from src.db.designs import (
@@ -23,14 +25,24 @@ from src.db.designs import (
     ensure_indexes,
 )
 
+logger = logging.getLogger(__name__)
+
 _couch: CouchDB | None = None
+_db_ready: bool = False
 
 
-async def init_db(couchdb_url: str, user: str = "", password: str = "") -> CouchDB:
+def is_db_ready() -> bool:
+    """Check if CouchDB is connected and databases are initialized."""
+    return _db_ready
+
+
+async def init_db(couchdb_url: str, user: str = "", password: str = "") -> CouchDB | None:
     """Initialize CouchDB connection and set up core databases.
 
     Creates the platform and events databases if they don't exist,
-    and pushes design documents and Mango indexes.
+    and pushes design documents and Mango indexes. If CouchDB is
+    unreachable, logs a warning and allows the app to start without
+    a database connection (health check will report degraded status).
 
     Args:
         couchdb_url: CouchDB server URL (e.g., http://localhost:5984).
@@ -38,30 +50,45 @@ async def init_db(couchdb_url: str, user: str = "", password: str = "") -> Couch
         password: CouchDB admin password.
 
     Returns:
-        The aiocouch CouchDB client instance.
+        The aiocouch CouchDB client instance, or None if connection failed.
     """
-    global _couch
+    global _couch, _db_ready
     _couch = CouchDB(couchdb_url, user=user, password=password)
 
-    # Ensure core databases exist
-    platform_db = await _couch.create("shamwari_platform", exists_ok=True)
-    events_db = await _couch.create("shamwari_events", exists_ok=True)
+    try:
+        # Ensure core databases exist
+        platform_db = await _couch.create("shamwari_platform", exists_ok=True)
+        events_db = await _couch.create("shamwari_events", exists_ok=True)
 
-    # Push design documents and indexes
-    await ensure_designs(platform_db, PLATFORM_DB_DESIGNS)
-    await ensure_indexes(platform_db, PLATFORM_DB_INDEXES)
-    await ensure_designs(events_db, EVENTS_DB_DESIGNS)
-    await ensure_indexes(events_db, EVENTS_DB_INDEXES)
+        # Push design documents and indexes
+        await ensure_designs(platform_db, PLATFORM_DB_DESIGNS)
+        await ensure_indexes(platform_db, PLATFORM_DB_INDEXES)
+        await ensure_designs(events_db, EVENTS_DB_DESIGNS)
+        await ensure_indexes(events_db, EVENTS_DB_INDEXES)
 
-    return _couch
+        _db_ready = True
+        logger.info("CouchDB connected and databases initialized at %s", couchdb_url)
+        return _couch
+    except Exception:
+        logger.warning(
+            "CouchDB unavailable at %s — app starting without database. "
+            "Set COUCHDB_URL, COUCHDB_USER, COUCHDB_PASSWORD and ensure CouchDB is running.",
+            couchdb_url,
+            exc_info=True,
+        )
+        await _couch.close()
+        _couch = None
+        _db_ready = False
+        return None
 
 
 async def close_db() -> None:
     """Close the CouchDB connection."""
-    global _couch
+    global _couch, _db_ready
     if _couch is not None:
         await _couch.close()
         _couch = None
+    _db_ready = False
 
 
 def get_couch() -> CouchDB:
