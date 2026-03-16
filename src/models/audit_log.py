@@ -1,14 +1,15 @@
 """Audit log model — system-wide activity trail.
 
-Immutable, append-only collection for security and compliance.
-TTL index expires records after 365 days.
+Immutable, append-only documents in shamwari_events CouchDB database.
+Consumed by the analytics pipeline for compliance reporting.
+
+Schema.org mapping: Action
 """
 
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 
-from beanie import Indexed
 from pydantic import Field
 
 from src.models.base import TimestampedDocument
@@ -25,10 +26,15 @@ class AuditLog(TimestampedDocument):
     """An immutable audit record of a system action.
 
     Captures who did what, when, and to which resource. Metadata stores
-    before/after state for change tracking. TTL: 365 days.
+    before/after state for change tracking.
+
+    CouchDB database: shamwari_events
+    Document _id: "audit_{timestamp}_{uuid}"
+    Schema.org @type: Action
     """
 
-    actor_id: Indexed(str)  # type: ignore[valid-type]
+    type: str = "audit_log"
+    actor_id: str
     actor_type: ActorType
     action: str = Field(description="e.g., api_key.create, org.member.add, model.deploy")
     resource_type: str = Field(description="e.g., api_key, organization, model")
@@ -39,12 +45,3 @@ class AuditLog(TimestampedDocument):
     ip_address: str | None = None
     user_agent: str | None = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-    class Settings:
-        name = "audit_logs"
-        use_state_management = True
-        indexes = [
-            [("timestamp", 1)],
-            [("actor_id", 1), ("timestamp", -1)],
-            [("resource_type", 1), ("resource_id", 1)],
-        ]

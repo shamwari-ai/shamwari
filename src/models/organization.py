@@ -1,12 +1,13 @@
 """Organization model — business/team accounts for platform.shamwari.ai.
 
 Organizations own API keys, subscriptions, and usage quotas.
-Members are embedded (bounded array, always read together).
+Stored in the shared shamwari_platform CouchDB database.
+
+Schema.org mapping: Organization
 """
 
 from enum import StrEnum
 
-from beanie import Indexed
 from pydantic import BaseModel, Field
 
 from src.models.base import TimestampedDocument
@@ -39,17 +40,17 @@ class Organization(TimestampedDocument):
     """A business or team account on platform.shamwari.ai.
 
     Owns API keys, subscriptions, and has members with roles.
-    Members embedded because the array is bounded and always read together.
+
+    CouchDB database: shamwari_platform
+    Document _id: "org_{slug}"
+    Schema.org @type: Organization
     """
 
+    type: str = "organization"
     name: str
-    slug: Indexed(str, unique=True)  # type: ignore[valid-type]
+    slug: str
     description: str = ""
-    owner_id: Indexed(str)  # type: ignore[valid-type]
+    owner_id: str
     members: list[OrganizationMember] = Field(default_factory=list)
     settings: OrganizationSettings = Field(default_factory=OrganizationSettings)
     is_active: bool = True
-
-    class Settings:
-        name = "organizations"
-        use_state_management = True

@@ -12,8 +12,7 @@ authors = [
 keywords = ["ai", "africa", "nlp", "shona", "ndebele", "language-model"]
 
 dependencies = [
-    "beanie==1.26.0",
-    "motor==3.6.0",
+    "aiocouch==3.0.0",
     "pydantic==2.10.4",
     "pydantic-settings==2.7.1",
     "fastapi==0.115.6",
