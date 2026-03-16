@@ -1,20 +1,20 @@
 """Billing models — plans, subscriptions, and invoices.
 
 Designed for the African market: USD pricing with affordability tiers.
-Organizations own subscriptions. Invoices track payment history.
+Organizations own subscriptions. Stored in shamwari_platform CouchDB database.
+
+Schema.org mappings: BillingPlan → Offer, Subscription → Order, Invoice → Invoice
 """
 
 from datetime import datetime
 from enum import StrEnum
 
-from beanie import Indexed
 from pydantic import BaseModel, Field
 
 from src.models.base import TimestampedDocument
 
-
 # ---------------------------------------------------------------------------
-# Billing Plans
+# Billing Plans (Schema.org: Offer)
 # ---------------------------------------------------------------------------
 
 
@@ -23,16 +23,19 @@ class BillingPlan(TimestampedDocument):
 
     Tiers designed for affordability: Free tier for experimentation,
     paid tiers for production use by African businesses and developers.
+
+    CouchDB database: shamwari_platform
+    Document _id: "plan_{slug}"
+    Schema.org @type: Offer
     """
 
+    type: str = "billing_plan"
     name: str = Field(description="e.g., Free, Starter, Pro, Enterprise")
-    slug: Indexed(str, unique=True)  # type: ignore[valid-type]
+    slug: str
     description: str = ""
     price_monthly_usd: float = 0.0
     price_annual_usd: float = 0.0
-    token_quota_monthly: int = Field(
-        default=10_000, description="Monthly token allowance"
-    )
+    token_quota_monthly: int = Field(default=10_000, description="Monthly token allowance")
     rate_limit_rpm: int = Field(default=10, description="Requests per minute")
     max_api_keys: int = 1
     features: list[str] = Field(
@@ -40,13 +43,9 @@ class BillingPlan(TimestampedDocument):
     )
     is_active: bool = True
 
-    class Settings:
-        name = "billing_plans"
-        use_state_management = True
-
 
 # ---------------------------------------------------------------------------
-# Subscriptions
+# Subscriptions (Schema.org: Order)
 # ---------------------------------------------------------------------------
 
 
@@ -63,9 +62,7 @@ class PaymentMethod(BaseModel):
     type: str = Field(description="card, mobile_money, bank_transfer")
     last4: str | None = None
     brand: str | None = None
-    provider: str | None = Field(
-        default=None, description="e.g., 'ecocash', 'innbucks', 'stripe'"
-    )
+    provider: str | None = Field(default=None, description="e.g., 'ecocash', 'innbucks', 'stripe'")
 
 
 class Subscription(TimestampedDocument):
@@ -73,9 +70,14 @@ class Subscription(TimestampedDocument):
 
     Tracks billing periods and payment method. One active subscription
     per organization.
+
+    CouchDB database: shamwari_platform
+    Document _id: "sub_{organization_id}"
+    Schema.org @type: Order
     """
 
-    organization_id: Indexed(str, unique=True)  # type: ignore[valid-type]
+    type: str = "subscription"
+    organization_id: str
     plan_id: str
     status: SubscriptionStatus = SubscriptionStatus.TRIALING
     current_period_start: datetime | None = None
@@ -83,13 +85,9 @@ class Subscription(TimestampedDocument):
     cancel_at_period_end: bool = False
     payment_method: PaymentMethod | None = None
 
-    class Settings:
-        name = "subscriptions"
-        use_state_management = True
-
 
 # ---------------------------------------------------------------------------
-# Invoices
+# Invoices (Schema.org: Invoice)
 # ---------------------------------------------------------------------------
 
 
@@ -113,10 +111,13 @@ class InvoiceLineItem(BaseModel):
 class Invoice(TimestampedDocument):
     """A billing record for an organization.
 
-    Line items are embedded (small, bounded array, always read together).
+    CouchDB database: shamwari_platform
+    Document _id: "inv_{uuid}"
+    Schema.org @type: Invoice
     """
 
-    organization_id: Indexed(str)  # type: ignore[valid-type]
+    type: str = "invoice"
+    organization_id: str
     subscription_id: str | None = None
     amount_usd: float = 0.0
     currency: str = "USD"
@@ -126,11 +127,3 @@ class Invoice(TimestampedDocument):
     period_end: datetime | None = None
     due_date: datetime | None = None
     paid_at: datetime | None = None
-
-    class Settings:
-        name = "invoices"
-        use_state_management = True
-        indexes = [
-            [("organization_id", 1), ("created_at", -1)],
-            [("status", 1)],
-        ]

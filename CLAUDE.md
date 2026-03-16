@@ -29,24 +29,30 @@ Shamwari is not trying to be GPT. It's the AI that actually works for Africa: sm
 | UI | shadcn/ui + Tailwind CSS v4 | Component library — Stone theme, Noto Sans, Lucide icons, large radius |
 | Monorepo | Turborepo + npm workspaces | Build orchestration across apps and packages |
 | Edge | Cloudflare Workers | API gateway, rate limiting, API key validation, cron jobs, caching |
-| App Backend | Vercel Serverless (Next.js Route Handlers / Server Actions) | Auth flows, CRUD, conversations, billing — direct MongoDB access |
-| AI Backend | Python (FastAPI) on Fly.io | AI inference, model management, training pipelines, heavy compute — direct MongoDB via Beanie |
+| AI Backend | Python (FastAPI) on Fly.io | AI inference, model management, API endpoints — direct CouchDB access |
 | Inference | Rust | Model loading (GGUF/ONNX), token generation, quantized inference |
-| Database | MongoDB Atlas | User accounts, API keys, usage tracking, conversation history, billing (NOT SQL/D1) |
+| Database | CouchDB (on Fly.io) | Operational data — per-user databases for local-first PouchDB sync |
+| Analytics | Apache Doris (on Fly.io) | OLAP engine for usage metrics, billing aggregation, dashboards |
 | Storage | Cloudflare R2 | Model artifacts, file uploads, static assets |
 | Model | Custom (1B–7B) | On-device + cloud inference, African language focus |
 | Frontend Hosting | Vercel | Two projects — `shamwari-web` and `shamwari-platform` |
-| AI Hosting | Fly.io | Python FastAPI backend (linked to GitHub repo) |
+| AI Hosting | Fly.io | Python FastAPI backend, CouchDB, Doris, event workers |
+| Structured Data | Schema.org (JSON-LD) | Frontend pages and API responses use Schema.org types |
+| API Spec | OpenAPI 3.1 | Full API contract auto-generated from FastAPI, committed as openapi.json |
 
 ### Architecture Principles
 
 - **Turborepo monorepo** with npm workspaces — `apps/*` for deployable apps, `packages/*` for shared code
-- **Three-tier backend**: Cloudflare Workers (edge), Vercel Serverless (app logic + DB), Fly.io (AI + heavy compute)
-- **Vercel Serverless** for all database access from frontend apps — Next.js Route Handlers and Server Actions connect directly to MongoDB Atlas via the Node.js driver
-- **Cloudflare Workers** for edge concerns only — API gateway, rate limiting, API key validation, caching, cron triggers. Workers do NOT connect directly to MongoDB (no TCP support)
-- **Fly.io** for Python FastAPI backend — AI inference, model management, training pipelines. Connects to MongoDB via Motor/Beanie
-- **MongoDB Atlas** as the sole data layer — do not use SQL, D1, or other relational databases. MongoDB App Services (Data API, Triggers, Functions) is EOL — all processing handled by Vercel Serverless, CF Workers Cron Triggers, or Fly.io
+- **Local-first architecture**: CouchDB (server) + PouchDB (client) for offline-capable bidirectional sync
+- **Per-user CouchDB databases**: Each user gets `shamwari_user_{id}` — PouchDB syncs directly with no filtering needed
+- **Fly.io** runs all stateful services — CouchDB, Apache Doris, FastAPI backend, inference API, event workers
+- **Vercel** for frontend hosting only — SSR/SSG/CDN. No database access from Vercel
+- **Cloudflare Workers** for edge concerns only — API gateway, rate limiting, API key validation, caching, cron triggers
+- **CouchDB** as the sole operational data layer — do not use MongoDB, SQL, D1, or other databases for operational data
+- **Apache Doris** for analytics only — fed by CouchDB _changes feed via event pipeline worker
 - **R2** for all object/blob storage needs — model weights, uploads, assets
+- **Schema.org compliance** — Frontend pages use JSON-LD structured data, API responses include @context/@type fields
+- **OpenAPI 3.1 compliance** — Full API contract defined in FastAPI, auto-generated openapi.json committed to repo
 - **Fully open source** — every component from model weights to platform code designed for open distribution and community contribution
 
 ## Repository Structure
@@ -74,10 +80,12 @@ shamwari-ai/
 │       │   ├── lib/       # Shared utilities (cn, etc.)
 │       │   └── styles/    # Shared theme CSS (Stone theme tokens)
 │       └── components.json # shadcn/ui config for shared components
-├── src/                   # Python backend (FastAPI + Beanie ODM) — deploys to Fly.io
+├── src/                   # Python backend (FastAPI + CouchDB) — deploys to Fly.io
 │   ├── auth/              # Stytch authentication integration
-│   ├── db/                # MongoDB database initialization
-│   └── models/            # Beanie document models (13 collections)
+│   ├── db/                # CouchDB initialization, document helpers, design documents
+│   ├── models/            # CouchDB document models (Pydantic, 13 document types)
+│   ├── schemas/           # API request/response schemas (Schema.org-aligned)
+│   └── routers/           # FastAPI API routers (OpenAPI-annotated, /v1 prefix)
 ├── tasks/
 │   ├── todo.md            # Current task tracking with checkable items
 │   └── lessons.md         # Accumulated lessons and patterns from corrections
@@ -100,7 +108,7 @@ shamwari-ai/
 | `@shamwari/web` | `apps/web` | Consumer chat app (shamwari.ai) | Vercel: `shamwari-web` |
 | `@shamwari/platform` | `apps/platform` | Developer portal (platform.shamwari.ai) | Vercel: `shamwari-platform` |
 | `@shamwari/ui` | `packages/ui` | Shared shadcn/ui component library | (internal package) |
-| Python backend | `src/` | FastAPI + Beanie ODM (AI inference, model mgmt) | Fly.io (linked to GitHub repo) |
+| Python backend | `src/` | FastAPI + CouchDB (AI inference, API, model mgmt) | Fly.io (linked to GitHub repo) |
 
 ### Frontend Commands
 
@@ -235,7 +243,7 @@ Shamwari is a product with a developer ecosystem. When working on platform featu
 - **Developer documentation** — clear, thorough, accessible to developers of varying experience
 - **Onboarding flows** — smooth path from signup to first API call
 - **Value proposition** for African businesses: language coverage, cultural context, data sovereignty, affordability, latency advantages from regional deployment
-- **Usage tracking and billing** — all stored in MongoDB, surfaced through platform.shamwari.ai dashboards
+- **Usage tracking and billing** — stored in CouchDB, aggregated via Doris, surfaced through platform.shamwari.ai dashboards
 
 ## AI Assistant Operating Rules
 
@@ -252,10 +260,12 @@ Shamwari is a product with a developer ecosystem. When working on platform featu
 3. No speculative code — don't add features, error handling, or abstractions beyond what is requested.
 4. Never commit secrets, API keys, or credentials.
 5. Run tests after making changes if a test framework is configured.
-6. Use MongoDB for all data persistence — never introduce SQL or D1.
-7. Use Vercel Serverless (Route Handlers / Server Actions) for app-level database access from Next.js apps.
-8. Use Cloudflare Workers for edge concerns only (API gateway, rate limiting, caching, cron) — Workers cannot connect to MongoDB directly.
-9. Use Fly.io for Python FastAPI backend — AI inference, model management, training pipelines.
+6. Use CouchDB for all operational data persistence — never introduce MongoDB, SQL, or D1.
+7. Use per-user CouchDB databases for user-scoped data (conversations, preferences) — enables PouchDB sync.
+8. Use Cloudflare Workers for edge concerns only (API gateway, rate limiting, caching, cron).
+9. Use Fly.io for Python FastAPI backend, CouchDB, Doris, and all stateful services.
+10. Ensure API responses include Schema.org @context/@type for entity endpoints.
+11. Keep openapi.json in sync — regenerate via `python scripts/export_openapi.py` after API changes.
 
 ### After Finishing
 
@@ -269,5 +279,5 @@ Shamwari is a product with a developer ecosystem. When working on platform featu
 - Do not create CI/CD pipelines or deployment configurations without instruction.
 - Do not introduce heavy frameworks or dependencies without discussion.
 - Do not restructure the repository layout without explicit approval.
-- Do not use SQL, D1, or any relational database — MongoDB only.
+- Do not use MongoDB, SQL, D1, or any relational database — CouchDB only for operational data, Doris for analytics.
 - Do not propose solutions that ignore African resource constraints (bandwidth, compute, device capabilities).

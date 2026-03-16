@@ -1,52 +1,42 @@
-"""Usage record model — API consumption tracking (time-series pattern).
+"""Usage event model — API consumption tracking.
 
-High-volume collection optimized for writes and time-range queries.
-TTL index automatically expires raw records after 90 days.
-Aggregated summaries (daily/monthly) are computed by MongoDB scheduled triggers.
+Written to the shamwari_events CouchDB database on every API call.
+Consumed by the CouchDB-to-Doris event pipeline via the _changes feed
+for real-time analytics aggregation.
+
+Schema.org mapping: UseAction
 """
 
 from datetime import UTC, datetime
 
-from beanie import Indexed
 from pydantic import Field
 
 from src.models.base import TimestampedDocument
 
 
-class UsageRecord(TimestampedDocument):
+class UsageEvent(TimestampedDocument):
     """A single API usage event.
 
-    Written on every API call. Indexed for time-range queries by
-    organization, API key, and model. TTL-expired after 90 days;
-    MongoDB scheduled triggers aggregate into daily/monthly summaries
-    before expiration.
+    Written on every API call. Consumed by the event pipeline worker
+    which transforms and loads into Apache Doris for analytics.
+
+    CouchDB database: shamwari_events
+    Document _id: "evt_{timestamp}_{uuid}"
+    Schema.org @type: UseAction
     """
 
-    api_key_id: str
-    organization_id: Indexed(str)  # type: ignore[valid-type]
+    type: str = "usage_event"
+    event_type: str = Field(description="'api_call', 'chat_inference', 'on_device_sync'")
+    api_key_id: str | None = None
+    organization_id: str | None = None
     user_id: str | None = Field(default=None, description="Consumer user, if applicable")
-    model_id: str
-    endpoint: str = Field(description="e.g., /v1/chat/completions")
+    model_id: str | None = None
+    model_version: str | None = None
+    endpoint: str = Field(default="", description="e.g., /v1/chat/completions")
     tokens_input: int = 0
     tokens_output: int = 0
-    response_time_ms: int = 0
+    latency_ms: int = 0
+    region: str = Field(default="jnb", description="Fly.io region serving the request")
+    status: str = Field(default="success", description="success, error, rate_limited")
     status_code: int = 200
     timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
-
-    class Settings:
-        name = "usage_records"
-        use_state_management = True
-        indexes = [
-            [("timestamp", 1)],
-            [("api_key_id", 1), ("timestamp", -1)],
-            [("organization_id", 1), ("timestamp", -1)],
-            [("model_id", 1), ("timestamp", -1)],
-        ]
-        # TTL: 90 days (7_776_000 seconds). Raw records auto-expire.
-        # MongoDB scheduled triggers aggregate before expiration.
-        timeseries = {
-            "timeField": "timestamp",
-            "metaField": "organization_id",
-            "granularity": "minutes",
-            "expireAfterSeconds": 7_776_000,
-        }

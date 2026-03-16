@@ -1,12 +1,14 @@
 """AI Model registry — tracks model versions, capabilities, and pricing.
 
-Each model version is a separate document. Models are served via the Rust
+Each model version is a separate document. Models are served via the
 inference engine (cloud) or downloaded to devices (on-device via R2).
+Stored in shamwari_platform CouchDB database.
+
+Schema.org mapping: SoftwareApplication
 """
 
 from enum import StrEnum
 
-from beanie import Indexed
 from pydantic import BaseModel, Field
 
 from src.models.base import TimestampedDocument
@@ -39,8 +41,13 @@ class AIModel(TimestampedDocument):
 
     Tracks model metadata, supported languages, capabilities, and pricing.
     Artifacts (weights, configs) are stored in Cloudflare R2.
+
+    CouchDB database: shamwari_platform
+    Document _id: "model_{slug}_{version}"
+    Schema.org @type: SoftwareApplication
     """
 
+    type: str = "ai_model"
     name: str
     slug: str
     version: str
@@ -58,12 +65,3 @@ class AIModel(TimestampedDocument):
     artifact_url: str | None = Field(default=None, description="R2 path to model artifacts")
     status: ModelStatus = ModelStatus.TRAINING
     pricing: ModelPricing = Field(default_factory=ModelPricing)
-
-    class Settings:
-        name = "models"
-        use_state_management = True
-        indexes = [
-            [("slug", 1), ("version", 1)],
-            [("status", 1)],
-            [("supported_languages", 1)],
-        ]
