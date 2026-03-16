@@ -23,5 +23,6 @@ primary_region = "jnb"  # Johannesburg — closest to Zimbabwe
     timeout = "5s"
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "1gb"
