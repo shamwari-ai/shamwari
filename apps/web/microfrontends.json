@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/microfrontends.json",
+  "applications": {
+    "shamwari-ai-web": {
+      "development": {
+        "fallback": "shamwari.ai"
+      }
+    },
+    "shamwari-ai-platform": {
+      "routing": [
+        {
+          "paths": [/* add paths here */]
+        }
+      ]
+    }
+  }
+}
