@@ -25,8 +25,8 @@ Shamwari is not trying to be GPT. It's the AI that actually works for Africa: sm
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| Frontend | Next.js 16 (App Router) | Both web properties — shamwari.ai and platform.shamwari.ai |
-| UI | shadcn/ui + Tailwind CSS v4 | Component library — Stone theme, Noto Sans, Lucide icons, large radius |
+| Frontend | SvelteKit 2 + Svelte 5 (runes) | Both web properties — shamwari.ai and platform.shamwari.ai |
+| UI | Tailwind CSS v4 + Lucide Svelte | Stone theme, Noto Sans, Lucide icons, large radius — shadcn-svelte primitives can be added on demand |
 | Monorepo | Turborepo + npm workspaces | Build orchestration across apps and packages |
 | Edge | Cloudflare Workers | API gateway, rate limiting, API key validation, cron jobs, caching |
 | AI Backend | Python (FastAPI) on Fly.io | AI inference, model management, API endpoints — direct CouchDB access |
@@ -60,26 +60,31 @@ Shamwari is not trying to be GPT. It's the AI that actually works for Africa: sm
 ```
 shamwari-ai/
 ├── apps/
-│   ├── web/               # shamwari.ai — consumer chat (Next.js, @shamwari/web)
-│   │   ├── app/           # App Router pages and layouts
-│   │   ├── components/    # App-specific React components
-│   │   ├── lib/           # App-specific utilities
-│   │   ├── components.json # shadcn/ui config for this app
+│   ├── web/               # shamwari.ai — consumer chat (SvelteKit, @shamwari/web)
+│   │   ├── src/
+│   │   │   ├── routes/    # File-system routes (+page.svelte, +layout.svelte, +error.svelte)
+│   │   │   ├── lib/       # App-local utilities; lib/server/* is server-only
+│   │   │   ├── app.html   # HTML shell (Intercom widget + fonts)
+│   │   │   ├── app.css    # Tailwind v4 entry + design tokens
+│   │   │   └── hooks.server.ts # Security headers, server-side hooks
+│   │   ├── svelte.config.js
+│   │   ├── vite.config.ts
 │   │   └── vercel.json    # Vercel deployment config (shamwari-web project)
-│   └── platform/          # platform.shamwari.ai — developer portal (Next.js, @shamwari/platform)
-│       ├── app/           # App Router pages and layouts
-│       ├── components/    # App-specific React components
-│       ├── lib/           # App-specific utilities
-│       ├── components.json # shadcn/ui config for this app
+│   └── platform/          # platform.shamwari.ai — developer portal (SvelteKit, @shamwari/platform)
+│       ├── src/
+│       │   ├── routes/
+│       │   ├── lib/
+│       │   ├── app.html
+│       │   ├── app.css
+│       │   └── hooks.server.ts
+│       ├── svelte.config.js
+│       ├── vite.config.ts
 │       └── vercel.json    # Vercel deployment config (shamwari-platform project)
 ├── packages/
-│   └── ui/                # Shared component library (@shamwari/ui)
-│       ├── src/
-│       │   ├── components/ # Shared shadcn/ui components
-│       │   ├── hooks/     # Shared React hooks
-│       │   ├── lib/       # Shared utilities (cn, etc.)
-│       │   └── styles/    # Shared theme CSS (Stone theme tokens)
-│       └── components.json # shadcn/ui config for shared components
+│   └── ui/                # Shared component library (@shamwari/ui) — Svelte
+│       └── src/
+│           ├── lib/       # cn helper, JSON-LD builders, JsonLd.svelte component
+│           └── styles/    # Shared theme CSS (Stone theme tokens)
 ├── src/                   # Python backend (FastAPI + CouchDB) — deploys to Fly.io
 │   ├── auth/              # Stytch authentication integration
 │   ├── db/                # CouchDB initialization, document helpers, design documents
@@ -107,7 +112,7 @@ shamwari-ai/
 |-------------------|------|-------------|------------|
 | `@shamwari/web` | `apps/web` | Consumer chat app (shamwari.ai) | Vercel: `shamwari-web` |
 | `@shamwari/platform` | `apps/platform` | Developer portal (platform.shamwari.ai) | Vercel: `shamwari-platform` |
-| `@shamwari/ui` | `packages/ui` | Shared shadcn/ui component library | (internal package) |
+| `@shamwari/ui` | `packages/ui` | Shared Svelte component library (Tailwind tokens, JSON-LD helpers) | (internal package) |
 | Python backend | `src/` | FastAPI + CouchDB (AI inference, API, model mgmt) | Fly.io (linked to GitHub repo) |
 
 ### Frontend Commands

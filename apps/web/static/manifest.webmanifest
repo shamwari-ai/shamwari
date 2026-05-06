@@ -1,0 +1,13 @@
+{
+  "name": "Shamwari AI",
+  "short_name": "Shamwari",
+  "description": "Open-source AI built for Africa.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF9F5",
+  "theme_color": "#0A0A0A",
+  "icons": [
+    { "src": "/icon.svg", "type": "image/svg+xml", "sizes": "any" },
+    { "src": "/apple-touch-icon.png", "type": "image/png", "sizes": "180x180" }
+  ]
+}

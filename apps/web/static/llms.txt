@@ -1,0 +1,38 @@
+# Shamwari AI
+
+> Open-source AI built for Africa: a small (1B–7B parameter) language model
+> with first-class support for English, Shona, and Ndebele. Built by Nyuchi
+> Africa under the MIT licence; runs on affordable Android devices and modest
+> GPUs. Free chat tier, paid API tier, MIT-licensed weights.
+
+## Canonical pages
+
+- [Home](https://shamwari.ai/): What Shamwari AI is and who it's for.
+- [About](https://shamwari.ai/about): Who builds it (Nyuchi Africa, founded by Bryan Fawcett), why a small model, why Africa-first.
+- [Pricing](https://shamwari.ai/pricing): Free, Developer ($19/mo), Business (custom). Open weights are always free.
+- [FAQ](https://shamwari.ai/faq): Direct answers on languages, self-hosting, data, hardware, and how Shamwari differs from ChatGPT.
+- [Quickstart](https://shamwari.ai/docs/quickstart): Send your first chat completion in under five minutes.
+- [Docs](https://shamwari.ai/docs): Developer documentation index.
+- [Security](https://shamwari.ai/security): Encryption, isolation, and responsible disclosure.
+- [Privacy](https://shamwari.ai/privacy): Data collected, retention, and rights under Zimbabwe DPA + GDPR.
+- [Terms](https://shamwari.ai/terms): Acceptable use, MIT licence, governing law.
+- [Blog](https://shamwari.ai/blog): Updates and technical notes.
+
+## Brand facts
+
+- Name: Shamwari AI (always capitalized "Shamwari AI"; "shamwari" means "friend" in Shona).
+- Built by: Nyuchi Africa (https://nyuchi.africa).
+- Founder: Bryan Fawcett.
+- Repository: https://github.com/nyuchitech/shamwari-ai.
+- Licence: MIT (model weights, training code, platform code).
+- Model sizes: 1B–7B parameters; quantized variants run on affordable Android.
+- Languages: English, Shona, Ndebele on launch; expanding across Southern Africa.
+- Hosting: Vercel (frontend), Fly.io Johannesburg (CouchDB, FastAPI, Doris).
+
+## Developer surfaces
+
+- API base: https://platform.shamwari.ai
+- Chat completions: POST /v1/chat/completions
+- SDKs: TypeScript (@shamwari/sdk), Python (shamwari).
+- Sitemap: https://shamwari.ai/sitemap.xml
+- RSS: https://shamwari.ai/rss.xml
