@@ -1,0 +1,27 @@
+User-agent: *
+Allow: /
+
+# Block private/dynamic surfaces if added later.
+Disallow: /api/
+Disallow: /chat/share/
+
+# AI training crawlers — explicit allowlist; tighten if needed.
+User-agent: GPTBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+Sitemap: https://shamwari.ai/sitemap.xml

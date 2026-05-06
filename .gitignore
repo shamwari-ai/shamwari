@@ -1,7 +1,10 @@
 # === Node.js ===
 node_modules/
 .next/
+.svelte-kit/
+.vercel/
 out/
+build/
 dist/
 .turbo/
 .cache/

@@ -1,0 +1,10 @@
+# Shamwari AI — AI crawler policy
+# https://github.com/ai-robots-txt/ai.robots.txt
+
+User-Agent: *
+Allow: /
+Disallow: /api/
+Disallow: /chat/share/
+
+Contact: ai@shamwari.ai
+Policy: https://shamwari.ai/terms
