@@ -4,7 +4,8 @@ Generates openapi.json at the project root for CI validation,
 external consumers, and SDK generation.
 
 Usage:
-    python scripts/export_openapi.py
+    python scripts/export_openapi.py            # write
+    python scripts/export_openapi.py --check    # CI drift check
 """
 
 import json
@@ -17,14 +18,35 @@ sys.path.insert(0, str(project_root))
 
 from src.main import app  # noqa: E402
 
-spec = app.openapi()
 
-output_path = project_root / "openapi.json"
-with open(output_path, "w") as f:
-    json.dump(spec, f, indent=2)
-    f.write("\n")
+def render() -> str:
+    spec = app.openapi()
+    return json.dumps(spec, indent=2, sort_keys=True) + "\n"
 
-print(f"OpenAPI spec written to {output_path}")
-print(f"  Title: {spec['info']['title']}")
-print(f"  Version: {spec['info']['version']}")
-print(f"  Paths: {len(spec.get('paths', {}))}")
+
+def main() -> int:
+    output_path = project_root / "openapi.json"
+    rendered = render()
+
+    if "--check" in sys.argv:
+        on_disk = output_path.read_text() if output_path.exists() else ""
+        if on_disk != rendered:
+            print(
+                "openapi.json is out of date. Run `python scripts/export_openapi.py`.",
+                file=sys.stderr,
+            )
+            return 1
+        print("openapi.json is up to date.")
+        return 0
+
+    output_path.write_text(rendered)
+    spec = app.openapi()
+    print(f"OpenAPI spec written to {output_path}")
+    print(f"  Title: {spec['info']['title']}")
+    print(f"  Version: {spec['info']['version']}")
+    print(f"  Paths: {len(spec.get('paths', {}))}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

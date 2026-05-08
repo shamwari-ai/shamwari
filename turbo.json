@@ -3,19 +3,60 @@
   "ui": "tui",
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
-      "outputs": [".svelte-kit/**", ".vercel/output/**", "!.svelte-kit/cache/**"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*"
+      ],
+      "outputs": [
+        ".svelte-kit/**",
+        ".vercel/output/**",
+        "!.svelte-kit/cache/**"
+      ],
+      "env": [
+        "WORKOS_CLIENT_ID",
+        "WORKOS_API_KEY",
+        "WORKOS_REDIRECT_URI",
+        "WORKOS_COOKIE_PASSWORD",
+        "AI_API_URL",
+        "PUBLIC_STYTCH_PUBLIC_TOKEN"
+      ]
     },
     "dev": {
       "cache": false,
       "persistent": true
     },
     "lint": {
-      "dependsOn": ["^lint"]
+      "dependsOn": [
+        "^lint"
+      ]
     },
     "check-types": {
-      "dependsOn": ["^check-types"]
+      "dependsOn": [
+        "^check-types"
+      ]
+    },
+    "test": {
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "coverage/**"
+      ]
+    },
+    "test:e2e": {
+      "dependsOn": [
+        "^build"
+      ],
+      "cache": false
+    },
+    "size": {
+      "dependsOn": [
+        "build"
+      ],
+      "cache": false
     }
   }
 }

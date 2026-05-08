@@ -294,8 +294,8 @@ async def ensure_designs(db: Database, design_doc: dict[str, Any]) -> None:
 async def ensure_indexes(db: Database, indexes: list[dict[str, Any]]) -> None:
     """Create Mango indexes on a CouchDB database."""
     for index_def in indexes:
-        await db.session.request(
+        await db.session.request(  # type: ignore[attr-defined]
             "POST",
-            db._database_path("_index"),
+            db._database_path("_index"),  # type: ignore[attr-defined]
             json=index_def,
         )
