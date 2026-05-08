@@ -1,0 +1,10 @@
+# Allowlist for gitleaks. Each line is a fingerprint:
+#   <sha>:<file>:<rule>:<line>
+#
+# These were added because gitleaks' generic-api-key rule flagged
+# obvious placeholder strings in older history that have since been
+# renamed. Keep this file short — every entry is a deliberate
+# acknowledgement that the string is not a real secret.
+
+6d56a2a0397acc76fe3a5ca7a752fab3e508b31e:apps/platform/playwright.config.ts:generic-api-key:19
+6d56a2a0397acc76fe3a5ca7a752fab3e508b31e:apps/web/playwright.config.ts:generic-api-key:19

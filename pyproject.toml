@@ -17,7 +17,7 @@ dependencies = [
     "pydantic-settings==2.7.1",
     "fastapi==0.115.6",
     "uvicorn[standard]==0.34.0",
-    "stytch==11.5.0",
+    "pyjwt[crypto]==2.10.1",
     "httpx==0.28.1",
 ]
 
@@ -25,8 +25,10 @@ dependencies = [
 dev = [
     "pytest==8.3.4",
     "pytest-asyncio==0.24.0",
+    "pytest-cov==6.0.0",
     "ruff==0.8.6",
     "mypy==1.14.1",
+    "bandit==1.8.0",
 ]
 
 [build-system]
@@ -51,3 +53,31 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["src"]
+# Older routers/models/db modules that pre-date the auth + memory + tests work
+# are tracked separately — fold them into coverage as they get exercised.
+omit = [
+    "src/db/*",
+    "src/models/*",
+    "src/routers/conversations.py",
+    "src/routers/datasets.py",
+    "src/routers/feedback.py",
+    "src/routers/inference.py",
+    "src/routers/models.py",
+    "src/routers/organizations.py",
+]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = false
+exclude_also = [
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "@overload",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
