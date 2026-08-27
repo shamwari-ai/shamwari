@@ -126,6 +126,31 @@ jobs:
           cd apps/web
           lhci autorun --config=./lighthouserc.json || echo "Lighthouse warnings — see job log"
 
+  gateway:
+    name: Gateway (types, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gateway/package-lock.json
+
+      - run: npm ci
+        working-directory: gateway
+
+      - name: Type check
+        run: npm run typecheck
+        working-directory: gateway
+
+      # Covers the two invariants in CLAUDE.md: personal scope never routes
+      # to Cloud, and premium tier stays licenseClass 'restricted'.
+      - name: Unit tests
+        run: npm test
+        working-directory: gateway
+
   python:
     name: Python (lint, types, tests, coverage)
     runs-on: ubuntu-latest

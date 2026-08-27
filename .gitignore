@@ -12,6 +12,7 @@ dist/
 
 # npm debug logs
 npm-debug.log*
+*.log
 
 # === Python ===
 __pycache__/
@@ -42,3 +43,7 @@ Thumbs.db
 .env.*.local
 .coverage
 coverage.xml
+
+# === Cloudflare Workers ===
+.wrangler/
+.dev.vars
