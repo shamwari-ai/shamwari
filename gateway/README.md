@@ -85,7 +85,29 @@ start → budget_month (cost cap)
           false → economy_qwen  → fallback → workers_ai → done
 ```
 
-Post and deploy it — creating a route does not make it live:
+The feature is in Beta, so treat the shapes below as current-as-of-now.
+
+### In the dashboard
+
+The **Create a new Route** dialog takes a name and a template — there is no
+JSON box in it. Name the route `shamwari`, so calls read
+`model: "dynamic/shamwari"`, and choose **Start from scratch**.
+
+Do *not* choose "Start from example", despite the RECOMMENDED badge: it
+wires a `gpt-4o` OpenAI node. Anything answered there is restricted output
+that the Worker will still stamp `open_weight`, which is rule 2 broken. See
+the open-weight section below.
+
+Then open the route's Editor and paste the `elements` array from
+`dynamic-route.json` into its JSON view. If the Editor offers no JSON view,
+use the API path below instead — it does the whole thing in one call.
+
+(The dialog says the name cannot be changed later. `PATCH /routes/{id}` with
+a `name` body exists in the API, so a misnamed route is recoverable.)
+
+### Via the API
+
+Creating a route does not make it live — deploy the version too:
 
 ```bash
 ACC=$CF_ACCOUNT_ID; GW=shamwari
