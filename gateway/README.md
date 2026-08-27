@@ -69,6 +69,95 @@ production.
 The keyword buckets are `en`, `sn` and `nd`. Ndebele is empty today; that is
 a visible gap rather than a hidden one.
 
+## AI Gateway dynamic route
+
+`dynamic-route.json` is the payload for AI Gateway's Dynamic Routing. It
+validates against Cloudflare's own `POST /routes` schema, and its graph is
+checked by `test/dynamic-route.test.ts` — one start, one end, no dangling
+`elementId`, every element reachable.
+
+```
+start → budget_month (cost cap)
+          success  → tier_check
+          fallback → economy_qwen
+        tier_check (metadata.tier == "standard")
+          true  → standard_kimi → fallback → economy_qwen
+          false → economy_qwen  → fallback → workers_ai → done
+```
+
+Post and deploy it — creating a route does not make it live:
+
+```bash
+ACC=$CF_ACCOUNT_ID; GW=shamwari
+API=https://api.cloudflare.com/client/v4/accounts/$ACC/ai-gateway/gateways/$GW
+
+ROUTE=$(curl -sS -X POST "$API/routes" \
+  -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" \
+  --data @dynamic-route.json | tee /dev/stderr | jq -r .result.id)
+
+VERSION=$(curl -sS "$API/routes/$ROUTE/versions" \
+  -H "Authorization: Bearer $CF_API_TOKEN" | jq -r '.result[0].id')
+
+curl -sS -X POST "$API/routes/$ROUTE/deployments" \
+  -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" \
+  -d "{\"version_id\":\"$VERSION\"}"
+```
+
+Then call it with `model: "dynamic/shamwari"` on `/compat/chat/completions`.
+
+### It replaces step 1 of the degradation, not all three
+
+`src/gateway.ts` degrades AI Gateway → direct provider → Workers AI. The
+second step exists precisely because it has no Cloudflare in the path. A
+dynamic route lives *inside* AI Gateway, so it cannot provide that: if the
+Gateway is down, the route is down with it. Keep steps 2 and 3 in
+`gateway.ts`. The route makes step 1 smarter; it does not make the rest
+redundant.
+
+### Every node must stay open-weight — this is rule 2
+
+The Worker stamps `licenseClass` from the tier it *intended* to call, in
+`targets()`. A route's fallback chain can serve the response from a
+different provider than the one the Worker picked, and the Worker will not
+know. Every node here is open-weight (Qwen, Kimi K3, Workers AI), so every
+path through the graph is `open_weight` and the stamp stays true whichever
+node answers.
+
+Add a Claude or GPT node and that stops holding: the Worker would stamp
+`open_weight` on restricted output, and Core would accept it into the Mind
+training path. If premium is ever routed here, the Worker must first read
+the `cf-aig-provider` and `cf-aig-model` response headers, which name the
+provider that actually served the request, and stamp from those instead of
+from `target`.
+
+### Two fields to confirm in the editor
+
+`properties.conditions` on the conditional is typed `unknown` in
+Cloudflare's OpenAPI schema and in their SDKs — the shape is not published
+anywhere ([cloudflare-docs#27334](https://github.com/cloudflare/cloudflare-docs/issues/27334)).
+The value here is modelled on the `user_plan == "paid"` example in the docs
+and is the one part of this file that is a guess. Same for what `rate.key`
+accepts: the field is typed `string`, but whether it resolves a metadata
+path is not documented.
+
+Fastest way to settle both: build one conditional and one budget node in the
+visual editor, then read back what the dashboard wrote —
+
+```bash
+curl -sS "$API/routes/$ROUTE" -H "Authorization: Bearer $CF_API_TOKEN" | jq .
+```
+
+and copy its exact shape into this file.
+
+### Metadata the Worker must send
+
+The route branches on `metadata.tier`, and the budget node keys on
+`metadata.ownerEntityId`. Neither is sent today — `src/gateway.ts` posts
+`model`, `messages`, `temperature` and `max_tokens` only. Wire them through
+AI Gateway custom metadata before pointing traffic at the route, or
+`tier_check` will always take the `false` branch and every request will go
+to economy.
+
 ## Verify before deploy
 
 - Provider slugs in `src/router.ts` against the current AI Gateway provider list

@@ -1,0 +1,91 @@
+{
+  "name": "shamwari",
+  "elements": [
+    {
+      "id": "start",
+      "type": "start",
+      "outputs": { "next": { "elementId": "budget_month" } }
+    },
+    {
+      "id": "budget_month",
+      "type": "rate",
+      "properties": {
+        "limitType": "cost",
+        "key": "metadata.ownerEntityId",
+        "limit": 50,
+        "window": 2592000
+      },
+      "outputs": {
+        "success": { "elementId": "tier_check" },
+        "fallback": { "elementId": "economy_qwen" }
+      }
+    },
+    {
+      "id": "tier_check",
+      "type": "conditional",
+      "properties": {
+        "conditions": {
+          "operator": "and",
+          "conditions": [
+            {
+              "field": "metadata.tier",
+              "operator": "eq",
+              "value": "standard"
+            }
+          ]
+        }
+      },
+      "outputs": {
+        "true": { "elementId": "standard_kimi" },
+        "false": { "elementId": "economy_qwen" }
+      }
+    },
+    {
+      "id": "standard_kimi",
+      "type": "model",
+      "properties": {
+        "provider": "moonshot",
+        "model": "kimi-k3",
+        "timeout": 30000,
+        "retries": 1
+      },
+      "outputs": {
+        "success": { "elementId": "done" },
+        "fallback": { "elementId": "economy_qwen" }
+      }
+    },
+    {
+      "id": "economy_qwen",
+      "type": "model",
+      "properties": {
+        "provider": "qwen",
+        "model": "qwen3-32b-instruct",
+        "timeout": 20000,
+        "retries": 1
+      },
+      "outputs": {
+        "success": { "elementId": "done" },
+        "fallback": { "elementId": "workers_ai" }
+      }
+    },
+    {
+      "id": "workers_ai",
+      "type": "model",
+      "properties": {
+        "provider": "workers-ai",
+        "model": "@cf/qwen/qwen2.5-coder-32b-instruct",
+        "timeout": 15000,
+        "retries": 0
+      },
+      "outputs": {
+        "success": { "elementId": "done" },
+        "fallback": { "elementId": "done" }
+      }
+    },
+    {
+      "id": "done",
+      "type": "end",
+      "outputs": {}
+    }
+  ]
+}
