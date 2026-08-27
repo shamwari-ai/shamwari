@@ -1,0 +1,15 @@
+{
+  "name": "shamwari-docs",
+  "version": "1.0.0",
+  "private": true,
+  "description": "docs.shamwari.ai — how Shamwari is built",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "node check.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.126.0"
+  }
+}
