@@ -94,6 +94,23 @@ the tests — and the route itself is built by hand from the table below.
 Keep the two in step: if you change the route in the dashboard, change the
 JSON to match, or the next person reads a file that lies.
 
+### One command, if you have an API token
+
+The dashboard has no JSON import, but the REST API does accept the payload
+— despite the docs page saying Dynamic Routing is not on the REST API, it is
+in Cloudflare's OpenAPI schema. This creates the route, finds its version
+and deploys it, which is the step that is easy to miss by hand:
+
+```bash
+export CF_ACCOUNT_ID=... CF_API_TOKEN=...   # token needs AI Gateway edit
+./scripts/create-dynamic-route.sh
+```
+
+It checks `success` in the response body rather than the status code,
+because Cloudflare returns 200 with `success: false` for domain errors, and
+it prints the read-back command for the two undocumented fields. Build by
+hand only if you would rather not mint a token.
+
 ### Build it by hand
 
 Create the route: name it `shamwari` (so calls read
