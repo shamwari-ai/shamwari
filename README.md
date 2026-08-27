@@ -16,6 +16,10 @@ CLAUDE.md                      handoff context, invariants, applied-migration lo
 LICENSE  NOTICE                Apache-2.0; third-party model and corpus terms
 .github/workflows/ci.yml       gateway types + tests, Core imports, secret scan
 docs/architecture-and-gtm.md   product architecture + go-to-market
+docs/repo-split.md             proposal for breaking up this monorepo
+docs/workers-ai-models.md      verified provider slugs and model ids
+
+docs-site/                     docs.shamwari.ai — one HTML file, no build
 
 gateway/                       Cloudflare Workers, TypeScript
   src/scope.ts                 the scope gate — read this first

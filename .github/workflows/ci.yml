@@ -65,6 +65,23 @@ jobs:
         run: python -c "import main, ingest_ground; print(main.app.title, main.app.version)"
         working-directory: core
 
+  docs-site:
+    name: Docs site (links, tokens, size)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      # No build step, so this is the whole suite: dead anchors, colours
+      # with no base :root value, the size budget, and the open-weights
+      # language rule.
+      - name: Check
+        run: node check.mjs
+        working-directory: docs-site
+
   gitleaks:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
