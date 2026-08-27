@@ -4,6 +4,13 @@ The README's "verify provider slugs before deploy" item, done. Everything
 here was read from Cloudflare's own OpenAPI schema and docs, not from
 memory. Re-verify before any deploy: the catalogue moves.
 
+## Status
+
+Text generation and embeddings are in this phase. **Voice and image are
+deferred** — decided 2026-08-27. Their sections below stay because the
+constraints, not the model ids, are the expensive part to rediscover.
+CLAUDE.md's deferred-work list carries the summary.
+
 ## AI Gateway provider slugs
 
 These 24 are the only natively supported provider slugs:
@@ -121,12 +128,6 @@ Image out: `flux-1-schnell`, `flux-2-dev`, `flux-2-klein-4b`,
 
 FLUX licences differ sharply by variant — schnell is permissive, `dev` is
 not. Read the licence per variant before stamping `licenseClass`.
-
-## Voice and image are deferred
-
-Decided 2026-08-27: not this phase. The sections below stay because the
-constraints are the expensive part to rediscover, not the model ids.
-CLAUDE.md's deferred-work list carries the summary.
 
 ## Two things that must hold before voice or image ships
 
