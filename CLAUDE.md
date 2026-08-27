@@ -276,7 +276,32 @@ upstream; not something to paper over here.
 ## Deliberately not in this phase
 
 Streaming responses · semantic caching · premium tier (Claude/GPT) ·
-self-serve billing · Shamwari Mind · `code.shamwari.ai` sandboxes.
+self-serve billing · Shamwari Mind · `code.shamwari.ai` sandboxes ·
+voice and image.
+
+On voice and image, when that phase starts — three findings from the
+catalogue check on 2026-08-27, so they are not rediscovered:
+
+- **The scope gate has to come with them.** `gateway/src/scope.ts` guards
+  `/v1/chat/completions` only. A voice note or a photo is the most personal
+  thing a user sends: a clinic recording, a payslip, a child. Any new
+  endpoint must pass `parseScope` and `decideDestination` before a byte
+  reaches a provider, or rule 1 is broken by the feature that looks least
+  like text.
+- **`licenseClass` stops working per tier.** It is derived from the tier in
+  `router.ts` today. Deepgram Aura and the Leonardo image models are
+  proprietary; FLUX `dev` is restricted while `schnell` is not; Whisper is
+  permissive. That has to be stamped per model.
+- **There is no Shona or Ndebele text-to-speech in the catalogue.** Aura is
+  English and Spanish, MeloTTS covers neither. Voice *output* in either
+  language cannot be served from Cloudflare at all. Whisper has some Shona
+  in its training mix, so voice *input* is worth measuring rather than
+  assuming.
+
+Vision has one convenience: `@cf/qwen/qwen3.8-27b` is Image-Text-to-Text
+and the same family as the text tier, so image input needs no new provider.
+
+`docs/workers-ai-models.md` has the verified model ids for all of it.
 
 On sandboxes, when that phase starts: Cloudflare Sandbox SDK went GA April
 2026 and does per-session containers with code interpreters and live preview
