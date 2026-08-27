@@ -1,0 +1,70 @@
+[
+  {
+    "id": "START",
+    "type": "start",
+    "outputs": {
+      "next": {
+        "elementId": "economy_qwen"
+      }
+    }
+  },
+  {
+    "id": "economy_qwen",
+    "type": "model",
+    "properties": {
+      "provider": "qwen",
+      "model": "qwen3-32b-instruct",
+      "timeout": 20000,
+      "retries": 1
+    },
+    "outputs": {
+      "success": {
+        "elementId": "END"
+      },
+      "fallback": {
+        "elementId": "standard_kimi"
+      }
+    }
+  },
+  {
+    "id": "standard_kimi",
+    "type": "model",
+    "properties": {
+      "provider": "moonshot",
+      "model": "kimi-k3",
+      "timeout": 30000,
+      "retries": 1
+    },
+    "outputs": {
+      "success": {
+        "elementId": "END"
+      },
+      "fallback": {
+        "elementId": "workers_ai"
+      }
+    }
+  },
+  {
+    "id": "workers_ai",
+    "type": "model",
+    "properties": {
+      "provider": "workers-ai",
+      "model": "@cf/qwen/qwen2.5-coder-32b-instruct",
+      "timeout": 15000,
+      "retries": 0
+    },
+    "outputs": {
+      "success": {
+        "elementId": "END"
+      },
+      "fallback": {
+        "elementId": "END"
+      }
+    }
+  },
+  {
+    "id": "END",
+    "type": "end",
+    "outputs": {}
+  }
+]
