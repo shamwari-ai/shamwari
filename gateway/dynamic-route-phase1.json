@@ -12,7 +12,7 @@
     "id": "economy",
     "type": "model",
     "properties": {
-      "provider": "workersai",
+      "provider": "workers-ai",
       "model": "@cf/qwen/qwen3-30b-a3b-fp8",
       "timeout": 20000,
       "retries": 1
@@ -30,7 +30,7 @@
     "id": "standard",
     "type": "model",
     "properties": {
-      "provider": "workersai",
+      "provider": "workers-ai",
       "model": "@cf/moonshotai/kimi-k2.6",
       "timeout": 30000,
       "retries": 1
@@ -48,7 +48,7 @@
     "id": "last_resort",
     "type": "model",
     "properties": {
-      "provider": "workersai",
+      "provider": "workers-ai",
       "model": "@cf/zai-org/glm-5.3-flash",
       "timeout": 15000,
       "retries": 0

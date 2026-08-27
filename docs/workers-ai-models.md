@@ -26,7 +26,11 @@ replicate  vertex       workersai
 provider (`POST /accounts/{id}/ai-gateway/custom-providers`, requires
 `name`, `slug`, `base_url`) or must be reached through `openrouter`.
 
-**The Workers AI slug is `workersai`, not `workers-ai`.**
+**The Workers AI provider value is `workers-ai`.** The docs page lives at
+`/ai-gateway/usage/providers/workersai/`, and that URL slug is not the API
+value — a distinction that cost a wrong correction here. The dashboard's own
+JSON serialisation writes `workers-ai`, and the dashboard is authoritative
+for its own schema.
 
 ## What was wrong before this was checked
 
@@ -34,7 +38,7 @@ provider (`POST /accounts/{id}/ai-gateway/custom-providers`, requires
 |---|---|
 | `provider: "qwen"` | not a provider slug — needs a custom provider |
 | `provider: "moonshot"` | not a provider slug — needs a custom provider |
-| `provider: "workers-ai"` | the slug is `workersai` |
+| `provider: "workers-ai"` | correct after all — see the note above. It was briefly "corrected" to `workersai` on the strength of a docs URL slug, which was not evidence |
 | `model: "qwen3-32b-instruct"` | does not exist in any Cloudflare catalogue |
 | `@cf/qwen/qwen2.5-coder-32b-instruct` as the general fallback | it is a **code-specific** model; a poor last resort for Shona/Ndebele legal and tax questions |
 
@@ -66,6 +70,18 @@ deprecated.
 | `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Function calling, batch |
 | `@cf/meta/llama-4-scout-17b-16e-instruct` | Function calling, batch |
 | `@cf/openai/gpt-oss-120b`, `gpt-oss-20b` | OpenAI's **open-weight** release — not the API models. Licence is not the OpenAI API terms; confirm before treating as `open_weight` |
+
+## A timeout of 0 disables the fallback chain
+
+The route editor defaults every model node's `timeout` and `retries` to `0`.
+A node with `timeout: 0` either never times out — so a hung provider hangs
+the request and the node below it never runs — or times out instantly.
+Either way the fallback chain is inert, which is the only reason the graph
+exists.
+
+Set real values: 20000 ms on the first node with 1 retry, 30000 on the
+second, 15000 on the last resort with 0 retries. `test/dynamic-route.test.ts`
+asserts no shipped node carries a zero timeout.
 
 ## Embeddings — locked, do not change
 
