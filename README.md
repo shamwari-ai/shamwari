@@ -13,6 +13,8 @@ Ecosystem. Bundu Foundation IP, sold commercially under Nyuchi Africa.
 
 ```
 CLAUDE.md                      handoff context, invariants, applied-migration log
+LICENSE  NOTICE                Apache-2.0; third-party model and corpus terms
+.github/workflows/ci.yml       gateway types + tests, Core imports, secret scan
 docs/architecture-and-gtm.md   product architecture + go-to-market
 
 gateway/                       Cloudflare Workers, TypeScript
@@ -107,7 +109,12 @@ curl localhost:8787/v1/chat/completions \
 
 ## Licence
 
-Platform code: Apache-2.0. Shamwari Mind: open weights, Apache-2.0 base.
+Platform code: Apache-2.0 (`LICENSE`), copyright Bundu Foundation.
+Shamwari Mind: open weights, Apache-2.0 base.
+
+Third-party model terms and per-source corpus licences are in `NOTICE`.
+They are not covered by ours, and Ground eligibility is not training
+eligibility.
 
 Shamwari Cloud routes to third-party open-weight and commercial models. It is
 **not** "fully open source" — say "open weights". See the language discipline

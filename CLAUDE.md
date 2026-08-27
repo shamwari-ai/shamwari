@@ -13,6 +13,10 @@ companion, positioned as the Digital Twin's conversational interface.
 
 - **IP owner:** Bundu Foundation (Zimbabwe CLG)
 - **Sold commercially under:** Nyuchi Africa
+- **Licence:** Apache-2.0, copyright Bundu Foundation. Chosen over MIT for
+  the patent grant and the attribution requirement — both matter when the
+  same code is licensed commercially. `NOTICE` carries the third-party
+  model and corpus terms, which are *not* covered by ours.
 - **Surfaces:** shamwari.ai (standalone), Mukoko mini-apps, Nyuchi products
 - **Brand:** Shona for "friend". Mineral: sodalite. Voice: helpful, warm,
   intelligent. *"A friend that serves; a friend that does not control."*
