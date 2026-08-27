@@ -4,16 +4,16 @@
     "type": "start",
     "outputs": {
       "next": {
-        "elementId": "economy_qwen"
+        "elementId": "economy"
       }
     }
   },
   {
-    "id": "economy_qwen",
+    "id": "economy",
     "type": "model",
     "properties": {
-      "provider": "qwen",
-      "model": "qwen3-32b-instruct",
+      "provider": "workersai",
+      "model": "@cf/qwen/qwen3-30b-a3b-fp8",
       "timeout": 20000,
       "retries": 1
     },
@@ -22,16 +22,16 @@
         "elementId": "END"
       },
       "fallback": {
-        "elementId": "standard_kimi"
+        "elementId": "standard"
       }
     }
   },
   {
-    "id": "standard_kimi",
+    "id": "standard",
     "type": "model",
     "properties": {
-      "provider": "moonshot",
-      "model": "kimi-k3",
+      "provider": "workersai",
+      "model": "@cf/moonshotai/kimi-k2.6",
       "timeout": 30000,
       "retries": 1
     },
@@ -40,16 +40,16 @@
         "elementId": "END"
       },
       "fallback": {
-        "elementId": "workers_ai"
+        "elementId": "last_resort"
       }
     }
   },
   {
-    "id": "workers_ai",
+    "id": "last_resort",
     "type": "model",
     "properties": {
-      "provider": "workers-ai",
-      "model": "@cf/qwen/qwen2.5-coder-32b-instruct",
+      "provider": "workersai",
+      "model": "@cf/zai-org/glm-5.3-flash",
       "timeout": 15000,
       "retries": 0
     },

@@ -73,7 +73,9 @@ export async function infer(
     }
   }
 
-  const fb = (await env.AI.run('@cf/qwen/qwen2.5-coder-32b-instruct' as never, {
+  // A general model, not the coder variant: this answers Shona and Ndebele
+  // questions about law and tax when both providers are unreachable.
+  const fb = (await env.AI.run('@cf/qwen/qwen3-30b-a3b-fp8' as never, {
     messages,
   } as never)) as { response?: string };
 

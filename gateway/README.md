@@ -105,15 +105,26 @@ node at `provider: ""`, `timeout: 0`, `retries: 0`.
 
 Do it in two passes, because two fields have no published shape:
 
-**Pass 1 — `dynamic-route-phase1.json`.** Paste that array. It uses only
-element types whose shape is fully specified: start, three model nodes, end.
-Economy first, escalating to Kimi then Workers AI on provider failure. Save
-and deploy; it is a working route.
+**Pass 1 — `dynamic-route-phase1.json`.** Paste that array. Every node is
+on `workersai`, the only provider slug these model families have natively,
+so it needs no custom provider and no API key:
+
+| Node | Model | Why |
+|---|---|---|
+| `economy` | `@cf/qwen/qwen3-30b-a3b-fp8` | MoE, cheap per token — the bulk tier |
+| `standard` | `@cf/moonshotai/kimi-k2.6` | Kimi on Workers AI; `kimi-k3` is not there |
+| `last_resort` | `@cf/zai-org/glm-5.3-flash` | fast, independent family |
+
+Save and deploy; it is a working route.
 
 It is also behaviourally identical to the full route today. `tier_check`
 would take its `false` branch on every request until `src/gateway.ts` sends
 `tier` as custom metadata, and `false` goes to economy — so pass 1 gives up
 nothing real, it just defers the spend cap.
+
+Swap in `@cf/qwen/qwen3.8-27b` (newer, and the vision path) or
+`@cf/zai-org/glm-5.2` (flagship) if you want more capability per request.
+`docs/workers-ai-models.md` has the verified list.
 
 **Pass 2 — the two unknown nodes.** Add `tier_check` (Conditional) and
 `budget_month` (Budget Limit) in the visual editor, wire them per
@@ -121,6 +132,13 @@ nothing real, it just defers the spend cap.
 JSON view and copy what the dashboard wrote for `properties.conditions` and
 `rate.key` into `dynamic-route.json`. That is the moment the spec stops
 being a guess.
+
+**Pass 3, only for the target route.** `dynamic-route.json` sends economy to
+`qwen` and standard to `moonshot`. Neither is a Cloudflare provider slug —
+both need a custom provider created first, pointed at DashScope and
+Moonshot. That is the configuration the drop intended, and it is what keeps
+step 2 of the degradation meaningful: `workersai` is Cloudflare, so a route
+built only on it makes Cloudflare a dependency rather than an enhancement.
 
 ### One command, if you have an API token
 
