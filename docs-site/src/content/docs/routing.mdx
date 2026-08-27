@@ -1,0 +1,58 @@
+---
+title: Routing and models
+summary: >-
+  Shamwari Cloud routes; it is not a model. Most questions go to a fast,
+  inexpensive model, and only the ones that need more get more.
+order: 5
+---
+import Verdict from '../../components/Verdict.astro';
+import Note from '../../components/Note.astro';
+
+## How the tier is chosen
+
+A plain heuristic over length, turn count and task keywords in all three
+languages, held in a configuration file rather than compiled in — so it can
+be retuned without a code change.
+
+Deliberately not an AI classifier. Paying for a model call to decide which
+model to call would double the latency and the cost of every single request,
+to answer a question a keyword list answers well enough. The heuristic will
+be revised when usage data shows where it is wrong, not before.
+
+| Tier | Model family | Provenance | Trains Mind |
+| --- | --- | --- | --- |
+| Economy | Qwen | `open_weight` | <Verdict allowed={true} label="Eligible" /> |
+| Standard | Kimi | `open_weight` | <Verdict allowed={true} label="Eligible" /> |
+| Premium | Not configured | `restricted` | <Verdict allowed={false} label="Never" /> |
+
+Economy handles the bulk, which is where the margin comes from — the gateway
+passes provider pricing through at cost.
+
+<Note label="Say open weights, not open source">
+The models Shamwari routes to publish their weights. That is not the same as
+being open source, and the difference is not pedantry: Kimi ships under a
+bespoke licence with revenue and user thresholds attached, not under MIT or
+Apache-2.0.
+
+Shamwari's own platform code is Apache-2.0. The models it calls are governed
+by their own terms, and the corpus it reads is governed by a licence recorded
+per source.
+</Note>
+
+## Provenance travels with the answer, not with the tier
+
+A fallback chain can serve a response from a different provider than the one
+originally chosen. That makes tier-level provenance a lie waiting to happen:
+the stamp says what we meant to call, and the answer came from somewhere
+else.
+
+Every model a request can reach is therefore open-weight, so that whichever
+one answers, the stamp stays true. Adding a restricted provider anywhere in a
+fallback chain would require reading the provider back from the response and
+stamping from that instead — which is the work, not a detail.
+
+## Where sovereignty applies
+
+Shamwari Mind, which runs on the device, and Shamwari Ground, which is our own
+corpus, are sovereign. Shamwari Cloud calls models hosted elsewhere and is
+not, and no amount of phrasing makes it so.

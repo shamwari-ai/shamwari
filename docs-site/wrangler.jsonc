@@ -4,9 +4,8 @@
   "compatibility_date": "2026-08-01",
   "observability": { "enabled": true },
 
-  // Static assets only. No Worker script, no bindings, no secrets — this
-  // repo should be safe for anyone in the org to push a typo fix to.
-  "assets": { "directory": "./public" },
+  // Astro's static output. No Worker script, no bindings, no secrets.
+  "assets": { "directory": "./dist" },
 
   "routes": [
     { "pattern": "docs.shamwari.ai", "custom_domain": true }

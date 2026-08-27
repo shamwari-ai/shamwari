@@ -1,0 +1,11 @@
+---
+import { getEntry, render } from 'astro:content';
+import Doc from '../layouts/Doc.astro';
+
+const entry = await getEntry('docs', 'index');
+if (!entry) throw new Error('src/content/docs/index.mdx is missing');
+const { Content } = await render(entry);
+---
+<Doc title={entry.data.title} summary={entry.data.summary} slug="index">
+  <Content />
+</Doc>
