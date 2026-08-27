@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "description": "Tier routing heuristic for Shamwari Cloud. Edit this file and redeploy to retune routing without touching TypeScript. Validated at module load by src/router.ts and again by test/policy.test.ts, so a malformed policy fails before it can silently route everything to one tier.",
+  "notes": [
+    "What is NOT here, deliberately: tier identity, provider slugs, direct provider URLs, API key bindings, and licenseClass. Those are provenance-bearing and live in src/router.ts. Rule 2 of CLAUDE.md hardcodes premium as 'restricted'; moving that into an editable file would put it one careless edit away from stamping restricted output as Mind-trainable.",
+    "Model ids are not here either. They come from the ECONOMY_MODEL and STANDARD_MODEL wrangler vars, which are already the place to change a model without a code edit. Duplicating them here would create a second source of truth.",
+    "This is a deploy-time config, not runtime-dynamic: the file is bundled into the Worker. Edit, then `wrangler deploy`."
+  ],
+
+  "default_tier": "economy",
+
+  "model_aliases": {
+    "shamwari-economy": "economy",
+    "shamwari-standard": "standard"
+  },
+
+  "escalation": {
+    "tier": "standard",
+
+    "max_total_chars": 6000,
+    "max_messages": 12,
+
+    "keywords": {
+      "en": [
+        "calculate",
+        "compute",
+        "derive",
+        "compare",
+        "analyse",
+        "analyze",
+        "step by step",
+        "write code",
+        "debug",
+        "reconcile",
+        "draft a contract"
+      ],
+      "sn": [
+        "tsanangura",
+        "verenga"
+      ],
+      "nd": []
+    }
+  }
+}

@@ -17,6 +17,16 @@
 # ---------------------------------------------------------------
 set -euo pipefail
 
+# ---------------------------------------------------------------
+# HISTORICAL. This produced gateway/ at v1.0. The tree has since moved
+# on — routing-policy.json, test/, resolveJsonModule in tsconfig.json —
+# and this script does not know about any of it. Kept because the
+# comments in it record why each file looks the way it does.
+#
+# It refuses to run against an existing directory, so it cannot clobber
+# gateway/. Do not "regenerate" from it; edit gateway/ directly.
+# ---------------------------------------------------------------
+
 DIR="${1:-shamwari-gateway}"
 [ -e "$DIR" ] && { echo "error: $DIR exists" >&2; exit 1; }
 

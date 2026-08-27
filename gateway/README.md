@@ -45,6 +45,30 @@ npm run dev
 
 Shamwari Core must be reachable at `CORE_URL` first.
 
+## Tier routing
+
+`routing-policy.json` holds the tuning surface of the heuristic: the default
+tier, the public model aliases, the escalation thresholds, and the hard-task
+keyword list bucketed by language. Edit it and redeploy to retune routing
+without touching TypeScript.
+
+What is deliberately *not* in it: tier identity, provider slugs, direct
+provider URLs, API key bindings, and `licenseClass`. Those are
+provenance-bearing and stay in `src/router.ts`, because Core rejects
+restricted rows from the Mind training path on the strength of what that file
+stamps. Model ids stay in the `ECONOMY_MODEL` and `STANDARD_MODEL` wrangler
+vars, which are already the no-code-edit place to change a model.
+
+`validatePolicy` runs at module load and refuses a policy that parses but
+means something different — an unknown tier name, a threshold of zero, an
+uppercase keyword the lowercased match could never fire on. The Worker fails
+to serve rather than silently routing everything to one tier. `npm test`
+validates the shipped file, so that failure lands in CI rather than in
+production.
+
+The keyword buckets are `en`, `sn` and `nd`. Ndebele is empty today; that is
+a visible gap rather than a hidden one.
+
 ## Verify before deploy
 
 - Provider slugs in `src/router.ts` against the current AI Gateway provider list
