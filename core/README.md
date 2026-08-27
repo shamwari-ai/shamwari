@@ -33,7 +33,7 @@ the product and Cloud is the general-knowledge fallback.
 ## Setup
 
 ```bash
-pip install fastapi uvicorn motor asyncpg httpx pydantic
+pip install -r requirements.txt
 
 export MONGODB_URI="mongodb+srv://..."
 export SUPABASE_DB_URL="postgresql://...@db.hxjblxsheosjbjqgmlhx.supabase.co:5432/postgres"
