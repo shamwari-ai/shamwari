@@ -1,49 +1,9 @@
-# === Node.js ===
 node_modules/
-.next/
-.svelte-kit/
-.vercel/
-out/
-build/
-dist/
-.turbo/
-.cache/
-*.tsbuildinfo
-
-# npm debug logs
-npm-debug.log*
-*.log
-
-# === Python ===
-__pycache__/
-*.py[cod]
-*$py.class
-*.egg-info/
-*.egg
-.venv/
-venv/
-.mypy_cache/
-.pytest_cache/
-.ruff_cache/
-
-# === IDE ===
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# === OS ===
-.DS_Store
-Thumbs.db
-
-# === Environment ===
-.env
-.env.local
-.env.*.local
-.coverage
-coverage.xml
-
-# === Cloudflare Workers ===
-.wrangler/
 .dev.vars
+.wrangler/
+dist/
+*.log
+__pycache__/
+.venv/
+.env
+.DS_Store
