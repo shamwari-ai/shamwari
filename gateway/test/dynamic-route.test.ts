@@ -25,7 +25,7 @@ const byType = (t: string) => elements.filter((e) => e.type === t);
 
 describe('the dynamic route graph', () => {
   it('has exactly one start and one end', () => {
-    expect(byType('start').map((e) => e.id)).toEqual(['start']);
+    expect(byType('start')).toHaveLength(1);
     expect(byType('end')).toHaveLength(1);
   });
 
@@ -40,7 +40,7 @@ describe('the dynamic route graph', () => {
 
   it('reaches every element from start', () => {
     const seen = new Set<string>();
-    const stack = ['start'];
+    const stack = [byType('start')[0]?.id as string];
     while (stack.length) {
       const n = stack.pop() as string;
       if (seen.has(n)) continue;
@@ -96,7 +96,8 @@ describe('the route matches the Worker it fronts', () => {
     expect(rate).toBeDefined();
     expect(rate?.properties?.limitType).toBe('cost');
     // Reached directly from start, so the cap cannot be bypassed by a branch.
-    expect(edges.find((e) => e.from === 'start')?.to).toBe(rate?.id);
+    const startId = byType('start')[0]?.id;
+    expect(edges.find((e) => e.from === startId)?.to).toBe(rate?.id);
   });
 
   it('degrades to economy when the cap is hit rather than failing the request', () => {

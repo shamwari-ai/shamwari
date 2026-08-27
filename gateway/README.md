@@ -71,7 +71,8 @@ a visible gap rather than a hidden one.
 
 ## AI Gateway dynamic route
 
-`dynamic-route.json` specifies the route for AI Gateway's Dynamic Routing.
+`dynamic-route.json` specifies the target route for AI Gateway's Dynamic
+Routing; `dynamic-route-phase1.json` is the subset that needs no guesswork.
 It validates against Cloudflare's own `POST /routes` schema, and its graph
 is checked by `test/dynamic-route.test.ts` — one start, one end, no dangling
 `elementId`, every element reachable, and no restricted provider anywhere.
@@ -93,6 +94,33 @@ is the *specification* — the record of what the route should be, guarded by
 the tests — and the route itself is built by hand from the table below.
 Keep the two in step: if you change the route in the dashboard, change the
 JSON to match, or the next person reads a file that lies.
+
+### Paste it into the editor's JSON view
+
+The route Editor has a JSON view, and it takes the bare `elements` array —
+not the `{name, elements}` wrapper the API wants. Creating a route from
+scratch seeds it with a skeleton whose conventions are worth matching:
+`START` and `END` in caps, `outputs: {}` on the end node, and a blank model
+node at `provider: ""`, `timeout: 0`, `retries: 0`.
+
+Do it in two passes, because two fields have no published shape:
+
+**Pass 1 — `dynamic-route-phase1.json`.** Paste that array. It uses only
+element types whose shape is fully specified: start, three model nodes, end.
+Economy first, escalating to Kimi then Workers AI on provider failure. Save
+and deploy; it is a working route.
+
+It is also behaviourally identical to the full route today. `tier_check`
+would take its `false` branch on every request until `src/gateway.ts` sends
+`tier` as custom metadata, and `false` goes to economy — so pass 1 gives up
+nothing real, it just defers the spend cap.
+
+**Pass 2 — the two unknown nodes.** Add `tier_check` (Conditional) and
+`budget_month` (Budget Limit) in the visual editor, wire them per
+`dynamic-route.json`, and point START at `budget_month`. Then re-open the
+JSON view and copy what the dashboard wrote for `properties.conditions` and
+`rate.key` into `dynamic-route.json`. That is the moment the spec stops
+being a guess.
 
 ### One command, if you have an API token
 

@@ -2,9 +2,13 @@
   "name": "shamwari",
   "elements": [
     {
-      "id": "start",
+      "id": "START",
       "type": "start",
-      "outputs": { "next": { "elementId": "budget_month" } }
+      "outputs": {
+        "next": {
+          "elementId": "budget_month"
+        }
+      }
     },
     {
       "id": "budget_month",
@@ -16,8 +20,12 @@
         "window": 2592000
       },
       "outputs": {
-        "success": { "elementId": "tier_check" },
-        "fallback": { "elementId": "economy_qwen" }
+        "success": {
+          "elementId": "tier_check"
+        },
+        "fallback": {
+          "elementId": "economy_qwen"
+        }
       }
     },
     {
@@ -36,8 +44,12 @@
         }
       },
       "outputs": {
-        "true": { "elementId": "standard_kimi" },
-        "false": { "elementId": "economy_qwen" }
+        "true": {
+          "elementId": "standard_kimi"
+        },
+        "false": {
+          "elementId": "economy_qwen"
+        }
       }
     },
     {
@@ -50,8 +62,12 @@
         "retries": 1
       },
       "outputs": {
-        "success": { "elementId": "done" },
-        "fallback": { "elementId": "economy_qwen" }
+        "success": {
+          "elementId": "END"
+        },
+        "fallback": {
+          "elementId": "economy_qwen"
+        }
       }
     },
     {
@@ -64,8 +80,12 @@
         "retries": 1
       },
       "outputs": {
-        "success": { "elementId": "done" },
-        "fallback": { "elementId": "workers_ai" }
+        "success": {
+          "elementId": "END"
+        },
+        "fallback": {
+          "elementId": "workers_ai"
+        }
       }
     },
     {
@@ -78,12 +98,16 @@
         "retries": 0
       },
       "outputs": {
-        "success": { "elementId": "done" },
-        "fallback": { "elementId": "done" }
+        "success": {
+          "elementId": "END"
+        },
+        "fallback": {
+          "elementId": "END"
+        }
       }
     },
     {
-      "id": "done",
+      "id": "END",
       "type": "end",
       "outputs": {}
     }
