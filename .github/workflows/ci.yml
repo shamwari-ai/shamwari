@@ -4,7 +4,11 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    # Not just main. Stacked pull requests target the branch below them in
+    # the stack, and a filter of [main] silently gives every layer but the
+    # bottom one zero checks — the failure looks like a green PR, which is
+    # the worst shape for it to take.
+    branches: [main, "claude/**"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
