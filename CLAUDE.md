@@ -65,7 +65,10 @@ Kimi K3 and Qwen permit it.
 
 `licenseClass` is stamped at generation time and never inferred later:
 - `gateway/src/router.ts` — premium tier is hardcoded `restricted`. **Do not
-  change this.**
+  change this,** and do not move `licenseClass` into
+  `gateway/routing-policy.json`. That file is the editable routing heuristic;
+  provenance must not be editable without a code review. `validatePolicy`
+  and `test/policy.test.ts` both assert the split.
 - `core/main.py::sink_bulk` — rejects any conversation missing a valid
   `licenseClass` rather than defaulting it
 - Postgres `training_examples.license_class` has `CHECK (= 'open_weight')` — a

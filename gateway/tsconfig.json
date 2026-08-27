@@ -4,6 +4,7 @@
     "lib": ["es2022"],
     "module": "es2022",
     "moduleResolution": "bundler",
+    "resolveJsonModule": true,
     "types": ["@cloudflare/workers-types"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
