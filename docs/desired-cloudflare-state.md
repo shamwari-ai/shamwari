@@ -6,9 +6,10 @@ decision this all rests on.
 
 ## The answer to "sandbox per user, or Worker per user?"
 
-Neither. Cloudflare OS — Cloudflare's own open-source agentic workspace,
-Apache-2.0, shipped August 2026 — solves exactly this problem and uses a
-third mechanism: **the Worker Loader binding**.
+Neither. Cloudflare OS — Cloudflare's own agentic workspace, Apache-2.0
+licensed source, shipped August 2026 — solves exactly this problem and uses a
+third mechanism: **Dynamic Workers, reached through the Worker Loader
+binding**.
 
 ```jsonc
 "worker_loaders": [{ "binding": "LOADER" }]
@@ -27,15 +28,33 @@ dispatch namespace to administer, no upload, and no container to cold-start.
 A "gadget" — their word for a small personal app — is a dynamically loaded
 Worker plus a Durable Object holding its state.
 
+Two loading modes, and Cloudflare OS uses the second: `load(code)` spins up a
+fresh Dynamic Worker for one-time execution, while `get(id, callback)` caches
+by id so it stays warm across requests. One-shot generated code wants
+`load()`; a gadget someone returns to wants `get()`.
+
 There are **zero Containers bindings anywhere in that repository**. Cloudflare
 does not use Containers for this, and neither should we.
 
 | Mechanism | Deploy step | Cold start | Ceiling | Verdict |
 |---|---|---|---|---|
-| **Worker Loader** | none — code strings at load | isolate | Worker limits | **Use this** |
+| **Dynamic Workers** (Worker Loader) | none — code strings at load | isolate | Worker limits | **Use this**, but see the maturity note |
 | Workers for Platforms | upload per artifact | isolate | unlimited apps | Only if artifacts need their own hostname |
 | Containers | image build | container boot | 1,500 vCPU / 6 TiB account-wide | Only for a real interpreter and filesystem |
 | Worker per user | upload per user | isolate | — | Solves nothing a Durable Object doesn't solve better |
+
+### Maturity: open beta, not GA
+
+Dynamic Workers entered **open beta on 24 March 2026** and had not reached
+general availability when this was written. An earlier version of this
+document recommended it without saying so, which is the kind of omission that
+turns into a production surprise. Treat the recommendation as conditional:
+the mechanism is right, and a beta is not a foundation to put a paying
+customer's gadget on without a fallback. Re-check the changelog before
+committing to it.
+
+Note also that the docs now brand this **Dynamic Workers**, with Worker
+Loader as the binding name rather than the product name.
 
 So: **one dynamically loaded Worker per gadget version, not per user.** A user
 with forty gadgets gets forty isolates on demand and pays for none of them
@@ -79,12 +98,24 @@ arrived at from the security side rather than the sovereignty side.
 workspace for company knowledge work. Shamwari is a consumer companion for
 Zimbabwean law, tax and daily life. Fork the mechanisms, not the shape.
 
-**And the constraint that does not go away:** Worker Loader runs on
+**And the constraint that does not go away:** a Dynamic Worker runs on
 Cloudflare. Under CLAUDE.md's own reading — personal-scope artifacts cannot
-execute on Cloudflare Containers — a Worker Loader gadget computing over
-personal data is the same category of problem, just cheaper. Adopting this
-gives us `platform` and `community` scope immediately. `personal` still needs
-the Rust + `deno_core` host behind a shared `SandboxProvider`.
+execute on Cloudflare Containers — a gadget computing over personal data is
+the same category of problem, just cheaper. Adopting this gives us
+`platform` and `community` scope immediately. `personal` still needs the
+Rust + `deno_core` host behind a shared `SandboxProvider`.
+
+One control is worth knowing about even so, because it is the strongest
+version of the argument for eventually saying yes. `load()` and `get()` both
+accept **`globalOutbound: null`**, which blocks all outbound network access
+from the Dynamic Worker — the code can compute but cannot exfiltrate, and
+every capability it does get is one the host passed in explicitly. That is
+precisely the shape a Gatekeeper needs.
+
+It does not settle rule 1 by itself: the code and the data it touches are
+still on hardware we do not control, which is the storage-and-execution
+question `scaling-and-memory.md` leaves open. But it means the eventual
+answer is a trust decision about Cloudflare rather than a missing mechanism.
 
 ## Desired account state
 
@@ -153,6 +184,8 @@ a WebSocket or request is in flight.
 
 - [`cloudflare/cloudflare-os`](https://github.com/cloudflare/cloudflare-os) —
   Apache-2.0. Read at commit `1411714`.
+- [Dynamic Workers open beta, 24 March 2026](https://developers.cloudflare.com/changelog/post/2026-03-24-dynamic-workers-open-beta/)
+- [Dynamic Worker Loaders](https://developers.cloudflare.com/workers/runtime-apis/bindings/worker-loader/)
 - [Cloudflare OS](https://os.cloudflare.app/)
 - [Workers for Platforms](https://developers.cloudflare.com/cloudflare-for-platforms/workers-for-platforms/)
 - [Durable Objects limits](https://developers.cloudflare.com/durable-objects/platform/limits/)
