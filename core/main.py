@@ -161,7 +161,11 @@ async def verify_key(body: KeyLookup) -> KeyResult:
 
 class GroundQuery(BaseModel):
     query: str
-    embedding: list[float] = Field(..., min_length=1024, max_length=1024)
+    #: Absent means the caller did not embed the query, which is required of
+    #: a `mind` destination — see ground_search. 1024 is bge-m3 and matches
+    #: the live ground_vector_search index; a mismatch is rejected rather
+    #: than searched against the wrong index.
+    embedding: list[float] | None = Field(default=None, min_length=1024, max_length=1024)
     owner_entity_id: str
     scope: Scope = Scope.PLATFORM
     destination: Literal["cloud", "mind"] = "cloud"
@@ -195,6 +199,28 @@ async def ground_search(body: GroundQuery) -> dict[str, Any]:
     """
     scope = resolve_scope(body.scope, body.destination)
 
+    # RULE 1, AUTHORITATIVELY, IN THE LEAK PATH.
+    #
+    # A `mind` destination that arrives carrying an embedding means the
+    # caller embedded the user's question before calling us. Embedding is
+    # inference, so on the edge that is a Cloudflare-hosted model seeing
+    # personal text — the leak this endpoint's own docstring claims cannot
+    # happen. The Worker guards it too (gateway/src/ground.ts); this is the
+    # check the Worker cannot bypass, and it is deliberately a refusal
+    # rather than a silent discard of the vector, because a discard would
+    # hide a Worker that had already leaked.
+    if body.destination == "mind" and body.embedding is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "error": "edge_embedding_forbidden",
+                "message": (
+                    "A mind-destination query must not be embedded by the caller. "
+                    "Embedding is inference; the device supplies its own vector."
+                ),
+            },
+        )
+
     if scope is Scope.PERSONAL:
         owner_filter: dict[str, Any] = {"ownerEntityId": body.owner_entity_id}
     elif scope is Scope.COMMUNITY:
@@ -210,47 +236,74 @@ async def ground_search(body: GroundQuery) -> dict[str, Any]:
     if body.language:
         prefilter["language"] = {"$in": [body.language, "en"]}
 
-    pipeline: list[dict[str, Any]] = [
+    lexical: list[dict[str, Any]] = [
         {
-            "$rankFusion": {
-                "input": {
-                    "pipelines": {
-                        "semantic": [
-                            {
-                                "$vectorSearch": {
-                                    "index": "ground_vector_search",
-                                    "path": "embedding",
-                                    "queryVector": body.embedding,
-                                    "numCandidates": body.top_k * 20,
-                                    "limit": body.top_k * 2,
-                                    "filter": prefilter,
-                                }
+            "$search": {
+                "index": "ground_text_search",
+                "compound": {
+                    "must": [
+                        {
+                            "text": {
+                                "query": body.query,
+                                "path": ["title", "heading", "content"],
                             }
-                        ],
-                        "lexical": [
-                            {
-                                "$search": {
-                                    "index": "ground_text_search",
-                                    "compound": {
-                                        "must": [
-                                            {
-                                                "text": {
-                                                    "query": body.query,
-                                                    "path": ["title", "heading", "content"],
-                                                }
-                                            }
-                                        ],
-                                        "filter": [{"equals": {"path": "isActive", "value": True}}],
-                                    },
-                                }
-                            },
-                            {"$limit": body.top_k * 2},
-                        ],
-                    }
+                        }
+                    ],
+                    "filter": [{"equals": {"path": "isActive", "value": True}}],
                 },
-                "combination": {"weights": {"semantic": 2, "lexical": 1}},
             }
         },
+        # The owner filter belongs on BOTH retrieval pipelines, not just the
+        # vector one. Atlas Search cannot express the whole prefilter in its
+        # compound form, so it is re-applied as a $match immediately after
+        # $search — before $limit, so the limit counts documents the caller
+        # is actually allowed to see.
+        #
+        # Without this, $rankFusion merged lexical hits that had passed only
+        # an isActive check into a result set the caller was scope-gated out
+        # of: a platform-scope Cloud request could surface another entity's
+        # personal pod chunks by keyword and forward them to Moonshot. The
+        # scope model is only as strong as its least-filtered pipeline.
+        {"$match": prefilter},
+        {"$limit": body.top_k * 2},
+    ]
+
+    if body.embedding is None:
+        # Lexical only. Weaker ranking over the same corpus, not a different
+        # corpus — the prefilter above still applies. This is what a
+        # personal-scope query gets until Mind ships its own embedding, and
+        # it is the honest cost of not embedding on Cloud.
+        retrieval: list[dict[str, Any]] = [*lexical]
+    else:
+        retrieval = [
+            {
+                "$rankFusion": {
+                    "input": {
+                        "pipelines": {
+                            "semantic": [
+                                {
+                                    "$vectorSearch": {
+                                        "index": "ground_vector_search",
+                                        "path": "embedding",
+                                        "queryVector": body.embedding,
+                                        "numCandidates": body.top_k * 20,
+                                        "limit": body.top_k * 2,
+                                        "filter": prefilter,
+                                    }
+                                }
+                            ],
+                            "lexical": lexical,
+                        }
+                    },
+                    # RRF, not averaged scores: the two indexes produce
+                    # incompatible score scales and averaging ranks badly.
+                    "combination": {"weights": {"semantic": 2, "lexical": 1}},
+                }
+            }
+        ]
+
+    pipeline: list[dict[str, Any]] = [
+        *retrieval,
         {"$limit": body.top_k},
         {
             "$project": {
@@ -363,6 +416,21 @@ async def sink_bulk(body: BulkWrite) -> dict[str, Any]:
                     status.HTTP_400_BAD_REQUEST,
                     f"{name} document missing valid licenseClass",
                 )
+
+            # licenseClass gates the teacher model's terms. It says nothing
+            # about the user's. A personal-scope exchange is the caller's own
+            # pod data and must never reach the Mind training corpus however
+            # permissive the teacher model's licence was, so refuse the
+            # combination at write time rather than filtering it at read
+            # time — a read-time filter is one forgotten WHERE clause away
+            # from training on someone's payslip.
+            if name in {"conversations", "messages"} and d.get("scope") == "personal":
+                if d.get("trainingEligible") is not False:
+                    raise HTTPException(
+                        status.HTTP_400_BAD_REQUEST,
+                        f"{name} document is personal scope and must set "
+                        "trainingEligible=false",
+                    )
 
         res = await client[body.database][name].insert_many(docs, ordered=False)
         written[name] = len(res.inserted_ids)
