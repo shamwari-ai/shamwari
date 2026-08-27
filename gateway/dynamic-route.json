@@ -75,7 +75,7 @@
       "type": "model",
       "properties": {
         "provider": "qwen",
-        "model": "qwen3-32b-instruct",
+        "model": "qwen3.8-max",
         "timeout": 20000,
         "retries": 1
       },
@@ -92,8 +92,8 @@
       "id": "workers_ai",
       "type": "model",
       "properties": {
-        "provider": "workers-ai",
-        "model": "@cf/qwen/qwen2.5-coder-32b-instruct",
+        "provider": "workersai",
+        "model": "@cf/zai-org/glm-5.3-flash",
         "timeout": 15000,
         "retries": 0
       },

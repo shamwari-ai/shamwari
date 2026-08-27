@@ -8,6 +8,7 @@
 // undocumented upstream — see gateway/README.md.
 import { describe, expect, it } from 'vitest';
 import route from '../dynamic-route.json';
+import phase1 from '../dynamic-route-phase1.json';
 
 type Element = {
   id: string;
@@ -70,7 +71,10 @@ describe('rule 2 — every path stays open-weight', () => {
   // so the stamp is only true while every reachable provider is
   // open-weight. Adding a restricted provider here means the Worker must
   // stamp from the cf-aig-provider response header instead.
-  const OPEN_WEIGHT = new Set(['qwen', 'moonshot', 'workers-ai']);
+  // 'qwen' and 'moonshot' are custom-provider slugs this account must
+  // create; 'workersai' is the native Cloudflare one. See
+  // docs/workers-ai-models.md — 'workers-ai' with a hyphen is not valid.
+  const OPEN_WEIGHT = new Set(['qwen', 'moonshot', 'workersai']);
 
   it('routes only to open-weight providers', () => {
     const providers = byType('model').map((e) => e.properties?.provider as string);
@@ -105,5 +109,39 @@ describe('the route matches the Worker it fronts', () => {
     const fallback = rate?.outputs.fallback?.elementId;
     const target = elements.find((e) => e.id === fallback);
     expect(target?.properties?.provider).toBe('qwen');
+  });
+});
+
+// Phase 1 is a paste target for the dashboard's JSON view, so a broken graph
+// there fails silently in someone's browser rather than in CI.
+describe('dynamic-route-phase1.json', () => {
+  const ph1 = phase1 as Element[];
+  const p1ids = new Set(ph1.map((e) => e.id));
+  const p1edges = ph1.flatMap((e) =>
+    Object.entries(e.outputs ?? {}).map(([, o]) => ({ from: e.id, to: o.elementId })),
+  );
+
+  it('is a closed graph with one start and one end', () => {
+    expect(ph1.filter((e) => e.type === 'start')).toHaveLength(1);
+    expect(ph1.filter((e) => e.type === 'end')).toHaveLength(1);
+    expect(p1edges.filter((e) => !p1ids.has(e.to))).toEqual([]);
+  });
+
+  it('needs no custom provider — every node is on workersai', () => {
+    for (const e of ph1.filter((x) => x.type === 'model')) {
+      expect(e.properties?.provider).toBe('workersai');
+    }
+  });
+
+  it('uses @cf/ model ids, which is what workersai accepts', () => {
+    for (const e of ph1.filter((x) => x.type === 'model')) {
+      expect(e.properties?.model as string).toMatch(/^@cf\/[a-z0-9._-]+\/[a-zA-Z0-9._-]+$/);
+    }
+  });
+
+  it('routes to no code-specialised model — the corpus is law and tax, not code', () => {
+    for (const e of ph1.filter((x) => x.type === 'model')) {
+      expect(e.properties?.model as string).not.toMatch(/coder|-code/);
+    }
   });
 });
