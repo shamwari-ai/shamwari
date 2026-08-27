@@ -71,10 +71,10 @@ a visible gap rather than a hidden one.
 
 ## AI Gateway dynamic route
 
-`dynamic-route.json` is the payload for AI Gateway's Dynamic Routing. It
-validates against Cloudflare's own `POST /routes` schema, and its graph is
-checked by `test/dynamic-route.test.ts` — one start, one end, no dangling
-`elementId`, every element reachable.
+`dynamic-route.json` specifies the route for AI Gateway's Dynamic Routing.
+It validates against Cloudflare's own `POST /routes` schema, and its graph
+is checked by `test/dynamic-route.test.ts` — one start, one end, no dangling
+`elementId`, every element reachable, and no restricted provider anywhere.
 
 ```
 start → budget_month (cost cap)
@@ -85,45 +85,65 @@ start → budget_month (cost cap)
           false → economy_qwen  → fallback → workers_ai → done
 ```
 
-The feature is in Beta, so treat the shapes below as current-as-of-now.
+The feature is in Beta.
 
-### In the dashboard
+**The dashboard has no JSON import.** The Create dialog takes only a name
+and a template, and the Editor is a visual canvas. So `dynamic-route.json`
+is the *specification* — the record of what the route should be, guarded by
+the tests — and the route itself is built by hand from the table below.
+Keep the two in step: if you change the route in the dashboard, change the
+JSON to match, or the next person reads a file that lies.
 
-The **Create a new Route** dialog takes a name and a template — there is no
-JSON box in it. Name the route `shamwari`, so calls read
-`model: "dynamic/shamwari"`, and choose **Start from scratch**.
+### Build it by hand
 
-Do *not* choose "Start from example", despite the RECOMMENDED badge: it
-wires a `gpt-4o` OpenAI node. Anything answered there is restricted output
-that the Worker will still stamp `open_weight`, which is rule 2 broken. See
-the open-weight section below.
+Create the route: name it `shamwari` (so calls read
+`model: "dynamic/shamwari"`) and choose **Start from scratch**.
 
-Then open the route's Editor and paste the `elements` array from
-`dynamic-route.json` into its JSON view. If the Editor offers no JSON view,
-use the API path below instead — it does the whole thing in one call.
+Do *not* choose "Start from example", despite the RECOMMENDED badge — it
+wires a `gpt-4o` OpenAI node, which is rule 2 broken before the route
+serves a single request. See the open-weight section below.
 
-(The dialog says the name cannot be changed later. `PATCH /routes/{id}` with
-a `name` body exists in the API, so a misnamed route is recoverable.)
+The name is fixed in the UI. `PATCH /routes/{id}` takes a `name`, so a
+misnamed route is still recoverable.
 
-### Via the API
+Then add six nodes. Add them in this order so each one's target already
+exists when you wire its output:
 
-Creating a route does not make it live — deploy the version too:
+| # | Node | Type | Settings | Wire outputs to |
+|---|---|---|---|---|
+| 1 | `done` | End | — | — |
+| 2 | `workers_ai` | Model | Workers AI · `@cf/qwen/qwen2.5-coder-32b-instruct` · timeout 15000 · retries 0 | success → `done`, fallback → `done` |
+| 3 | `economy_qwen` | Model | Qwen · `qwen3-32b-instruct` · timeout 20000 · retries 1 | success → `done`, fallback → `workers_ai` |
+| 4 | `standard_kimi` | Model | Moonshot · `kimi-k3` · timeout 30000 · retries 1 | success → `done`, fallback → `economy_qwen` |
+| 5 | `tier_check` | Conditional | `metadata.tier` equals `standard` | true → `standard_kimi`, false → `economy_qwen` |
+| 6 | `budget_month` | Budget Limit | cost · key `metadata.ownerEntityId` · limit 50 · window 2592000 (30d) | success → `tier_check`, fallback → `economy_qwen` |
+
+Finally point **Start** at `budget_month`, then **Save** the version and
+**Deploy** it — saving alone does not make it live.
+
+Node names are for your own legibility; the editor may not let you set the
+ids. What matters is the shape of the graph.
+
+Two settings the UI will phrase its own way. The conditional's field/
+operator/value builder is the one part of `dynamic-route.json` that was a
+guess — the JSON shape is unpublished upstream
+([cloudflare-docs#27334](https://github.com/cloudflare/cloudflare-docs/issues/27334))
+— so build it in the UI and treat the UI as correct. Same for the budget
+key: whether it accepts a metadata path at all is undocumented, so if
+`metadata.ownerEntityId` is not offered, use whatever per-key option it
+gives you and note it here.
+
+Worth doing once the route exists, so the file stops being a guess:
 
 ```bash
 ACC=$CF_ACCOUNT_ID; GW=shamwari
 API=https://api.cloudflare.com/client/v4/accounts/$ACC/ai-gateway/gateways/$GW
-
-ROUTE=$(curl -sS -X POST "$API/routes" \
-  -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" \
-  --data @dynamic-route.json | tee /dev/stderr | jq -r .result.id)
-
-VERSION=$(curl -sS "$API/routes/$ROUTE/versions" \
-  -H "Authorization: Bearer $CF_API_TOKEN" | jq -r '.result[0].id')
-
-curl -sS -X POST "$API/routes/$ROUTE/deployments" \
-  -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" \
-  -d "{\"version_id\":\"$VERSION\"}"
+curl -sS "$API/routes" -H "Authorization: Bearer $CF_API_TOKEN" | jq .
 ```
+
+That returns the route exactly as the dashboard stored it. Copy the real
+`conditions` and `key` shapes into `dynamic-route.json` and the spec becomes
+accurate rather than approximate.
 
 Then call it with `model: "dynamic/shamwari"` on `/compat/chat/completions`.
 
