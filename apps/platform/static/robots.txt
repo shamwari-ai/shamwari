@@ -1,5 +1,0 @@
-User-agent: *
-Disallow: /
-
-# platform.shamwari.ai is an authenticated developer portal.
-# Until the public-facing portion ships we keep it out of the index.
