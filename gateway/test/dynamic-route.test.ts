@@ -72,9 +72,9 @@ describe('rule 2 — every path stays open-weight', () => {
   // open-weight. Adding a restricted provider here means the Worker must
   // stamp from the cf-aig-provider response header instead.
   // 'qwen' and 'moonshot' are custom-provider slugs this account must
-  // create; 'workersai' is the native Cloudflare one. See
-  // docs/workers-ai-models.md — 'workers-ai' with a hyphen is not valid.
-  const OPEN_WEIGHT = new Set(['qwen', 'moonshot', 'workersai']);
+  // create. 'workers-ai' is what the dashboard itself serialises for
+  // Workers AI — see docs/workers-ai-models.md.
+  const OPEN_WEIGHT = new Set(['qwen', 'moonshot', 'workers-ai']);
 
   it('routes only to open-weight providers', () => {
     const providers = byType('model').map((e) => e.properties?.provider as string);
@@ -127,13 +127,27 @@ describe('dynamic-route-phase1.json', () => {
     expect(p1edges.filter((e) => !p1ids.has(e.to))).toEqual([]);
   });
 
-  it('needs no custom provider — every node is on workersai', () => {
+  it('needs no custom provider — every node is on Workers AI', () => {
     for (const e of ph1.filter((x) => x.type === 'model')) {
-      expect(e.properties?.provider).toBe('workersai');
+      expect(e.properties?.provider).toBe('workers-ai');
     }
   });
 
-  it('uses @cf/ model ids, which is what workersai accepts', () => {
+  it('gives every node a real timeout', () => {
+    // 0 is the editor's default. With it, a node either never times out —
+    // so a hung provider hangs the request and the fallback never fires —
+    // or times out instantly. Either way the chain below it is dead.
+    for (const e of ph1.filter((x) => x.type === 'model')) {
+      expect(e.properties?.timeout as number).toBeGreaterThan(0);
+    }
+  });
+
+  it('retries the first node before falling back', () => {
+    const first = ph1.find((e) => e.id === 'economy');
+    expect(first?.properties?.retries as number).toBeGreaterThan(0);
+  });
+
+  it('uses @cf/ model ids, which is what Workers AI accepts', () => {
     for (const e of ph1.filter((x) => x.type === 'model')) {
       expect(e.properties?.model as string).toMatch(/^@cf\/[a-z0-9._-]+\/[a-zA-Z0-9._-]+$/);
     }

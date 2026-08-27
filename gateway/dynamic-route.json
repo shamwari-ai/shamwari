@@ -92,7 +92,7 @@
       "id": "workers_ai",
       "type": "model",
       "properties": {
-        "provider": "workersai",
+        "provider": "workers-ai",
         "model": "@cf/zai-org/glm-5.3-flash",
         "timeout": 15000,
         "retries": 0
