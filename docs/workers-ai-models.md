@@ -122,6 +122,12 @@ Image out: `flux-1-schnell`, `flux-2-dev`, `flux-2-klein-4b`,
 FLUX licences differ sharply by variant — schnell is permissive, `dev` is
 not. Read the licence per variant before stamping `licenseClass`.
 
+## Voice and image are deferred
+
+Decided 2026-08-27: not this phase. The sections below stay because the
+constraints are the expensive part to rediscover, not the model ids.
+CLAUDE.md's deferred-work list carries the summary.
+
 ## Two things that must hold before voice or image ships
 
 **Rule 1 gets harder, not easier.** The scope gate in `gateway/src/scope.ts`
