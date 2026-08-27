@@ -1,0 +1,18 @@
+---
+/** The two rules are genuinely numbered in CLAUDE.md. The numeral encodes
+    that; it is not ornament. */
+interface Props { n: number; title: string }
+const { n, title } = Astro.props;
+---
+<div class="rule">
+  <div class="n" aria-hidden="true">{n}</div>
+  <div>
+    <h3>Rule {n} — {title}</h3>
+    <slot />
+  </div>
+</div>
+<style>
+  .rule { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.25rem; margin: 0 0 2.5rem; }
+  .n { font-family: var(--serif); font-size: 2.6rem; line-height: 0.9; color: var(--sodalite); }
+  h3 { margin: 0.2rem 0 0.6rem; font-family: var(--sans); font-size: 1.15rem; font-weight: 600; color: var(--ink); }
+</style>

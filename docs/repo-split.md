@@ -1,6 +1,7 @@
 # Splitting the monorepo
 
-A proposal, not a done deal. Read the risk section before agreeing to it.
+The ordering below is **agreed** (2026-08-27). The risk section is the part
+worth re-reading before each extraction, not the repo list.
 
 ## Proposed repositories
 
@@ -8,7 +9,7 @@ A proposal, not a done deal. Read the risk section before agreeing to it.
 |---|---|---|---|---|
 | `shamwari-gateway` | `gateway/` | Cloudflare Workers | TypeScript | Already standalone — own lockfile, own `wrangler deploy`, touches no other component's files. Deploys on its own cadence, several times a day if routing is being tuned. |
 | `shamwari-core` | `core/` + `db/` | Nyuchi infrastructure | Python | Owns MongoDB and Postgres. `db/` goes with it, not on its own: `ingest_ground.py` writes to both stores and the schema is meaningless apart from the service that reads it. |
-| `shamwari-docs` | `docs-site/` | `docs.shamwari.ai` | static HTML | Public-facing, no build, no secrets. Anyone in the org should be able to fix a typo without touching a repo that can deploy inference. |
+| `shamwari-docs` | `docs-site/` | `docs.shamwari.ai`, on Cloudflare Workers | Astro + MDX, static output | Public-facing, no bindings, no secrets. Anyone in the org should be able to fix a typo without touching a repo that can deploy inference. |
 | `shamwari` (this one) | `CLAUDE.md`, `README.md`, `docs/`, `LICENSE`, `NOTICE`, `scripts/` | nothing | — | The umbrella. Handoff context, the applied-migration log, architecture and GTM, the repo index. Keeps the name so the ecosystem's front door does not move. |
 
 Later, when those phases open:
@@ -17,7 +18,7 @@ Later, when those phases open:
 |---|---|
 | `shamwari-mind` | Training pipeline, QLoRA config, eval harness. Reads `mind_training_chunks` and nothing else. |
 | `shamwari-web` | `shamwari.ai` — the consumer surface. |
-| `shamwari-platform` | `platform.shamwari.ai` — keys, usage, billing. |
+| `shamwari-platform` | `platform.shamwari.ai` — the console: keys, usage, billing. Astro, with TypeScript or Rust underneath. |
 | `shamwari-sandbox` | `code.shamwari.ai`. Rust + `deno_core` behind a shared `SandboxProvider`, because personal-scope artifacts cannot execute on Cloudflare Containers under rule 1. |
 
 ## What the split costs
@@ -110,6 +111,12 @@ messages is most of the documentation.
 - **Do not put the scope gate in a shared package.** Two independent
   implementations is the design. Deduplicating them removes the defence in
   depth and leaves the sovereignty claim resting on one function.
+- **Do not point a new repo at the old Vercel projects.** The SvelteKit web
+  and platform apps were removed from this repo in the pivot, but their
+  Vercel projects still exist on Vercel's side and now build from a tree
+  that has no app in it. Delete or re-target them deliberately rather than
+  leaving them failing.
+
 - **Do not split before the demo works.** `shamwari.knowledgeBase` is still
   empty and Core is not deployed. Repo surgery competes for attention with
   the only task that turns this into a working product.

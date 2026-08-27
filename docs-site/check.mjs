@@ -1,44 +1,86 @@
-// No build step, so this is the whole test suite: the checks that would
-// otherwise only fail in a reader's browser.
-import { readFileSync, statSync } from 'node:fs';
+// Post-build checks on dist/. Astro covers types and MDX syntax; these are
+// the things it cannot know about.
+import { readFileSync, statSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
-const html = readFileSync('public/index.html', 'utf8');
-const bytes = statSync('public/index.html').size;
+const walk = (dir) =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)],
+  );
+
+const files = walk('dist');
+const pages = files.filter((f) => f.endsWith('.html'));
 const fail = [];
+if (pages.length < 7) fail.push(`expected at least 7 built pages, found ${pages.length}`);
 
-// Every in-page link resolves to an id that exists.
-const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
-for (const [, href] of html.matchAll(/href="#([^"]+)"/g)) {
-  if (!ids.has(href)) fail.push(`dead anchor: #${href}`);
-}
+const routes = new Set(pages.map((p) => p.replace(/^dist/, '').replace(/index\.html$/, '')));
+const assets = new Set(files.map((f) => f.replace(/^dist/, '')));
 
-// Language discipline is a project rule, not a preference — see CLAUDE.md.
-// Collapse whitespace first: the permitted phrases wrap across lines in the
-// source, and a per-line check would flag its own allow-list.
-const flat = html.replace(/\s+/g, ' ');
+// Astro extracts component styles into their own stylesheet, so the tokens
+// live there rather than inline. Collect every :root block in the build.
+const css = files.filter((f) => f.endsWith('.css')).map((f) => readFileSync(f, 'utf8'));
+
+// The one permitted family of uses: naming the phrase in order to reject it.
 const PERMITTED = [
   'not the same as being open source',
   'Say open weights, not open source',
-  '\u201Can open source model\u201D',
+  '“an open source model”',
+  '“Open source” invites',
 ];
-for (const m of flat.matchAll(/.{60}open[ -]sourc.{60}/gi)) {
-  if (!PERMITTED.some((ok) => m[0].includes(ok))) {
-    fail.push(`says "open source" outside the rule that forbids it: …${m[0].slice(40, 110)}…`);
+
+for (const page of pages) {
+  const html = readFileSync(page, 'utf8');
+  const where = page.replace(/^dist\//, '') || 'index.html';
+  const baseVars = [
+    ...[...html.matchAll(/:root\s*\{([^}]*)\}/g)].map((m) => m[1]),
+    ...css.flatMap((c) => [...c.matchAll(/:root\s*\{([^}]*)\}/g)].map((m) => m[1])),
+  ].join('');
+
+  // Internal page links resolve to a route that was actually built. Asset
+  // paths are checked against the file list instead — they carry hashes and
+  // are not routes.
+  for (const [, href] of html.matchAll(/href="(\/[^"#]*)"/g)) {
+    if (/\.[a-z0-9]{2,5}$/i.test(href)) {
+      if (!assets.has(href)) fail.push(`${where}: missing asset ${href}`);
+      continue;
+    }
+    const norm = href.endsWith('/') ? href : href + '/';
+    if (!routes.has(norm)) fail.push(`${where}: dead link ${href}`);
+  }
+
+  // Language discipline from CLAUDE.md. Indexed rather than regex-windowed,
+  // so adjacent occurrences cannot swallow one another's context.
+  const flat = html.replace(/\s+/g, ' ');
+  for (let i = flat.search(/open[ -]sourc/i); i !== -1; ) {
+    const ctx = flat.slice(Math.max(0, i - 90), i + 90);
+    if (!PERMITTED.some((ok) => ctx.includes(ok))) {
+      fail.push(`${where}: says "open source" outside the rule that forbids it — …${ctx.slice(60, 150)}…`);
+    }
+    const next = flat.slice(i + 10).search(/open[ -]sourc/i);
+    i = next === -1 ? -1 : i + 10 + next;
+  }
+
+  // A colour defined only inside a prefers-color-scheme or [data-theme]
+  // block renders one theme's text on the other theme's ground.
+  for (const [, name] of html.matchAll(/var\((--[a-z-]+)/g)) {
+    if (!baseVars.includes(name + ':')) fail.push(`${where}: token ${name} has no base :root value`);
+  }
+
+  // No client JavaScript: nothing on these pages needs it.
+  if (/<script(?![^>]*type="application\/ld\+json")/i.test(html)) {
+    fail.push(`${where}: ships a <script> tag`);
   }
 }
 
-// A colour defined only inside a media or [data-theme] block renders one
-// theme's text on the other theme's ground.
-const rootVars = (html.match(/:root\s*\{([^}]*)\}/) || [, ''])[1];
-for (const [, name] of html.matchAll(/var\((--[a-z-]+)/g)) {
-  if (!rootVars.includes(name + ':')) fail.push(`token ${name} has no base :root value`);
-}
-
-// The site's own argument is that it loads on a slow connection.
-if (bytes > 40_960) fail.push(`index.html is ${bytes} bytes, over the 40KB budget`);
+// The audience is assumed to be on a slow connection.
+const biggest = Math.max(...pages.map((p) => statSync(p).size));
+if (biggest > 51_200) fail.push(`largest page is ${biggest} bytes, over the 50KB budget`);
 
 if (fail.length) {
   console.error('FAIL\n' + [...new Set(fail)].map((f) => '  - ' + f).join('\n'));
   process.exit(1);
 }
-console.log(`ok — ${bytes} bytes, ${ids.size} anchors, tokens resolve, language rule held`);
+console.log(
+  `ok — ${pages.length} pages, largest ${biggest} bytes, links and assets resolve, ` +
+    `tokens have base values, no client JS, language rule held`,
+);

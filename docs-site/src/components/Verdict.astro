@@ -1,0 +1,22 @@
+---
+/** A yes/no state that must read without relying on colour alone. */
+interface Props { allowed: boolean; label?: string }
+const { allowed, label } = Astro.props;
+---
+<span class:list={['verdict', allowed ? 'yes' : 'no']}>
+  {label ?? (allowed ? 'Yes' : 'No')}
+</span>
+<style>
+  .verdict {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 0.22em 0.6em;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .no  { background: var(--ochre-q);    color: var(--ochre); }
+  .yes { background: var(--sodalite-q); color: var(--sodalite); }
+</style>

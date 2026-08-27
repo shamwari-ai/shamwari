@@ -1,0 +1,50 @@
+---
+title: Architecture
+summary: >-
+  Two services, drawn along one line: the edge holds no database credentials,
+  and the service that holds them does not run on the edge.
+order: 4
+---
+
+## The gateway, at the edge
+
+A Cloudflare Worker in TypeScript. It authenticates the key, applies the
+scope gate, chooses a tier, fetches grounding context, calls the model, and
+queues a record of what happened. It never opens a database connection.
+
+TypeScript rather than Rust, deliberately. A gateway is entirely input and
+output — routing, headers, `fetch` — with no computation worth compiling.
+Rust earns its place in the sandbox host and in queue consumers that do real
+work; here it would cost bundle size and cold-start time for nothing.
+
+## Core, on our own infrastructure
+
+A Python service that owns MongoDB and the training corpus in Postgres. It
+verifies API keys, runs retrieval, makes the authoritative scope decision,
+and accepts writes through a strict allow-list rather than as a general
+database proxy — so an edge worker that was somehow compromised still could
+not write wherever it liked.
+
+Core exists partly for a mundane reason. MongoDB's HTTP data API was
+withdrawn in September 2025, and the native driver is not hardened for edge
+runtimes, so something had to sit in front of the database. Given that, it is
+also the right place for the scope decision — because that decision should
+live somewhere the edge provider cannot see.
+
+## Cloudflare is an enhancement, never a dependency
+
+Inference degrades in three steps:
+
+1. **Through the AI gateway** — which adds caching, spend limits and
+   observability.
+2. **Directly to the same provider** — with no Cloudflare in the path at all.
+3. **To a smaller model** — lower quality, still an answer.
+
+Every response reports which path served it. Steps 2 and 3 are what make the
+claim true, and paths that are never exercised rot quietly, so the gateway
+credential gets broken on purpose once a month to confirm the fallbacks still
+work.
+
+This is also why the routing does not live entirely inside Cloudflare's own
+dynamic-routing feature, tempting as that is: a route defined inside the AI
+gateway dies with the AI gateway, which would make step 2 impossible.

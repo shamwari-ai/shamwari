@@ -1,0 +1,50 @@
+---
+title: Two rules that must not be broken
+nav: The two rules
+summary: >-
+  Everything else in Shamwari is a preference. These two are constraints,
+  enforced in more than one place, because each is the kind of claim that is
+  worthless the first time it turns out not to be true.
+order: 2
+---
+import Rule from '../../components/Rule.astro';
+
+<Rule n={1} title="Personal data never reaches a third-party inference provider">
+
+Not Kimi, not Qwen, not Claude, not anyone. When a request is marked
+`personal` and the only available destination is an external model, Shamwari
+returns `409 scope_requires_local_inference` and answers nothing.
+
+It is **not** quietly downgraded to public knowledge. A downgrade would
+answer confidently while withholding the very data the question was about,
+and the person asking would have no way to know something was missing. An
+error is worse service and better faith.
+
+The check runs twice on purpose: once at the edge, so a refused request costs
+nothing, and once inside the service that owns the database, where the edge
+cannot overrule it. Two implementations, in two languages, deliberately not
+sharing code — because one check is one bug away from a leak, and this leak
+would not be an outage. It would be a broken promise.
+
+</Rule>
+
+<Rule n={2} title="Only open-weight output may train Shamwari Mind">
+
+Every logged exchange is stamped with a provenance class at the moment it is
+generated, never inferred afterwards when the evidence is gone.
+
+Anthropic's and OpenAI's terms bar using their output to train a competing
+model. Qwen's and Kimi's permit it. So the stamp decides eligibility, and it
+is enforced three times over:
+
+1. The router assigns it, and the premium tier is hardcoded `restricted`.
+2. The service refuses to store an exchange without a valid one, rather than
+   defaulting it to something permissive.
+3. The training corpus carries a database constraint that a restricted row
+   physically cannot satisfy.
+
+Three checks for one invariant looks like belt and braces. It is really an
+admission that provenance is impossible to reconstruct later: if the stamp is
+ever wrong, there is no way to find out which rows to remove.
+
+</Rule>

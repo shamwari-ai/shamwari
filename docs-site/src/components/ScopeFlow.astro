@@ -1,0 +1,52 @@
+---
+/** The point of this diagram is the line that is not drawn: personal scope
+    has no path to the cloud. Everything else is context for that absence. */
+---
+<figure>
+  <svg viewBox="0 0 640 232" role="img" aria-labelledby="flow-t flow-d">
+    <title id="flow-t">How a request is routed by scope</title>
+    <desc id="flow-d">A request enters the scope gate. Community and platform
+      scopes continue to Shamwari Cloud and an external model. Personal scope
+      is stopped at the gate, and can only continue to Shamwari Mind on the
+      device.</desc>
+    <g fill="none" stroke="var(--hairline)" stroke-width="1.25">
+      <path d="M104 60 H176"></path>
+      <path d="M104 168 H176"></path>
+      <path d="M296 60 H368"></path>
+      <path d="M488 60 H556"></path>
+      <path d="M296 168 H368"></path>
+    </g>
+    <g font-family="var(--sans)" font-size="12.5">
+      <rect x="8" y="38" width="96" height="44" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="56" y="65" text-anchor="middle" fill="var(--text)">community</text>
+      <rect x="8" y="146" width="96" height="44" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="56" y="173" text-anchor="middle" fill="var(--text)">personal</text>
+
+      <rect x="176" y="26" width="120" height="176" fill="var(--sodalite-q)" stroke="var(--sodalite)"></rect>
+      <text x="236" y="106" text-anchor="middle" fill="var(--sodalite)" font-weight="600">scope gate</text>
+      <text x="236" y="126" text-anchor="middle" fill="var(--sodalite)" font-size="10.5">enforced twice</text>
+
+      <rect x="368" y="38" width="120" height="44" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="428" y="65" text-anchor="middle" fill="var(--text)">Shamwari Cloud</text>
+
+      <rect x="556" y="38" width="76" height="44" fill="var(--surface)" stroke="var(--hairline)"></rect>
+      <text x="594" y="59" text-anchor="middle" fill="var(--text)" font-size="11">external</text>
+      <text x="594" y="73" text-anchor="middle" fill="var(--text)" font-size="11">model</text>
+
+      <rect x="368" y="146" width="120" height="44" fill="var(--surface)" stroke="var(--sodalite)"></rect>
+      <text x="428" y="167" text-anchor="middle" fill="var(--sodalite)" font-size="11">Shamwari Mind</text>
+      <text x="428" y="181" text-anchor="middle" fill="var(--sodalite)" font-size="11">on your device</text>
+    </g>
+    <g stroke="var(--ochre)" stroke-width="1.5" fill="none">
+      <path d="M300 132 L332 100"></path>
+      <path d="M332 132 L300 100"></path>
+    </g>
+    <text x="316" y="152" text-anchor="middle" fill="var(--ochre)" font-family="var(--sans)" font-size="10.5" font-weight="600">409</text>
+  </svg>
+  <figcaption><slot /></figcaption>
+</figure>
+<style>
+  figure { margin: 0 0 1.5rem; }
+  svg { width: 100%; height: auto; display: block; }
+  figcaption { margin-top: 0.75rem; font-size: 0.86rem; color: var(--granite); max-width: var(--measure); }
+</style>
