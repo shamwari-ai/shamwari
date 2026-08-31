@@ -1,0 +1,47 @@
+---
+title: Ground, and why citation is the whole point
+nav: Ground and citation
+summary: >-
+  Zimbabwean law, tax rates and policy change often, and a confident wrong
+  answer about a statutory instrument is worse than no answer.
+order: 6
+---
+import Note from '../../components/Note.astro';
+
+## Retrieval
+
+Two searches run together — one semantic, one keyword — and their *rankings*
+are fused rather than their scores. The two indexes produce numbers on
+incompatible scales, and averaging them ranks badly.
+
+Chunking follows the document's own structure: *Part*, *Chapter*, *Schedule*,
+*Section*, *Article*, *Clause*. This is the difference between a citation
+that reads **section 56** and one that reads *chunk 47*, and the citation is
+the entire product claim. Repealed provisions are excluded from retrieval
+rather than filtered out afterwards, so a superseded rate can never be
+quoted as current.
+
+Embeddings are multilingual by choice, so a question asked in Shona can find
+a passage written in English. That was the deciding factor in choosing the
+model, and it is now locked: changing it would mean re-embedding the whole
+corpus and rebuilding the indexes.
+
+## When Ground does not know
+
+Shamwari says so, answers from general knowledge, and marks that it has done
+so. It does not invent a section number, a statutory instrument, a rate or a
+date — and where an answer turns on a current figure it cannot confirm, it
+says the figure must be verified and names the authority to verify it with.
+
+The miss is recorded. A question we could not answer is the most useful thing
+a customer can tell us about what to ingest next, so the gaps become the
+corpus roadmap rather than disappearing.
+
+<Note label="Some sources are not ours to take">
+Every source carries a recorded reuse basis, and the ingestion tool refuses a
+source whose terms have not been read rather than warning and continuing.
+
+Being able to *show* something is not permission to *train* on it. Scraped
+news can be cited and linked, and is not training data. Copyrighted exam
+material is not scraped at all — licence, or no answer.
+</Note>

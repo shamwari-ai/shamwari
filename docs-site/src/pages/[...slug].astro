@@ -1,0 +1,21 @@
+---
+import { getCollection, render, type CollectionEntry } from 'astro:content';
+import type { GetStaticPaths } from 'astro';
+import Doc from '../layouts/Doc.astro';
+
+export const getStaticPaths: GetStaticPaths = async () => {
+  const pages = await getCollection('docs');
+  // index.mdx is served by pages/index.astro, so it is excluded here to
+  // avoid two routes claiming the same URL.
+  return pages
+    .filter((p) => p.id !== 'index')
+    .map((p) => ({ params: { slug: p.id }, props: { entry: p } }));
+};
+
+// getStaticPaths props are not inferred, so the type is declared here.
+const { entry } = Astro.props as { entry: CollectionEntry<'docs'> };
+const { Content } = await render(entry);
+---
+<Doc title={entry.data.title} summary={entry.data.summary} slug={entry.id}>
+  <Content />
+</Doc>

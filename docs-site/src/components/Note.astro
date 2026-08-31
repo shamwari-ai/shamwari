@@ -1,0 +1,28 @@
+---
+/** A caveat the reader must not skim past. `label` names why it is here. */
+interface Props { label: string }
+const { label } = Astro.props;
+---
+<aside class="note">
+  <span class="label">{label}</span>
+  <slot />
+</aside>
+<style>
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    padding: 1.25rem 1.4rem;
+    margin: 0 0 1.25rem;
+    max-width: var(--measure);
+  }
+  .note :global(p:last-child) { margin-bottom: 0; }
+  .label {
+    display: block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ochre);
+    margin-bottom: 0.5rem;
+  }
+</style>

@@ -1,0 +1,48 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shamwari-gateway",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "observability": { "enabled": true },
+
+  // Embeddings only. Also the last-resort inference fallback.
+  "ai": { "binding": "AI" },
+
+  "kv_namespaces": [
+    { "binding": "AUTH_CACHE", "id": "REPLACE_ME" }
+    // wrangler kv namespace create AUTH_CACHE
+  ],
+
+  "queues": {
+    "producers": [{ "binding": "SINK", "queue": "shamwari-sink" }],
+    "consumers": [
+      {
+        "queue": "shamwari-sink",
+        "max_batch_size": 100,
+        "max_batch_timeout": 10,
+        "max_retries": 5,
+        "dead_letter_queue": "shamwari-sink-dlq"
+      }
+    ]
+  },
+
+  "vars": {
+    "CF_GATEWAY_ID": "shamwari",
+    "CORE_URL": "https://core.shamwari.ai",
+    "EMBEDDING_MODEL": "@cf/baai/bge-m3",
+    "GROUND_TOP_K": "6",
+    "AUTH_CACHE_TTL": "60",
+    "ECONOMY_MODEL": "qwen3-32b-instruct",
+    "STANDARD_MODEL": "kimi-k3",
+    "SURFACE": "shamwari.ai",
+
+    // Mind is not deployed yet. While false, personal-scope requests are
+    // refused rather than routed to Cloud. Flip to "true" when Mind ships.
+    "MIND_AVAILABLE": "false"
+  }
+
+  // wrangler secret put:
+  //   CF_ACCOUNT_ID, CF_AIG_TOKEN
+  //   SHAMWARI_CORE_TOKEN
+  //   QWEN_API_KEY, MOONSHOT_API_KEY
+}

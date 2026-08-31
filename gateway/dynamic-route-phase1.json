@@ -1,0 +1,70 @@
+[
+  {
+    "id": "START",
+    "type": "start",
+    "outputs": {
+      "next": {
+        "elementId": "economy"
+      }
+    }
+  },
+  {
+    "id": "economy",
+    "type": "model",
+    "properties": {
+      "provider": "workers-ai",
+      "model": "@cf/qwen/qwen3-30b-a3b-fp8",
+      "timeout": 20000,
+      "retries": 1
+    },
+    "outputs": {
+      "success": {
+        "elementId": "END"
+      },
+      "fallback": {
+        "elementId": "standard"
+      }
+    }
+  },
+  {
+    "id": "standard",
+    "type": "model",
+    "properties": {
+      "provider": "workers-ai",
+      "model": "@cf/moonshotai/kimi-k2.6",
+      "timeout": 30000,
+      "retries": 1
+    },
+    "outputs": {
+      "success": {
+        "elementId": "END"
+      },
+      "fallback": {
+        "elementId": "last_resort"
+      }
+    }
+  },
+  {
+    "id": "last_resort",
+    "type": "model",
+    "properties": {
+      "provider": "workers-ai",
+      "model": "@cf/zai-org/glm-5.3-flash",
+      "timeout": 15000,
+      "retries": 0
+    },
+    "outputs": {
+      "success": {
+        "elementId": "END"
+      },
+      "fallback": {
+        "elementId": "END"
+      }
+    }
+  },
+  {
+    "id": "END",
+    "type": "end",
+    "outputs": {}
+  }
+]

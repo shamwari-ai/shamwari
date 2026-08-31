@@ -1,0 +1,25 @@
+# Gitleaks configuration.
+#
+# Default rules, plus one narrow allowlist. Replaces the fingerprint-based
+# .gitleaksignore, whose entries pointed at files that no longer exist and
+# which had to be re-added every time a flagged line moved.
+#
+# Keep this file short. Every allowlist entry is a deliberate statement that
+# the matched string cannot be a credential.
+
+title = "Shamwari AI"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = """
+The API-key placeholder used in the curl examples in README.md and in the
+gateway generator's smoke-test output. The curl-auth-header rule flags
+`Authorization: Bearer sk_shamwari_...` on entropy alone.
+
+Matched on the whole line and on the literal three-dot placeholder, so a
+real key — which is random and has no ellipsis — is still reported.
+"""
+regexTarget = "line"
+regexes = ['''Bearer sk_shamwari_\.\.\.''']

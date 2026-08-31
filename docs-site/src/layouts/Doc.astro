@@ -1,0 +1,164 @@
+---
+import { getCollection } from 'astro:content';
+import '../styles/tokens.css';
+
+interface Props { title: string; summary: string; slug: string }
+const { title, summary, slug } = Astro.props;
+
+// Nav order comes from each page's frontmatter, so adding a page means
+// adding a file — there is no list here to forget to update.
+const pages = (await getCollection('docs')).sort((a, b) => a.data.order - b.data.order);
+const href = (id: string) => (id === 'index' ? '/' : `/${id}/`);
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{title} · Shamwari AI</title>
+  <meta name="description" content={summary} />
+  <link rel="canonical" href={new URL(href(slug), Astro.site)} />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&display=swap"
+  />
+</head>
+<body>
+  <header class="masthead">
+    <div class="inner">
+      <a class="wordmark" href="/">Shamwari AI <span>Documentation</span></a>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <nav aria-label="Documentation">
+      <p class="eyebrow">Contents</p>
+      <ul>
+        {pages.map((p) => (
+          <li>
+            <a href={href(p.id)} aria-current={p.id === slug ? 'page' : undefined}>
+              {p.data.nav ?? p.data.title}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+
+    <main>
+      <h1>{title}</h1>
+      <p class="standfirst">{summary}</p>
+      <div class="prose"><slot /></div>
+    </main>
+  </div>
+
+  <footer>
+    <div class="inner">
+      <p>
+        Shamwari is Shona for <em>friend</em>. The community pillar of the Bundu
+        Ecosystem — Bundu Foundation intellectual property, sold commercially
+        under Nyuchi Africa.
+      </p>
+      <p>
+        Platform code is Apache-2.0. Third-party model terms and per-source
+        corpus licences are recorded separately and are not covered by ours.
+      </p>
+    </div>
+  </footer>
+</body>
+</html>
+
+<style>
+  .masthead { border-bottom: 1px solid var(--hairline); background: var(--surface); }
+  .inner { max-width: 78rem; margin: 0 auto; padding: 1.5rem; }
+  .wordmark {
+    display: inline-flex; align-items: baseline; gap: 0.6rem;
+    font-family: var(--serif); font-size: 1.35rem; font-weight: 600;
+    color: var(--ink); letter-spacing: -0.01em; text-decoration: none;
+  }
+  .wordmark span {
+    font-family: var(--sans); font-size: 0.72rem; font-weight: 500;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--sodalite);
+  }
+
+  .wrap {
+    max-width: 78rem; margin: 0 auto; padding: 0 1.5rem;
+    display: grid; grid-template-columns: 1fr; gap: 0;
+  }
+  @media (min-width: 60rem) {
+    .wrap { grid-template-columns: 14rem minmax(0, 1fr); gap: 4rem; }
+  }
+
+  nav { padding: 2.25rem 0 0; }
+  @media (min-width: 60rem) {
+    nav { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; padding-top: 3rem; }
+  }
+  .eyebrow {
+    margin: 0 0 0.85rem; font-size: 0.7rem; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--granite);
+  }
+  nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; }
+  @media (min-width: 60rem) { nav ul { flex-direction: column; gap: 0.5rem; } }
+  nav a {
+    color: var(--granite); text-decoration: none; font-size: 0.9rem;
+    border-bottom: 1px solid transparent;
+  }
+  nav a:hover { color: var(--sodalite); border-bottom-color: var(--sodalite); }
+  nav a[aria-current='page'] { color: var(--ink); font-weight: 600; }
+
+  main { padding: 3rem 0 5rem; min-width: 0; }
+  h1 {
+    font-family: var(--serif); font-weight: 400;
+    font-size: clamp(2rem, 5vw, 2.8rem); line-height: 1.14;
+    letter-spacing: -0.02em; color: var(--ink);
+    margin: 0; max-width: 30ch; text-wrap: balance;
+  }
+  .standfirst {
+    max-width: var(--measure); margin: 1rem 0 2.25rem;
+    padding-bottom: 2rem; border-bottom: 1px solid var(--hairline);
+    font-size: 1.12rem; color: var(--granite);
+  }
+
+  .prose :global(h2) {
+    font-family: var(--serif); font-weight: 600;
+    font-size: clamp(1.4rem, 3vw, 1.8rem); line-height: 1.22;
+    letter-spacing: -0.015em; color: var(--ink);
+    margin: 2.75rem 0 1rem; text-wrap: balance;
+  }
+  .prose :global(h3) {
+    font-family: var(--sans); font-weight: 600; font-size: 1.02rem;
+    color: var(--ink); margin: 2rem 0 0.6rem;
+  }
+  .prose :global(p), .prose :global(ul), .prose :global(ol) { max-width: var(--measure); }
+  .prose :global(p) { margin: 0 0 1.1rem; }
+  .prose :global(ul), .prose :global(ol) { padding-left: 1.1rem; }
+  .prose :global(li) { margin-bottom: 0.5rem; }
+  .prose :global(blockquote) {
+    margin: 0 0 1.25rem; padding-left: 1.1rem;
+    border-left: 2px solid var(--sodalite);
+    font-family: var(--serif); font-style: italic; color: var(--sodalite);
+    max-width: var(--measure);
+  }
+  /* Tables scroll inside their own container so the page never scrolls sideways. */
+  .prose :global(table) {
+    display: block; overflow-x: auto; border-collapse: collapse;
+    width: 100%; font-size: 0.94rem; margin: 0 0 1.25rem;
+  }
+  .prose :global(th), .prose :global(td) {
+    text-align: left; padding: 0.65rem 1rem 0.65rem 0;
+    border-bottom: 1px solid var(--hairline); vertical-align: top;
+  }
+  .prose :global(th) {
+    font-size: 0.7rem; font-weight: 600; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--granite);
+    border-bottom-color: var(--ink); white-space: nowrap;
+  }
+
+  footer {
+    border-top: 1px solid var(--hairline); background: var(--surface);
+    color: var(--granite); font-size: 0.9rem;
+  }
+  footer p { max-width: var(--measure); }
+  footer p:last-child { margin-bottom: 0; }
+</style>

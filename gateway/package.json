@@ -1,0 +1,22 @@
+{
+  "name": "shamwari-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shamwari Cloud edge gateway — routed inference grounded in Zimbabwean law, policy and economy",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "tail": "wrangler tail",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260826.1",
+    "typescript": "^5.9.0",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.126.0"
+  }
+}

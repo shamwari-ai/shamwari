@@ -1,0 +1,25 @@
+Shamwari AI
+Copyright 2026 Bundu Foundation
+
+This product includes software developed by Bundu Foundation
+(https://bundu.org) and is sold commercially under Nyuchi Africa.
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+---
+
+Shamwari Cloud routes inference to third-party providers. Their model
+weights and outputs are covered by their own licences, not this one:
+
+  - Qwen (economy tier)   — open weights, Alibaba Cloud terms
+  - Kimi K3 (standard)    — open weights, bespoke Moonshot AI licence.
+                            Read the LICENSE file directly; it requires a
+                            separate agreement for Model-as-a-Service
+                            operators above USD 20M revenue over any
+                            12 months, and attribution above 100M MAU or
+                            USD 20M monthly revenue.
+
+Corpus content ingested into Shamwari Ground carries its own licence,
+recorded per source in Postgres `corpus_sources.license` and gated by
+`ground_eligible` and `mind_eligible`. Ground eligibility is not training
+eligibility. See CLAUDE.md.
