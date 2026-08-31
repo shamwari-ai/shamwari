@@ -1,6 +1,7 @@
 import type { Env, Message, SinkMessage, AuthContext } from './types';
 import { authenticate } from './auth';
 import { parseScope, decideDestination, ScopeRefusal } from './scope';
+import type { Capability, ScopeDecision } from './scope';
 import { route } from './router';
 import { infer } from './gateway';
 import { ground } from './ground';
@@ -31,6 +32,140 @@ async function overQuota(env: Env, auth: AuthContext): Promise<boolean> {
   }
 }
 
+interface ChatBody {
+  messages?: Message[];
+  model?: string;
+  scope?: string;
+}
+
+/**
+ * Everything both endpoints do before they diverge: authenticate, meter,
+ * parse, and gate on scope. The capability argument is what makes the gate
+ * mean different things on the two endpoints — see scope.ts.
+ */
+async function admit(
+  req: Request,
+  env: Env,
+  capability: Capability,
+): Promise<
+  | { ok: false; response: Response }
+  | { ok: true; auth: AuthContext; body: ChatBody; messages: Message[]; decision: ScopeDecision }
+> {
+  const auth = await authenticate(req, env);
+  if (!auth) return { ok: false, response: json({ error: 'invalid_api_key' }, 401) };
+  if (await overQuota(env, auth)) {
+    return {
+      ok: false,
+      response: json(
+        {
+          error: 'quota_exceeded',
+          tier: auth.tier,
+          upgrade: 'https://platform.shamwari.ai/billing',
+        },
+        429,
+      ),
+    };
+  }
+
+  let body: ChatBody;
+  try {
+    body = await req.json();
+  } catch {
+    return { ok: false, response: json({ error: 'invalid_json' }, 400) };
+  }
+
+  const messages = body.messages ?? [];
+  if (messages.length === 0) {
+    return { ok: false, response: json({ error: 'messages_required' }, 400) };
+  }
+
+  // Scope gate, before anything expensive happens.
+  const scope = parseScope(body.scope);
+  try {
+    return { ok: true, auth, body, messages, decision: decideDestination(scope, env, capability) };
+  } catch (e) {
+    if (e instanceof ScopeRefusal) return { ok: false, response: json(e.toPayload(), 409) };
+    throw e;
+  }
+}
+
+/**
+ * Retrieval without generation. This is the endpoint Shamwari Mind calls.
+ *
+ * It is the only endpoint that may see personal scope, and it can only do
+ * so because nothing here reaches a provider: ground() skips the edge
+ * embedding for a `mind` destination, and infer() is never called. The
+ * device gets the system prompt and the citations, and answers for itself.
+ */
+async function groundContext(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const a = await admit(req, env, 'retrieval_only');
+  if (!a.ok) return a.response;
+  const { auth, messages, decision } = a;
+
+  const requestId = crypto.randomUUID();
+  const started = Date.now();
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  const language = lastUser ? detectLanguage(lastUser.content) : null;
+
+  const g = await ground(
+    env,
+    messages,
+    auth.ownerEntityId,
+    decision.scope,
+    decision.destination,
+    language,
+  );
+  const latencyMs = Date.now() - started;
+
+  // Metered, but no conversation document. The gateway never sees the
+  // answer on this path, and a personal-scope exchange is not Mind training
+  // data — see the trainingEligible note on the completion path.
+  ctx.waitUntil(
+    env.SINK.send({
+      database: 'platform',
+      collection: 'usageEvents',
+      doc: {
+        ownerEntityId: auth.ownerEntityId,
+        apiKeyId: auth.apiKeyId,
+        requestId,
+        billingPeriod: billingPeriod(),
+        tier: 'retrieval',
+        provider: null,
+        model: null,
+        licenseClass: null,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheHit: false,
+        groundHit: g.hit,
+        inferencePath: 'mind',
+        edgeEmbedding: decision.destination === 'cloud',
+        latencyMs,
+        createdAt: new Date().toISOString(),
+      },
+    }).catch((e) => console.error('sink enqueue failed', String(e))),
+  );
+
+  return json({
+    id: requestId,
+    system_prompt: g.systemPrompt,
+    shamwari: {
+      scope: decision.scope,
+      destination: decision.destination,
+      language,
+      grounded: g.hit,
+      inference_path: 'mind',
+      latency_ms: latencyMs,
+      citations: g.chunks.map((c) => ({
+        title: c.title,
+        heading: c.heading,
+        authority: c.authority,
+        effective_from: c.effective_from,
+        url: c.source_url,
+      })),
+    },
+  });
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
@@ -43,42 +178,16 @@ export default {
         mind: env.MIND_AVAILABLE === 'true',
       });
     }
+    if (url.pathname === '/v1/ground/context' && req.method === 'POST') {
+      return groundContext(req, env, ctx);
+    }
     if (url.pathname !== '/v1/chat/completions' || req.method !== 'POST') {
       return json({ error: 'not_found' }, 404);
     }
 
-    const auth = await authenticate(req, env);
-    if (!auth) return json({ error: 'invalid_api_key' }, 401);
-    if (await overQuota(env, auth)) {
-      return json(
-        {
-          error: 'quota_exceeded',
-          tier: auth.tier,
-          upgrade: 'https://platform.shamwari.ai/billing',
-        },
-        429,
-      );
-    }
-
-    let body: { messages?: Message[]; model?: string; scope?: string };
-    try {
-      body = await req.json();
-    } catch {
-      return json({ error: 'invalid_json' }, 400);
-    }
-
-    const messages = body.messages ?? [];
-    if (messages.length === 0) return json({ error: 'messages_required' }, 400);
-
-    // Scope gate, before anything expensive happens.
-    const scope = parseScope(body.scope);
-    let decision;
-    try {
-      decision = decideDestination(scope, env);
-    } catch (e) {
-      if (e instanceof ScopeRefusal) return json(e.toPayload(), 409);
-      throw e;
-    }
+    const a = await admit(req, env, 'cloud_inference');
+    if (!a.ok) return a.response;
+    const { auth, body, messages, decision } = a;
 
     const requestId = crypto.randomUUID();
     const started = Date.now();
@@ -125,6 +234,11 @@ export default {
           licenseClass: target.licenseClass,
           tier: target.tier,
           grounded: g.hit,
+          // Provenance gates the teacher model's terms; this gates the
+          // user's. A personal-scope exchange is the user's own pod data
+          // and is never Mind training material, whatever licence the
+          // teacher model carries. Core rejects the combination outright.
+          trainingEligible: decision.scope !== 'personal',
           promoted: false,
           lastMessageAt: now,
           createdAt: now,

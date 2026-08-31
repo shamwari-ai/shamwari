@@ -52,11 +52,29 @@ Enforced twice on purpose:
 Two checks because one is a single bug away from a leak, and this leak is a
 broken sovereignty claim rather than a 500.
 
+**Two checks were not enough, and the reason is worth keeping.** Three code
+paths downstream of the gate never read the decision it returned: `ground()`
+embedded the question on Workers AI, `infer()` sent the prompt to a provider,
+and Core's lexical retrieval pipeline had no owner filter at all. Both checks
+passed in every case. `docs/scaling-and-memory.md` has the write-up. The rule
+that follows: **a scope decision no downstream function is obliged to read is
+a comment, not a control.** When adding an endpoint, pass the decision to
+everything that touches provider I/O, and add the test that counts the calls.
+
 **Consequence:** Shamwari Mind (on-device) is load-bearing, not a nice-to-have.
 If Personal can't reach Cloud and Personal is what makes a companion a
 companion, Mind is the product and Cloud is the general-knowledge fallback.
-`MIND_AVAILABLE=false` today; flipping it routes personal scope to Mind with no
-code change.
+
+`MIND_AVAILABLE=false` today. It gates `/v1/ground/context` — retrieval only,
+no provider call — which is the endpoint Mind calls to get Ground context and
+a system prompt before generating **on the device**. It deliberately does not
+gate `/v1/chat/completions`: that endpoint generates on Cloud, so no value of
+a Worker variable can make it serve personal scope.
+
+This used to read "flipping it routes personal scope to Mind with no code
+change". That was false and it hid a leak — there is no Mind client in the
+Worker and there cannot be one, so flipping the flag sent personal prompts to
+Moonshot. Mind is a client of the gateway, not a backend behind it.
 
 ### 2. Only `open_weight` provenance may train Shamwari Mind
 
@@ -225,6 +243,7 @@ unqueryable vectors. Keep that behaviour.
 | 22 corpus sources seeded | 5 blocked pending licence review |
 | `core/` | written, syntax-verified, **not deployed** |
 | `gateway/` | written, typecheck clean, structural assertions pass, **not deployed** |
+| rule-1 enforcement downstream of the gate | fixed 2026-08-27, 3 defects, tests added |
 | `shamwari.knowledgeBase` content | **EMPTY — this is the only blocker to a demo** |
 
 ### The single next step
