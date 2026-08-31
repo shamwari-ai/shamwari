@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shamwari-docs",
+  "compatibility_date": "2026-08-01",
+  "observability": { "enabled": true },
+
+  // Astro's static output. No Worker script, no bindings, no secrets.
+  "assets": { "directory": "./dist" },
+
+  "routes": [
+    { "pattern": "docs.shamwari.ai", "custom_domain": true }
+  ]
+}
