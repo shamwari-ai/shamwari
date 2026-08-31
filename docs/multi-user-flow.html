@@ -1,0 +1,827 @@
+<title>Shamwari Traffic Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,600;1,6..72,400&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+/* ---------------------------------------------------------------------------
+   Sodalite. Inherited verbatim from docs-site/src/styles/tokens.css — the
+   brand mineral named in CLAUDE.md, not a preference. Ochre carries meaning:
+   it appears only where something is refused or restricted, never as
+   decoration. Slate-teal is the one hue added, for Mind, because the whole
+   argument of this page is that Mind is not Cloud and it must not be
+   possible to mistake one for the other.
+   --------------------------------------------------------------------------- */
+:root {
+  --ink:        #0E1428;
+  --text:       #1B2338;
+  --granite:    #5D667C;
+  --paper:      #F4F6FA;
+  --surface:    #FFFFFF;
+  --sunken:     #EDF1F8;
+  --hairline:   #D3DAE8;
+  --sodalite:   #2B4A9B;
+  --sodalite-q: #E4E9F6;
+  --ochre:      #9C5228;
+  --ochre-q:    #F6EAE1;
+  --mind:       #1B6068;
+  --mind-q:     #DDEEEF;
+  --sage:       #2F6B4F;
+  --shadow:     0 1px 2px rgba(14, 20, 40, .06), 0 8px 24px -16px rgba(14, 20, 40, .18);
+
+  --serif: Newsreader, Georgia, "Times New Roman", serif;
+  --sans: Archivo, "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink:        #EDF0F7;
+    --text:       #D6DCEA;
+    --granite:    #939CB2;
+    --paper:      #0B1020;
+    --surface:    #131A2E;
+    --sunken:     #0F1526;
+    --hairline:   #2A3350;
+    --sodalite:   #8AA6E8;
+    --sodalite-q: #1A2543;
+    --ochre:      #D89767;
+    --ochre-q:    #33231A;
+    --mind:       #6FBEC6;
+    --mind-q:     #122E31;
+    --sage:       #77BE99;
+    --shadow:     0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px -16px rgba(0, 0, 0, .8);
+  }
+}
+:root[data-theme="dark"] {
+  --ink:        #EDF0F7;
+  --text:       #D6DCEA;
+  --granite:    #939CB2;
+  --paper:      #0B1020;
+  --surface:    #131A2E;
+  --sunken:     #0F1526;
+  --hairline:   #2A3350;
+  --sodalite:   #8AA6E8;
+  --sodalite-q: #1A2543;
+  --ochre:      #D89767;
+  --ochre-q:    #33231A;
+  --mind:       #6FBEC6;
+  --mind-q:     #122E31;
+  --sage:       #77BE99;
+  --shadow:     0 1px 2px rgba(0, 0, 0, .5), 0 8px 24px -16px rgba(0, 0, 0, .8);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 2.5rem 1.25rem 4rem; }
+
+/* ---- masthead ---------------------------------------------------------- */
+.mast { display: flex; flex-direction: column; gap: .5rem; margin-bottom: .5rem; }
+.eyebrow {
+  font-size: .7rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--granite);
+}
+h1 {
+  font-family: var(--serif); font-weight: 600; font-size: clamp(1.9rem, 4.4vw, 2.9rem);
+  line-height: 1.08; margin: 0; color: var(--ink); text-wrap: balance;
+  letter-spacing: -.015em;
+}
+.dek { max-width: 70ch; margin: 0; color: var(--granite); font-size: 1.02rem; }
+
+.caveat {
+  margin: 1.5rem 0 0; padding: .85rem 1rem;
+  background: var(--ochre-q); border-left: 3px solid var(--ochre);
+  font-size: .88rem; color: var(--text);
+}
+.caveat strong { color: var(--ink); font-weight: 600; }
+
+/* ---- instrument panel -------------------------------------------------- */
+.panel {
+  margin-top: 1.75rem; padding: .9rem 1rem;
+  background: var(--surface); border: 1px solid var(--hairline); box-shadow: var(--shadow);
+  display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1.4rem;
+}
+.panel-group { display: flex; align-items: center; gap: .6rem; }
+.panel-label {
+  font-size: .66rem; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--granite);
+}
+button {
+  font-family: var(--sans); font-size: .82rem; font-weight: 600;
+  color: var(--ink); background: var(--surface);
+  border: 1px solid var(--hairline); padding: .38rem .8rem; cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+button:hover { border-color: var(--sodalite); }
+button:focus-visible { outline: 2px solid var(--sodalite); outline-offset: 2px; }
+button[aria-pressed="true"] {
+  background: var(--sodalite); border-color: var(--sodalite); color: #fff;
+}
+:root[data-theme="dark"] button[aria-pressed="true"],
+:root:not([data-theme="light"]) button[aria-pressed="true"] { color: var(--paper); }
+button.danger[aria-pressed="true"] { background: var(--ochre); border-color: var(--ochre); }
+button.mindish[aria-pressed="true"] { background: var(--mind); border-color: var(--mind); }
+.seg { display: flex; }
+.seg button { border-right-width: 0; }
+.seg button:last-child { border-right-width: 1px; }
+
+/* ---- stage ruler ------------------------------------------------------- */
+.board {
+  margin-top: 1.1rem; background: var(--surface);
+  border: 1px solid var(--hairline); box-shadow: var(--shadow);
+  overflow-x: auto;
+}
+.grid { min-width: 940px; }
+.row {
+  display: grid;
+  grid-template-columns: 232px repeat(6, 1fr) 178px;
+  align-items: stretch;
+  border-bottom: 1px solid var(--hairline);
+}
+.row:last-child { border-bottom: 0; }
+.ruler { background: var(--sunken); }
+.ruler > div {
+  padding: .6rem .5rem; font-size: .64rem; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--granite);
+  border-left: 1px solid var(--hairline); text-align: center;
+}
+.ruler > div:first-child { border-left: 0; text-align: left; padding-left: .9rem; }
+.ruler > div:last-child { text-align: left; }
+
+/* ---- lanes ------------------------------------------------------------- */
+.who { padding: .7rem .9rem; border-right: 1px solid var(--hairline); }
+.who-name { font-weight: 600; color: var(--ink); font-size: .88rem; }
+.who-meta {
+  font-family: var(--mono); font-size: .66rem; color: var(--granite);
+  letter-spacing: -.01em; margin-top: .1rem;
+}
+.who-ask {
+  margin-top: .3rem; font-size: .76rem; color: var(--text);
+  font-style: italic; line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.cell {
+  border-left: 1px solid var(--hairline);
+  display: flex; align-items: center; justify-content: center;
+  min-height: 62px; position: relative;
+}
+.pip {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--hairline);
+  transition: background .2s, transform .2s, box-shadow .2s;
+}
+.cell.done .pip { background: var(--sodalite); }
+.cell.done.mind .pip { background: var(--mind); }
+.cell.live .pip {
+  transform: scale(1.9); background: var(--sodalite);
+  box-shadow: 0 0 0 5px var(--sodalite-q);
+}
+.cell.live.mind .pip { background: var(--mind); box-shadow: 0 0 0 5px var(--mind-q); }
+.cell.refused .pip {
+  background: var(--ochre); transform: scale(1.5);
+  box-shadow: 0 0 0 5px var(--ochre-q);
+}
+.cell.skipped .pip {
+  background: transparent; border: 1px dashed var(--hairline); width: 9px; height: 9px;
+}
+/* the connector between stages, drawn only where the request has been */
+.cell::before {
+  content: ""; position: absolute; left: 0; right: 50%; top: 50%; height: 1px;
+  background: var(--hairline); z-index: 0;
+}
+.cell.done::before, .cell.live::before, .cell.refused::before { background: var(--sodalite); }
+.cell.done.mind::before, .cell.live.mind::before { background: var(--mind); }
+.cell.refused::before { background: var(--ochre); }
+.pip { position: relative; z-index: 1; }
+
+.out { padding: .7rem .8rem; border-left: 1px solid var(--hairline); display: flex; align-items: center; }
+.chip {
+  font-family: var(--mono); font-size: .66rem; font-weight: 500;
+  padding: .22rem .45rem; border: 1px solid var(--hairline);
+  background: var(--sunken); color: var(--text); line-height: 1.35;
+}
+.chip.cloud { background: var(--sodalite-q); border-color: var(--sodalite); color: var(--ink); }
+.chip.mind  { background: var(--mind-q); border-color: var(--mind); color: var(--ink); }
+.chip.ref   { background: var(--ochre-q); border-color: var(--ochre); color: var(--ink); }
+.chip.wait  { color: var(--granite); }
+.chip b { font-weight: 700; }
+
+/* ---- tallies ----------------------------------------------------------- */
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 1.1rem; margin-top: 1.1rem; }
+.card {
+  background: var(--surface); border: 1px solid var(--hairline);
+  box-shadow: var(--shadow); padding: 1rem 1.1rem;
+}
+.card h2 {
+  font-family: var(--serif); font-size: 1.06rem; font-weight: 600; color: var(--ink);
+  margin: 0 0 .15rem;
+}
+.card p.note { margin: 0 0 .8rem; font-size: .8rem; color: var(--granite); }
+.card p.fine {
+  margin: .9rem 0 0; padding-top: .7rem; border-top: 1px solid var(--hairline);
+  font-size: .74rem; color: var(--granite); line-height: 1.5;
+}
+dl.bars { margin: 0; display: grid; gap: .45rem; }
+.bar { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: .5rem; }
+.bar dt { font-size: .8rem; color: var(--text); }
+.bar dt code { font-family: var(--mono); font-size: .74rem; }
+.bar dd {
+  margin: 0; font-family: var(--mono); font-size: .82rem; font-weight: 700;
+  color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.track { grid-column: 1 / -1; height: 3px; background: var(--sunken); }
+.track > span { display: block; height: 100%; background: var(--sodalite); transition: width .3s; }
+.track.is-ochre > span { background: var(--ochre); }
+.track.is-mind > span { background: var(--mind); }
+.track.is-sage > span { background: var(--sage); }
+
+/* ---- the log ----------------------------------------------------------- */
+.log { margin-top: 1.1rem; }
+table { width: 100%; border-collapse: collapse; font-size: .78rem; }
+.tscroll { overflow-x: auto; }
+th, td {
+  text-align: left; padding: .42rem .6rem; border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+th {
+  font-size: .62rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--granite); background: var(--sunken); position: sticky; top: 0;
+}
+td { font-family: var(--mono); font-size: .72rem; color: var(--text); font-variant-numeric: tabular-nums; }
+td.name { font-family: var(--sans); font-size: .78rem; color: var(--ink); font-weight: 500; }
+tbody tr.is-ref td { color: var(--ochre); }
+.tag {
+  display: inline-block; padding: .05rem .3rem; font-size: .64rem; font-weight: 700;
+  border: 1px solid currentColor;
+}
+.tag.yes { color: var(--sage); }
+.tag.no  { color: var(--ochre); }
+.empty { padding: 1.2rem; color: var(--granite); font-size: .84rem; }
+
+/* ---- prose ------------------------------------------------------------- */
+.read { margin-top: 2.5rem; max-width: 66ch; }
+.read h2 {
+  font-family: var(--serif); font-size: 1.3rem; font-weight: 600; color: var(--ink);
+  margin: 1.9rem 0 .4rem; text-wrap: balance;
+}
+.read p { margin: .6rem 0; }
+.read code { font-family: var(--mono); font-size: .82em; background: var(--sodalite-q); color: var(--ink); padding: .08em .32em; }
+.read ul { padding-left: 1.1rem; margin: .6rem 0; }
+.read li { margin: .3rem 0; }
+.read strong { color: var(--ink); font-weight: 600; }
+footer {
+  margin-top: 2.5rem; padding-top: 1rem; border-top: 1px solid var(--hairline);
+  font-size: .78rem; color: var(--granite);
+}
+.sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pip, .track > span { transition: none; }
+}
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <p class="eyebrow">Shamwari AI · gateway trace</p>
+    <h1>Six people, one gateway, three destinations</h1>
+    <p class="dek">
+      What concurrent traffic through <code>shamwari-gateway</code> looks like stage by
+      stage — and where each request stops. The two switches below are the ones that
+      change the answers: the AI Gateway credential, and whether Shamwari Mind exists.
+    </p>
+  </header>
+
+  <p class="caveat">
+    <strong>Simulated, deliberately.</strong> Neither Core nor the gateway is deployed, and
+    <code>shamwari.knowledgeBase</code> is empty — that emptiness is the only thing between
+    this and a real demo. Ground hits below are the ones the Constitution of Zimbabwe would
+    answer once ingested; everything else misses, which is what it would honestly do today.
+  </p>
+
+  <div class="panel">
+    <div class="panel-group">
+      <span class="panel-label">Traffic</span>
+      <button id="run" aria-pressed="true">Pause</button>
+      <div class="seg" role="group" aria-label="Speed">
+        <button data-speed="1400" aria-pressed="false">Slow</button>
+        <button data-speed="700" aria-pressed="true">1×</button>
+        <button data-speed="260" aria-pressed="false">Fast</button>
+      </div>
+    </div>
+    <div class="panel-group">
+      <span class="panel-label">Break something</span>
+      <button id="brk-gw" class="danger" aria-pressed="false">AI Gateway credential</button>
+      <button id="brk-dp" class="danger" aria-pressed="false">Direct provider</button>
+    </div>
+    <div class="panel-group">
+      <span class="panel-label">MIND_AVAILABLE</span>
+      <button id="mind" class="mindish" aria-pressed="false">false</button>
+    </div>
+  </div>
+
+  <div class="board">
+    <div class="grid">
+      <div class="row ruler" role="presentation">
+        <div>Who is asking</div>
+        <div>Auth</div>
+        <div>Scope</div>
+        <div>Ground</div>
+        <div>Route</div>
+        <div>Infer</div>
+        <div>Sink</div>
+        <div>Outcome</div>
+      </div>
+      <div id="lanes"></div>
+    </div>
+  </div>
+
+  <div class="cols">
+    <section class="card">
+      <h2>Which path answered</h2>
+      <p class="note">Cloudflare is an enhancement, never a dependency. Break the credential above and watch this move.</p>
+      <dl class="bars" id="paths"></dl>
+    </section>
+
+    <section class="card">
+      <h2>The scope gate</h2>
+      <p class="note">Personal scope is refused, not downgraded. A downgrade would answer confidently while withholding the user's own data.</p>
+      <dl class="bars" id="scopes"></dl>
+    </section>
+
+    <section class="card">
+      <h2>Mind training corpus</h2>
+      <p class="note">Two independent gates: the teacher model's licence, and whose data it was.</p>
+      <dl class="bars" id="corpus"></dl>
+      <p class="fine">The personal count is an invariant, not a statistic. It should stay at
+      zero — the only personal path is Mind, and Mind writes no conversation. Anything else
+      means a new endpoint started sinking personal exchanges.</p>
+    </section>
+  </div>
+
+  <section class="card log">
+    <h2>Completed requests</h2>
+    <p class="note">Newest first. This is the shape of a <code>platform.usageEvents</code> row, plus the training verdict a <code>shamwari.conversations</code> row would carry.</p>
+    <div class="tscroll">
+      <table>
+        <caption class="sr">Completed requests with scope, tier, model, inference path and training eligibility</caption>
+        <thead>
+          <tr>
+            <th scope="col">Who</th><th scope="col">Scope</th><th scope="col">Lang</th>
+            <th scope="col">Tier</th><th scope="col">Model</th><th scope="col">Path</th>
+            <th scope="col">Ground</th><th scope="col">ms</th><th scope="col">Trains Mind</th>
+          </tr>
+        </thead>
+        <tbody id="log"><tr><td class="empty" colspan="9">Waiting for the first request…</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="read">
+    <h2>What the board is actually showing</h2>
+    <p>
+      Every lane runs the same six stages, because there is one code path. What differs is
+      where a lane stops and why. Three divergences are worth watching for.
+    </p>
+
+    <h2>Chipo's lane never reaches a provider</h2>
+    <p>
+      She asks about her own payslip, so her request is <code>personal</code> scope. While
+      <code>MIND_AVAILABLE=false</code> it is refused at the scope gate with
+      <strong>409 <code>scope_requires_local_inference</code></strong> — two stages before
+      anything is embedded and four before anything is generated.
+    </p>
+    <p>
+      Flip the switch and her lane changes shape rather than lengthening: it picks up Ground
+      and then stops. <code>/v1/ground/context</code> returns the system prompt and the
+      citations, and her device generates the answer. The gateway never sees it, which is why
+      there is no Sink pip and no row in the log. That is what "routes to Mind" has to mean
+      when Mind runs on the device — Mind is a client of the gateway, not a backend behind it.
+    </p>
+
+    <h2>Farai escalates and the others do not</h2>
+    <p>
+      His question about VAT deferment is long and contains a hard keyword, so
+      <code>routing-policy.json</code> sends him to the standard tier and Kimi K3. Tendai and
+      Nomsa ask short questions and stay on economy, which is where the margin comes from —
+      AI Gateway passes provider pricing through at cost.
+    </p>
+
+    <h2>Break the credential and nothing fails</h2>
+    <p>
+      The Infer stage has three steps behind it: AI Gateway, then the provider directly, then
+      Workers AI as the last resort. Every response carries <code>inference_path</code> so the
+      degradation is observable rather than assumed. Break both switches at once and traffic
+      lands on <code>@cf/zai-org/glm-5.3-flash</code> — slower, cheaper, still answering.
+    </p>
+    <p>
+      These paths rot silently if they are never exercised. Break the Gateway credential
+      deliberately once a month.
+    </p>
+
+    <h2>Two gates on the training corpus, not one</h2>
+    <p>
+      A conversation reaches <code>mind_training_chunks</code> only if both hold:
+    </p>
+    <ul>
+      <li><strong>The teacher model permits it.</strong> Kimi K3 and Qwen do; Claude and GPT
+      do not, so the premium tier is stamped <code>restricted</code> in code where a policy
+      file cannot reach it.</li>
+      <li><strong>It was not the user's own data.</strong> A personal-scope exchange is never
+      training material however permissive the teacher model's licence was. That is the
+      user's gate, and it is separate.</li>
+    </ul>
+    <p>
+      Both are enforced at write time. Postgres carries
+      <code>CHECK (license_class = 'open_weight')</code> underneath, so a restricted row
+      physically cannot enter the table.
+    </p>
+
+    <h2>The honest gap</h2>
+    <p>
+      Ground misses on most lanes here because it would. Twenty-two corpus sources are seeded
+      and five are blocked pending a licence read; the Constitution of Zimbabwe is the only
+      source currently approved, ground-eligible and mind-eligible. Ingest it and the Ground
+      column starts telling the truth.
+    </p>
+  </div>
+
+  <footer>
+    Sodalite palette and Newsreader / Archivo inherited from
+    <code>docs-site</code>. Ochre marks a refusal or a restriction and nothing else.
+    Simulated client-side; no request leaves this page.
+  </footer>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const STAGES = ["auth", "scope", "ground", "route", "infer", "sink"];
+
+  // Six concurrent callers. Questions are real ones for the corpus Shamwari
+  // is built on; the Shona and Ndebele are the point, not flavour.
+  const USERS = [
+    { id: "tendai", name: "Tendai", meta: "shamwari.ai · KV auth hit", lang: "sn",
+      scope: "platform",
+      asks: [
+        { q: "Ndinobhadhara marii PAYE pamwedzi kana ndichiwana US$450?", chars: 44, hard: false, ground: false },
+        { q: "Ko mari yekutengesa mbeu inobhadharwa mutero here?", chars: 49, hard: false, ground: false },
+      ] },
+    { id: "nomsa", name: "Nomsa", meta: "shamwari.ai · KV auth hit", lang: "nd",
+      scope: "platform",
+      asks: [
+        { q: "Ngingathola kanjani i-birth certificate yomntwana wami?", chars: 55, hard: false, ground: false },
+        { q: "Ilungelo lami lokuthula libhaliwe kuphi kumthethosisekelo?", chars: 58, hard: false, ground: true },
+      ] },
+    { id: "farai", name: "Farai", meta: "shamwari.ai · escalates", lang: "en",
+      scope: "platform",
+      asks: [
+        { q: "Walk me through the VAT deferment provisions in the 2026 statutory instrument and how they interact with the Finance Act…", chars: 6400, hard: true, ground: false },
+        { q: "Which section of the Constitution governs compulsory acquisition of agricultural land, and has it been amended?", chars: 118, hard: true, ground: true },
+      ] },
+    { id: "chipo", name: "Chipo", meta: "shamwari.ai · personal", lang: "sn",
+      scope: "personal",
+      asks: [
+        { q: "Tarisa payslip yangu — ndabhadharwa zvakanaka here mwedzi uno?", chars: 61, hard: false, ground: false },
+        { q: "Ndaseva marii gore rino kubva pane zvandinowana?", chars: 47, hard: false, ground: false },
+      ] },
+    { id: "mukoko", name: "Mukoko mini-app", meta: "mukoko · community", lang: "en",
+      scope: "community",
+      asks: [
+        { q: "What are people in Mutare asking about council rates this month?", chars: 64, hard: false, ground: true },
+        { q: "Summarise the most common maize pricing questions this week.", chars: 60, hard: false, ground: false },
+      ] },
+    { id: "nyuchi", name: "Nyuchi customer", meta: "api · premium asked", lang: "en",
+      scope: "platform", premium: true,
+      asks: [
+        { q: "Draft a client memo on the tax treatment of USD invoicing under SI 185.", chars: 72, hard: true, ground: false },
+      ] },
+  ];
+
+  const MODELS = {
+    economy:  { provider: "qwen",       model: "qwen3.8-max",           licence: "open_weight" },
+    standard: { provider: "moonshot",   model: "kimi-k3",               licence: "open_weight" },
+    premium:  { provider: "unconfigured", model: "—",                   licence: "restricted"  },
+    fallback: { provider: "workers-ai", model: "@cf/zai-org/glm-5.3-flash", licence: "open_weight" },
+  };
+
+  const state = {
+    running: true,
+    speed: 700,
+    brokeGateway: false,
+    brokeDirect: false,
+    mind: false,
+    lanes: USERS.map((u, i) => ({
+      user: u, askIndex: 0, stage: -1, wait: i * 2, outcome: null, trace: null,
+    })),
+    tally: { path: {}, scope: {}, corpus: { accepted: 0, personal: 0, restricted: 0 } },
+    log: [],
+    seq: 0,
+  };
+
+  // ---- DOM ---------------------------------------------------------------
+  const el = (t, cls, txt) => {
+    const n = document.createElement(t);
+    if (cls) n.className = cls;
+    if (txt !== undefined) n.textContent = txt;
+    return n;
+  };
+
+  const lanesEl = document.getElementById("lanes");
+  const cellRefs = new Map();
+
+  for (const lane of state.lanes) {
+    const row = el("div", "row");
+    const who = el("div", "who");
+    who.append(el("div", "who-name", lane.user.name));
+    who.append(el("div", "who-meta", lane.user.meta));
+    const ask = el("div", "who-ask");
+    who.append(ask);
+    row.append(who);
+
+    const cells = STAGES.map(() => {
+      const c = el("div", "cell");
+      c.append(el("span", "pip"));
+      row.append(c);
+      return c;
+    });
+
+    const out = el("div", "out");
+    const chip = el("span", "chip wait", "idle");
+    out.append(chip);
+    row.append(out);
+
+    lanesEl.append(row);
+    cellRefs.set(lane.user.id, { cells, chip, ask });
+  }
+
+  // ---- simulation --------------------------------------------------------
+  /** Mirrors gateway/src/router.ts: escalate on length, message count, or a
+      hard keyword. The premium alias is requested but unconfigured. */
+  function pickTier(lane, ask) {
+    if (lane.user.premium) return "premium";
+    if (ask.chars > 6000 || ask.hard) return "standard";
+    return "economy";
+  }
+
+  /** Mirrors gateway/src/gateway.ts: three-step degradation. */
+  function pickPath() {
+    if (!state.brokeGateway) return "gateway";
+    if (!state.brokeDirect) return "direct";
+    return "workers-ai";
+  }
+
+  function begin(lane) {
+    const ask = lane.user.asks[lane.askIndex % lane.user.asks.length];
+    lane.askIndex += 1;
+    lane.stage = 0;
+    lane.outcome = null;
+    state.seq += 1;
+    lane.trace = {
+      id: state.seq, ask,
+      scope: lane.user.scope,
+      destination: lane.user.scope === "personal" ? "mind" : "cloud",
+      refusedAt: null, tier: null, path: null, model: null, licence: null,
+      ground: false, ms: 0,
+    };
+    cellRefs.get(lane.user.id).ask.textContent = "“" + ask.q + "”";
+  }
+
+  function advance(lane) {
+    const t = lane.trace;
+    const stage = STAGES[lane.stage];
+
+    if (stage === "scope" && t.scope === "personal") {
+      // The gate. MIND_AVAILABLE cannot unlock cloud inference for personal
+      // scope — it unlocks retrieval only, which reaches no provider.
+      if (!state.mind) {
+        t.refusedAt = "scope";
+        finish(lane);
+        return;
+      }
+    }
+
+    if (stage === "ground") {
+      // No edge embedding for a mind destination: embedding is inference.
+      t.ground = t.ask.ground && t.destination === "cloud";
+      if (t.destination === "mind") {
+        // Retrieval only. Route, Infer and Sink never run.
+        finish(lane);
+        return;
+      }
+    }
+
+    if (stage === "route") {
+      t.tier = pickTier(lane, t.ask);
+      const m = MODELS[t.tier];
+      t.model = m.model;
+      t.licence = m.licence;
+      if (t.tier === "premium") {
+        // Unconfigured, so the request falls to the last resort — but the
+        // licence stamp follows the tier that was asked for, which is the
+        // whole reason licenseClass lives in code and not in a policy file.
+        t.model = MODELS.fallback.model;
+      }
+    }
+
+    if (stage === "infer") {
+      t.path = t.tier === "premium" ? "workers-ai" : pickPath();
+      if (t.path === "workers-ai" && t.tier !== "premium") t.model = MODELS.fallback.model;
+      t.ms = { gateway: 380, direct: 620, "workers-ai": 240 }[t.path] + (t.ask.chars > 2000 ? 900 : 90);
+    }
+
+    lane.stage += 1;
+    if (lane.stage >= STAGES.length) finish(lane);
+  }
+
+  function finish(lane) {
+    const t = lane.trace;
+    lane.outcome = t;
+    lane.wait = 4;
+
+    if (t.refusedAt) {
+      bump(state.tally.scope, "personal refused (409)");
+    } else if (t.destination === "mind") {
+      bump(state.tally.scope, "personal served by Mind");
+      bump(state.tally.path, "mind (on device)");
+    } else {
+      bump(state.tally.scope, t.scope + " to Cloud");
+      bump(state.tally.path, t.path);
+      if (t.licence === "restricted") state.tally.corpus.restricted += 1;
+      else if (t.scope === "personal") state.tally.corpus.personal += 1;
+      else state.tally.corpus.accepted += 1;
+
+      state.log.unshift(t);
+      if (state.log.length > 12) state.log.pop();
+      Object.assign(t, { who: lane.user.name, lang: lane.user.lang });
+    }
+    lane.stage = STAGES.length + 1;
+  }
+
+  const bump = (o, k) => { o[k] = (o[k] || 0) + 1; };
+
+  function tick() {
+    for (const lane of state.lanes) {
+      if (lane.wait > 0) { lane.wait -= 1; continue; }
+      if (lane.stage < 0 || lane.stage > STAGES.length) { begin(lane); continue; }
+      advance(lane);
+    }
+    render();
+  }
+
+  // ---- render ------------------------------------------------------------
+  function render() {
+    for (const lane of state.lanes) {
+      const { cells, chip } = cellRefs.get(lane.user.id);
+      const t = lane.trace;
+      const mindish = t && t.destination === "mind" && state.mind;
+
+      cells.forEach((c, i) => {
+        c.className = "cell";
+        if (!t) return;
+        if (t.refusedAt) {
+          if (i < 1) c.classList.add("done");
+          else if (i === 1) c.classList.add("refused");
+          else c.classList.add("skipped");
+          return;
+        }
+        const reached = lane.stage > STAGES.length ? STAGES.length : lane.stage;
+        const stops = mindish ? 3 : STAGES.length;
+        if (i < Math.min(reached, stops)) c.classList.add("done");
+        else if (i === reached && reached < stops) c.classList.add("live");
+        else if (i >= stops) c.classList.add("skipped");
+        if (mindish) c.classList.add("mind");
+      });
+
+      chip.className = "chip";
+      if (!t) { chip.classList.add("wait"); chip.textContent = "idle"; continue; }
+      if (lane.outcome) {
+        if (t.refusedAt) {
+          chip.classList.add("ref");
+          chip.textContent = "409 scope_requires_local_inference";
+        } else if (t.destination === "mind") {
+          chip.classList.add("mind");
+          chip.textContent = "mind · retrieval only · no provider";
+        } else {
+          chip.classList.add("cloud");
+          chip.textContent = t.tier + " · " + t.model + " · " + t.path + " · " + t.ms + "ms";
+        }
+      } else {
+        chip.classList.add("wait");
+        chip.textContent = "in flight · " + STAGES[Math.min(lane.stage, STAGES.length - 1)];
+      }
+    }
+
+    bars("paths", state.tally.path, (k) =>
+      k === "mind (on device)" ? "is-mind" : k === "workers-ai" ? "is-sage" : "");
+    bars("scopes", state.tally.scope, (k) =>
+      k.includes("refused") ? "is-ochre" : k.includes("Mind") ? "is-mind" : "");
+    bars("corpus", {
+      "Accepted — open weights, not personal": state.tally.corpus.accepted,
+      "Rejected — personal scope": state.tally.corpus.personal,
+      "Rejected — restricted licence": state.tally.corpus.restricted,
+    }, (k) => (k.startsWith("Accepted") ? "is-sage" : "is-ochre"));
+
+    renderLog();
+  }
+
+  function bars(id, data, cls) {
+    const host = document.getElementById(id);
+    const keys = Object.keys(data);
+    if (!keys.length) {
+      host.innerHTML = '<p class="note" style="margin:0">Nothing yet.</p>';
+      return;
+    }
+    const max = Math.max(...keys.map((k) => data[k])) || 1;
+    host.textContent = "";
+    for (const k of keys) {
+      const wrap = el("div", "bar");
+      wrap.append(el("dt", null, k));
+      wrap.append(el("dd", null, String(data[k])));
+      const track = el("div", "track " + cls(k));
+      const fill = el("span");
+      fill.style.width = Math.round((data[k] / max) * 100) + "%";
+      track.append(fill);
+      wrap.append(track);
+      host.append(wrap);
+    }
+  }
+
+  function renderLog() {
+    const body = document.getElementById("log");
+    if (!state.log.length) return;
+    body.textContent = "";
+    for (const t of state.log) {
+      const tr = el("tr");
+      const trains = t.licence === "open_weight" && t.scope !== "personal";
+      const cells = [
+        ["name", t.who],
+        [null, t.scope],
+        [null, t.lang],
+        [null, t.tier],
+        [null, t.model],
+        [null, t.path],
+        [null, t.ground ? "hit" : "miss"],
+        [null, String(t.ms)],
+      ];
+      for (const [cls, v] of cells) tr.append(el("td", cls, v));
+      const last = el("td");
+      const tag = el("span", "tag " + (trains ? "yes" : "no"), trains ? "yes" : "no");
+      last.append(tag);
+      tr.append(last);
+      body.append(tr);
+    }
+  }
+
+  // ---- controls ----------------------------------------------------------
+  let timer = null;
+  const restart = () => {
+    if (timer) clearInterval(timer);
+    if (state.running) timer = setInterval(tick, state.speed);
+  };
+
+  const runBtn = document.getElementById("run");
+  runBtn.addEventListener("click", () => {
+    state.running = !state.running;
+    runBtn.setAttribute("aria-pressed", String(state.running));
+    runBtn.textContent = state.running ? "Pause" : "Resume";
+    restart();
+  });
+
+  for (const b of document.querySelectorAll("[data-speed]")) {
+    b.addEventListener("click", () => {
+      for (const o of document.querySelectorAll("[data-speed]")) o.setAttribute("aria-pressed", "false");
+      b.setAttribute("aria-pressed", "true");
+      state.speed = Number(b.dataset.speed);
+      restart();
+    });
+  }
+
+  const toggle = (id, key, onLabel, offLabel) => {
+    const b = document.getElementById(id);
+    b.addEventListener("click", () => {
+      state[key] = !state[key];
+      b.setAttribute("aria-pressed", String(state[key]));
+      if (onLabel) b.textContent = state[key] ? onLabel : offLabel;
+      render();
+    });
+  };
+  toggle("brk-gw", "brokeGateway");
+  toggle("brk-dp", "brokeDirect");
+  toggle("mind", "mind", "true", "false");
+
+  render();
+  restart();
+})();
+</script>
