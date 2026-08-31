@@ -203,10 +203,18 @@ export default {
       language,
     );
     const target = route(messages, body.model, env);
-    const result = await infer(env, target, [
-      { role: 'system', content: g.systemPrompt },
-      ...messages.filter((m) => m.role !== 'system'),
-    ]);
+    const result = await infer(
+      env,
+      target,
+      [{ role: 'system', content: g.systemPrompt }, ...messages.filter((m) => m.role !== 'system')],
+      {
+        tier: target.tier,
+        scope: decision.scope,
+        ownerEntityId: auth.ownerEntityId,
+        surface: env.SURFACE,
+        requestId,
+      },
+    );
     const latencyMs = Date.now() - started;
 
     const now = new Date().toISOString();
@@ -231,14 +239,27 @@ export default {
             effectiveFrom: c.effective_from,
           })),
           teacherModel: `${result.provider}/${result.model}`,
-          licenseClass: target.licenseClass,
+          // Resolved from the model that actually answered, not from the
+          // tier that was asked for. A dynamic route can substitute the
+          // model without a deploy, and the Workers AI fallback always
+          // does. See provenance.ts.
+          licenseClass: result.licenseClass,
+          requestedModel: `${result.requestedProvider}/${result.requestedModel}`,
+          modelSubstituted: result.substituted,
           tier: target.tier,
           grounded: g.hit,
-          // Provenance gates the teacher model's terms; this gates the
-          // user's. A personal-scope exchange is the user's own pod data
-          // and is never Mind training material, whatever licence the
-          // teacher model carries. Core rejects the combination outright.
-          trainingEligible: decision.scope !== 'personal',
+          // Two independent gates, and a row needs both.
+          //
+          // licenseClass gates the teacher model's terms. This gates the
+          // user's: a personal-scope exchange is the user's own pod data and
+          // is never Mind training material, whatever licence the teacher
+          // model carries. Core rejects that combination outright.
+          //
+          // The licenceClass half is here too because the pipeline reads
+          // trainingEligible, and a restricted row that is merely *labelled*
+          // restricted while still flagged eligible relies on every future
+          // reader joining the two fields correctly.
+          trainingEligible: decision.scope !== 'personal' && result.licenseClass === 'open_weight',
           promoted: false,
           lastMessageAt: now,
           createdAt: now,
@@ -255,7 +276,10 @@ export default {
           tier: target.tier,
           provider: result.provider,
           model: result.model,
-          licenseClass: target.licenseClass,
+          requestedProvider: result.requestedProvider,
+          requestedModel: result.requestedModel,
+          modelSubstituted: result.substituted,
+          licenseClass: result.licenseClass,
           inputTokens: result.inputTokens,
           outputTokens: result.outputTokens,
           cacheHit: result.cacheHit,
@@ -291,6 +315,10 @@ export default {
         grounded: g.hit,
         cache_hit: result.cacheHit,
         inference_path: result.path,
+        model_served: `${result.provider}/${result.model}`,
+        // Surfaced rather than buried in the usage event: a dynamic route
+        // substituting the model is otherwise invisible to the caller.
+        model_substituted: result.substituted,
         latency_ms: latencyMs,
         citations: g.chunks.map((c) => ({
           title: c.title,
