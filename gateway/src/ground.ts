@@ -35,6 +35,24 @@ export async function ground(
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
   if (!lastUser) return { chunks: [], systemPrompt: BASE, hit: false };
 
+  // RULE 1, IN THE LEAK PATH.
+  //
+  // Embedding is inference. `env.AI.run` is a Cloudflare-hosted model, so
+  // embedding a personal-scope question here would put the user's own words
+  // through a third-party provider — upstream of Core's authoritative check,
+  // which is the one place designed to catch exactly this.
+  //
+  // A `mind` destination therefore gets no edge embedding. Core falls back
+  // to lexical-only retrieval, which is weaker ranking over the same public
+  // corpus rather than a different corpus. Mind supplies its own vector,
+  // computed on the device, when it ships.
+  //
+  // The question text still reaches Core. That is first-party Nyuchi
+  // infrastructure, not a third-party inference provider, and Core already
+  // stores the conversation — so this adds no exposure that rule 1 has not
+  // already accepted.
+  const embedding = destination === 'cloud' ? await embed(env, lastUser.content) : null;
+
   let chunks: GroundChunk[] = [];
   try {
     // Core runs $rankFusion over the vector and lexical indexes and applies
@@ -43,7 +61,7 @@ export async function ground(
       method: 'POST',
       body: {
         query: lastUser.content,
-        embedding: await embed(env, lastUser.content),
+        ...(embedding ? { embedding } : {}),
         owner_entity_id: ownerEntityId,
         scope,
         destination,

@@ -151,13 +151,14 @@ a WebSocket or request is in flight.
   on, custom providers for Qwen and Moonshot, and the `shamwari` dynamic
   route.
 - **Workers AI** — `@cf/baai/bge-m3` for Ground embeddings only. **Never for
-  personal-scope text.** See the defect in `scaling-and-memory.md`.
+  personal-scope text**, which is now enforced in `ground()` rather than
+  only asserted. See `scaling-and-memory.md`.
 
 ### What must never be on Cloudflare
 
 - Inference over `personal`-scope content, including embeddings. This is
-  rule 1, and it is the thing currently broken behind the `MIND_AVAILABLE`
-  flag.
+  rule 1. It was broken behind the `MIND_AVAILABLE` flag in three separate
+  places; all three are fixed and each has a test.
 - Execution of `personal`-scope artifacts, whether on Containers or via
   Worker Loader.
 - Mongo or Postgres credentials. The gateway holds none today; keep it that

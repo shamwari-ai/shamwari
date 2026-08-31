@@ -32,12 +32,21 @@
     "EMBEDDING_MODEL": "@cf/baai/bge-m3",
     "GROUND_TOP_K": "6",
     "AUTH_CACHE_TTL": "60",
-    "ECONOMY_MODEL": "qwen3-32b-instruct",
+    // Model ids as the provider names them, not as Workers AI names them:
+    // the economy and standard tiers go to Alibaba DashScope and Moonshot
+    // through AI Gateway custom providers. "qwen3-32b-instruct" was here
+    // and exists in no catalogue — see docs/workers-ai-models.md.
+    "ECONOMY_MODEL": "qwen3.8-max",
     "STANDARD_MODEL": "kimi-k3",
     "SURFACE": "shamwari.ai",
 
-    // Mind is not deployed yet. While false, personal-scope requests are
-    // refused rather than routed to Cloud. Flip to "true" when Mind ships.
+    // Gates /v1/ground/context, the retrieval-only endpoint Mind calls.
+    // It does NOT gate /v1/chat/completions: that endpoint generates on
+    // Cloud, so no value here can make it serve personal scope. Flipping
+    // this used to unlock exactly that, which is the leak scope.ts now
+    // documents. Keep it in vars, not secrets — it is not a credential and
+    // a plaintext value is what makes it auditable in `wrangler deploy`
+    // output and in the /health response.
     "MIND_AVAILABLE": "false"
   }
 
