@@ -13,6 +13,16 @@
     // wrangler kv namespace create AUTH_CACHE
   ],
 
+  // Weekly degradation probe. Exercises all three inference paths and writes
+  // the reading to platform.serviceHealth. This replaces "break the Gateway
+  // credential deliberately once a month" — a manual chore, which will be
+  // skipped, and skipping it looks exactly like passing it.
+  // Mondays 06:00 UTC (08:00 CAT), ahead of the week's traffic.
+  //
+  // Three small completions a week. If that cost ever matters, the fallback
+  // paths are not being relied on enough to be worth keeping.
+  "triggers": { "crons": ["0 6 * * 1"] },
+
   "queues": {
     "producers": [{ "binding": "SINK", "queue": "shamwari-sink" }],
     "consumers": [
