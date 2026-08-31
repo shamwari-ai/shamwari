@@ -298,8 +298,9 @@ footer {
     <h1>Six people, one gateway, three destinations</h1>
     <p class="dek">
       What concurrent traffic through <code>shamwari-gateway</code> looks like stage by
-      stage — and where each request stops. The two switches below are the ones that
-      change the answers: the AI Gateway credential, and whether Shamwari Mind exists.
+      stage — and where each request stops. The switches below are the ones that change the
+      answers: the AI Gateway credential, the direct provider, whether a dynamic route
+      substitutes the model, and whether Shamwari Mind exists.
     </p>
   </header>
 
@@ -324,6 +325,10 @@ footer {
       <span class="panel-label">Break something</span>
       <button id="brk-gw" class="danger" aria-pressed="false">AI Gateway credential</button>
       <button id="brk-dp" class="danger" aria-pressed="false">Direct provider</button>
+    </div>
+    <div class="panel-group">
+      <span class="panel-label">Dynamic route</span>
+      <button id="subst" class="danger" aria-pressed="false">substitutes Claude</button>
     </div>
     <div class="panel-group">
       <span class="panel-label">MIND_AVAILABLE</span>
@@ -366,7 +371,9 @@ footer {
       <dl class="bars" id="corpus"></dl>
       <p class="fine">The personal count is an invariant, not a statistic. It should stay at
       zero — the only personal path is Mind, and Mind writes no conversation. Anything else
-      means a new endpoint started sinking personal exchanges.</p>
+      means a new endpoint started sinking personal exchanges. The restricted count stays at
+      zero too while no configured model is restricted; flip the <strong>Dynamic route</strong>
+      switch to make it move.</p>
     </section>
   </div>
 
@@ -379,7 +386,7 @@ footer {
         <thead>
           <tr>
             <th scope="col">Who</th><th scope="col">Scope</th><th scope="col">Lang</th>
-            <th scope="col">Tier</th><th scope="col">Model</th><th scope="col">Path</th>
+            <th scope="col">Tier asked</th><th scope="col">Model served</th><th scope="col">Path</th>
             <th scope="col">Ground</th><th scope="col">ms</th><th scope="col">Trains Mind</th>
           </tr>
         </thead>
@@ -423,11 +430,15 @@ footer {
       The Infer stage has three steps behind it: AI Gateway, then the provider directly, then
       Workers AI as the last resort. Every response carries <code>inference_path</code> so the
       degradation is observable rather than assumed. Break both switches at once and traffic
-      lands on <code>@cf/zai-org/glm-5.3-flash</code> — slower, cheaper, still answering.
+      lands on <code>@cf/qwen/qwen3-30b-a3b-fp8</code> — slower, cheaper, still answering.
     </p>
     <p>
-      These paths rot silently if they are never exercised. Break the Gateway credential
-      deliberately once a month.
+      These paths rot silently if they are never exercised, because on a healthy day nothing
+      reaches them: step 2 runs only when step 1 fails, step 3 only when both do. A weekly
+      cron now exercises all three independently and writes the reading to
+      <code>platform.serviceHealth</code>, so a rotted fallback is a row you can query rather
+      than a monthly chore someone has to remember — and skipping a chore looks exactly like
+      passing it.
     </p>
 
     <h2>Two gates on the training corpus, not one</h2>
@@ -436,8 +447,11 @@ footer {
     </p>
     <ul>
       <li><strong>The teacher model permits it.</strong> Kimi K3 and Qwen do; Claude and GPT
-      do not, so the premium tier is stamped <code>restricted</code> in code where a policy
-      file cannot reach it.</li>
+      do not. Resolved from the model that <em>actually answered</em>, against an allowlist in
+      code where a policy file cannot reach it — not from the tier that was requested. Flip
+      the <strong>Dynamic route</strong> switch: the tier column still says
+      <code>standard</code>, the served model becomes Claude, and the row stops being training
+      material. Nothing was deployed to make that happen, which is the point.</li>
       <li><strong>It was not the user's own data.</strong> A personal-scope exchange is never
       training material however permissive the teacher model's licence was. That is the
       user's gate, and it is separate.</li>
@@ -510,17 +524,35 @@ footer {
   ];
 
   const MODELS = {
-    economy:  { provider: "qwen",       model: "qwen3.8-max",           licence: "open_weight" },
-    standard: { provider: "moonshot",   model: "kimi-k3",               licence: "open_weight" },
-    premium:  { provider: "unconfigured", model: "—",                   licence: "restricted"  },
-    fallback: { provider: "workers-ai", model: "@cf/zai-org/glm-5.3-flash", licence: "open_weight" },
+    economy:  { provider: "qwen",         model: "qwen3.8-max" },
+    standard: { provider: "moonshot",     model: "kimi-k3" },
+    premium:  { provider: "unconfigured", model: "—" },
+    fallback: { provider: "workers-ai",   model: "@cf/qwen/qwen3-30b-a3b-fp8" },
   };
+
+  // What an AI Gateway dynamic route might substitute. Editing a route is a
+  // dashboard action — no deploy, no code review — which is exactly why
+  // provenance cannot be read off the tier that was requested.
+  const SUBSTITUTE = { provider: "anthropic", model: "claude-opus-5" };
+
+  // Mirrors gateway/src/provenance.ts: an allowlist of concrete models,
+  // failing closed. Note there is no entry for a *tier* — the licence is a
+  // property of what generated the text, not of what was asked for.
+  const OPEN_WEIGHT = new Set([
+    "qwen/qwen3.8-max",
+    "moonshot/kimi-k3",
+    "workers-ai/@cf/qwen/qwen3-30b-a3b-fp8",
+  ]);
+
+  const resolveLicence = (provider, model) =>
+    OPEN_WEIGHT.has(`${provider}/${model}`.toLowerCase()) ? "open_weight" : "restricted";
 
   const state = {
     running: true,
     speed: 700,
     brokeGateway: false,
     brokeDirect: false,
+    substitute: false,
     mind: false,
     lanes: USERS.map((u, i) => ({
       user: u, askIndex: 0, stage: -1, wait: i * 2, outcome: null, trace: null,
@@ -592,7 +624,8 @@ footer {
       id: state.seq, ask,
       scope: lane.user.scope,
       destination: lane.user.scope === "personal" ? "mind" : "cloud",
-      refusedAt: null, tier: null, path: null, model: null, licence: null,
+      refusedAt: null, tier: null, path: null, provider: null, model: null,
+      licence: null, asked: null, substituted: false,
       ground: false, ms: 0,
     };
     cellRefs.get(lane.user.id).ask.textContent = "“" + ask.q + "”";
@@ -623,21 +656,31 @@ footer {
     }
 
     if (stage === "route") {
+      // The tier records only what was ASKED FOR. Nothing is stamped here.
       t.tier = pickTier(lane, t.ask);
-      const m = MODELS[t.tier];
-      t.model = m.model;
-      t.licence = m.licence;
-      if (t.tier === "premium") {
-        // Unconfigured, so the request falls to the last resort — but the
-        // licence stamp follows the tier that was asked for, which is the
-        // whole reason licenseClass lives in code and not in a policy file.
-        t.model = MODELS.fallback.model;
-      }
+      t.asked = MODELS[t.tier];
     }
 
     if (stage === "infer") {
       t.path = t.tier === "premium" ? "workers-ai" : pickPath();
-      if (t.path === "workers-ai" && t.tier !== "premium") t.model = MODELS.fallback.model;
+
+      // What actually served, which is a different question from what was
+      // asked for. Three ways they diverge:
+      let served;
+      if (t.path === "workers-ai") {
+        served = MODELS.fallback;               // both providers unreachable
+      } else if (state.substitute && t.path === "gateway") {
+        served = SUBSTITUTE;                    // a dynamic route chose it
+      } else {
+        served = t.asked;                       // asked for is what answered
+      }
+
+      t.provider = served.provider;
+      t.model = served.model;
+      // Resolved from the served pair, never from t.tier.
+      t.licence = resolveLicence(served.provider, served.model);
+      t.substituted = served !== t.asked;
+
       t.ms = { gateway: 380, direct: 620, "workers-ai": 240 }[t.path] + (t.ask.chars > 2000 ? 900 : 90);
     }
 
@@ -770,7 +813,9 @@ footer {
         [null, t.scope],
         [null, t.lang],
         [null, t.tier],
-        [null, t.model],
+        // The served model, marked when it is not the one asked for. The
+        // "Trains Mind" column follows this, not the tier beside it.
+        [null, t.model + (t.substituted ? " ⇠" : "")],
         [null, t.path],
         [null, t.ground ? "hit" : "miss"],
         [null, String(t.ms)],
@@ -819,6 +864,7 @@ footer {
   };
   toggle("brk-gw", "brokeGateway");
   toggle("brk-dp", "brokeDirect");
+  toggle("subst", "substitute");
   toggle("mind", "mind", "true", "false");
 
   render();
