@@ -171,10 +171,22 @@ see it.
 ### Cloudflare is an enhancement, never a dependency
 
 Three-step degradation in `gateway/src/gateway.ts`. Every response carries
-`inference_path` (`gateway` | `direct` | `workers-ai`). **Watch this in
-production** — the fallback paths are what make the claim true, and they rot
-silently if never exercised. Break the Gateway credential deliberately once a
-month.
+`inference_path` (`gateway` | `direct` | `workers-ai`). The fallback paths are
+what make the claim true, and **on a healthy day nothing reaches them** —
+step 2 runs only when step 1 fails, step 3 only when both do — so they rot
+silently and the rot is invisible until the outage that needs them.
+
+This used to say "break the Gateway credential deliberately once a month".
+That was a manual chore, and skipping it looks exactly like passing it. It is
+now a weekly cron: `probe()` exercises all three paths **independently** and
+writes one row to `platform.serviceHealth`. `gateway.ts` therefore exposes
+`viaGateway` / `viaDirect` / `viaWorkersAI` separately and `infer()` composes
+them — a probe built on `infer()` would only ever report on the gateway,
+because `infer()` stops at the first success.
+
+`docs/degradation-probe.md` has what to alert on. The short version:
+`serviceable: false` pages someone; `directOk`/`workersAiOk` false for two
+consecutive weeks means a fallback has rotted while users noticed nothing.
 
 ---
 

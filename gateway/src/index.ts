@@ -8,6 +8,7 @@ import { ground } from './ground';
 import { drain } from './sink';
 import { detectLanguage } from './lang';
 import { core } from './core';
+import { probe, healthDoc } from './probe';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body, null, 2), {
@@ -333,5 +334,38 @@ export default {
 
   async queue(batch: MessageBatch<SinkMessage>, env: Env): Promise<void> {
     await drain(batch, env);
+  },
+
+  /**
+   * Weekly degradation probe. See probe.ts for why this is a cron rather
+   * than the manual monthly chore CLAUDE.md used to prescribe.
+   *
+   * It writes through the same queue as everything else, so a Core outage
+   * delays the reading rather than losing it, and so the probe does not
+   * become the one thing in the Worker that talks to a database directly.
+   */
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    const report = await probe(env);
+
+    if (!report.allPathsHealthy) {
+      // Loud in the Worker log as well as durable in Mongo. The fallback
+      // paths existing is the whole basis of "Cloudflare is an enhancement,
+      // never a dependency", so a rotted one should not be discoverable
+      // only by remembering to query for it.
+      console.error(
+        'degradation probe: not all inference paths healthy',
+        JSON.stringify(report.results),
+      );
+    }
+
+    ctx.waitUntil(
+      env.SINK.send(healthDoc(report)).catch((e) =>
+        console.error('probe sink enqueue failed', String(e)),
+      ),
+    );
   },
 } satisfies ExportedHandler<Env, SinkMessage>;

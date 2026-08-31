@@ -76,29 +76,29 @@ async function post(
 }
 
 /**
- * Three-step degradation, so Cloudflare is an enhancement and not a
- * dependency:
- *   1. AI Gateway   caching, spend limits, observability, dynamic routing
- *   2. Direct       same provider, no Cloudflare in the path
- *   3. Workers AI   last resort, lower quality, still answers
+ * Step 1 of the degradation chain. Caching, spend limits, observability and
+ * dynamic routing.
  *
- * Exercise steps 2 and 3 monthly or they will rot silently.
+ * Returns null rather than throwing when the step is unavailable, so the
+ * caller decides whether to degrade or to report. `skipCache` exists for the
+ * probe: its prompt is constant, so a cached HIT would report a healthy
+ * gateway while the provider behind it was unreachable.
  */
-export async function infer(
+export async function viaGateway(
   env: Env,
   target: Target,
   messages: Message[],
   meta: RequestMetadata,
-): Promise<InferenceResult> {
-  const key = target.apiKey(env);
-
+  skipCache = false,
+): Promise<InferenceResult | null> {
   try {
     const res = await post(
       `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/compat/chat/completions`,
       {
         'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-        Authorization: `Bearer ${key}`,
+        Authorization: `Bearer ${target.apiKey(env)}`,
         'cf-aig-metadata': JSON.stringify(buildMetadata(meta)),
+        ...(skipCache ? { 'cf-aig-skip-cache': 'true' } : {}),
       },
       `${target.provider}/${target.model}`,
       messages,
@@ -110,24 +110,42 @@ export async function infer(
   } catch (e) {
     console.warn('gateway threw', String(e));
   }
+  return null;
+}
 
-  if (target.directUrl) {
-    try {
-      const res = await post(
-        target.directUrl,
-        { Authorization: `Bearer ${key}` },
-        target.model,
-        messages,
-      );
-      if (res.ok) return parse(res, target, false, 'direct');
-      console.warn('direct', res.status);
-    } catch (e) {
-      console.warn('direct threw', String(e));
-    }
+/** Step 2. The same provider with no Cloudflare in the path. */
+export async function viaDirect(
+  env: Env,
+  target: Target,
+  messages: Message[],
+): Promise<InferenceResult | null> {
+  if (!target.directUrl) return null;
+  try {
+    const res = await post(
+      target.directUrl,
+      { Authorization: `Bearer ${target.apiKey(env)}` },
+      target.model,
+      messages,
+    );
+    if (res.ok) return parse(res, target, false, 'direct');
+    console.warn('direct', res.status);
+  } catch (e) {
+    console.warn('direct threw', String(e));
   }
+  return null;
+}
 
-  // A general model, not the coder variant: this answers Shona and Ndebele
-  // questions about law and tax when both providers are unreachable.
+/**
+ * Step 3. Last resort, lower quality, still answers.
+ *
+ * A general model, not the coder variant: this answers Shona and Ndebele
+ * questions about law and tax when both providers are unreachable.
+ */
+export async function viaWorkersAI(
+  env: Env,
+  target: Target,
+  messages: Message[],
+): Promise<InferenceResult> {
   const fb = (await env.AI.run(WORKERS_AI_FALLBACK_MODEL as never, {
     messages,
   } as never)) as { response?: string };
@@ -145,6 +163,32 @@ export async function infer(
     substituted: true,
     path: 'workers-ai',
   };
+}
+
+/**
+ * Three-step degradation, so Cloudflare is an enhancement and not a
+ * dependency:
+ *   1. AI Gateway   caching, spend limits, observability, dynamic routing
+ *   2. Direct       same provider, no Cloudflare in the path
+ *   3. Workers AI   last resort, lower quality, still answers
+ *
+ * The steps are separate exported functions rather than inline blocks so
+ * that `probe.ts` can exercise each one **on its own**. In one composed
+ * function the later steps are only reachable when the earlier ones fail,
+ * which is exactly why they rotted: nothing ever ran step 2 or 3 on a
+ * healthy day. See docs/degradation-probe.md.
+ */
+export async function infer(
+  env: Env,
+  target: Target,
+  messages: Message[],
+  meta: RequestMetadata,
+): Promise<InferenceResult> {
+  return (
+    (await viaGateway(env, target, messages, meta)) ??
+    (await viaDirect(env, target, messages)) ??
+    (await viaWorkersAI(env, target, messages))
+  );
 }
 
 async function parse(

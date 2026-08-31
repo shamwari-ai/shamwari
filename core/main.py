@@ -382,7 +382,10 @@ class BulkWrite(BaseModel):
 
 _ALLOWED: dict[str, set[str]] = {
     "shamwari": {"conversations", "messages", "groundMisses"},
-    "platform": {"usageEvents", "auditLog"},
+    # serviceHealth carries the weekly degradation probe's reading. It holds
+    # no user content by construction — see gateway/src/probe.ts — and the
+    # collection already existed, unused.
+    "platform": {"usageEvents", "auditLog", "serviceHealth"},
 }
 
 
