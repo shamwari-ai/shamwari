@@ -87,11 +87,28 @@ Kimi K3 and Qwen permit it.
   `gateway/routing-policy.json`. That file is the editable routing heuristic;
   provenance must not be editable without a code review. `validatePolicy`
   and `test/policy.test.ts` both assert the split.
+- `gateway/src/provenance.ts` — resolves the licence from the model that
+  **actually served**, against an allowlist in code, and **fails closed to
+  `restricted` for anything unlisted**. This is the value that gets stamped;
+  `router.ts` records intent.
 - `core/main.py::sink_bulk` — rejects any conversation missing a valid
-  `licenseClass` rather than defaulting it
+  `licenseClass` rather than defaulting it, and rejects
+  `licenseClass: restricted` together with `trainingEligible: true`
 - Postgres `training_examples.license_class` has `CHECK (= 'open_weight')` — a
   restricted row physically cannot enter the table
 - `mind_training_chunks` view is the only thing the training pipeline reads
+
+**Why the tier alone was not enough — the rule-1 lesson again.** The tier
+records what the Worker *asked for*. The model that answers is not always the
+model that was asked for: `infer()` degrades to Workers AI when both the
+Gateway and the direct provider are unreachable, and an **AI Gateway dynamic
+route can substitute the model from a dashboard — no deploy, no code review.**
+A route failing over from Kimi to a restricted model wrote rows stamped
+`open_weight` and flagged trainable. So provenance is now resolved from
+`cf-aig-provider` / `cf-aig-model` on the response, and Core re-checks the
+combination, because the Worker's allowlist is exactly the thing a route change
+can outdate. Restated: **a provenance claim derived from intent rather than
+from what happened is a label, not a control.**
 
 ---
 

@@ -432,6 +432,26 @@ async def sink_bulk(body: BulkWrite) -> dict[str, Any]:
                         "trainingEligible=false",
                     )
 
+            # The other half of the same invariant, and the authoritative
+            # copy of it. A restricted teacher model's output may be stored
+            # and served; it may never be marked trainable.
+            #
+            # The Worker already resolves licenseClass from the model that
+            # actually served (gateway/src/provenance.ts) and refuses this
+            # combination itself. This check exists because an AI Gateway
+            # dynamic route can substitute the model from a dashboard, with
+            # no deploy and no code review — so the Worker's view of what
+            # served is exactly the thing that can go stale. Two checks, for
+            # the same reason rule 1 has two: one is a single bug away from a
+            # corpus that has to be thrown away.
+            if name in {"conversations", "messages"}:
+                if d.get("licenseClass") == "restricted" and d.get("trainingEligible") is True:
+                    raise HTTPException(
+                        status.HTTP_400_BAD_REQUEST,
+                        f"{name} document has restricted provenance and cannot set "
+                        "trainingEligible=true",
+                    )
+
         res = await client[body.database][name].insert_many(docs, ordered=False)
         written[name] = len(res.inserted_ids)
 

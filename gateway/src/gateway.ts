@@ -1,14 +1,65 @@
-import type { Env, Message } from './types';
+import type { Env, Message, LicenseClass, Scope, Tier } from './types';
 import type { Target } from './router';
+import { resolveLicenseClass, WORKERS_AI_FALLBACK_MODEL } from './provenance';
 
 export interface InferenceResult {
   text: string;
   inputTokens: number;
   outputTokens: number;
   cacheHit: boolean;
+  /** The provider that actually served, per `cf-aig-provider` where present. */
   provider: string;
+  /** The model that actually served, per `cf-aig-model` where present. */
   model: string;
+  requestedProvider: string;
+  requestedModel: string;
+  /** Resolved from the served model, never from the requested tier. */
+  licenseClass: LicenseClass;
+  /** True when a dynamic route or a fallback answered with something else. */
+  substituted: boolean;
   path: 'gateway' | 'direct' | 'workers-ai';
+}
+
+/**
+ * Context attached to the AI Gateway log entry, and available to Conditional
+ * nodes inside a dynamic route.
+ *
+ * Nothing derived from message content belongs here. These values are stored
+ * in Cloudflare's logs, so the rule is the same shape as rule 1's:
+ * identifiers and routing dimensions only, never the user's words.
+ *
+ * `scope` can only ever be `community` or `platform` on this path — personal
+ * scope is refused before `infer()` is reachable — but it is sent so a route
+ * and its log can show that rather than assume it.
+ */
+export interface RequestMetadata {
+  tier: Tier;
+  scope: Scope;
+  ownerEntityId: string;
+  surface: string;
+  requestId: string;
+}
+
+/**
+ * AI Gateway accepts at most FIVE custom metadata entries per request and
+ * silently ignores the rest — so a sixth would not error, it would quietly
+ * stop reaching the dynamic route that branches on it. Values must be
+ * string, number or boolean; objects are not supported. Keys beginning
+ * `cf.` are reserved and are stripped by Cloudflare.
+ *
+ * `test/gateway.test.ts` pins the count at five, so adding a dimension is a
+ * deliberate trade against an existing one rather than a silent loss.
+ */
+export const AIG_METADATA_MAX_ENTRIES = 5;
+
+export function buildMetadata(meta: RequestMetadata): Record<string, string> {
+  return {
+    tier: meta.tier,
+    scope: meta.scope,
+    owner_entity_id: meta.ownerEntityId,
+    surface: meta.surface,
+    request_id: meta.requestId,
+  };
 }
 
 async function post(
@@ -27,7 +78,7 @@ async function post(
 /**
  * Three-step degradation, so Cloudflare is an enhancement and not a
  * dependency:
- *   1. AI Gateway   caching, spend limits, observability
+ *   1. AI Gateway   caching, spend limits, observability, dynamic routing
  *   2. Direct       same provider, no Cloudflare in the path
  *   3. Workers AI   last resort, lower quality, still answers
  *
@@ -37,6 +88,7 @@ export async function infer(
   env: Env,
   target: Target,
   messages: Message[],
+  meta: RequestMetadata,
 ): Promise<InferenceResult> {
   const key = target.apiKey(env);
 
@@ -46,6 +98,7 @@ export async function infer(
       {
         'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
         Authorization: `Bearer ${key}`,
+        'cf-aig-metadata': JSON.stringify(buildMetadata(meta)),
       },
       `${target.provider}/${target.model}`,
       messages,
@@ -75,7 +128,7 @@ export async function infer(
 
   // A general model, not the coder variant: this answers Shona and Ndebele
   // questions about law and tax when both providers are unreachable.
-  const fb = (await env.AI.run('@cf/qwen/qwen3-30b-a3b-fp8' as never, {
+  const fb = (await env.AI.run(WORKERS_AI_FALLBACK_MODEL as never, {
     messages,
   } as never)) as { response?: string };
 
@@ -85,7 +138,11 @@ export async function infer(
     outputTokens: 0,
     cacheHit: false,
     provider: 'workers-ai',
-    model: 'fallback',
+    model: WORKERS_AI_FALLBACK_MODEL,
+    requestedProvider: target.provider,
+    requestedModel: target.model,
+    licenseClass: resolveLicenseClass('workers-ai', WORKERS_AI_FALLBACK_MODEL),
+    substituted: true,
     path: 'workers-ai',
   };
 }
@@ -100,13 +157,24 @@ async function parse(
     choices?: { message?: { content?: string } }[];
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
+
+  // A dynamic route reports what it chose in these headers. They are absent
+  // on the direct path and on a plain single-model gateway request, in which
+  // case what was asked for is what served.
+  const provider = res.headers.get('cf-aig-provider')?.trim() || target.provider;
+  const model = res.headers.get('cf-aig-model')?.trim() || target.model;
+
   return {
     text: j.choices?.[0]?.message?.content ?? '',
     inputTokens: j.usage?.prompt_tokens ?? 0,
     outputTokens: j.usage?.completion_tokens ?? 0,
     cacheHit,
-    provider: target.provider,
-    model: target.model,
+    provider,
+    model,
+    requestedProvider: target.provider,
+    requestedModel: target.model,
+    licenseClass: resolveLicenseClass(provider, model),
+    substituted: provider !== target.provider || model !== target.model,
     path,
   };
 }
