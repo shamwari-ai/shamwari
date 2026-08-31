@@ -1,0 +1,27 @@
+# Core's dependency SPEC. Hand-edited.
+#
+# `requirements.txt` is GENERATED from this file and is what actually gets
+# installed — fully pinned, with hashes. Do not edit it by hand.
+#
+# After changing anything here:
+#
+#     pip install pip-tools
+#     cd core
+#     pip-compile --generate-hashes --strip-extras \
+#         --output-file=requirements.txt requirements.in
+#
+# then run `python check_lock.py`, which CI runs too. It fails if this file
+# names something the lock does not pin. The failure mode of a lockfile is
+# not that it breaks; it is that it quietly stops describing the spec.
+#
+# The lock is resolved for CPython 3.11 on Linux, which is what CI and the
+# deploy target run. `uvicorn[standard]` pulls platform-specific wheels, so
+# the hashes will not satisfy a macOS or Windows install — develop against
+# this file there.
+
+fastapi>=0.115
+uvicorn[standard]>=0.32
+motor>=3.6
+asyncpg>=0.30
+httpx>=0.28
+pydantic>=2.9
