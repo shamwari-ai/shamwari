@@ -52,12 +52,19 @@ A conversation becomes Shamwari Mind training data only if both hold.
 
 | Gate | Asks | Fails when |
 |---|---|---|
-| Provenance | Does the teacher model's licence permit training a competing model? | The premium tier answered — <Verdict allowed={false} label="restricted" /> |
+| Provenance | Does the licence of the model that **actually answered** permit training a competing model? | An unlisted or restricted model served — <Verdict allowed={false} label="restricted" /> |
 | Ownership | Was this the platform's data, or the user's own? | The exchange was `personal` scope |
 
 They are independent, and both are enforced at write time rather than filtered
 at read time. A read-time filter is one forgotten `WHERE` clause away from
 training on someone's payslip.
+
+Provenance follows the model that answered, not the tier that was requested.
+The two diverge whenever a request degrades to Workers AI, and whenever an AI
+Gateway dynamic route substitutes a model — a dashboard edit, with no deploy
+behind it. An unlisted model resolves to `restricted`: unlisted means nobody
+has read its terms, and a lost training row is recoverable where a corpus that
+has to be discarded is not.
 
 ## Breaking Cloudflare on purpose
 
