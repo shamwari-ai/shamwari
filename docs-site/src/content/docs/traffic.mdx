@@ -1,0 +1,69 @@
+---
+title: What concurrent traffic looks like
+nav: Concurrent traffic
+summary: >-
+  Six people asking six different things through one gateway, and the three
+  different places their requests stop.
+order: 8
+---
+import Note from '../../components/Note.astro';
+import Verdict from '../../components/Verdict.astro';
+
+There is one code path. Every request runs the same six stages — authenticate,
+scope gate, Ground retrieval, route, infer, sink — and what distinguishes one
+caller from another is not which path they take but **where their path stops.**
+
+<Note label="Interactive">
+  The [Shamwari traffic board](https://claude.ai/code/artifact/7788e014-745f-40cc-af16-b0c11c4effd6)
+  runs this as a live board: six lanes, a pip per stage, and two switches — the
+  AI Gateway credential and `MIND_AVAILABLE` — that change the answers. Source
+  is `docs/multi-user-flow.html` in the repository.
+
+  It is a simulation. Neither Core nor the gateway is deployed yet, and Ground
+  is empty.
+</Note>
+
+## Three shapes a request can take
+
+**Refused at the gate.** A `personal`-scope question — someone asking about
+their own payslip — stops at stage two with **409
+`scope_requires_local_inference`**, two stages before anything is embedded and
+four before anything is generated. It is not downgraded to a general answer.
+A downgrade would answer confidently while withholding the user's own data,
+giving no signal that anything was missing.
+
+**Served without a provider.** With Shamwari Mind available, the same question
+takes a shorter path rather than a longer one: authenticate, scope, Ground,
+stop. `/v1/ground/context` returns a system prompt and citations, and the
+device generates the answer. No embedding is computed at the edge, because
+embedding is inference. There is no sink row, because the gateway never sees
+the answer.
+
+That is what "routes to Mind" has to mean. Mind runs on the device, so it is a
+client of the gateway, not a backend behind it.
+
+**Answered on Cloud.** `platform` and `community` scope run all six stages. A
+short question in Shona stays on the economy tier; a long question about a
+statutory instrument escalates to standard. Both are open-weight models.
+
+## Two gates on the training corpus
+
+A conversation becomes Shamwari Mind training data only if both hold.
+
+| Gate | Asks | Fails when |
+|---|---|---|
+| Provenance | Does the teacher model's licence permit training a competing model? | The premium tier answered — <Verdict allowed={false} label="restricted" /> |
+| Ownership | Was this the platform's data, or the user's own? | The exchange was `personal` scope |
+
+They are independent, and both are enforced at write time rather than filtered
+at read time. A read-time filter is one forgotten `WHERE` clause away from
+training on someone's payslip.
+
+## Breaking Cloudflare on purpose
+
+The infer stage has three steps behind it: AI Gateway, then the provider
+directly, then Workers AI. Every response reports which one answered, in
+`inference_path`, so degradation is observable rather than assumed.
+
+These fallbacks rot silently if they are never exercised. Break the Gateway
+credential deliberately once a month, and watch the path move.
