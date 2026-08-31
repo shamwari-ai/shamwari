@@ -62,7 +62,18 @@ jobs:
           cache: pip
           cache-dependency-path: core/requirements.txt
 
-      - run: pip install -r requirements.txt
+      # Offline and deterministic: asserts the lock still pins everything
+      # requirements.in names, and that it carries hashes. Runs before the
+      # install so a stale lock is named as such rather than surfacing as a
+      # confusing ImportError further down.
+      - name: Lockfile matches spec
+        run: python check_lock.py
+        working-directory: core
+
+      # --require-hashes is redundant while every line has a hash, and it is
+      # here so that a line WITHOUT one fails the install instead of quietly
+      # dropping hash enforcement for the whole file.
+      - run: pip install --require-hashes -r requirements.txt
         working-directory: core
 
       - name: Import check
