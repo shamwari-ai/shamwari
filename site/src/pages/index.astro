@@ -1,0 +1,105 @@
+---
+import Layout from '../layouts/Layout.astro';
+import HomeHero from '../components/HomeHero.astro';
+import Section from '@bundu/ui/Section.astro';
+import SectionHeader from '@bundu/ui/SectionHeader.astro';
+import { Button } from '@bundu/ui/ui/button';
+import { Card } from '@bundu/ui/ui/card';
+import StatusPill from '../components/StatusPill.astro';
+---
+<Layout
+  title="Shamwari AI — an African AI companion that cites its sources"
+  description="Shamwari is an AI companion built in Zimbabwe. It answers in Shona, Ndebele and English, cites the actual statute instead of guessing, and is built so your personal data can never reach a cloud model."
+>
+  <HomeHero
+    subtitle="Community pillar of the Bundu Ecosystem"
+    title="A friend that serves; a friend that does not control."
+    description="Shamwari — Shona for friend — is an AI companion built in Zimbabwe. It answers in Shona, Ndebele and English, cites the actual provision of the actual statute instead of guessing, and is built so that anything it knows about you specifically can never leave your own device."
+    primaryCTA={{ text: 'Read the Blueprint', href: '/blueprint/' }}
+    secondaryCTA={{ text: 'See the Project', href: '/project/' }}
+  />
+
+  <Section bg="secondary" space="tight" border>
+    <blockquote class="max-w-2xl border-l-2 border-primary pl-5 font-serif text-h3 italic text-primary">
+      Shamwari cites the Statutory Instrument. ChatGPT guesses.
+    </blockquote>
+    <p class="mt-5 max-w-2xl text-body text-muted-foreground">
+      Zimbabwean law, tax thresholds and monetary policy change most months. A
+      model with that baked into its weights is stale the day it ships — and
+      it will answer confidently anyway. Shamwari retrieves the current text
+      before it answers and shows you where it came from.
+    </p>
+  </Section>
+
+  <Section>
+    <SectionHeader
+      eyebrow="What it is"
+      title="One companion, three places it can run"
+      description="Which one answers a question depends on whose question it is — not on which plan you're paying for."
+    />
+    <div class="mt-10 grid grid-cols-1 gap-5 md:grid-cols-3">
+      <Card>
+        <h3 class="font-serif text-h5 text-foreground">Cloud</h3>
+        <p class="mt-2 text-body-sm text-muted-foreground">
+          Routed third-party models. Fast, general knowledge, no persistent
+          memory of you.
+        </p>
+      </Card>
+      <Card>
+        <h3 class="font-serif text-h5 text-foreground">Ground</h3>
+        <p class="mt-2 text-body-sm text-muted-foreground">
+          The Zimbabwean corpus — law, tax, regulation — kept fresh and cited
+          by section.
+        </p>
+      </Card>
+      <Card>
+        <h3 class="font-serif text-h5 text-foreground">Mind</h3>
+        <p class="mt-2 text-body-sm text-muted-foreground">
+          A small, open-weight model on your own device — the only part that
+          ever sees anything personal.
+        </p>
+      </Card>
+    </div>
+    <p class="mt-8">
+      <Button href="/blueprint/" variant="ghost" arrow>Read the full blueprint</Button>
+    </p>
+  </Section>
+
+  <Section bg="secondary" border>
+    <SectionHeader
+      eyebrow="Where we are"
+      title="Built in the open, honestly labelled"
+      description="We'd rather this page be a little less impressive and stay true than round anything up."
+    />
+    <div class="mt-10 grid grid-cols-1 gap-5 md:grid-cols-3">
+      <Card class="flex flex-col gap-3">
+        <StatusPill state="live" />
+        <p class="text-body text-foreground">The architecture, documented and enforced in code.</p>
+      </Card>
+      <Card class="flex flex-col gap-3">
+        <StatusPill state="building" />
+        <p class="text-body text-foreground">The Zimbabwean legal and tax corpus — starting with the Constitution of Zimbabwe.</p>
+      </Card>
+      <Card class="flex flex-col gap-3">
+        <StatusPill state="planned" />
+        <p class="text-body text-foreground">Shamwari Mind, the on-device model.</p>
+      </Card>
+    </div>
+    <p class="mt-8">
+      <Button href="/project/" variant="ghost" arrow>See the full project page</Button>
+    </p>
+  </Section>
+
+  <Section space="loose">
+    <SectionHeader
+      align="center"
+      eyebrow="Get in touch"
+      title="Talk to us before you talk to a consultant"
+      description="We're bringing on the first customers by hand — mostly around Zimbabwean tax and regulatory compliance, where being wrong costs real money and the answer changes monthly."
+      max="max-w-xl"
+    />
+    <div class="mt-8 flex justify-center">
+      <Button href="/contact/" size="lg" arrow>Get in touch</Button>
+    </div>
+  </Section>
+</Layout>

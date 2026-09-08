@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+@import '@bundu/ui/styles/globals.css';
+@import './brand-shamwari.css';
+
+@config '../../tailwind.config.mjs';
+
+/* Fonts loaded via <link> in Layout.astro, not @import here — an @import
+   this far down the cascade (after @bundu/ui's own @layer rules) fails
+   Lightning CSS's "@import must precede all rules" check once everything
+   is flattened into one stylesheet. Same faces as the rest of the
+   ecosystem's editorial voice (Newsreader serif, Archivo sans), layered
+   over the design system's Noto Sans/Serif stack rather than replacing it. */
+
+:root {
+  --font-shamwari-serif: 'Newsreader', 'Noto Serif', Georgia, serif;
+  --font-shamwari-sans: 'Archivo', 'Noto Sans', system-ui, sans-serif;
+}
+
+body {
+  font-family: var(--font-shamwari-sans);
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-serif {
+  font-family: var(--font-shamwari-serif) !important;
+}

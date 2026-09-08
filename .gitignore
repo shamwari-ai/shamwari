@@ -2,6 +2,7 @@ node_modules/
 .dev.vars
 .wrangler/
 dist/
+.astro/
 *.log
 __pycache__/
 .venv/

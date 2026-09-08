@@ -1,0 +1,8 @@
+---
+/** A small numbered circle marker, used by any ordered list of steps
+    (the two sovereignty rules, the Mind training pipeline). Shared so the
+    marker isn't hand-rolled at each call site with its own class string. */
+interface Props { n: number }
+const { n } = Astro.props;
+---
+<span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary text-body-sm font-semibold text-primary-foreground">{n}</span>

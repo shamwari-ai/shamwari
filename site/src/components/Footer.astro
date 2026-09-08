@@ -1,0 +1,81 @@
+---
+import SocialIcon from '@bundu/ui/SocialIcon.astro';
+import { PAGES, REPO, CONTACT_EMAIL, externalLinkAttrs } from '../lib/site';
+
+// Contact isn't repeated here: it has its own "Get in touch" column below.
+const explore = PAGES.filter((p) => p.path !== '/contact/');
+
+// Build-time only (Astro renders this frontmatter once, at build) — no
+// client JS, just a copyright year that doesn't need a manual bump.
+const year = new Date().getFullYear();
+---
+<footer class="border-t border-border bg-secondary">
+  <div class="container-custom grid grid-cols-1 gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4">
+    <div>
+      <a href="/" class="flex items-baseline gap-2 font-serif text-h5 font-semibold text-primary no-underline">
+        Shamwari <span class="font-sans text-caption font-semibold uppercase tracking-widest text-muted-foreground">AI</span>
+      </a>
+      <p class="mt-4 max-w-xs text-body-sm text-muted-foreground">
+        An AI companion built in Zimbabwe. Community pillar of the Bundu Ecosystem.
+      </p>
+      <div class="mt-4 flex gap-1">
+        <SocialIcon url={REPO} label="Shamwari on GitHub" />
+      </div>
+    </div>
+
+    <div>
+      <p class="eyebrow">Explore</p>
+      <ul class="space-y-2">
+        {explore.map((item) => (
+          <li>
+            <a
+              href={item.path}
+              {...externalLinkAttrs(item.external)}
+              class="text-body-sm text-muted-foreground no-underline hover:text-foreground"
+            >
+              {item.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </div>
+
+    <div>
+      <p class="eyebrow">Ecosystem</p>
+      <ul class="space-y-2 text-body-sm text-muted-foreground">
+        <li><a href="https://bundu.org" target="_blank" rel="noopener noreferrer" class="no-underline hover:text-foreground">Bundu Foundation</a></li>
+        <li><a href="https://nyuchi.com" target="_blank" rel="noopener noreferrer" class="no-underline hover:text-foreground">Nyuchi Africa</a></li>
+        <li>Mukoko</li>
+      </ul>
+    </div>
+
+    <div>
+      <p class="eyebrow">Get in touch</p>
+      <ul class="space-y-2">
+        <li>
+          <a href={`mailto:${CONTACT_EMAIL}`} class="text-body-sm text-muted-foreground no-underline hover:text-foreground">
+            {CONTACT_EMAIL}
+          </a>
+        </li>
+        <li>
+          <a href="/contact/" class="text-body-sm text-muted-foreground no-underline hover:text-foreground">
+            Contact page
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="border-t border-border">
+    <div class="container-custom flex flex-col gap-3 py-6 text-body-sm text-muted-foreground">
+      <p class="font-semibold text-foreground">&copy; {year} Bundu Foundation. All rights reserved.</p>
+      <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p class="max-w-2xl">
+          Shamwari is Shona for <em>friend</em>. Bundu Foundation intellectual property,
+          sold commercially under Nyuchi Africa.
+        </p>
+        <p>Platform code is Apache-2.0. Third-party model and corpus terms are recorded separately.</p>
+      </div>
+    </div>
+  </div>
+</footer>

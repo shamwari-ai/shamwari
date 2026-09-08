@@ -1,0 +1,61 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Section from '@bundu/ui/Section.astro';
+import SectionHeader from '@bundu/ui/SectionHeader.astro';
+import { Button } from '@bundu/ui/ui/button';
+import { Card } from '@bundu/ui/ui/card';
+---
+<Layout
+  title="Contact · Shamwari AI"
+  description="We're bringing on the first customers by hand — mostly around Zimbabwean tax and regulatory compliance. Get in touch."
+>
+  <Section space="tight">
+    <SectionHeader
+      as="h1"
+      size="display"
+      eyebrow="Get in touch"
+      title="Talk to us before you talk to a consultant"
+      description="We're bringing on the first customers by hand — mostly around Zimbabwean tax and regulatory compliance, where being wrong costs real money and the answer changes monthly."
+      max="max-w-2xl"
+    />
+    <p class="mt-8">
+      <Button href="mailto:hello@shamwari.ai" size="lg" arrow>hello@shamwari.ai</Button>
+    </p>
+  </Section>
+
+  <Section bg="secondary" border>
+    <SectionHeader eyebrow="Who this is for right now" title="Three reasons to write in" max="max-w-2xl" />
+    <div class="mt-8 grid grid-cols-1 gap-5 md:grid-cols-3">
+      <Card padding="lg">
+        <h3 class="font-semibold text-foreground">Tax &amp; regulatory compliance</h3>
+        <p class="mt-2 text-body-sm text-muted-foreground">
+          You need current, cited answers on Zimbabwean law, tax or
+          regulation, and you're tired of paying for guesses.
+        </p>
+      </Card>
+      <Card padding="lg">
+        <h3 class="font-semibold text-foreground">Early access to Ground</h3>
+        <p class="mt-2 text-body-sm text-muted-foreground">
+          You're a developer who wants to build on Ground once early access
+          opens up.
+        </p>
+      </Card>
+      <Card padding="lg">
+        <h3 class="font-semibold text-foreground">A data-licensing conversation</h3>
+        <p class="mt-2 text-body-sm text-muted-foreground">
+          You hold Zimbabwean legal, tax, or language source material and
+          want to talk about a licence.
+        </p>
+      </Card>
+    </div>
+  </Section>
+
+  <Section>
+    <p class="max-w-2xl text-body text-muted-foreground">
+      Prefer to read first? See the <a href="/blueprint/" class="text-primary underline underline-offset-2">Blueprint</a>
+      for how Shamwari is built, the <a href="/project/" class="text-primary underline underline-offset-2">Project page</a>
+      for exactly what's live today, or <a href="https://docs.shamwari.ai" class="text-primary underline underline-offset-2">docs.shamwari.ai</a>
+      for the full technical documentation.
+    </p>
+  </Section>
+</Layout>
