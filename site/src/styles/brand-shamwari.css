@@ -1,0 +1,15 @@
+/* brand-shamwari — Shamwari's primary: sodalite.
+   Sodalite is Shamwari's canonical brand->mineral: a deep blue matrix,
+   named in the root CLAUDE.md. @bundu/ui ships brand-{bundu,nyuchi,mukoko}
+   overlays but not this one yet — this is the same one-file pattern,
+   kept locally until it's contributed upstream to @bundu/ui. Import AFTER
+   globals.css so it wins. */
+:root {
+  --primary: var(--color-sodalite);
+  --ring: var(--color-sodalite);
+}
+.dark,
+[data-theme='dark'] {
+  --primary: var(--color-sodalite);
+  --ring: var(--color-sodalite);
+}

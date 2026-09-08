@@ -1,0 +1,199 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Section from '@bundu/ui/Section.astro';
+import SectionHeader from '@bundu/ui/SectionHeader.astro';
+import { Card } from '@bundu/ui/ui/card';
+import { Button } from '@bundu/ui/ui/button';
+import GateDiagram from '../../components/GateDiagram.astro';
+import NumberBadge from '../../components/NumberBadge.astro';
+import { REPO } from '../../lib/site';
+
+const rules = [
+  {
+    title: 'Your personal data never reaches a third-party model',
+    body: "Not the cloud providers we route to, not anyone. If a question is about your own life and the only available answer would mean sending it to an outside model, Shamwari says so and stops — it does not quietly answer with a shrug instead.",
+  },
+  {
+    title: 'Only open-weight output trains Shamwari Mind',
+    body: "The model we train and give away is never built from output whose licence forbids that. Every exchange is labelled the moment it's generated, and the training pipeline physically cannot ingest anything labelled otherwise.",
+  },
+];
+
+const mindSteps = [
+  { title: 'Seed', body: 'question/answer pairs from Ground documents.' },
+  { title: 'Generate', body: 'candidates in Shona, Ndebele, Zimbabwean English and code-switched registers with Kimi K3 and Qwen — never Claude or GPT, whose terms bar using their output to train a competing model.' },
+  { title: 'Correct', body: 'with paid human annotators. This is the irreplaceable part: Shamwari employs Zimbabweans to teach an AI Zimbabwe.' },
+  { title: 'Train', body: 'with QLoRA on Qwen 4B — an Apache-2.0 base, so Mind is genuinely open: weights, data recipe and eval suite all publishable.' },
+  { title: 'Quantize', body: 'to q4, targeting a ~US$120 Android device.' },
+];
+
+const ecosystem = [
+  { name: 'Bundu Labs', body: 'Research.' },
+  { name: 'Mukoko', body: 'The consumer super-app — several sub-apps currently running in beta.' },
+  { name: 'Nyuchi Africa', body: "The commercial pillar. Shamwari's paid tiers run here." },
+  { name: 'Shamwari AI', body: 'The community pillar — this site.', highlight: true },
+];
+---
+<Layout
+  title="Blueprint — how Shamwari is built · Shamwari AI"
+  description="Cloud, Ground and Mind; the two rules that must not be broken; and where Shamwari sits in the Bundu Ecosystem."
+>
+  <Section space="tight">
+    <SectionHeader
+      as="h1"
+      size="display"
+      eyebrow="Blueprint"
+      title="How Shamwari is built"
+      description="Shamwari isn't one model behind an API — it's three, and which one answers a question depends on whose question it is."
+      max="max-w-2xl"
+    />
+  </Section>
+
+  <Section bg="secondary" border>
+    <div class="grid grid-cols-1 gap-5 md:grid-cols-3">
+      <Card padding="lg">
+        <h2 class="font-serif text-h4 text-foreground">Cloud</h2>
+        <p class="mt-3 text-body-sm text-muted-foreground">
+          Runs on routed third-party models. Fast, general knowledge, no
+          persistent memory of you. Handles anything that isn't about your
+          own life.
+        </p>
+      </Card>
+      <Card padding="lg">
+        <h2 class="font-serif text-h4 text-foreground">Ground</h2>
+        <p class="mt-3 text-body-sm text-muted-foreground">
+          The Zimbabwean corpus — law, tax, regulation — kept fresh and cited
+          by section. What makes an answer <em>correct</em> instead of just
+          fluent.
+        </p>
+      </Card>
+      <Card padding="lg">
+        <h2 class="font-serif text-h4 text-foreground">Mind</h2>
+        <p class="mt-3 text-body-sm text-muted-foreground">
+          A small, open-weight model that runs on your own device. The only
+          thing that ever sees your personal data, because it never has to
+          leave.
+        </p>
+      </Card>
+    </div>
+  </Section>
+
+  <Section>
+    <SectionHeader eyebrow="Data sovereignty" title="The two rules that must not be broken" max="max-w-2xl" />
+    <div class="mt-8">
+      <GateDiagram />
+      <p class="mt-4 max-w-2xl text-body-sm text-muted-foreground">
+        A question about your own life is answered on your device by Shamwari
+        Mind. It is checked twice — once at the edge, once in the service
+        that owns the data — because a leak here isn't an outage, it's a
+        broken promise.
+      </p>
+    </div>
+
+    <div class="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2">
+      {rules.map((rule, i) => (
+        <Card className="border-l-4 border-l-primary">
+          <p class="flex items-baseline gap-3 font-semibold text-foreground">
+            <NumberBadge n={i + 1} />
+            {rule.title}
+          </p>
+          <p class="mt-3 text-body-sm text-muted-foreground">{rule.body}</p>
+        </Card>
+      ))}
+    </div>
+    <p class="mt-6">
+      <Button href="https://docs.shamwari.ai/rules/" external variant="ghost" arrow>
+        Read the full technical detail
+      </Button>
+    </p>
+  </Section>
+
+  <Section bg="secondary" border>
+    <SectionHeader eyebrow="Ground — the moat" title="Freshness beats volume" max="max-w-2xl" />
+    <p class="mt-6 max-w-2xl text-body text-muted-foreground">
+      A grounded small model beats an ungrounded large one on "what is the
+      current PAYE threshold" — because the large one is guessing from memory
+      and the small one is reading. Ground is a living corpus with an
+      effective date on every document, not a one-time scrape: when a
+      Statutory Instrument supersedes an older one, retrieval stops citing
+      the repealed version.
+    </p>
+    <p class="mt-4 max-w-2xl text-body text-muted-foreground">
+      What people actually ask becomes the roadmap for what we ingest next —
+      <code class="rounded bg-sodalite-container px-1.5 py-0.5 text-body-sm text-sodalite-on-container">shamwari.groundMisses</code>
+      logs every question Ground couldn't answer, so the corpus roadmap is
+      written by the people asking, not by guesswork.
+    </p>
+    <ol class="mt-6 max-w-2xl list-decimal space-y-2 pl-5 text-body-sm text-muted-foreground">
+      <li><strong class="text-foreground">Law</strong> — the Constitution (approved, first in), ZimLII, Veritas, Parliament</li>
+      <li><strong class="text-foreground">Economy</strong> — ZIMRA, RBZ, ZIMSTAT, Ministry of Finance</li>
+      <li><strong class="text-foreground">Verticals</strong> — AGRITEX, MoHCC, ZIMSEC (licence required)</li>
+      <li><strong class="text-foreground">Language</strong> — Masakhane, Common Voice, VOA, UZ ALRI partnership</li>
+    </ol>
+    <p class="mt-6 max-w-2xl text-body-sm text-muted-foreground">
+      Five sources are blocked pending licence review — nothing gets scraped
+      first and asked about later. See
+      <a href={`${REPO}/issues/18`} target="_blank" rel="noopener noreferrer" class="text-primary underline underline-offset-2">the open issue</a>
+      tracking that.
+    </p>
+  </Section>
+
+  <Section>
+    <SectionHeader
+      eyebrow="Mind"
+      title="How the model we give away gets trained"
+      description="Distillation, not fine-tuning from scratch — and the one step in this pipeline that's the actual asset."
+      max="max-w-2xl"
+    />
+    <ol class="mt-8 max-w-2xl space-y-5">
+      {mindSteps.map((step, i) => (
+        <li class="flex gap-4">
+          <NumberBadge n={i + 1} />
+          <p class="text-body-sm text-muted-foreground"><strong class="text-foreground">{step.title}</strong> {step.body}</p>
+        </li>
+      ))}
+    </ol>
+    <p class="mt-6 max-w-2xl text-body-sm text-muted-foreground">
+      ShamwariBench — a Zimbabwean law, tax, agriculture, health, Shona and
+      Ndebele fluency benchmark — gets built and published <em>before</em>
+      training starts. Whoever owns the benchmark owns the argument about
+      who's actually best at African languages.
+    </p>
+    <p class="mt-6">
+      <Button href="https://github.com/bundu-labs/shamwari/issues/20" external variant="ghost" arrow>
+        Track Mind on GitHub
+      </Button>
+    </p>
+  </Section>
+
+  <Section bg="secondary" border>
+    <SectionHeader eyebrow="Cloud economics" title="Where the margin actually comes from" max="max-w-2xl" />
+    <p class="mt-6 max-w-2xl text-body text-muted-foreground">
+      AI Gateway passes provider pricing through at cost — there's no margin
+      in simply reselling access, since anyone could go direct and undercut
+      it. Margin gets built from three places instead:
+    </p>
+    <ul class="mt-6 max-w-2xl list-disc space-y-2 pl-5 text-body-sm text-muted-foreground">
+      <li><strong class="text-foreground">Route the bulk to cheap models.</strong> Qwen and DeepSeek handle most traffic; Kimi K3 for reasoning and long context; premium models are opt-in only. Target: at least 70% of tokens on the economy tier.</li>
+      <li><strong class="text-foreground">Cache hard.</strong> Exact-match caching is free on AI Gateway, and in a market where thousands of people ask near-identical questions about ZIMRA thresholds, that hit rate should be high.</li>
+      <li><strong class="text-foreground">Let Ground do the lifting.</strong> A grounded 4B answer beats an ungrounded 400B answer on a question with a factual, checkable answer. Correct answers from cheap models is the whole game.</li>
+    </ul>
+  </Section>
+
+  <Section>
+    <SectionHeader
+      eyebrow="Ecosystem"
+      title="Where Shamwari sits in the Bundu Ecosystem"
+      description="Bundu Foundation is a Zimbabwe-registered non-profit that holds the Shamwari IP and governs the wider ecosystem. Shamwari is sold commercially under Nyuchi Africa; the code itself stays Apache-2.0."
+      max="max-w-2xl"
+    />
+    <div class="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2">
+      {ecosystem.map((pillar) => (
+        <Card className={pillar.highlight ? 'border-2 border-primary bg-sodalite-container' : undefined}>
+          <h3 class="font-semibold text-foreground">{pillar.name}</h3>
+          <p class="mt-1 text-body-sm text-muted-foreground">{pillar.body}</p>
+        </Card>
+      ))}
+    </div>
+  </Section>
+</Layout>

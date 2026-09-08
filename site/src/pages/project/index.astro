@@ -1,0 +1,78 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Section from '@bundu/ui/Section.astro';
+import SectionHeader from '@bundu/ui/SectionHeader.astro';
+import { Button } from '@bundu/ui/ui/button';
+import { Card } from '@bundu/ui/ui/card';
+import StatusPill from '../../components/StatusPill.astro';
+import { STATUS, issueUrl } from '../../data/status';
+import { REPO } from '../../lib/site';
+
+const tiers = [
+  { name: 'Community', entity: 'Bundu Foundation', body: 'Shamwari Mind, downloadable, open weights, forever free. This is the community pillar — not a trial of something else.' },
+  { name: 'Developer', entity: 'Nyuchi Africa', body: 'Pay-as-you-go API access to Shamwari Cloud, routed to the models that fit each request.' },
+  { name: 'Business', entity: 'Nyuchi Africa', body: 'Committed monthly volume, an SLA, and usage dashboards for teams building on top of Shamwari.' },
+  { name: 'Sovereign', entity: 'Nyuchi Africa', body: 'Mind and Ground deployed on your own infrastructure. No data leaves it, ever.' },
+];
+---
+<Layout
+  title="Project — where Shamwari actually stands · Shamwari AI"
+  description="What's live, what's still being built, and who the four commercial tiers are for."
+>
+  <Section space="tight">
+    <SectionHeader
+      as="h1"
+      size="display"
+      eyebrow="Project"
+      title="Where things actually stand"
+      description="We'd rather this page be a little less impressive and stay true than round anything up. Every item below is tracked in the open on GitHub — not just described here."
+      max="max-w-2xl"
+    />
+  </Section>
+
+  <Section bg="secondary" border>
+    <ul class="flex max-w-2xl flex-col gap-6">
+      {STATUS.map((item) => (
+        <li class="flex flex-col gap-1.5">
+          <div class="flex flex-wrap items-baseline gap-3">
+            <StatusPill state={item.state} />
+            <span class="font-semibold text-foreground">{item.title}</span>
+          </div>
+          <p class="text-body-sm text-muted-foreground">{item.body}</p>
+          {item.issues && (
+            <p class="flex flex-wrap gap-3 text-body-sm">
+              {item.issues.map((n) => (
+                <a href={issueUrl(n)} target="_blank" rel="noopener noreferrer" class="text-primary underline underline-offset-2">
+                  Track #{n} on GitHub ↗
+                </a>
+              ))}
+            </p>
+          )}
+        </li>
+      ))}
+    </ul>
+    <p class="mt-8 max-w-2xl text-body-sm text-muted-foreground">
+      Full backlog: <a href={`${REPO}/issues`} target="_blank" rel="noopener noreferrer" class="text-primary underline underline-offset-2">github.com/bundu-labs/shamwari/issues</a>.
+    </p>
+  </Section>
+
+  <Section>
+    <SectionHeader eyebrow="Who it's for" title="Four ways to use it" max="max-w-2xl" />
+    <div class="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {tiers.map((tier) => (
+        <Card>
+          <h3 class="font-semibold text-foreground">{tier.name}</h3>
+          <p class="mt-1 text-caption font-semibold uppercase tracking-wide text-muted-foreground">{tier.entity}</p>
+          <p class="mt-3 text-body-sm text-muted-foreground">{tier.body}</p>
+        </Card>
+      ))}
+    </div>
+    <p class="mt-6 max-w-2xl text-body-sm text-muted-foreground">
+      We're inviting early customers in by hand rather than opening self-serve
+      billing yet.
+    </p>
+    <p class="mt-6">
+      <Button href="/contact/" arrow>Get in touch</Button>
+    </p>
+  </Section>
+</Layout>

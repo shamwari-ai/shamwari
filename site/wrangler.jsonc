@@ -1,0 +1,20 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shamwari-site",
+  "compatibility_date": "2026-08-01",
+  "observability": { "enabled": true },
+
+  // Astro's static output. No Worker script, no bindings, no secrets.
+  "assets": { "directory": "./dist" },
+
+  // shamwari.ai's DNS is still externally managed (not yet on Cloudflare),
+  // so the custom-domain routes below can't attach until that's moved over.
+  // workers_dev gives a working preview URL in the meantime:
+  // https://shamwari-site.nyuchi.workers.dev
+  "workers_dev": true,
+
+  "routes": [
+    { "pattern": "shamwari.ai", "custom_domain": true },
+    { "pattern": "www.shamwari.ai", "custom_domain": true }
+  ]
+}

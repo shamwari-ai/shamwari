@@ -23,6 +23,8 @@ docs/workers-ai-models.md      verified provider slugs and model ids
 
 docs-site/                     docs.shamwari.ai — one HTML file, no build
 
+site/                           shamwari.ai — the public landing page
+
 gateway/                       Cloudflare Workers, TypeScript
   src/scope.ts                 the scope gate — read this first
   src/router.ts                tier routing, licenseClass assignment

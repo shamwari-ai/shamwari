@@ -1,0 +1,85 @@
+---
+/** The homepage hero — full-bleed, with a technical/engineering backdrop
+    (a dot-grid plus the Shamwari network mark, faded out toward the text)
+    instead of text capped at a narrow column on an empty right half. The
+    grid and mark are both decorative (aria-hidden), so they add nothing to
+    the accessibility tree and nothing to the page's JS budget — this is
+    all static SVG/CSS, same zero-client-JS rule as the rest of the site. */
+import { Button } from '@bundu/ui/ui/button';
+
+interface CTA { text: string; href: string }
+interface Props {
+  subtitle: string;
+  title: string;
+  description: string;
+  primaryCTA: CTA;
+  secondaryCTA: CTA;
+}
+const { subtitle, title, description, primaryCTA, secondaryCTA } = Astro.props;
+---
+<section class="home-hero">
+  <div class="backdrop" aria-hidden="true">
+    <svg class="grid" width="100%" height="100%" preserveAspectRatio="none">
+      <defs>
+        <pattern id="dot-grid" width="34" height="34" patternUnits="userSpaceOnUse">
+          <circle cx="1.5" cy="1.5" r="1.5" fill="var(--border)" />
+        </pattern>
+      </defs>
+      <rect width="100%" height="100%" fill="url(#dot-grid)" />
+    </svg>
+    <img class="mark" src="/shamwari-icon.png" alt="" />
+  </div>
+
+  <div class="container-custom hero-content">
+    <p class="eyebrow">{subtitle}</p>
+    <h1>{title}</h1>
+    <p class="standfirst">{description}</p>
+    <div class="cta-row">
+      <Button href={primaryCTA.href}>{primaryCTA.text}</Button>
+      <Button href={secondaryCTA.href} variant="ghost" arrow>{secondaryCTA.text}</Button>
+    </div>
+  </div>
+</section>
+
+<style>
+  .home-hero {
+    position: relative;
+    overflow: hidden;
+    min-height: 40rem;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+  }
+  @media (min-height: 50rem) {
+    .home-hero { min-height: 46rem; }
+  }
+
+  .backdrop { position: absolute; inset: 0; }
+  .grid { position: absolute; inset: 0; opacity: 0.55; }
+  .mark {
+    position: absolute; top: 50%; right: -6%; transform: translateY(-50%);
+    width: 46rem; max-width: 60vw; height: auto; opacity: 0.14;
+    /* Fades the mark out toward the text column so it never competes with
+       the headline — a mask, not a hard clip, so the edge stays soft. */
+    -webkit-mask-image: linear-gradient(to left, black 45%, transparent 88%);
+    mask-image: linear-gradient(to left, black 45%, transparent 88%);
+  }
+
+  .hero-content { position: relative; z-index: 1; padding: 4rem 1.5rem; }
+  .eyebrow {
+    margin: 0 0 0.85rem; font-size: 0.7rem; font-weight: 600;
+    letter-spacing: 0.14em; text-transform: uppercase; color: var(--primary);
+  }
+  h1 {
+    /* Newsreader comes from the global h1 rule in src/styles/global.css. */
+    font-weight: 400;
+    font-size: clamp(2.4rem, 5.2vw, 4.2rem); line-height: 1.08;
+    letter-spacing: -0.02em; color: var(--foreground); margin: 0 0 1.25rem;
+    max-width: 22ch; text-wrap: balance;
+  }
+  .standfirst {
+    max-width: 42rem; font-size: 1.2rem; line-height: 1.6;
+    color: var(--muted-foreground); margin: 0 0 2rem;
+  }
+  .cta-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+</style>

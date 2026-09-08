@@ -1,0 +1,115 @@
+---
+/** The scope-gate pipeline, in the "connected dark panels" style used
+    across product marketing sites for a technical pipeline: inputs on the
+    left, the pipeline itself in the middle, destinations (plus a live
+    example) on the right — carrying the mechanism in more depth than a
+    single small SVG could: the two separate checks, and what each one
+    actually is in the code. Staying exactly as static as everything else
+    on this site: no client JS, plain HTML/CSS, an Icon for the connectors
+    instead of hand-computed bezier paths. Deliberately dark-panelled on
+    the light page background, the same way a product site shows a
+    screenshot of dark UI chrome regardless of the page's own theme. */
+import Icon from '@bundu/ui/Icon.astro';
+
+const stages = [
+  { label: 'Parse request', detail: 'reads the scope the request claims — personal, community or platform' },
+  { label: 'Edge check', code: 'gateway/src/scope.ts', detail: 'fast fail, saves a Core round trip' },
+  { label: 'Core check', code: 'core/main.py::resolve_scope', detail: "authoritative — the edge can't override it" },
+  { label: 'Route decision', detail: 'Cloud, or refuse and point at Mind — never a silent downgrade' },
+];
+---
+<div class="gate-diagram">
+  <div class="panel inputs">
+    <p class="panel-title">A question arrives</p>
+    <div class="row"><span class="dot"></span>A general question</div>
+    <div class="row"><span class="dot"></span>A question about you</div>
+  </div>
+
+  <Icon name="arrow-right" class="connector" title="flows into" />
+
+  <div class="panel gate">
+    <p class="panel-title">The gate — checked twice</p>
+    {stages.map((s) => (
+      <div class="stage">
+        <span class="dot"></span>
+        <div>
+          <p class="stage-label">{s.label}{s.code && <code>{s.code}</code>}</p>
+          <p class="stage-detail">{s.detail}</p>
+        </div>
+      </div>
+    ))}
+  </div>
+
+  <Icon name="arrow-right" class="connector" title="routes to" />
+
+  <div class="outputs">
+    <div class="panel destinations">
+      <p class="panel-title">Where it goes</p>
+      <div class="row"><span class="dot"></span>Shamwari Cloud <span class="muted">→ routed provider</span></div>
+      <div class="row"><span class="dot dot-blocked"></span>Shamwari Mind <span class="muted">→ on your device</span></div>
+    </div>
+    <div class="panel terminal">
+      <p class="term-line"><span class="prompt">&gt;</span> POST /v1/chat/completions <span class="muted">{'{scope: "personal"}'}</span></p>
+      <p class="term-line term-error">409 scope_requires_local_inference</p>
+      <p class="term-line"><span class="prompt">&gt;</span> POST /v1/chat/completions <span class="muted">{'{scope: "community"}'}</span></p>
+      <p class="term-line term-ok">200 → routed to Shamwari Cloud (Qwen)</p>
+    </div>
+  </div>
+</div>
+
+<style>
+  .gate-diagram {
+    display: flex; flex-wrap: wrap; align-items: stretch; gap: 1.25rem;
+    justify-content: center;
+  }
+  .panel {
+    background: #131A3E; border: 1px solid #2B3466; border-radius: 14px;
+    padding: 1.25rem 1.4rem; color: #E4E9F6;
+  }
+  .panel-title {
+    font-size: 0.78rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+    color: #8AA6E8; margin: 0 0 1rem;
+  }
+  .inputs { flex: 1 1 220px; max-width: 260px; align-self: center; }
+  .gate { flex: 2 1 360px; max-width: 440px; }
+  .outputs { flex: 1 1 260px; max-width: 300px; display: flex; flex-direction: column; gap: 1rem; }
+  .destinations { flex: none; }
+
+  .row {
+    display: flex; align-items: center; gap: 0.6rem; font-size: 0.9rem;
+    padding: 0.5rem 0; border-bottom: 1px solid #212A54;
+  }
+  .row:last-child { border-bottom: none; }
+  .muted { color: #7C87B8; font-size: 0.82em; margin-left: auto; }
+
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    background: #8AA6E8; box-shadow: 0 0 8px #8aa6e8aa;
+  }
+  .dot-blocked { background: #D89767; box-shadow: 0 0 8px #d89767aa; }
+
+  .stage { display: flex; gap: 0.7rem; padding: 0.55rem 0; }
+  .stage .dot { margin-top: 0.4rem; }
+  .stage-label { font-size: 0.9rem; font-weight: 600; margin: 0; display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+  .stage-label code {
+    font-family: var(--mono, ui-monospace, monospace); font-size: 0.72rem; font-weight: 400;
+    color: #8AA6E8; background: #1D2452; padding: 0.1em 0.4em; border-radius: 3px;
+  }
+  .stage-detail { margin: 0.2rem 0 0; font-size: 0.82rem; color: #A7B0D8; }
+
+  .terminal { background: #0B0F26; font-family: var(--mono, ui-monospace, monospace); font-size: 0.78rem; }
+  .term-line { margin: 0 0 0.5rem; color: #C5CAE9; }
+  .term-line:last-child { margin-bottom: 0; }
+  .prompt { color: #8AA6E8; }
+  .term-error { color: #E5A17A; }
+  .term-ok { color: #8FE3C0; }
+
+  .connector {
+    display: none; align-self: center; flex-shrink: 0; color: var(--primary, #283593);
+    width: 1.4rem; height: 1.4rem;
+  }
+  @media (min-width: 60rem) {
+    .gate-diagram { flex-wrap: nowrap; }
+    .connector { display: block; }
+  }
+</style>

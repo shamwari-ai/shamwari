@@ -1,0 +1,16 @@
+---
+/** A three-state indicator for what's actually built vs. what's planned,
+    on top of @bundu/ui's Badge rather than a hand-rolled colour map.
+    Colour alone never carries the meaning — the label always says it too. */
+import { Badge } from '@bundu/ui/ui/badge';
+
+interface Props { state: 'live' | 'building' | 'planned' }
+const { state } = Astro.props;
+
+const config = {
+  live: { label: 'Live', variant: 'success' as const },
+  building: { label: 'Building', variant: 'accent' as const },
+  planned: { label: 'Planned', variant: 'outline' as const },
+}[state];
+---
+<Badge variant={config.variant} size="sm" className="uppercase tracking-wider">{config.label}</Badge>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600&family=Newsreader:wght@600&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; }
+  body {
+    background: #283593; /* --color-sodalite, light mode */
+    font-family: 'Archivo', sans-serif;
+    position: relative;
+    overflow: hidden;
+  }
+  svg.hexlayer { position: absolute; inset: 0; }
+  .brand {
+    position: absolute; top: 60px; left: 64px; z-index: 2;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .mark { width: 56px; height: 56px; }
+  .wordmark {
+    font-family: 'Newsreader', serif; font-weight: 600; font-size: 28px;
+    color: #FAF9F5; display: flex; align-items: baseline; gap: 10px;
+  }
+  .wordmark span {
+    font-family: 'Archivo', sans-serif; font-weight: 600; font-size: 13px;
+    letter-spacing: 0.14em; text-transform: uppercase; color: #8AA6E8;
+  }
+  .page-url {
+    position: absolute; bottom: 60px; left: 64px; z-index: 2;
+    font-family: 'Archivo', sans-serif; font-weight: 500; font-size: 16px;
+    letter-spacing: 0.02em; color: #8AA6E8;
+  }
+  .content { position: absolute; top: 180px; left: 64px; right: 64px; z-index: 2; }
+  .eyebrow {
+    font-size: 15px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+    color: #8AA6E8; margin-bottom: 22px;
+  }
+  h1 {
+    font-family: 'Newsreader', serif; font-weight: 600; font-size: 56px; line-height: 1.15;
+    color: #FAF9F5; letter-spacing: -0.01em; max-width: 740px;
+    text-shadow: 0 2px 24px rgba(16, 20, 48, 0.55);
+  }
+  p {
+    margin-top: 26px; font-size: 22px; line-height: 1.5; color: #C5CAE9; max-width: 700px;
+    text-shadow: 0 2px 16px rgba(16, 20, 48, 0.5);
+  }
+</style>
+</head>
+<body>
+  <svg class="hexlayer" viewBox="0 0 1200 630" xmlns="http://www.w3.org/2000/svg">HEX_PATTERN</svg>
+  <div class="brand">
+    <img class="mark" src="MARK_SRC" />
+    <div class="wordmark">Shamwari <span>AI</span></div>
+  </div>
+  <div class="content">
+    <p class="eyebrow">EYEBROW</p>
+    <h1>TITLE</h1>
+    <p>DESCRIPTION</p>
+  </div>
+  <p class="page-url">PAGE_URL</p>
+</body>
+</html>

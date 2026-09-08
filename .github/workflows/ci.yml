@@ -106,6 +106,32 @@ jobs:
         run: npm run check
         working-directory: docs-site
 
+  site:
+    name: Landing page (build, links, tokens, size)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - run: npm ci
+        working-directory: site
+
+      - name: Build
+        run: npm run build
+        working-directory: site
+
+      # astro check covers types. check.mjs covers what it cannot: dead
+      # anchors and assets, colours with no base :root value, stray client
+      # JS, the size budget, and the language-discipline rules.
+      - name: Check
+        run: npm run check
+        working-directory: site
+
   gitleaks:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest

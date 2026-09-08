@@ -1,0 +1,35 @@
+---
+import { Button } from '@bundu/ui/ui/button';
+import { PAGES, externalLinkAttrs } from '../lib/site';
+
+// Home and Contact aren't repeated here: Home is the logo, Contact is the
+// CTA button below.
+const nav = PAGES.filter((p) => p.path !== '/' && p.path !== '/contact/');
+
+const path = Astro.url.pathname;
+const isActive = (href: string) => !href.startsWith('http') && (path === href || (href !== '/' && path.startsWith(href)));
+---
+<header class="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+  <div class="container-custom flex items-center justify-between gap-6 py-4">
+    <a href="/" class="flex items-baseline gap-2 font-serif text-h4 font-semibold text-primary no-underline">
+      Shamwari
+      <span class="font-sans text-caption font-semibold uppercase tracking-widest text-muted-foreground">AI</span>
+    </a>
+
+    <nav aria-label="Primary" class="flex flex-wrap items-center gap-x-6 gap-y-2">
+      {nav.map((item) => (
+        <a
+          href={item.path}
+          {...externalLinkAttrs(item.external)}
+          class:list={[
+            'text-body-sm no-underline transition-colors',
+            isActive(item.path) ? 'font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground',
+          ]}
+        >
+          {item.label}
+        </a>
+      ))}
+      <Button href="/contact/" size="sm">Get in touch</Button>
+    </nav>
+  </div>
+</header>
