@@ -1,4 +1,19 @@
-# docs.shamwari.ai
+# docs.shamwari.ai — content migrated, do not edit the pages
+
+**The 7 pages under `src/content/docs/` have moved to `shamwari-ai/docs`
+(Mintlify) as real MDX content.** See shamwari-ai/docs#1 for the migration
+and shamwari-ai/shamwari#23 for the issue that tracks it. Edit the pages
+there — `index`, `rules`, `scopes`, `architecture`, `routing`, `ground`,
+`language`, `traffic` — not the copies in this directory.
+
+This Astro site is still what `docs.shamwari.ai` serves today. Nothing here
+has been deleted and no DNS/Workers routing change has been made — #23 leaves
+both as open human decisions (which source is canonical, and whether to
+delete `docs-site/` once it's confirmed). Until that lands, this directory
+still builds and deploys as before; treat its content pages as a stale mirror
+rather than a place to fix things.
+
+---
 
 Astro with MDX content, static output, served by **Cloudflare Workers static
 assets**. Not Vercel — the docs site is Cloudflare, like the gateway.
