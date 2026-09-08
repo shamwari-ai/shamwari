@@ -31,23 +31,25 @@ const tiers = [
   </Section>
 
   <Section bg="secondary" border>
-    <ul class="flex max-w-2xl flex-col gap-6">
+    <ul class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
       {STATUS.map((item) => (
-        <li class="flex flex-col gap-1.5">
-          <div class="flex flex-wrap items-baseline gap-3">
-            <StatusPill state={item.state} />
-            <span class="font-semibold text-foreground">{item.title}</span>
-          </div>
-          <p class="text-body-sm text-muted-foreground">{item.body}</p>
-          {item.issues && (
-            <p class="flex flex-wrap gap-3 text-body-sm">
-              {item.issues.map((n) => (
-                <a href={issueUrl(n)} target="_blank" rel="noopener noreferrer" class="text-primary underline underline-offset-2">
-                  Track #{n} on GitHub ↗
-                </a>
-              ))}
-            </p>
-          )}
+        <li>
+          <Card class="flex h-full flex-col gap-1.5">
+            <div class="flex flex-wrap items-baseline gap-3">
+              <StatusPill state={item.state} />
+              <span class="font-semibold text-foreground">{item.title}</span>
+            </div>
+            <p class="text-body-sm text-muted-foreground">{item.body}</p>
+            {item.issues && (
+              <p class="mt-auto flex flex-wrap gap-3 pt-2 text-body-sm">
+                {item.issues.map((n) => (
+                  <a href={issueUrl(n)} target="_blank" rel="noopener noreferrer" class="text-primary underline underline-offset-2">
+                    Track #{n} on GitHub ↗
+                  </a>
+                ))}
+              </p>
+            )}
+          </Card>
         </li>
       ))}
     </ul>
