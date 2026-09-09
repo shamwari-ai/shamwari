@@ -4,7 +4,7 @@ import type { Env, Scope } from './types';
  * THE LOAD-BEARING RULE
  *
  * Personal-layer content never reaches a third-party inference provider.
- * Not Kimi, not Qwen, not Claude. That is what makes "sovereign AI
+ * Not Z.ai, not Claude, not anyone. That is what makes "sovereign AI
  * companion" a technical fact rather than a marketing line.
  *
  * Enforced twice on purpose. Here, so the request fails fast without

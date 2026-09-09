@@ -22,9 +22,14 @@ huggingface  ideogram   mistral  openai  openrouter  parallel  perplexity
 replicate  vertex       workersai
 ```
 
-**There is no `qwen` and no `moonshot` provider.** Both need a custom
-provider (`POST /accounts/{id}/ai-gateway/custom-providers`, requires
-`name`, `slug`, `base_url`) or must be reached through `openrouter`.
+**There is no `qwen`, `moonshot`, or `zai` provider.** All three need a
+custom provider (`POST /accounts/{id}/ai-gateway/custom-providers`, requires
+`name`, `slug`, `base_url`) or must be reached through `openrouter`. The
+current gateway config (`src/router.ts`) uses `zai`, pointed at
+`https://api.z.ai/api/paas/v4/chat/completions` — the `qwen`/`moonshot`
+entries below are the historical record of the mistakes that established
+this pattern, kept because the pattern, not the specific provider, is the
+expensive part to rediscover.
 
 **The Workers AI provider value is `workers-ai`.** The docs page lives at
 `/ai-gateway/usage/providers/workersai/`, and that URL slug is not the API
@@ -59,8 +64,9 @@ deprecated.
 | `@cf/qwen/qwq-32b` | Qwen reasoning specialist |
 | `@cf/moonshotai/kimi-k2.6` | Kimi K2.6. Reasoning, function calling |
 | `@cf/moonshotai/kimi-k2.7-code` | Kimi, code-specialised |
+| `@cf/zai-org/glm-5.3` | GLM 5.3 flagship. **Current standard tier**, via Z.ai directly (see gateway/README.md) — this Workers AI entry is a same-weights alternative, not what the gateway calls today |
+| `@cf/zai-org/glm-5.3-flash` | GLM 5.3 Flash, MIT-licensed, natively multimodal. **Current economy tier** (via Z.ai) and the Workers AI last-resort fallback |
 | `@cf/zai-org/glm-5.2` | GLM 5.2 flagship. Reasoning, function calling |
-| `@cf/zai-org/glm-5.3-flash` | GLM 5.3 Flash. Fast tier |
 | `@cf/zai-org/glm-4.7-flash` | GLM 4.7 Flash |
 | `@cf/deepseek/deepseek-v4-pro-0813` | 1M context, agentic |
 | `@cf/deepseek/deepseek-v4-flash-0731` | Faster DeepSeek V4 |
@@ -133,7 +139,8 @@ Image in:
 
 | Model id | Notes |
 |---|---|
-| `@cf/qwen/qwen3.8-27b` | Image-Text-to-Text — the vision path, same family as the text tier |
+| `@cf/qwen/qwen3.8-27b` | Image-Text-to-Text — a separate family from the current text tier (GLM), still viable as a dedicated vision model |
+| `@cf/zai-org/glm-5.3-flash` | Natively multimodal — same model as the economy tier, so image input needs no new provider at all. Verify against Z.ai's API docs before relying on this; untested here |
 | `@cf/nvidia/nemotron-3-120b-a12b` | Image-to-Text |
 | `@cf/llava-hf/llava-1.5-7b-hf` | Image-to-Text |
 

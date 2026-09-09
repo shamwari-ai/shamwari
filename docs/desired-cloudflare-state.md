@@ -148,8 +148,7 @@ a WebSocket or request is in flight.
 - **Queues** — `shamwari-sink` and `shamwari-sink-dlq` (exist).
 - **R2** — gadget content and blueprints, when the workshop lands.
 - **AI Gateway** — gateway `shamwari`, spend limit set, exact-match caching
-  on, custom providers for Qwen and Moonshot, and the `shamwari` dynamic
-  route.
+  on, a custom provider for Z.ai, and the `shamwari` dynamic route.
 - **Workers AI** — `@cf/baai/bge-m3` for Ground embeddings only. **Never for
   personal-scope text**, which is now enforced in `ground()` rather than
   only asserted. See `scaling-and-memory.md`.

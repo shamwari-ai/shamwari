@@ -91,8 +91,8 @@ always go direct and undercut you.
 
 Margin has to be manufactured, from three places:
 
-1. **Route the bulk to cheap models.** Qwen and DeepSeek handle most traffic;
-   Kimi K3 for reasoning and long context; Claude/GPT premium and opt-in only.
+1. **Route the bulk to cheap models.** GLM-5.3-Flash handles most traffic;
+   GLM-5.3 for reasoning and long context; Claude/GPT premium and opt-in only.
    Target ≥70% of tokens on economy.
 2. **Cache hard.** Exact-match caching is free on AI Gateway. In a market where
    thousands ask near-identical questions about ZIMRA thresholds, hit rate
@@ -134,8 +134,9 @@ than warning. ZimLII is the highest-value unblock.
 ## 6. Mind — distillation, not fine-tuning from scratch
 
 1. Seed question/answer pairs from Ground documents
-2. Kimi K3 and Qwen generate candidates in Shona, Ndebele, Zimbabwean English
-   and code-switched registers — **never Claude or GPT**, provider terms bar it
+2. GLM-5.3 and GLM-5.3-Flash generate candidates in Shona, Ndebele, Zimbabwean
+   English and code-switched registers — **never Claude or GPT**, provider
+   terms bar it
 3. Paid human annotators correct. This is the irreplaceable asset, and a good
    story: Shamwari employs Zimbabweans to teach an AI Zimbabwe
 4. QLoRA on Qwen 4B. Apache-2.0 base means Mind is genuinely open — weights,

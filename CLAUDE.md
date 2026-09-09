@@ -79,7 +79,9 @@ Moonshot. Mind is a client of the gateway, not a backend behind it.
 ### 2. Only `open_weight` provenance may train Shamwari Mind
 
 Anthropic and OpenAI terms bar using their outputs to train competing models.
-Kimi K3 and Qwen permit it.
+Z.ai's GLM-5.3 and GLM-5.3-Flash permit it — GLM-5.3-Flash under plain MIT,
+GLM-5.3 under a bespoke licence that explicitly grants the right to
+fine-tune and create derivative works.
 
 `licenseClass` is stamped at generation time and never inferred later:
 - `gateway/src/router.ts` — premium tier is hardcoded `restricted`. **Do not
@@ -119,14 +121,15 @@ claim and one a journalist can puncture.
 
 | Don't say | Do say |
 |---|---|
-| "open source model" | "open weights" — Kimi K3 ships under a bespoke licence, not MIT/Apache |
+| "open source model" | "open weights" — GLM-5.3 ships under a bespoke licence, not MIT/Apache (GLM-5.3-Flash *is* MIT) |
 | "your data stays in Africa" (for Cloud) | Sovereignty attaches to Mind + Ground only. **Never to Cloud.** |
 | "we built our own model" | "We train Shamwari Mind. We route Shamwari Cloud." |
 
-Kimi K3's licence: broadly permissive, but requires a separate agreement for
-Model-as-a-Service operators above $20M revenue over any 12 months, and
-attribution above 100M MAU or $20M monthly revenue. Nowhere near either
-threshold. **Read the LICENSE file directly before shipping** — do not trust
+GLM-5.3's licence: explicitly permits use, fine-tuning and derivative works;
+the only gate is a security review for Model-as-a-Service operators above
+$10B revenue over any 12 months. Nowhere near that threshold.
+**Read the LICENSE file directly before shipping**
+(https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE) — do not trust
 this summary.
 
 ---
@@ -141,7 +144,7 @@ gateway/          Cloudflare Workers, TypeScript
                   routing · KV auth cache · AI Gateway · scope gate · queue producer
                   holds NO database credentials, never talks to Mongo
   │
-  ├──► Cloudflare AI Gateway ──► Qwen (economy) / Kimi K3 (standard)
+  ├──► Cloudflare AI Gateway ──► GLM-5.3-Flash (economy) / GLM-5.3 (standard), via Z.ai
   │         └─ degradation: gateway → direct provider → Workers AI
   │
   └──► core/      FastAPI on Nyuchi infrastructure
@@ -356,8 +359,10 @@ catalogue check on 2026-08-27, so they are not rediscovered:
   in its training mix, so voice *input* is worth measuring rather than
   assuming.
 
-Vision has one convenience: `@cf/qwen/qwen3.8-27b` is Image-Text-to-Text
-and the same family as the text tier, so image input needs no new provider.
+Vision has one convenience, better than it used to be: GLM-5.3-Flash is
+natively multimodal — the economy tier itself handles image input, so no
+new provider or model family is needed for it. Verify this against
+Z.ai's actual API docs before shipping; this hasn't been tested here yet.
 
 `docs/workers-ai-models.md` has the verified model ids for all of it.
 

@@ -24,19 +24,19 @@ export function targets(env: Env): Record<Tier, Target> {
   return {
     economy: {
       tier: 'economy',
-      provider: 'qwen',
+      provider: 'zai',
       model: env.ECONOMY_MODEL,
       licenseClass: 'open_weight',
-      directUrl: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
-      apiKey: (e) => e.QWEN_API_KEY,
+      directUrl: 'https://api.z.ai/api/paas/v4/chat/completions',
+      apiKey: (e) => e.ZAI_API_KEY,
     },
     standard: {
       tier: 'standard',
-      provider: 'moonshot',
+      provider: 'zai',
       model: env.STANDARD_MODEL,
       licenseClass: 'open_weight',
-      directUrl: 'https://api.moonshot.ai/v1/chat/completions',
-      apiKey: (e) => e.MOONSHOT_API_KEY,
+      directUrl: 'https://api.z.ai/api/paas/v4/chat/completions',
+      apiKey: (e) => e.ZAI_API_KEY,
     },
     // Premium is deliberately unconfigured. When Claude or GPT are added,
     // licenseClass MUST stay 'restricted' — their terms bar using outputs
