@@ -42,12 +42,11 @@
     "EMBEDDING_MODEL": "@cf/baai/bge-m3",
     "GROUND_TOP_K": "6",
     "AUTH_CACHE_TTL": "60",
-    // Model ids as the provider names them, not as Workers AI names them:
-    // the economy and standard tiers go to Alibaba DashScope and Moonshot
-    // through AI Gateway custom providers. "qwen3-32b-instruct" was here
-    // and exists in no catalogue — see docs/workers-ai-models.md.
-    "ECONOMY_MODEL": "qwen3.8-max",
-    "STANDARD_MODEL": "kimi-k3",
+    // Model ids as Z.ai names them, not as Workers AI names them: the
+    // economy and standard tiers both go to Z.ai (api.z.ai) through an AI
+    // Gateway custom provider. See docs/workers-ai-models.md.
+    "ECONOMY_MODEL": "glm-5.3-flash",
+    "STANDARD_MODEL": "glm-5.3",
     "SURFACE": "shamwari.ai",
 
     // Gates /v1/ground/context, the retrieval-only endpoint Mind calls.
@@ -63,5 +62,5 @@
   // wrangler secret put:
   //   CF_ACCOUNT_ID, CF_AIG_TOKEN
   //   SHAMWARI_CORE_TOKEN
-  //   QWEN_API_KEY, MOONSHOT_API_KEY
+  //   ZAI_API_KEY
 }

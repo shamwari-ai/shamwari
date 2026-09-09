@@ -71,10 +71,10 @@ describe('rule 2 — every path stays open-weight', () => {
   // so the stamp is only true while every reachable provider is
   // open-weight. Adding a restricted provider here means the Worker must
   // stamp from the cf-aig-provider response header instead.
-  // 'qwen' and 'moonshot' are custom-provider slugs this account must
-  // create. 'workers-ai' is what the dashboard itself serialises for
-  // Workers AI — see docs/workers-ai-models.md.
-  const OPEN_WEIGHT = new Set(['qwen', 'moonshot', 'workers-ai']);
+  // 'zai' is the custom-provider slug this account must create. 'workers-ai'
+  // is what the dashboard itself serialises for Workers AI — see
+  // docs/workers-ai-models.md.
+  const OPEN_WEIGHT = new Set(['zai', 'workers-ai']);
 
   it('routes only to open-weight providers', () => {
     const providers = byType('model').map((e) => e.properties?.provider as string);
@@ -108,7 +108,7 @@ describe('the route matches the Worker it fronts', () => {
     const [rate] = byType('rate');
     const fallback = rate?.outputs.fallback?.elementId;
     const target = elements.find((e) => e.id === fallback);
-    expect(target?.properties?.provider).toBe('qwen');
+    expect(target?.properties?.provider).toBe('zai');
   });
 });
 

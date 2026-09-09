@@ -10,8 +10,7 @@ export interface Env {
   CORE_URL: string;
   SHAMWARI_CORE_TOKEN: string;
 
-  QWEN_API_KEY: string;
-  MOONSHOT_API_KEY: string;
+  ZAI_API_KEY: string;
 
   EMBEDDING_MODEL: string;
   GROUND_TOP_K: string;

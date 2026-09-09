@@ -4,8 +4,12 @@ import type { LicenseClass } from './types';
  * RULE 2, RESOLVED FROM WHAT ACTUALLY SERVED THE REQUEST.
  *
  * Only `open_weight` provenance may train Shamwari Mind. Anthropic's and
- * OpenAI's terms bar using their outputs to train a competing model; Kimi
- * K3's and Qwen's permit it.
+ * OpenAI's terms bar using their outputs to train a competing model. Z.ai's
+ * GLM-5.3 licence explicitly grants the right to "fine-tune... and create
+ * derivative works" — read directly from the LICENSE file at
+ * https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE before trusting
+ * this comment, per the standing rule below. GLM-5.3-Flash ships under
+ * plain MIT.
  *
  * `router.ts` stamps a licenceClass on the tier the Worker *asks for*. That
  * is the right place for intent and it is not sufficient on its own,
@@ -33,18 +37,19 @@ import type { LicenseClass } from './types';
  * not.
  */
 const OPEN_WEIGHT: ReadonlySet<string> = new Set<string>([
-  // Moonshot Kimi K3. Bespoke licence, broadly permissive, permits training
-  // on outputs. Read the LICENSE file before adding a new variant here —
-  // the MaaS and attribution thresholds are revenue-scaled.
-  'moonshot/kimi-k3',
-  'moonshot/kimi-k3-0711-preview',
+  // Z.ai GLM-5.3. Bespoke licence, explicitly permits fine-tuning and
+  // derivative works; the only gate is a security review for
+  // Model-as-a-Service operators above $10B revenue over any 12 months.
+  // Nowhere near that scale. Read the LICENSE file before adding a new
+  // variant here: https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE
+  'zai/glm-5.3',
 
-  // Alibaba Qwen, via DashScope. Tongyi Qianwen licence permits it.
-  'qwen/qwen3.8-max',
-  'qwen/qwen3-30b-a3b-fp8',
+  // Z.ai GLM-5.3-Flash. Plain MIT.
+  'zai/glm-5.3-flash',
 
-  // Workers AI last-resort fallback. Same Qwen weights, Cloudflare-hosted.
-  `workers-ai/${'@cf/qwen/qwen3-30b-a3b-fp8'}`,
+  // Workers AI last-resort fallback. Same GLM-5.3-Flash weights,
+  // Cloudflare-hosted.
+  `workers-ai/${'@cf/zai-org/glm-5.3-flash'}`,
 ]);
 
 /**
@@ -54,7 +59,7 @@ const OPEN_WEIGHT: ReadonlySet<string> = new Set<string>([
  * `platform.usageEvents` could not tell you which model answered when both
  * providers were down — and left nothing for the allowlist above to key on.
  */
-export const WORKERS_AI_FALLBACK_MODEL = '@cf/qwen/qwen3-30b-a3b-fp8';
+export const WORKERS_AI_FALLBACK_MODEL = '@cf/zai-org/glm-5.3-flash';
 
 /** Normalised so casing or padding from a provider header cannot miss. */
 function key(provider: string, model: string): string {
