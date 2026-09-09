@@ -24,7 +24,7 @@
           "elementId": "tier_check"
         },
         "fallback": {
-          "elementId": "economy_qwen"
+          "elementId": "economy_glm"
         }
       }
     },
@@ -45,19 +45,19 @@
       },
       "outputs": {
         "true": {
-          "elementId": "standard_kimi"
+          "elementId": "standard_glm"
         },
         "false": {
-          "elementId": "economy_qwen"
+          "elementId": "economy_glm"
         }
       }
     },
     {
-      "id": "standard_kimi",
+      "id": "standard_glm",
       "type": "model",
       "properties": {
-        "provider": "moonshot",
-        "model": "kimi-k3",
+        "provider": "zai",
+        "model": "glm-5.3",
         "timeout": 30000,
         "retries": 1
       },
@@ -66,16 +66,16 @@
           "elementId": "END"
         },
         "fallback": {
-          "elementId": "economy_qwen"
+          "elementId": "economy_glm"
         }
       }
     },
     {
-      "id": "economy_qwen",
+      "id": "economy_glm",
       "type": "model",
       "properties": {
-        "provider": "qwen",
-        "model": "qwen3.8-max",
+        "provider": "zai",
+        "model": "glm-5.3-flash",
         "timeout": 20000,
         "retries": 1
       },

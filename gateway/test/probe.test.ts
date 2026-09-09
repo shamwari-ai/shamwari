@@ -15,10 +15,9 @@ function fakeEnv(aiOk = true) {
     CF_ACCOUNT_ID: 'acct',
     CF_GATEWAY_ID: 'gw',
     CF_AIG_TOKEN: 'aig',
-    ECONOMY_MODEL: 'qwen3.8-max',
-    STANDARD_MODEL: 'kimi-k3',
-    QWEN_API_KEY: 'q',
-    MOONSHOT_API_KEY: 'm',
+    ECONOMY_MODEL: 'glm-5.3-flash',
+    STANDARD_MODEL: 'glm-5.3',
+    ZAI_API_KEY: 'z',
     SURFACE: 'shamwari.ai',
   } as unknown as Env;
 }
@@ -110,9 +109,9 @@ describe('probe', () => {
   it('names what served each healthy path', async () => {
     stubFetch(() => new Response(okBody, { status: 200 }));
     const r = await probe(fakeEnv(), 'standard');
-    expect(r.results.find((x) => x.path === 'gateway')?.served).toBe('moonshot/kimi-k3');
+    expect(r.results.find((x) => x.path === 'gateway')?.served).toBe('zai/glm-5.3');
     expect(r.results.find((x) => x.path === 'workers-ai')?.served).toBe(
-      'workers-ai/@cf/qwen/qwen3-30b-a3b-fp8',
+      'workers-ai/@cf/zai-org/glm-5.3-flash',
     );
   });
 

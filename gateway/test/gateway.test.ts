@@ -28,10 +28,9 @@ function fakeEnv() {
     CF_ACCOUNT_ID: 'acct',
     CF_GATEWAY_ID: 'gw',
     CF_AIG_TOKEN: 'aig',
-    ECONOMY_MODEL: 'qwen3.8-max',
-    STANDARD_MODEL: 'kimi-k3',
-    QWEN_API_KEY: 'q',
-    MOONSHOT_API_KEY: 'm',
+    ECONOMY_MODEL: 'glm-5.3-flash',
+    STANDARD_MODEL: 'glm-5.3',
+    ZAI_API_KEY: 'z',
   } as unknown as Env;
 }
 
@@ -103,19 +102,19 @@ describe('provenance follows the model that actually served', () => {
     stubGateway();
     const env = fakeEnv();
     const r = await infer(env, targets(env).standard, messages, meta);
-    expect(r.provider).toBe('moonshot');
-    expect(r.model).toBe('kimi-k3');
+    expect(r.provider).toBe('zai');
+    expect(r.model).toBe('glm-5.3');
     expect(r.substituted).toBe(false);
     expect(r.licenseClass).toBe('open_weight');
   });
 
   it('reads cf-aig-model and cf-aig-provider when a dynamic route substitutes', async () => {
-    stubGateway({ 'cf-aig-provider': 'qwen', 'cf-aig-model': 'qwen3.8-max' });
+    stubGateway({ 'cf-aig-provider': 'zai', 'cf-aig-model': 'glm-5.3-flash' });
     const env = fakeEnv();
     const r = await infer(env, targets(env).standard, messages, meta);
-    expect(r.provider).toBe('qwen');
-    expect(r.model).toBe('qwen3.8-max');
-    expect(r.requestedModel).toBe('kimi-k3');
+    expect(r.provider).toBe('zai');
+    expect(r.model).toBe('glm-5.3-flash');
+    expect(r.requestedModel).toBe('glm-5.3');
     expect(r.substituted).toBe(true);
     expect(r.licenseClass).toBe('open_weight');
   });
@@ -139,7 +138,7 @@ describe('provenance follows the model that actually served', () => {
     const r = await infer(env, targets(env).standard, messages, meta);
     expect(r.path).toBe('workers-ai');
     expect(r.provider).toBe('workers-ai');
-    expect(r.model).toBe('@cf/qwen/qwen3-30b-a3b-fp8');
+    expect(r.model).toBe('@cf/zai-org/glm-5.3-flash');
     expect(r.model).not.toBe('fallback');
     expect(r.licenseClass).toBe('open_weight');
     expect(r.substituted).toBe(true);

@@ -5,8 +5,8 @@ import { route, targets } from '../src/router';
 import type { Env, Message } from '../src/types';
 
 const env = {
-  ECONOMY_MODEL: 'qwen3-32b-instruct',
-  STANDARD_MODEL: 'kimi-k3',
+  ECONOMY_MODEL: 'glm-5.3-flash',
+  STANDARD_MODEL: 'glm-5.3',
 } as unknown as Env;
 
 const user = (content: string): Message => ({ role: 'user', content });
@@ -51,7 +51,7 @@ describe('route', () => {
   });
 
   it('reads model ids from env rather than hardcoding them', () => {
-    expect(route([user('hi')], undefined, env).model).toBe('qwen3-32b-instruct');
-    expect(route([user('hi')], 'shamwari-standard', env).model).toBe('kimi-k3');
+    expect(route([user('hi')], undefined, env).model).toBe('glm-5.3-flash');
+    expect(route([user('hi')], 'shamwari-standard', env).model).toBe('glm-5.3');
   });
 });
