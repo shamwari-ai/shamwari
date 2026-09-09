@@ -10,9 +10,9 @@ beforeEach(() => vi.spyOn(console, 'warn').mockImplementation(() => {}));
 afterEach(() => vi.restoreAllMocks());
 
 describe('resolveLicenseClass', () => {
-  it('admits the configured Kimi and Qwen models', () => {
-    expect(resolveLicenseClass('moonshot', 'kimi-k3')).toBe('open_weight');
-    expect(resolveLicenseClass('qwen', 'qwen3.8-max')).toBe('open_weight');
+  it('admits the configured GLM-5.3 and GLM-5.3-Flash models', () => {
+    expect(resolveLicenseClass('zai', 'glm-5.3')).toBe('open_weight');
+    expect(resolveLicenseClass('zai', 'glm-5.3-flash')).toBe('open_weight');
   });
 
   it('admits the Workers AI fallback under its real model id', () => {
@@ -22,8 +22,8 @@ describe('resolveLicenseClass', () => {
   it('fails closed for a model nobody has read the terms of', () => {
     // The whole point. An unlisted model is not assumed permissive just
     // because it sits behind a provider whose other models are.
-    expect(resolveLicenseClass('moonshot', 'kimi-k9-unreleased')).toBe('restricted');
-    expect(resolveLicenseClass('qwen', 'qwen-some-new-thing')).toBe('restricted');
+    expect(resolveLicenseClass('zai', 'glm-9-unreleased')).toBe('restricted');
+    expect(resolveLicenseClass('zai', 'glm-some-new-thing')).toBe('restricted');
   });
 
   it('fails closed for the providers whose terms bar training outright', () => {
@@ -37,12 +37,12 @@ describe('resolveLicenseClass', () => {
   });
 
   it('is insensitive to casing and padding from a provider header', () => {
-    expect(resolveLicenseClass(' Moonshot ', ' Kimi-K3 ')).toBe('open_weight');
+    expect(resolveLicenseClass(' Zai ', ' GLM-5.3 ')).toBe('open_weight');
   });
 
   it('never admits a bare provider or a bare model', () => {
-    expect(resolveLicenseClass('moonshot', '')).toBe('restricted');
-    expect(resolveLicenseClass('', 'kimi-k3')).toBe('restricted');
+    expect(resolveLicenseClass('zai', '')).toBe('restricted');
+    expect(resolveLicenseClass('', 'glm-5.3')).toBe('restricted');
   });
 
   it('keeps every allowlist entry lowercase, or lookups silently miss', () => {

@@ -37,8 +37,7 @@ wrangler queues create shamwari-sink-dlq
 wrangler secret put CF_ACCOUNT_ID
 wrangler secret put CF_AIG_TOKEN
 wrangler secret put SHAMWARI_CORE_TOKEN
-wrangler secret put QWEN_API_KEY
-wrangler secret put MOONSHOT_API_KEY
+wrangler secret put ZAI_API_KEY
 
 npm run dev
 ```
@@ -80,10 +79,10 @@ is checked by `test/dynamic-route.test.ts` — one start, one end, no dangling
 ```
 start → budget_month (cost cap)
           success  → tier_check
-          fallback → economy_qwen
+          fallback → economy_glm
         tier_check (metadata.tier == "standard")
-          true  → standard_kimi → fallback → economy_qwen
-          false → economy_qwen  → fallback → workers_ai → done
+          true  → standard_glm → fallback → economy_glm
+          false → economy_glm  → fallback → workers_ai → done
 ```
 
 The feature is in Beta.
@@ -111,9 +110,9 @@ so it needs no custom provider and no API key:
 
 | Node | Model | Why |
 |---|---|---|
-| `economy` | `@cf/qwen/qwen3-30b-a3b-fp8` | MoE, cheap per token — the bulk tier |
-| `standard` | `@cf/moonshotai/kimi-k2.6` | Kimi on Workers AI; `kimi-k3` is not there |
-| `last_resort` | `@cf/zai-org/glm-5.3-flash` | fast, independent family |
+| `economy` | `@cf/zai-org/glm-5.3-flash` | fast, MIT-licensed, natively multimodal — the bulk tier |
+| `standard` | `@cf/zai-org/glm-5.3` | GLM-5.3 flagship; both tiers are natively on Workers AI, unlike Kimi K3 before it |
+| `last_resort` | `@cf/zai-org/glm-5.3-flash` | same weights as `economy`, Cloudflare-hosted — deliberately redundant, matches `WORKERS_AI_FALLBACK_MODEL` in `src/provenance.ts` |
 
 Save and deploy; it is a working route.
 
@@ -122,9 +121,8 @@ would take its `false` branch on every request until `src/gateway.ts` sends
 `tier` as custom metadata, and `false` goes to economy — so pass 1 gives up
 nothing real, it just defers the spend cap.
 
-Swap in `@cf/qwen/qwen3.8-27b` (newer, and the vision path) or
-`@cf/zai-org/glm-5.2` (flagship) if you want more capability per request.
-`docs/workers-ai-models.md` has the verified list.
+`docs/workers-ai-models.md` has the verified list if a newer GLM point
+release is worth swapping in.
 
 **Pass 2 — the two unknown nodes.** Add `tier_check` (Conditional) and
 `budget_month` (Budget Limit) in the visual editor, wire them per
@@ -133,12 +131,16 @@ JSON view and copy what the dashboard wrote for `properties.conditions` and
 `rate.key` into `dynamic-route.json`. That is the moment the spec stops
 being a guess.
 
-**Pass 3, only for the target route.** `dynamic-route.json` sends economy to
-`qwen` and standard to `moonshot`. Neither is a Cloudflare provider slug —
-both need a custom provider created first, pointed at DashScope and
-Moonshot. That is the configuration the drop intended, and it is what keeps
-step 2 of the degradation meaningful: `workersai` is Cloudflare, so a route
-built only on it makes Cloudflare a dependency rather than an enhancement.
+**Pass 3, only for the target route.** `dynamic-route.json` sends both
+economy and standard to `zai`. That is not a Cloudflare provider slug — it
+needs a custom provider created first, pointed at `api.z.ai`
+(`https://api.z.ai/api/paas/v4/chat/completions`). That is the configuration
+the drop intended, and it is what keeps step 2 of the degradation
+meaningful: `workersai` is Cloudflare, so a route built only on it makes
+Cloudflare a dependency rather than an enhancement. Even though Workers AI
+now hosts GLM-5.3 natively (unlike Kimi K3 before it), routing the primary
+path through Workers AI instead of Z.ai's own API would collapse steps 1
+and 3 of the degradation into the same Cloudflare dependency.
 
 ### One command, if you have an API token
 
@@ -175,11 +177,11 @@ exists when you wire its output:
 | # | Node | Type | Settings | Wire outputs to |
 |---|---|---|---|---|
 | 1 | `done` | End | — | — |
-| 2 | `workers_ai` | Model | Workers AI · `@cf/qwen/qwen2.5-coder-32b-instruct` · timeout 15000 · retries 0 | success → `done`, fallback → `done` |
-| 3 | `economy_qwen` | Model | Qwen · `qwen3-32b-instruct` · timeout 20000 · retries 1 | success → `done`, fallback → `workers_ai` |
-| 4 | `standard_kimi` | Model | Moonshot · `kimi-k3` · timeout 30000 · retries 1 | success → `done`, fallback → `economy_qwen` |
-| 5 | `tier_check` | Conditional | `metadata.tier` equals `standard` | true → `standard_kimi`, false → `economy_qwen` |
-| 6 | `budget_month` | Budget Limit | cost · key `metadata.ownerEntityId` · limit 50 · window 2592000 (30d) | success → `tier_check`, fallback → `economy_qwen` |
+| 2 | `workers_ai` | Model | Workers AI · `@cf/zai-org/glm-5.3-flash` · timeout 15000 · retries 0 | success → `done`, fallback → `done` |
+| 3 | `economy_glm` | Model | Z.ai · `glm-5.3-flash` · timeout 20000 · retries 1 | success → `done`, fallback → `workers_ai` |
+| 4 | `standard_glm` | Model | Z.ai · `glm-5.3` · timeout 30000 · retries 1 | success → `done`, fallback → `economy_glm` |
+| 5 | `tier_check` | Conditional | `metadata.tier` equals `standard` | true → `standard_glm`, false → `economy_glm` |
+| 6 | `budget_month` | Budget Limit | cost · key `metadata.ownerEntityId` · limit 50 · window 2592000 (30d) | success → `tier_check`, fallback → `economy_glm` |
 
 Finally point **Start** at `budget_month`, then **Save** the version and
 **Deploy** it — saving alone does not make it live.
@@ -224,9 +226,9 @@ redundant.
 The Worker stamps `licenseClass` from the tier it *intended* to call, in
 `targets()`. A route's fallback chain can serve the response from a
 different provider than the one the Worker picked, and the Worker will not
-know. Every node here is open-weight (Qwen, Kimi K3, Workers AI), so every
-path through the graph is `open_weight` and the stamp stays true whichever
-node answers.
+know. Every node here is open-weight (GLM-5.3, GLM-5.3-Flash, Workers AI), so
+every path through the graph is `open_weight` and the stamp stays true
+whichever node answers.
 
 Add a Claude or GPT node and that stops holding: the Worker would stamp
 `open_weight` on restricted output, and Core would accept it into the Mind
@@ -268,7 +270,8 @@ to economy.
 - Provider slugs in `src/router.ts` against the current AI Gateway provider list
 - A spend limit set in the AI Gateway dashboard — cheapest insurance available
 - Exact-match caching enabled
-- The Kimi K3 LICENSE file, read directly
+- The GLM-5.3 LICENSE file, read directly
+  (https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE)
 
 ## Degradation
 

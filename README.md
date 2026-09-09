@@ -108,7 +108,8 @@ curl localhost:8787/v1/chat/completions \
       AI Gateway provider list
 - [ ] Set a **spend limit** in the AI Gateway dashboard — cheapest insurance available
 - [ ] Enable exact-match caching
-- [ ] Read the Kimi K3 LICENSE file directly, not a summary of it
+- [ ] Read the GLM-5.3 LICENSE file directly, not a summary of it
+      (https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE)
 - [ ] Confirm ZimLII's licence terms and flip `is_approved` if they permit reuse
 - [ ] Schedule a monthly game-day: break the AI Gateway credential and confirm
       the direct and Workers AI fallbacks still answer

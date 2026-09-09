@@ -16,7 +16,7 @@ Shamwari's canonical architecture is three layers of intelligence:
     platform   — base Mukoko knowledge
 
 Personal-layer content NEVER leaves the device or this service. It is not
-sent to Kimi, Qwen, Claude or any other third-party provider. That is what
+sent to Z.ai, Claude, or any other third-party provider. That is what
 makes "sovereign AI companion" true rather than marketing.
 
 Enforcement is structural: `resolve_scope` decides what a caller may see,
