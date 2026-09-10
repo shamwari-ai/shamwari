@@ -137,6 +137,19 @@ than warning. ZimLII is the highest-value unblock.
 2. GLM-5.3 and GLM-5.3-Flash generate candidates in Shona, Ndebele, Zimbabwean
    English and code-switched registers — **never Claude or GPT**, provider
    terms bar it
+
+   **Cost lever for this step specifically: AirLLM.** Candidate generation is
+   an offline batch job, not a served endpoint — no latency requirement,
+   unlike Cloud. That makes it the one place in this pipeline where AirLLM's
+   actual trade-off (streams layers, or just the active experts for an MoE
+   model, from disk to GPU, so a huge open-weight model fits in a few GB of
+   VRAM at 2–8 tok/s) is a genuine cost lever rather than a liability:
+   self-host candidate generation on owned hardware instead of paying Z.ai
+   per token for every synthetic example, at whatever throughput the batch
+   tolerates. Explicitly **not** for Cloud serving — 2–8 tok/s is far below
+   the 20+ tok/s interactive chat needs, and AirLLM's own positioning is
+   offline/research use, not production serving. Not built yet; needs a GPU
+   host this project doesn't have access to today.
 3. Paid human annotators correct. This is the irreplaceable asset, and a good
    story: Shamwari employs Zimbabweans to teach an AI Zimbabwe
 4. QLoRA on Qwen 4B. Apache-2.0 base means Mind is genuinely open — weights,
