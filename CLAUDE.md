@@ -375,5 +375,31 @@ cannot execute there** under rule 1. That needs a Rust + `deno_core` backend
 behind a shared `SandboxProvider` interface. Deno cannot run on Workers — they
 are competing runtimes.
 
+**A ready-built alternative to writing that `SandboxProvider` from scratch:
+OpenSandbox** (Alibaba, Apache-2.0 — `github.com/opensandbox-group/OpenSandbox`;
+the `alibaba/OpenSandbox` URL now redirects there). SDKs in Python, JS/TS,
+Java/Kotlin, C#/.NET and Go; Docker for single-node, Kubernetes for
+production (Kata Containers or gVisor as the isolation boundary — real
+sandboxing, not just namespaces); ships Helm charts and Terraform for
+AWS/GCP/Alibaba Cloud. The reason it's worth evaluating before building the
+Rust path: it runs on infrastructure Shamwari would own, not Cloudflare
+Containers, so it **sidesteps** the rule-1 constraint above rather than
+needing to satisfy it — a `SandboxProvider` implementation over OpenSandbox
+is a real candidate, not just Rust/`deno_core`. Not evaluated end-to-end:
+there is no Kubernetes or Docker host stood up yet to run it against, and
+that's the next step before picking between the two.
+
+On Mind's training-data generation (architecture-and-gtm.md §6 step 2), a
+capability worth knowing about when that phase starts: **AirLLM is a batch
+technology, not a serving one.** It streams model layers — or, for MoE
+models, only the active experts — from disk/RAM to GPU per forward pass,
+which is how it fits a 700B+-class open-weight model in a few GB of VRAM.
+The trade is throughput: real-world numbers are 2–8 tokens/sec on decent
+hardware, sometimes far worse, well under the 20+ tok/s interactive chat
+needs. Wrong tool for `/v1/chat/completions` — right tool for offline
+candidate generation, where there's no latency requirement and self-hosting
+beats paying Z.ai per token for every synthetic training example. Not wired
+up: needs a GPU host, which nothing here currently has access to.
+
 Meter usage now, invoice the first ten customers by hand. You want to be
 talking to them anyway.
