@@ -9,7 +9,7 @@
   "ai": { "binding": "AI" },
 
   "kv_namespaces": [
-    { "binding": "AUTH_CACHE", "id": "REPLACE_ME" }
+    { "binding": "AUTH_CACHE", "id": "REPLACE_ME" },
     // wrangler kv namespace create AUTH_CACHE
   ],
 
@@ -31,9 +31,9 @@
         "max_batch_size": 100,
         "max_batch_timeout": 10,
         "max_retries": 5,
-        "dead_letter_queue": "shamwari-sink-dlq"
-      }
-    ]
+        "dead_letter_queue": "shamwari-sink-dlq",
+      },
+    ],
   },
 
   "vars": {
@@ -56,8 +56,8 @@
     // documents. Keep it in vars, not secrets — it is not a credential and
     // a plaintext value is what makes it auditable in `wrangler deploy`
     // output and in the /health response.
-    "MIND_AVAILABLE": "false"
-  }
+    "MIND_AVAILABLE": "false",
+  },
 
   // wrangler secret put:
   //   CF_ACCOUNT_ID, CF_AIG_TOKEN

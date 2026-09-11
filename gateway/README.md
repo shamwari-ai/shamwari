@@ -13,11 +13,11 @@ queue consumers doing real computation. Not here.
 
 ## The scope rule
 
-| Layer | Content | May reach Cloud? |
-|---|---|---|
-| `personal` | the user's own pod data | **No** |
-| `community` | anonymised platform data | Yes |
-| `platform` | base Mukoko knowledge | Yes |
+| Layer       | Content                  | May reach Cloud? |
+| ----------- | ------------------------ | ---------------- |
+| `personal`  | the user's own pod data  | **No**           |
+| `community` | anonymised platform data | Yes              |
+| `platform`  | base Mukoko knowledge    | Yes              |
 
 Callers declare scope; `platform` is the default. A personal-scope request
 returns **409 `scope_requires_local_inference`** while `MIND_AVAILABLE` is
@@ -51,7 +51,7 @@ tier, the public model aliases, the escalation thresholds, and the hard-task
 keyword list bucketed by language. Edit it and redeploy to retune routing
 without touching TypeScript.
 
-What is deliberately *not* in it: tier identity, provider slugs, direct
+What is deliberately _not_ in it: tier identity, provider slugs, direct
 provider URLs, API key bindings, and `licenseClass`. Those are
 provenance-bearing and stay in `src/router.ts`, because Core rejects
 restricted rows from the Mind training path on the strength of what that file
@@ -89,7 +89,7 @@ The feature is in Beta.
 
 **The dashboard has no JSON import.** The Create dialog takes only a name
 and a template, and the Editor is a visual canvas. So `dynamic-route.json`
-is the *specification* — the record of what the route should be, guarded by
+is the _specification_ — the record of what the route should be, guarded by
 the tests — and the route itself is built by hand from the table below.
 Keep the two in step: if you change the route in the dashboard, change the
 JSON to match, or the next person reads a file that lies.
@@ -108,10 +108,10 @@ Do it in two passes, because two fields have no published shape:
 on `workersai`, the only provider slug these model families have natively,
 so it needs no custom provider and no API key:
 
-| Node | Model | Why |
-|---|---|---|
-| `economy` | `@cf/zai-org/glm-5.3-flash` | fast, MIT-licensed, natively multimodal — the bulk tier |
-| `standard` | `@cf/zai-org/glm-5.3` | GLM-5.3 flagship; both tiers are natively on Workers AI, unlike Kimi K3 before it |
+| Node          | Model                       | Why                                                                                                                               |
+| ------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `economy`     | `@cf/zai-org/glm-5.3-flash` | fast, MIT-licensed, natively multimodal — the bulk tier                                                                           |
+| `standard`    | `@cf/zai-org/glm-5.3`       | GLM-5.3 flagship; both tiers are natively on Workers AI, unlike Kimi K3 before it                                                 |
 | `last_resort` | `@cf/zai-org/glm-5.3-flash` | same weights as `economy`, Cloudflare-hosted — deliberately redundant, matches `WORKERS_AI_FALLBACK_MODEL` in `src/provenance.ts` |
 
 Save and deploy; it is a working route.
@@ -164,7 +164,7 @@ hand only if you would rather not mint a token.
 Create the route: name it `shamwari` (so calls read
 `model: "dynamic/shamwari"`) and choose **Start from scratch**.
 
-Do *not* choose "Start from example", despite the RECOMMENDED badge — it
+Do _not_ choose "Start from example", despite the RECOMMENDED badge — it
 wires a `gpt-4o` OpenAI node, which is rule 2 broken before the route
 serves a single request. See the open-weight section below.
 
@@ -174,14 +174,14 @@ misnamed route is still recoverable.
 Then add six nodes. Add them in this order so each one's target already
 exists when you wire its output:
 
-| # | Node | Type | Settings | Wire outputs to |
-|---|---|---|---|---|
-| 1 | `done` | End | — | — |
-| 2 | `workers_ai` | Model | Workers AI · `@cf/zai-org/glm-5.3-flash` · timeout 15000 · retries 0 | success → `done`, fallback → `done` |
-| 3 | `economy_glm` | Model | Z.ai · `glm-5.3-flash` · timeout 20000 · retries 1 | success → `done`, fallback → `workers_ai` |
-| 4 | `standard_glm` | Model | Z.ai · `glm-5.3` · timeout 30000 · retries 1 | success → `done`, fallback → `economy_glm` |
-| 5 | `tier_check` | Conditional | `metadata.tier` equals `standard` | true → `standard_glm`, false → `economy_glm` |
-| 6 | `budget_month` | Budget Limit | cost · key `metadata.ownerEntityId` · limit 50 · window 2592000 (30d) | success → `tier_check`, fallback → `economy_glm` |
+| #   | Node           | Type         | Settings                                                              | Wire outputs to                                  |
+| --- | -------------- | ------------ | --------------------------------------------------------------------- | ------------------------------------------------ |
+| 1   | `done`         | End          | —                                                                     | —                                                |
+| 2   | `workers_ai`   | Model        | Workers AI · `@cf/zai-org/glm-5.3-flash` · timeout 15000 · retries 0  | success → `done`, fallback → `done`              |
+| 3   | `economy_glm`  | Model        | Z.ai · `glm-5.3-flash` · timeout 20000 · retries 1                    | success → `done`, fallback → `workers_ai`        |
+| 4   | `standard_glm` | Model        | Z.ai · `glm-5.3` · timeout 30000 · retries 1                          | success → `done`, fallback → `economy_glm`       |
+| 5   | `tier_check`   | Conditional  | `metadata.tier` equals `standard`                                     | true → `standard_glm`, false → `economy_glm`     |
+| 6   | `budget_month` | Budget Limit | cost · key `metadata.ownerEntityId` · limit 50 · window 2592000 (30d) | success → `tier_check`, fallback → `economy_glm` |
 
 Finally point **Start** at `budget_month`, then **Save** the version and
 **Deploy** it — saving alone does not make it live.
@@ -216,14 +216,14 @@ Then call it with `model: "dynamic/shamwari"` on `/compat/chat/completions`.
 
 `src/gateway.ts` degrades AI Gateway → direct provider → Workers AI. The
 second step exists precisely because it has no Cloudflare in the path. A
-dynamic route lives *inside* AI Gateway, so it cannot provide that: if the
+dynamic route lives _inside_ AI Gateway, so it cannot provide that: if the
 Gateway is down, the route is down with it. Keep steps 2 and 3 in
 `gateway.ts`. The route makes step 1 smarter; it does not make the rest
 redundant.
 
 ### Every node must stay open-weight — this is rule 2
 
-The Worker stamps `licenseClass` from the tier it *intended* to call, in
+The Worker stamps `licenseClass` from the tier it _intended_ to call, in
 `targets()`. A route's fallback chain can serve the response from a
 different provider than the one the Worker picked, and the Worker will not
 know. Every node here is open-weight (GLM-5.3, GLM-5.3-Flash, Workers AI), so
@@ -271,7 +271,7 @@ to economy.
 - A spend limit set in the AI Gateway dashboard — cheapest insurance available
 - Exact-match caching enabled
 - The GLM-5.3 LICENSE file, read directly
-  (https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE)
+  (<https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE>)
 
 ## Degradation
 

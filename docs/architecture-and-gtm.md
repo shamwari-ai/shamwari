@@ -1,6 +1,6 @@
 # Shamwari AI — Architecture & Go-to-Market
 
-**Bundu Foundation / Nyuchi Africa · v2 · August 2026**
+Bundu Foundation / Nyuchi Africa · v2 · August 2026
 
 Supersedes v1, which framed the product as three infrastructure tiers. That was
 wrong: Shamwari already has a canonical three-layer model, and it describes data
@@ -12,27 +12,27 @@ scope rather than deployment. This version reconciles the two.
 
 **What it knows** — the canonical layers, from the brand registry:
 
-| Layer | Content |
-|---|---|
-| Personal | the user's own pod data |
+| Layer     | Content                  |
+| --------- | ------------------------ |
+| Personal  | the user's own pod data  |
 | Community | anonymised platform data |
-| Platform | base Mukoko knowledge |
+| Platform  | base Mukoko knowledge    |
 
 **Where it runs** — the infrastructure:
 
-| | Runs on | Holds |
-|---|---|---|
-| Cloud | Cloudflare Workers → routed providers | nothing persistent |
+|        | Runs on                                  | Holds                             |
+| ------ | ---------------------------------------- | --------------------------------- |
+| Cloud  | Cloudflare Workers → routed providers    | nothing persistent                |
 | Ground | MongoDB Atlas (`shamwari.knowledgeBase`) | Zimbabwe corpus, hybrid retrieval |
-| Mind | on-device, Qwen-based, quantized | distilled weights |
+| Mind   | on-device, Qwen-based, quantized         | distilled weights                 |
 
 They intersect, and the intersection is the product:
 
-| | Personal | Community | Platform |
-|---|---|---|---|
-| **Mind** | ✅ primary | — | ✅ cached |
-| **Ground** | pod-scoped | anonymised aggregate | shared corpus |
-| **Cloud** | ❌ **never** | ✅ | ✅ |
+|            | Personal     | Community            | Platform      |
+| ---------- | ------------ | -------------------- | ------------- |
+| **Mind**   | ✅ primary   | —                    | ✅ cached     |
+| **Ground** | pod-scoped   | anonymised aggregate | shared corpus |
+| **Cloud**  | ❌ **never** | ✅                   | ✅            |
 
 That bottom-left cell is the whole differentiator. It is enforced in code, not
 policy — see CLAUDE.md.
@@ -46,8 +46,8 @@ makes a companion a companion rather than a search box, then Mind is the
 product. Cloud is the general-knowledge fallback and the near-term revenue
 engine, but the roadmap cannot treat Mind as phase three.
 
-**Sovereignty means user-sovereign, not nationally-sovereign.** *"A friend that
-serves; a friend that does not control."* Defensible with a multi-provider
+**Sovereignty means user-sovereign, not nationally-sovereign.** _"A friend that
+serves; a friend that does not control."_ Defensible with a multi-provider
 gateway, on the single condition above. It is not defensible as a data-residency
 claim while Supabase sits in Ireland and inference routes to Beijing and San
 Francisco. Do not blur these.
@@ -62,12 +62,12 @@ Ground and ShamwariBench should be Foundation assets.
 
 ## 3. Commercial structure — split across entities
 
-| Tier | Entity | Shape |
-|---|---|---|
-| **Community** | Bundu Foundation | Free. Mind downloadable, open weights, forever. This *is* the community pillar. |
-| **Developer** | Nyuchi Africa | Pay-as-you-go, USD or ZiG. Economy tier default. |
-| **Business** | Nyuchi Africa | Committed monthly, SLA, standard tier, usage dashboards. |
-| **Sovereign** | Nyuchi Africa | Mind + Ground deployed on customer infrastructure. No data leaves. Annual licence. |
+| Tier          | Entity           | Shape                                                                              |
+| ------------- | ---------------- | ---------------------------------------------------------------------------------- |
+| **Community** | Bundu Foundation | Free. Mind downloadable, open weights, forever. This _is_ the community pillar.    |
+| **Developer** | Nyuchi Africa    | Pay-as-you-go, USD or ZiG. Economy tier default.                                   |
+| **Business**  | Nyuchi Africa    | Committed monthly, SLA, standard tier, usage dashboards.                           |
+| **Sovereign** | Nyuchi Africa    | Mind + Ground deployed on customer infrastructure. No data leaves. Annual licence. |
 
 The split matters. It stops the community pillar from also having to be the
 sales pillar, and it puts the open-weights release under the entity whose
@@ -110,7 +110,7 @@ into weights is stale on arrival and confidently wrong. Retrieval with citation
 and an effective date is not a compromise, it is the correct architecture — and
 it is the sharpest sales line available:
 
-> *Shamwari knows which Statutory Instrument came out last Friday.*
+> _Shamwari knows which Statutory Instrument came out last Friday._
 
 Freshness beats volume. The refresh pipeline matters more than corpus size.
 `ground_refresh_due` computes what needs re-checking; `supersededBy` filtering
@@ -150,6 +150,7 @@ than warning. ZimLII is the highest-value unblock.
    the 20+ tok/s interactive chat needs, and AirLLM's own positioning is
    offline/research use, not production serving. Not built yet; needs a GPU
    host this project doesn't have access to today.
+
 3. Paid human annotators correct. This is the irreplaceable asset, and a good
    story: Shamwari employs Zimbabweans to teach an AI Zimbabwe
 4. QLoRA on Qwen 4B. Apache-2.0 base means Mind is genuinely open — weights,
@@ -172,7 +173,7 @@ is existing consultant spend to redirect.
 
 Positioning to test:
 
-> *Shamwari cites the Statutory Instrument. ChatGPT guesses.*
+> _Shamwari cites the Statutory Instrument. ChatGPT guesses._
 
 Concrete, verifiable, and it makes the architecture the reason you win rather
 than something to apologise for.
@@ -181,13 +182,13 @@ than something to apologise for.
 
 ## 8. Risks
 
-| Risk | Mitigation |
-|---|---|
-| "Just a wrapper" | Ground + Mind + ShamwariBench. Ship Mind v0 so the answer is a link, not a promise |
-| Cloudflare outage takes down revenue | Three-step degradation, exercised monthly |
-| Provider ToS violation via distillation | `licenseClass` enforced by database constraint |
-| Sovereignty claim challenged | Claim user-sovereignty only; never data residency for Cloud |
-| Corpus goes stale | Refresh cadence built before corpus scale |
-| Margin compression | ≥70% economy routing, caching, Ground-boosted small models |
-| ZIMSEC / news copyright | Partnership before ingestion; never scrape-first |
-| Personal data leaks to a provider | Enforced twice, in gateway and Core. The one bug that must not happen |
+| Risk                                    | Mitigation                                                                         |
+| --------------------------------------- | ---------------------------------------------------------------------------------- |
+| "Just a wrapper"                        | Ground + Mind + ShamwariBench. Ship Mind v0 so the answer is a link, not a promise |
+| Cloudflare outage takes down revenue    | Three-step degradation, exercised monthly                                          |
+| Provider ToS violation via distillation | `licenseClass` enforced by database constraint                                     |
+| Sovereignty claim challenged            | Claim user-sovereignty only; never data residency for Cloud                        |
+| Corpus goes stale                       | Refresh cadence built before corpus scale                                          |
+| Margin compression                      | ≥70% economy routing, caching, Ground-boosted small models                         |
+| ZIMSEC / news copyright                 | Partnership before ingestion; never scrape-first                                   |
+| Personal data leaks to a provider       | Enforced twice, in gateway and Core. The one bug that must not happen              |

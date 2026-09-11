@@ -15,6 +15,6 @@
 
   "routes": [
     { "pattern": "shamwari.ai", "custom_domain": true },
-    { "pattern": "www.shamwari.ai", "custom_domain": true }
-  ]
+    { "pattern": "www.shamwari.ai", "custom_domain": true },
+  ],
 }

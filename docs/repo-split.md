@@ -44,20 +44,20 @@ what they render, not on where they run:
 
 ## Proposed repositories
 
-| Repo | Contents | Status | Deploys to | Framework | Why it is its own repo |
-|---|---|---|---|---|---|
-| `shamwari-gateway` | `gateway/` | Written, typecheck clean, **not deployed**. Not yet on Hono. | Cloudflare Workers | TypeScript, moving to Hono | Already standalone — own lockfile, own `wrangler deploy`, touches no other component's files. Deploys on its own cadence, several times a day if routing is being tuned. |
-| `shamwari-web` | `site/` | `site/` exists today as a **static** Astro build (no bindings, no SSR) with routes already claiming `shamwari.ai` / `www.shamwari.ai` at the apex. The desired end state (`docs/desired-cloudflare-state.md`) is Astro **SSR** with `UserObject`/`ConversationObject` Durable Object bindings — a real gap, not just an extraction. | Cloudflare Workers | Astro (SSR) | The apex is currently the most broken thing in the ecosystem: per `docs/scaling-and-memory.md`, "Nowhere" is what actually resolves — the SvelteKit app that served it was removed in the pivot, and the stale Vercel project it left behind is still configured to build a tree with no app in it. Extracting this repo is also how that gets retired. |
-| `shamwari-platform` | doesn't exist yet | Not started. The console needs three Core endpoints that don't exist yet: key issuance, key revocation, and a per-key usage breakdown (`GET /rollup` and `POST /auth/verify` already exist and cover the rest). | Cloudflare Workers | Astro (SSR) | `platform.shamwari.ai` — keys, usage, billing. Shows `platform`-scope data about a customer's own account, never `personal`-scope pod data, so it sits outside rule 1 entirely — the easiest of the active repos to build correctly. Rust is not warranted here: a console rendering someone else's aggregates has no CPU-bound work; save Rust for the sandbox host. |
-| `shamwari-core` | `core/` + `db/` | Written, syntax-verified, **not deployed**. | Nyuchi infrastructure | Python / FastAPI | Owns MongoDB and Postgres. `db/` goes with it, not on its own: `ingest_ground.py` writes to both stores and the schema is meaningless apart from the service that reads it. |
-| `shamwari-docs` | — | **Already extracted**, to `shamwari-ai/docs`. | `docs.shamwari.ai`, Cloudflare Workers (static) | Mintlify | Public-facing, no bindings, no secrets. Anyone in the org should be able to fix a typo without touching a repo that can deploy inference. |
-| `shamwari` (this one) | `CLAUDE.md`, `README.md`, `docs/`, `LICENSE`, `NOTICE`, `scripts/` | Ongoing — the umbrella. | nothing | — | Handoff context, the applied-migration log, architecture and GTM, the repo index. Keeps the name so the ecosystem's front door does not move. |
+| Repo                  | Contents                                                           | Status                                                                                                                                                                                                                                                                                                                              | Deploys to                                      | Framework                  | Why it is its own repo                                                                                                                                                                                                                                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shamwari-gateway`    | `gateway/`                                                         | Written, typecheck clean, **not deployed**. Not yet on Hono.                                                                                                                                                                                                                                                                        | Cloudflare Workers                              | TypeScript, moving to Hono | Already standalone — own lockfile, own `wrangler deploy`, touches no other component's files. Deploys on its own cadence, several times a day if routing is being tuned.                                                                                                                                                                                              |
+| `shamwari-web`        | `site/`                                                            | `site/` exists today as a **static** Astro build (no bindings, no SSR) with routes already claiming `shamwari.ai` / `www.shamwari.ai` at the apex. The desired end state (`docs/desired-cloudflare-state.md`) is Astro **SSR** with `UserObject`/`ConversationObject` Durable Object bindings — a real gap, not just an extraction. | Cloudflare Workers                              | Astro (SSR)                | The apex is currently the most broken thing in the ecosystem: per `docs/scaling-and-memory.md`, "Nowhere" is what actually resolves — the SvelteKit app that served it was removed in the pivot, and the stale Vercel project it left behind is still configured to build a tree with no app in it. Extracting this repo is also how that gets retired.               |
+| `shamwari-platform`   | doesn't exist yet                                                  | Not started. The console needs three Core endpoints that don't exist yet: key issuance, key revocation, and a per-key usage breakdown (`GET /rollup` and `POST /auth/verify` already exist and cover the rest).                                                                                                                     | Cloudflare Workers                              | Astro (SSR)                | `platform.shamwari.ai` — keys, usage, billing. Shows `platform`-scope data about a customer's own account, never `personal`-scope pod data, so it sits outside rule 1 entirely — the easiest of the active repos to build correctly. Rust is not warranted here: a console rendering someone else's aggregates has no CPU-bound work; save Rust for the sandbox host. |
+| `shamwari-core`       | `core/` + `db/`                                                    | Written, syntax-verified, **not deployed**.                                                                                                                                                                                                                                                                                         | Nyuchi infrastructure                           | Python / FastAPI           | Owns MongoDB and Postgres. `db/` goes with it, not on its own: `ingest_ground.py` writes to both stores and the schema is meaningless apart from the service that reads it.                                                                                                                                                                                           |
+| `shamwari-docs`       | —                                                                  | **Already extracted**, to `shamwari-ai/docs`.                                                                                                                                                                                                                                                                                       | `docs.shamwari.ai`, Cloudflare Workers (static) | Mintlify                   | Public-facing, no bindings, no secrets. Anyone in the org should be able to fix a typo without touching a repo that can deploy inference.                                                                                                                                                                                                                             |
+| `shamwari` (this one) | `CLAUDE.md`, `README.md`, `docs/`, `LICENSE`, `NOTICE`, `scripts/` | Ongoing — the umbrella.                                                                                                                                                                                                                                                                                                             | nothing                                         | —                          | Handoff context, the applied-migration log, architecture and GTM, the repo index. Keeps the name so the ecosystem's front door does not move.                                                                                                                                                                                                                         |
 
 Later, when those phases open:
 
-| Repo | Contents |
-|---|---|
-| `shamwari-mind` | Training pipeline, QLoRA config, eval harness. Reads `mind_training_chunks` and nothing else. |
+| Repo               | Contents                                                                                                                                                         |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shamwari-mind`    | Training pipeline, QLoRA config, eval harness. Reads `mind_training_chunks` and nothing else.                                                                    |
 | `shamwari-sandbox` | `code.shamwari.ai`. Rust + `deno_core` behind a shared `SandboxProvider`, because personal-scope artifacts cannot execute on Cloudflare Containers under rule 1. |
 
 ## What the split costs
@@ -79,6 +79,7 @@ Both currently define the same set independently:
 ```ts
 const CLOUD_SAFE: ReadonlySet<Scope> = new Set<Scope>(['community', 'platform']);
 ```
+
 ```python
 CLOUD_SAFE: frozenset[Scope] = frozenset({Scope.COMMUNITY, Scope.PLATFORM})
 ```
@@ -97,17 +98,17 @@ types in TypeScript; Core declares them in Pydantic. Nothing checks them
 against each other. In one repo that is a code review away from being
 caught. Across two repos it is a production 500.
 
-| Worker calls | Core serves |
-|---|---|
-| `POST /auth/verify` | ✓ |
-| `POST /ground/search` | ✓ |
-| `POST /sink/bulk` | ✓ |
-| `GET /rollup` | ✓ |
-| — | `GET /guardrails` (built, unused) |
-| — | `GET /health` |
-| *(needed for `shamwari-platform`)* | key issuance — **missing** |
-| *(needed for `shamwari-platform`)* | key revocation — **missing** |
-| *(needed for `shamwari-platform`)* | per-key usage breakdown — **missing** |
+| Worker calls                       | Core serves                           |
+| ---------------------------------- | ------------------------------------- |
+| `POST /auth/verify`                | ✓                                     |
+| `POST /ground/search`              | ✓                                     |
+| `POST /sink/bulk`                  | ✓                                     |
+| `GET /rollup`                      | ✓                                     |
+| —                                  | `GET /guardrails` (built, unused)     |
+| —                                  | `GET /health`                         |
+| _(needed for `shamwari-platform`)_ | key issuance — **missing**            |
+| _(needed for `shamwari-platform`)_ | key revocation — **missing**          |
+| _(needed for `shamwari-platform`)_ | per-key usage breakdown — **missing** |
 
 Fix before splitting, not after: have Core export its OpenAPI document —
 FastAPI already generates it at `/openapi.json` — commit it to `shamwari`,
@@ -135,7 +136,7 @@ it rather than restate it.
 2. ~~Extract `shamwari-docs`.~~ **Done** — now `shamwari-ai/docs`.
 3. **Migrate `gateway/` to Hono, then extract `shamwari-gateway`.** Already
    self-contained; its CI job moves across almost verbatim. Do the Hono
-   migration *before* the extraction, in this repo, so a routing mistake is
+   migration _before_ the extraction, in this repo, so a routing mistake is
    caught by the existing test suite rather than surfacing as a fresh
    repo's first bug.
 4. **Extract `shamwari-web`.** Start from `site/`'s existing static build —

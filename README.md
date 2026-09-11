@@ -5,7 +5,7 @@
 **An AI companion that cites the law instead of guessing it.**
 
 Built in Zimbabwe. Community pillar of the Bundu Ecosystem.
-Shona for *"friend"* — *"A friend that serves; a friend that does not control."*
+Shona for _"friend"_ — _"A friend that serves; a friend that does not control."_
 
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 [![Status: pre-launch](https://img.shields.io/badge/status-building%20in%20public-orange)](#where-this-actually-is-right-now)
@@ -30,7 +30,7 @@ document, cites the provision, and shows the effective date — the same
 discipline a good lawyer or accountant already uses, applied to an AI
 companion that answers in Shona, Ndebele, and Zimbabwean English.
 
-> *Shamwari cites the Statutory Instrument. A general-purpose model guesses.*
+> _Shamwari cites the Statutory Instrument. A general-purpose model guesses._
 
 That's the pitch. Here's the part that makes it more than a pitch: **the
 two claims that matter most are enforced in code, not asserted in a pitch
@@ -55,20 +55,20 @@ merely asked for, because a proxy substituting models behind your back is a
 real failure mode this codebase has already hit and fixed once.
 
 Read [`CLAUDE.md`](./CLAUDE.md) for the actual enforcement — file names,
-line-level reasoning, and the defects each rule's *second* check exists
+line-level reasoning, and the defects each rule's _second_ check exists
 because of. It's the single most information-dense file in this repo.
 
 ## The three layers
 
-| | What it is | Where your data goes |
-|---|---|---|
-| **Mind** | An on-device, open-weight model, distilled and quantized to run on modest hardware | Never leaves the device |
-| **Ground** | Zimbabwean law, tax, and policy — retrieved with citation and an effective date, kept fresh as sources change | Retrieval only; personal-scope stays pod-scoped |
-| **Cloud** | Multi-provider routed inference for community/platform-scope questions, degrading gracefully if any single provider goes down | Community and platform scope only — **never personal** |
+|            | What it is                                                                                                                    | Where your data goes                                   |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| **Mind**   | An on-device, open-weight model, distilled and quantized to run on modest hardware                                            | Never leaves the device                                |
+| **Ground** | Zimbabwean law, tax, and policy — retrieved with citation and an effective date, kept fresh as sources change                 | Retrieval only; personal-scope stays pod-scoped        |
+| **Cloud**  | Multi-provider routed inference for community/platform-scope questions, degrading gracefully if any single provider goes down | Community and platform scope only — **never personal** |
 
 Mind is not a someday feature bolted onto a chatbot — if personal-scope
 data can never reach Cloud, and personal-scope data is what makes a
-companion feel like *your* companion, then Mind **is** the product. Cloud
+companion feel like _your_ companion, then Mind **is** the product. Cloud
 is the general-knowledge fallback.
 
 Both Mind and its training corpus are meant to be genuinely open — weights,
@@ -80,12 +80,12 @@ route Shamwari Cloud."
 
 Building in public means saying this part plainly. As of this writing:
 
-| Piece | Status |
-|---|---|
-| Core (FastAPI) + Gateway (Cloudflare Workers) | written, tested, **not deployed yet** |
-| Ground's vector + text search indexes | live and ready |
-| Ground's actual content | **empty** — this is the one thing standing between this repo and a working demo |
-| Corpus licensing (law, tax, health, education sources) | partly cleared, partly waiting on human review — see `CLAUDE.md` |
+| Piece                                                  | Status                                                                          |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| Core (FastAPI) + Gateway (Cloudflare Workers)          | written, tested, **not deployed yet**                                           |
+| Ground's vector + text search indexes                  | live and ready                                                                  |
+| Ground's actual content                                | **empty** — this is the one thing standing between this repo and a working demo |
+| Corpus licensing (law, tax, health, education sources) | partly cleared, partly waiting on human review — see `CLAUDE.md`                |
 
 If you're evaluating this as a product today: it isn't one yet. If you're
 looking for a project where the architecture is already decided, documented,
@@ -198,7 +198,7 @@ scripts/                       generator for the gateway, kept for reference
 - [ ] Set a **spend limit** in the AI Gateway dashboard — cheapest insurance available
 - [ ] Enable exact-match caching
 - [ ] Read the GLM-5.3 LICENSE file directly, not a summary of it
-      (https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE)
+      (<https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE>)
 - [ ] Confirm ZimLII's licence terms and flip `is_approved` if they permit reuse
 - [ ] Schedule a monthly game-day: break the AI Gateway credential and confirm
       the direct and Workers AI fallbacks still answer

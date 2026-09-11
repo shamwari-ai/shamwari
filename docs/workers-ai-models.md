@@ -39,13 +39,13 @@ for its own schema.
 
 ## What was wrong before this was checked
 
-| Was | Reality |
-|---|---|
-| `provider: "qwen"` | not a provider slug — needs a custom provider |
-| `provider: "moonshot"` | not a provider slug — needs a custom provider |
-| `provider: "workers-ai"` | correct after all — see the note above. It was briefly "corrected" to `workersai` on the strength of a docs URL slug, which was not evidence |
-| `model: "qwen3-32b-instruct"` | does not exist in any Cloudflare catalogue |
-| `@cf/qwen/qwen2.5-coder-32b-instruct` as the general fallback | it is a **code-specific** model; a poor last resort for Shona/Ndebele legal and tax questions |
+| Was                                                           | Reality                                                                                                                                      |
+| ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider: "qwen"`                                            | not a provider slug — needs a custom provider                                                                                                |
+| `provider: "moonshot"`                                        | not a provider slug — needs a custom provider                                                                                                |
+| `provider: "workers-ai"`                                      | correct after all — see the note above. It was briefly "corrected" to `workersai` on the strength of a docs URL slug, which was not evidence |
+| `model: "qwen3-32b-instruct"`                                 | does not exist in any Cloudflare catalogue                                                                                                   |
+| `@cf/qwen/qwen2.5-coder-32b-instruct` as the general fallback | it is a **code-specific** model; a poor last resort for Shona/Ndebele legal and tax questions                                                |
 
 `kimi-k3` is real — Moonshot's flagship, in the unified catalogue at
 `/ai/models/moonshotai/kimi-k3/`. It is **not** on Workers AI, so it is
@@ -57,25 +57,25 @@ only reachable via a custom provider or OpenRouter. Workers AI carries
 Verified ids, current generation only. Full list has 46 entries, many
 deprecated.
 
-| Model id | Notes |
-|---|---|
-| `@cf/qwen/qwen3-30b-a3b-fp8` | Qwen3 MoE. Reasoning, function calling, batch. Cheap per token — the economy shape |
-| `@cf/qwen/qwen3.8-27b` | Qwen 3.8. Listed as Image-Text-to-Text: **vision plus** text and agentic |
-| `@cf/qwen/qwq-32b` | Qwen reasoning specialist |
-| `@cf/moonshotai/kimi-k2.6` | Kimi K2.6. Reasoning, function calling |
-| `@cf/moonshotai/kimi-k2.7-code` | Kimi, code-specialised |
-| `@cf/zai-org/glm-5.3` | GLM 5.3 flagship. **Current standard tier**, via Z.ai directly (see gateway/README.md) — this Workers AI entry is a same-weights alternative, not what the gateway calls today |
-| `@cf/zai-org/glm-5.3-flash` | GLM 5.3 Flash, MIT-licensed, natively multimodal. **Current economy tier** (via Z.ai) and the Workers AI last-resort fallback |
-| `@cf/zai-org/glm-5.2` | GLM 5.2 flagship. Reasoning, function calling |
-| `@cf/zai-org/glm-4.7-flash` | GLM 4.7 Flash |
-| `@cf/deepseek/deepseek-v4-pro-0813` | 1M context, agentic |
-| `@cf/deepseek/deepseek-v4-flash-0731` | Faster DeepSeek V4 |
-| `@cf/mistralai/mistral-small-3.1-24b-instruct` | Function calling |
-| `@cf/google/gemma-4-26b-a4b-it` | Reasoning, function calling |
-| `@cf/nvidia/nemotron-3-120b-a12b` | Also does Image-to-Text |
-| `@cf/meta/llama-3.3-70b-instruct-fp8-fast` | Function calling, batch |
-| `@cf/meta/llama-4-scout-17b-16e-instruct` | Function calling, batch |
-| `@cf/openai/gpt-oss-120b`, `gpt-oss-20b` | OpenAI's **open-weight** release — not the API models. Licence is not the OpenAI API terms; confirm before treating as `open_weight` |
+| Model id                                       | Notes                                                                                                                                                                          |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@cf/qwen/qwen3-30b-a3b-fp8`                   | Qwen3 MoE. Reasoning, function calling, batch. Cheap per token — the economy shape                                                                                             |
+| `@cf/qwen/qwen3.8-27b`                         | Qwen 3.8. Listed as Image-Text-to-Text: **vision plus** text and agentic                                                                                                       |
+| `@cf/qwen/qwq-32b`                             | Qwen reasoning specialist                                                                                                                                                      |
+| `@cf/moonshotai/kimi-k2.6`                     | Kimi K2.6. Reasoning, function calling                                                                                                                                         |
+| `@cf/moonshotai/kimi-k2.7-code`                | Kimi, code-specialised                                                                                                                                                         |
+| `@cf/zai-org/glm-5.3`                          | GLM 5.3 flagship. **Current standard tier**, via Z.ai directly (see gateway/README.md) — this Workers AI entry is a same-weights alternative, not what the gateway calls today |
+| `@cf/zai-org/glm-5.3-flash`                    | GLM 5.3 Flash, MIT-licensed, natively multimodal. **Current economy tier** (via Z.ai) and the Workers AI last-resort fallback                                                  |
+| `@cf/zai-org/glm-5.2`                          | GLM 5.2 flagship. Reasoning, function calling                                                                                                                                  |
+| `@cf/zai-org/glm-4.7-flash`                    | GLM 4.7 Flash                                                                                                                                                                  |
+| `@cf/deepseek/deepseek-v4-pro-0813`            | 1M context, agentic                                                                                                                                                            |
+| `@cf/deepseek/deepseek-v4-flash-0731`          | Faster DeepSeek V4                                                                                                                                                             |
+| `@cf/mistralai/mistral-small-3.1-24b-instruct` | Function calling                                                                                                                                                               |
+| `@cf/google/gemma-4-26b-a4b-it`                | Reasoning, function calling                                                                                                                                                    |
+| `@cf/nvidia/nemotron-3-120b-a12b`              | Also does Image-to-Text                                                                                                                                                        |
+| `@cf/meta/llama-3.3-70b-instruct-fp8-fast`     | Function calling, batch                                                                                                                                                        |
+| `@cf/meta/llama-4-scout-17b-16e-instruct`      | Function calling, batch                                                                                                                                                        |
+| `@cf/openai/gpt-oss-120b`, `gpt-oss-20b`       | OpenAI's **open-weight** release — not the API models. Licence is not the OpenAI API terms; confirm before treating as `open_weight`                                           |
 
 ## A timeout of 0 disables the fallback chain
 
@@ -111,38 +111,38 @@ index — the highest-value retrieval improvement available for free.
 
 Speech to text:
 
-| Model id | Notes |
-|---|---|
+| Model id                            | Notes                      |
+| ----------------------------------- | -------------------------- |
 | `@cf/openai/whisper-large-v3-turbo` | Broadest language coverage |
-| `@cf/openai/whisper` | Base |
-| `@cf/openai/whisper-tiny-en` | English only |
-| `@cf/deepgram/nova-3` | Partner, real-time |
-| `@cf/deepgram/flux` | Partner, real-time |
+| `@cf/openai/whisper`                | Base                       |
+| `@cf/openai/whisper-tiny-en`        | English only               |
+| `@cf/deepgram/nova-3`               | Partner, real-time         |
+| `@cf/deepgram/flux`                 | Partner, real-time         |
 
 Text to speech:
 
-| Model id | Languages |
-|---|---|
-| `@cf/deepgram/aura-1` | English |
-| `@cf/deepgram/aura-2-en` | English |
-| `@cf/deepgram/aura-2-es` | Spanish |
+| Model id                 | Languages                                |
+| ------------------------ | ---------------------------------------- |
+| `@cf/deepgram/aura-1`    | English                                  |
+| `@cf/deepgram/aura-2-en` | English                                  |
+| `@cf/deepgram/aura-2-es` | Spanish                                  |
 | `@cf/myshell-ai/melotts` | Multi, does not include Shona or Ndebele |
 
 **There is no Shona or Ndebele text-to-speech in the catalogue.** Voice
 output in either language cannot be served from Cloudflare today. Whisper
-has some Shona in its training mix, so speech *input* is worth measuring
+has some Shona in its training mix, so speech _input_ is worth measuring
 before assuming it is unusable — measure it, do not assume either way.
 
 ## Vision and images
 
 Image in:
 
-| Model id | Notes |
-|---|---|
-| `@cf/qwen/qwen3.8-27b` | Image-Text-to-Text — a separate family from the current text tier (GLM), still viable as a dedicated vision model |
-| `@cf/zai-org/glm-5.3-flash` | Natively multimodal — same model as the economy tier, so image input needs no new provider at all. Verify against Z.ai's API docs before relying on this; untested here |
-| `@cf/nvidia/nemotron-3-120b-a12b` | Image-to-Text |
-| `@cf/llava-hf/llava-1.5-7b-hf` | Image-to-Text |
+| Model id                          | Notes                                                                                                                                                                   |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@cf/qwen/qwen3.8-27b`            | Image-Text-to-Text — a separate family from the current text tier (GLM), still viable as a dedicated vision model                                                       |
+| `@cf/zai-org/glm-5.3-flash`       | Natively multimodal — same model as the economy tier, so image input needs no new provider at all. Verify against Z.ai's API docs before relying on this; untested here |
+| `@cf/nvidia/nemotron-3-120b-a12b` | Image-to-Text                                                                                                                                                           |
+| `@cf/llava-hf/llava-1.5-7b-hf`    | Image-to-Text                                                                                                                                                           |
 
 Image out: `flux-1-schnell`, `flux-2-dev`, `flux-2-klein-4b`,
 `flux-2-klein-9b` (Black Forest Labs), `stable-diffusion-xl-base-1.0`,
