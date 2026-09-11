@@ -6,14 +6,15 @@ summary: >-
   whose data a question is about.
 order: 3
 ---
+
 import Verdict from '../../components/Verdict.astro';
 import ScopeFlow from '../../components/ScopeFlow.astro';
 
-| Scope | What it holds | May reach the cloud |
-| --- | --- | --- |
-| `personal` | Your own pod — messages, spending, documents, health | <Verdict allowed={false} label="No. Ever." /> |
-| `community` | Anonymised patterns across the platform | <Verdict allowed={true} /> |
-| `platform` | Base knowledge — law, tax, policy, prices | <Verdict allowed={true} /> |
+| Scope       | What it holds                                        | May reach the cloud                           |
+| ----------- | ---------------------------------------------------- | --------------------------------------------- |
+| `personal`  | Your own pod — messages, spending, documents, health | <Verdict allowed={false} label="No. Ever." /> |
+| `community` | Anonymised patterns across the platform              | <Verdict allowed={true} />                    |
+| `platform`  | Base knowledge — law, tax, policy, prices            | <Verdict allowed={true} />                    |
 
 <ScopeFlow>
   There is no line from `personal` to the cloud. That absence is the product.

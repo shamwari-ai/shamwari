@@ -5,6 +5,7 @@ summary: >-
   inexpensive model, and only the ones that need more get more.
 order: 5
 ---
+
 import Verdict from '../../components/Verdict.astro';
 import Note from '../../components/Note.astro';
 
@@ -19,11 +20,11 @@ model to call would double the latency and the cost of every single request,
 to answer a question a keyword list answers well enough. The heuristic will
 be revised when usage data shows where it is wrong, not before.
 
-| Tier | Model family | Provenance | Trains Mind |
-| --- | --- | --- | --- |
-| Economy | Qwen | `open_weight` | <Verdict allowed={true} label="Eligible" /> |
-| Standard | Kimi | `open_weight` | <Verdict allowed={true} label="Eligible" /> |
-| Premium | Not configured | `restricted` | <Verdict allowed={false} label="Never" /> |
+| Tier     | Model family   | Provenance    | Trains Mind                                 |
+| -------- | -------------- | ------------- | ------------------------------------------- |
+| Economy  | Qwen           | `open_weight` | <Verdict allowed={true} label="Eligible" /> |
+| Standard | Kimi           | `open_weight` | <Verdict allowed={true} label="Eligible" /> |
+| Premium  | Not configured | `restricted`  | <Verdict allowed={false} label="Never" />   |
 
 Economy handles the bulk, which is where the margin comes from — the gateway
 passes provider pricing through at cost.
@@ -37,6 +38,7 @@ Apache-2.0.
 Shamwari's own platform code is Apache-2.0. The models it calls are governed
 by their own terms, and the corpus it reads is governed by a licence recorded
 per source.
+
 </Note>
 
 ## Provenance travels with the answer, not with the tier

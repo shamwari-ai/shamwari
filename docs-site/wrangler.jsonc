@@ -7,7 +7,5 @@
   // Astro's static output. No Worker script, no bindings, no secrets.
   "assets": { "directory": "./dist" },
 
-  "routes": [
-    { "pattern": "docs.shamwari.ai", "custom_domain": true }
-  ]
+  "routes": [{ "pattern": "docs.shamwari.ai", "custom_domain": true }],
 }
