@@ -36,12 +36,12 @@ by id so it stays warm across requests. One-shot generated code wants
 There are **zero Containers bindings anywhere in that repository**. Cloudflare
 does not use Containers for this, and neither should we.
 
-| Mechanism | Deploy step | Cold start | Ceiling | Verdict |
-|---|---|---|---|---|
-| **Dynamic Workers** (Worker Loader) | none — code strings at load | isolate | Worker limits | **Use this**, but see the maturity note |
-| Workers for Platforms | upload per artifact | isolate | unlimited apps | Only if artifacts need their own hostname |
-| Containers | image build | container boot | 1,500 vCPU / 6 TiB account-wide | Only for a real interpreter and filesystem |
-| Worker per user | upload per user | isolate | — | Solves nothing a Durable Object doesn't solve better |
+| Mechanism                           | Deploy step                 | Cold start     | Ceiling                         | Verdict                                              |
+| ----------------------------------- | --------------------------- | -------------- | ------------------------------- | ---------------------------------------------------- |
+| **Dynamic Workers** (Worker Loader) | none — code strings at load | isolate        | Worker limits                   | **Use this**, but see the maturity note              |
+| Workers for Platforms               | upload per artifact         | isolate        | unlimited apps                  | Only if artifacts need their own hostname            |
+| Containers                          | image build                 | container boot | 1,500 vCPU / 6 TiB account-wide | Only for a real interpreter and filesystem           |
+| Worker per user                     | upload per user             | isolate        | —                               | Solves nothing a Durable Object doesn't solve better |
 
 ### Maturity: open beta, not GA
 
@@ -76,7 +76,7 @@ to only the specific resource the user intended**, logs every action, and
 gates side effects behind human approval.
 
 The approval design is genuinely novel. Rather than blocking the agent while
-a human decides, the Gatekeeper *simulates* the outcome, lets the agent
+a human decides, the Gatekeeper _simulates_ the outcome, lets the agent
 continue and queue further actions, and returns simulated results if the
 agent reads back. The human approves in bulk later. That removes the reason
 people set agents to auto-approve, which is the actual security failure in
@@ -85,8 +85,8 @@ practice.
 For Shamwari this maps almost exactly onto the scope model. A Gatekeeper is
 how a gadget touches a user's pod **without the gadget ever seeing the pod**:
 narrow capability, full audit log, side effects held for approval. Rule 1
-currently says *no*; a Gatekeeper is the design that could eventually say
-*yes, this much, and here is the log*.
+currently says _no_; a Gatekeeper is the design that could eventually say
+_yes, this much, and here is the log_.
 
 **Gadgets as private instances.** Every user gets their own copy of the app
 rather than sharing a multi-tenant SaaS instance. Their argument is that a
@@ -121,22 +121,22 @@ answer is a trust decision about Cloudflare rather than a missing mechanism.
 
 ### Workers
 
-| Worker | Repo | Purpose | Bindings |
-|---|---|---|---|
-| `shamwari-gateway` | `shamwari-gateway` | The edge: auth, scope gate, routing, queue producer | `AI`, `AUTH_CACHE` (KV), `SINK` (Queue) |
-| `shamwari-docs` | `shamwari-docs` | `docs.shamwari.ai` | static assets only |
-| `shamwari-web` | `shamwari-web` | `shamwari.ai` — Astro, SSR | `USER` (DO), `CONVERSATION` (DO) |
-| `shamwari-console` | `shamwari-platform` | `platform.shamwari.ai` — Astro, SSR | calls Core over HTTP |
-| `shamwari-workshop` | `shamwari-workshop` | Gadget host, if and when we adopt this | `LOADER`, `GADGET` (DO), R2, KV |
-| `shamwari-gatekeeper-*` | `shamwari-workshop` | One per mediated resource | per-resource |
+| Worker                  | Repo                | Purpose                                             | Bindings                                |
+| ----------------------- | ------------------- | --------------------------------------------------- | --------------------------------------- |
+| `shamwari-gateway`      | `shamwari-gateway`  | The edge: auth, scope gate, routing, queue producer | `AI`, `AUTH_CACHE` (KV), `SINK` (Queue) |
+| `shamwari-docs`         | `shamwari-docs`     | `docs.shamwari.ai`                                  | static assets only                      |
+| `shamwari-web`          | `shamwari-web`      | `shamwari.ai` — Astro, SSR                          | `USER` (DO), `CONVERSATION` (DO)        |
+| `shamwari-console`      | `shamwari-platform` | `platform.shamwari.ai` — Astro, SSR                 | calls Core over HTTP                    |
+| `shamwari-workshop`     | `shamwari-workshop` | Gadget host, if and when we adopt this              | `LOADER`, `GADGET` (DO), R2, KV         |
+| `shamwari-gatekeeper-*` | `shamwari-workshop` | One per mediated resource                           | per-resource                            |
 
 ### Durable Object classes
 
-| Class | Granularity | Holds | Why |
-|---|---|---|---|
-| `UserObject` | one per person | memory index, entitlements, per-user limits | single-threaded consistency per user; no locking |
-| `ConversationObject` | one per conversation | working state, the streaming WebSocket | hibernates; two devices must not serialise behind one thread |
-| `GadgetObject` | one per gadget | gadget state, code version | mirrors Cloudflare OS's `class Gadget extends DurableObject` |
+| Class                | Granularity          | Holds                                       | Why                                                          |
+| -------------------- | -------------------- | ------------------------------------------- | ------------------------------------------------------------ |
+| `UserObject`         | one per person       | memory index, entitlements, per-user limits | single-threaded consistency per user; no locking             |
+| `ConversationObject` | one per conversation | working state, the streaming WebSocket      | hibernates; two devices must not serialise behind one thread |
+| `GadgetObject`       | one per gadget       | gadget state, code version                  | mirrors Cloudflare OS's `class Gadget extends DurableObject` |
 
 Limits are not the constraint: unlimited objects, 10 GB each on the SQLite
 backend, 30 s CPU per request (raisable to 5 min), unlimited wall time while

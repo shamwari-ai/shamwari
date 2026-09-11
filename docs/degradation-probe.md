@@ -5,11 +5,11 @@
 "Cloudflare is an enhancement, never a dependency" is a claim about three
 inference paths in `gateway/src/gateway.ts`:
 
-| Step | Path | Reached when |
-|---|---|---|
-| 1 | `gateway` | always tried first |
-| 2 | `direct` | step 1 failed |
-| 3 | `workers-ai` | steps 1 and 2 failed |
+| Step | Path         | Reached when         |
+| ---- | ------------ | -------------------- |
+| 1    | `gateway`    | always tried first   |
+| 2    | `direct`     | step 1 failed        |
+| 3    | `workers-ai` | steps 1 and 2 failed |
 
 The claim is only true while steps 2 and 3 work. **On a healthy day nothing
 reaches them.** That is the whole problem: they can be broken for months —
@@ -17,8 +17,8 @@ a rotated provider key, a changed direct URL, a model id retired from the
 catalogue — and every user request still succeeds through step 1, so nothing
 looks wrong until the outage that finally needs them.
 
-This used to be handled by an instruction in `CLAUDE.md`: *break the Gateway
-credential deliberately once a month*. That is a manual chore. It will be
+This used to be handled by an instruction in `CLAUDE.md`: _break the Gateway
+credential deliberately once a month_. That is a manual chore. It will be
 skipped, and **skipping it looks exactly like passing it.**
 
 ## What replaced it

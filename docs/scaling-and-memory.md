@@ -8,24 +8,24 @@ of them can be answered properly.
 Rule 1 says personal-layer data never reaches a third-party **inference
 provider**. CLAUDE.md's note on sandboxes goes further without saying so
 explicitly: it rules out Cloudflare Containers for personal-scope artifacts,
-which extends the rule from *inference* to *execution*.
+which extends the rule from _inference_ to _execution_.
 
 Neither statement covers storage. And that gap is where Durable Objects,
 memory, and sandboxes all live. So the rule needs a third column:
 
-| Cloudflare does | On personal-scope data | Status |
-|---|---|---|
-| **Transport** — TLS terminate, read a request body, route it | Already happening. A personal-scope request arrives at the Worker in cleartext and the Worker reads it to decide to refuse it | Permitted, by existing practice |
-| **Storage** — KV, R2, D1, Durable Object SQLite | Not yet happening anywhere | **Undecided** |
-| **Execution** — Durable Object code, Containers, Workers for Platforms | Not yet happening | Barred for artifacts, per CLAUDE.md |
-| **Inference** — Workers AI model calls, embeddings included | Barred, and now actually enforced downstream of the gate — see below | Barred, rule 1 |
+| Cloudflare does                                                        | On personal-scope data                                                                                                        | Status                              |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| **Transport** — TLS terminate, read a request body, route it           | Already happening. A personal-scope request arrives at the Worker in cleartext and the Worker reads it to decide to refuse it | Permitted, by existing practice     |
+| **Storage** — KV, R2, D1, Durable Object SQLite                        | Not yet happening anywhere                                                                                                    | **Undecided**                       |
+| **Execution** — Durable Object code, Containers, Workers for Platforms | Not yet happening                                                                                                             | Barred for artifacts, per CLAUDE.md |
+| **Inference** — Workers AI model calls, embeddings included            | Barred, and now actually enforced downstream of the gate — see below                                                          | Barred, rule 1                      |
 
 Pick one of two positions, because the architecture forks here:
 
 **Position A — Cloudflare is trusted infrastructure, not a trusted brain.**
 Transport and storage are fine; inference and execution over personal data
 are not. Durable Objects hold personal state, Workers for Platforms hosts
-user apps, and the sovereignty claim is specifically about *models* not
+user apps, and the sovereignty claim is specifically about _models_ not
 seeing your data. Cheap, fast, and everything below works.
 
 **Position B — personal-scope bytes never rest on infrastructure we do not
@@ -58,7 +58,7 @@ While `MIND_AVAILABLE=false` this was unreachable, because `decideDestination`
 threw first. The moment the flag flipped, every personal-scope question was
 embedded by a third-party model, upstream of Core's authoritative check.
 
-*Fixed:* `ground()` embeds only for a `cloud` destination. Core accepts a
+_Fixed:_ `ground()` embeds only for a `cloud` destination. Core accepts a
 query with no embedding and falls back to lexical-only retrieval — weaker
 ranking over the same public corpus, which is the honest cost of not
 embedding on Cloud. Core also now **refuses** a `mind`-destination query
@@ -73,7 +73,7 @@ because Mind runs on the device. It sent the prompt itself to Moonshot or
 Alibaba. CLAUDE.md's "flipping it routes personal scope to Mind with no code
 change" was the claim that made this invisible.
 
-*Fixed:* the scope gate now takes a capability. `/v1/chat/completions`
+_Fixed:_ the scope gate now takes a capability. `/v1/chat/completions`
 generates on Cloud by definition, so it refuses personal scope regardless of
 the flag. `MIND_AVAILABLE` instead gates `/v1/ground/context`, a new
 retrieval-only endpoint that returns the system prompt and citations and
@@ -88,7 +88,7 @@ pod chunks by keyword and forward them to a provider — no flag required, and
 the two-check design could not see it, because both checks had already
 passed by then.
 
-*Fixed:* the prefilter is re-applied as a `$match` immediately after
+_Fixed:_ the prefilter is re-applied as a `$match` immediately after
 `$search`, before `$limit`, so the limit counts documents the caller may
 actually see.
 
@@ -120,7 +120,7 @@ Rust underneath is worth it only where there is CPU-bound work. A console
 that renders tables of somebody else's aggregates has none. Keep Rust for the
 sandbox host, where it earns its place.
 
-Note that the console shows *usage*, which is `platform`-scope data about a
+Note that the console shows _usage_, which is `platform`-scope data about a
 customer's account — not `personal`-scope pod data. It sits outside rule 1
 entirely, which is why it is the easiest of these to build.
 
@@ -128,13 +128,13 @@ entirely, which is why it is the easiest of these to build.
 
 Viable, and the limits are not the constraint:
 
-| | |
-|---|---|
-| Objects per account | Unlimited |
-| Storage per Object | 10 GB (SQLite backend) |
-| CPU per request | 30s default, configurable to 5 min |
-| Wall time | Unlimited while a request, WebSocket or pending I/O is in flight |
-| WebSocket message | 32 MiB |
+|                     |                                                                  |
+| ------------------- | ---------------------------------------------------------------- |
+| Objects per account | Unlimited                                                        |
+| Storage per Object  | 10 GB (SQLite backend)                                           |
+| CPU per request     | 30s default, configurable to 5 min                               |
+| Wall time           | Unlimited while a request, WebSocket or pending I/O is in flight |
+| WebSocket message   | 32 MiB                                                           |
 
 What a per-user Object is genuinely good at: single-threaded consistency. One
 Object per user means no locking around conversation state, no race between
@@ -161,11 +161,11 @@ data. That is the fork.
 
 Cloudflare Containers is the substrate, and the limits do bound this:
 
-| Instance | vCPU | Memory | Disk |
-|---|---|---|---|
-| `lite` | 1/16 | 256 MiB | 2 GB |
-| `basic` | 1/4 | 1 GiB | 4 GB |
-| `standard-1` | 1/2 | 4 GiB | 8 GB |
+| Instance     | vCPU | Memory  | Disk |
+| ------------ | ---- | ------- | ---- |
+| `lite`       | 1/16 | 256 MiB | 2 GB |
+| `basic`      | 1/4  | 1 GiB   | 4 GB |
+| `standard-1` | 1/2  | 4 GiB   | 8 GB |
 
 Account ceiling is 1,500 concurrent vCPU and 6 TiB concurrent memory. At
 `lite`, memory binds first: about 24,000 concurrent sandboxes, and far fewer
@@ -208,12 +208,12 @@ filesystem — which is a much smaller set than it first appears.
 
 Four kinds, and they do not belong in the same place:
 
-| Kind | Example | Where | Scope |
-|---|---|---|---|
-| **Working** | the current conversation | `ConversationObject` SQLite | personal |
-| **Durable facts** | "I am a smallholder in Mutoko", "paid in USD" | `UserObject` SQLite, or Core under Position B | personal |
-| **Episodic** | "we worked out your PAYE in March" | Core — Mongo `conversations`, already built | personal |
-| **Semantic corpus** | Zimbabwean law and tax | Ground — Mongo `knowledgeBase`, already built | platform |
+| Kind                | Example                                       | Where                                         | Scope    |
+| ------------------- | --------------------------------------------- | --------------------------------------------- | -------- |
+| **Working**         | the current conversation                      | `ConversationObject` SQLite                   | personal |
+| **Durable facts**   | "I am a smallholder in Mutoko", "paid in USD" | `UserObject` SQLite, or Core under Position B | personal |
+| **Episodic**        | "we worked out your PAYE in March"            | Core — Mongo `conversations`, already built   | personal |
+| **Semantic corpus** | Zimbabwean law and tax                        | Ground — Mongo `knowledgeBase`, already built | platform |
 
 Retrieval over durable facts is where rule 1 bites hardest. Useful memory
 means retrievable memory, retrievable means embedded, and **embedding is

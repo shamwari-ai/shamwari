@@ -6,6 +6,7 @@ summary: >-
   different places their requests stop.
 order: 8
 ---
+
 import Note from '../../components/Note.astro';
 import Verdict from '../../components/Verdict.astro';
 
@@ -19,8 +20,9 @@ caller from another is not which path they take but **where their path stops.**
   AI Gateway credential and `MIND_AVAILABLE` — that change the answers. Source
   is `docs/multi-user-flow.html` in the repository.
 
-  It is a simulation. Neither Core nor the gateway is deployed yet, and Ground
-  is empty.
+It is a simulation. Neither Core nor the gateway is deployed yet, and Ground
+is empty.
+
 </Note>
 
 ## Three shapes a request can take
@@ -50,10 +52,10 @@ statutory instrument escalates to standard. Both are open-weight models.
 
 A conversation becomes Shamwari Mind training data only if both hold.
 
-| Gate | Asks | Fails when |
-|---|---|---|
+| Gate       | Asks                                                                                        | Fails when                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Provenance | Does the licence of the model that **actually answered** permit training a competing model? | An unlisted or restricted model served — <Verdict allowed={false} label="restricted" /> |
-| Ownership | Was this the platform's data, or the user's own? | The exchange was `personal` scope |
+| Ownership  | Was this the platform's data, or the user's own?                                            | The exchange was `personal` scope                                                       |
 
 They are independent, and both are enforced at write time rather than filtered
 at read time. A read-time filter is one forgotten `WHERE` clause away from

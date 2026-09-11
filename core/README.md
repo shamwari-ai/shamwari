@@ -14,11 +14,11 @@ rule — because it needs to live somewhere Cloudflare cannot see.
 
 Shamwari's canonical architecture is three layers of intelligence:
 
-| Layer | Content | May reach Cloud? |
-|---|---|---|
-| `personal` | the user's own pod data | **No** |
-| `community` | anonymised platform data | Yes |
-| `platform` | base Mukoko knowledge | Yes |
+| Layer       | Content                  | May reach Cloud? |
+| ----------- | ------------------------ | ---------------- |
+| `personal`  | the user's own pod data  | **No**           |
+| `community` | anonymised platform data | Yes              |
+| `platform`  | base Mukoko knowledge    | Yes              |
 
 A personal-scope request bound for an external provider returns **409
 `scope_requires_local_inference`**. It is not silently downgraded to platform
@@ -46,13 +46,13 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 
 ## Endpoints
 
-| Method | Path | Purpose |
-|---|---|---|
-| POST | `/auth/verify` | `platform.apiKeys` lookup by `keyPrefix`, constant-time hash compare |
-| POST | `/ground/search` | `$rankFusion` hybrid retrieval, scope-enforced |
-| GET | `/guardrails` | active rules for a surface |
-| POST | `/sink/bulk` | batched writes from the Worker's queue, allow-listed |
-| GET | `/rollup` | billing aggregate on the `ownerEntityId + billingPeriod` index |
+| Method | Path             | Purpose                                                              |
+| ------ | ---------------- | -------------------------------------------------------------------- |
+| POST   | `/auth/verify`   | `platform.apiKeys` lookup by `keyPrefix`, constant-time hash compare |
+| POST   | `/ground/search` | `$rankFusion` hybrid retrieval, scope-enforced                       |
+| GET    | `/guardrails`    | active rules for a surface                                           |
+| POST   | `/sink/bulk`     | batched writes from the Worker's queue, allow-listed                 |
+| GET    | `/rollup`        | billing aggregate on the `ownerEntityId + billingPeriod` index       |
 
 All except `/health` require `Authorization: Bearer $SHAMWARI_CORE_TOKEN`.
 
