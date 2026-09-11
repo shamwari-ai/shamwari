@@ -7,11 +7,13 @@
 Built in Zimbabwe. Community pillar of the Bundu Ecosystem.
 Shona for _"friend"_ — _"A friend that serves; a friend that does not control."_
 
-[![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
+[![CI](https://github.com/shamwari-ai/shamwari/actions/workflows/ci.yml/badge.svg)](https://github.com/shamwari-ai/shamwari/actions/workflows/ci.yml)
+[![Lint](https://github.com/shamwari-ai/shamwari/actions/workflows/lint.yml/badge.svg)](https://github.com/shamwari-ai/shamwari/actions/workflows/lint.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 [![Status: pre-launch](https://img.shields.io/badge/status-building%20in%20public-orange)](#where-this-actually-is-right-now)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen)](#contributing)
 
-[shamwari.ai](https://shamwari.ai) · [docs.shamwari.ai](https://docs.shamwari.ai) · [hello@shamwari.ai](mailto:hello@shamwari.ai)
+**Live:** [shamwari.ai](https://shamwari.ai) · **Docs:** [docs.shamwari.ai](https://docs.shamwari.ai) · **Contact:** [hello@shamwari.ai](mailto:hello@shamwari.ai)
 
 </div>
 
@@ -80,12 +82,15 @@ route Shamwari Cloud."
 
 Building in public means saying this part plainly. As of this writing:
 
-| Piece                                                  | Status                                                                          |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| Core (FastAPI) + Gateway (Cloudflare Workers)          | written, tested, **not deployed yet**                                           |
-| Ground's vector + text search indexes                  | live and ready                                                                  |
-| Ground's actual content                                | **empty** — this is the one thing standing between this repo and a working demo |
-| Corpus licensing (law, tax, health, education sources) | partly cleared, partly waiting on human review — see `CLAUDE.md`                |
+| Piece                                                                | Status                                                                                     |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [shamwari.ai](https://shamwari.ai) — the public site                 | live, built from `site/` as Astro static output on Cloudflare Workers                      |
+| [docs.shamwari.ai](https://docs.shamwari.ai) — the architecture docs | live, now served from [`shamwari-ai/docs`](https://github.com/shamwari-ai/docs) (Mintlify) |
+| Core (FastAPI) + Gateway (Cloudflare Workers)                        | written, tested, **not deployed yet**                                                      |
+| Ground's vector + text search indexes                                | live and ready                                                                             |
+| Ground's actual content                                              | **empty** — this is the one thing standing between this repo and a working demo            |
+| Corpus licensing (law, tax, health, education sources)               | 22 sources seeded; 5 blocked pending licence review — see `CLAUDE.md`                      |
+| `platform.shamwari.ai`                                               | **not the console yet** — a stale pre-pivot Vercel deployment still answers there          |
 
 If you're evaluating this as a product today: it isn't one yet. If you're
 looking for a project where the architecture is already decided, documented,
@@ -131,6 +136,23 @@ Claude Code — a coding agent working here starts with a real map of the
 codebase instead of grepping cold. If you use a different agent, `graft
 init --agents <yours>` wires it in.
 
+## Ecosystem
+
+The monorepo is being broken up along the plan in `docs/repo-split.md`. Until
+the `git subtree split` imports land, every repo below except `docs` and
+`.github` is an empty scaffold — the working code is still here.
+
+| Repo                                                                    | What it owns, or will                                            |
+| ----------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| [`shamwari-web`](https://github.com/shamwari-ai/shamwari-web)           | `shamwari.ai` — to be extracted from `site/`                     |
+| [`shamwari-gateway`](https://github.com/shamwari-ai/shamwari-gateway)   | the edge Worker — to be extracted from `gateway/`                |
+| [`shamwari-core`](https://github.com/shamwari-ai/shamwari-core)         | the FastAPI service — to be extracted from `core/` and `db/`     |
+| [`shamwari-platform`](https://github.com/shamwari-ai/shamwari-platform) | `platform.shamwari.ai` — the customer console, to be built fresh |
+| [`shamwari-sandbox`](https://github.com/shamwari-ai/shamwari-sandbox)   | `code.shamwari.ai` — the Rust execution host, not started        |
+| [`shamwari-mind`](https://github.com/shamwari-ai/shamwari-mind)         | training pipeline and eval harness, not started                  |
+| [`docs`](https://github.com/shamwari-ai/docs)                           | [docs.shamwari.ai](https://docs.shamwari.ai) — live              |
+| [`.github`](https://github.com/shamwari-ai/.github)                     | org defaults, reusable workflows, rulesets                       |
+
 ## Contributing
 
 This project needs more than pull requests, and that's part of what makes
@@ -169,9 +191,10 @@ docs/desired-cloudflare-state.md  what should exist in the CF account
 docs/scaling-and-memory.md     surfaces, Durable Objects, sandboxes, memory
 docs/workers-ai-models.md      verified provider slugs and model ids
 
-docs-site/                     docs.shamwari.ai — one HTML file, no build
+docs-site/                     Astro + MDX; pages MIGRATED to shamwari-ai/docs.
+                               A stale mirror — see shamwari-ai/shamwari#23
 
-site/                           shamwari.ai — the public landing page
+site/                          shamwari.ai — the landing page (Astro, static)
 
 gateway/                       Cloudflare Workers, TypeScript
   src/scope.ts                 the scope gate — read this first
@@ -203,10 +226,10 @@ scripts/                       generator for the gateway, kept for reference
 - [ ] Schedule a monthly game-day: break the AI Gateway credential and confirm
       the direct and Workers AI fallbacks still answer
 
-## License
+## Licence
 
-Platform code: Apache-2.0 (`LICENSE`), copyright Bundu Foundation.
-Shamwari Mind: open weights, Apache-2.0 base.
+Platform code: [Apache-2.0](https://www.apache.org/licenses/LICENSE-2.0)
+(`LICENSE`). Shamwari Mind: open weights, Apache-2.0 base.
 
 Third-party model terms and per-source corpus licences are in `NOTICE`.
 They are not covered by ours, and Ground eligibility is not training
@@ -215,3 +238,6 @@ eligibility.
 Shamwari Cloud routes to third-party open-weight and commercial models. It is
 **not** "fully open source" — say "open weights". See the language discipline
 table in `CLAUDE.md`.
+
+© Bundu Foundation. Shamwari is Bundu Foundation IP, sold commercially under
+Nyuchi Africa.
