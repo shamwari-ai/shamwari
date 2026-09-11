@@ -16,10 +16,10 @@ companion, positioned as the Digital Twin's conversational interface.
 - **Licence:** Apache-2.0, copyright Bundu Foundation. Chosen over MIT for
   the patent grant and the attribution requirement — both matter when the
   same code is licensed commercially. `NOTICE` carries the third-party
-  model and corpus terms, which are *not* covered by ours.
+  model and corpus terms, which are _not_ covered by ours.
 - **Surfaces:** shamwari.ai (standalone), Mukoko mini-apps, Nyuchi products
 - **Brand:** Shona for "friend". Mineral: sodalite. Voice: helpful, warm,
-  intelligent. *"A friend that serves; a friend that does not control."*
+  intelligent. _"A friend that serves; a friend that does not control."_
 
 Ecosystem: Bundu Foundation governs four pillars — Bundu Labs (research),
 Mukoko (consumer super-app), Nyuchi Africa (commercial), Shamwari AI
@@ -34,11 +34,11 @@ Mukoko (consumer super-app), Nyuchi Africa (commercial), Shamwari AI
 Shamwari's canonical architecture is three **data scopes**, not deployment
 tiers:
 
-| Scope | Content | May reach Cloud? |
-|---|---|---|
-| `personal` | the user's own pod data | **No. Ever.** |
-| `community` | anonymised platform data | Yes |
-| `platform` | base Mukoko knowledge | Yes |
+| Scope       | Content                  | May reach Cloud? |
+| ----------- | ------------------------ | ---------------- |
+| `personal`  | the user's own pod data  | **No. Ever.**    |
+| `community` | anonymised platform data | Yes              |
+| `platform`  | base Mukoko knowledge    | Yes              |
 
 A `personal`-scope request bound for an external provider returns **409
 `scope_requires_local_inference`**. It is **not** silently downgraded to
@@ -46,6 +46,7 @@ A `personal`-scope request bound for an external provider returns **409
 data, giving no signal that anything was missing. That is worse than an error.
 
 Enforced twice on purpose:
+
 - `gateway/src/scope.ts` — fast fail, saves a Core round trip
 - `core/main.py::resolve_scope` — authoritative, Worker cannot override
 
@@ -84,6 +85,7 @@ GLM-5.3 under a bespoke licence that explicitly grants the right to
 fine-tune and create derivative works.
 
 `licenseClass` is stamped at generation time and never inferred later:
+
 - `gateway/src/router.ts` — premium tier is hardcoded `restricted`. **Do not
   change this,** and do not move `licenseClass` into
   `gateway/routing-policy.json`. That file is the editable routing heuristic;
@@ -101,7 +103,7 @@ fine-tune and create derivative works.
 - `mind_training_chunks` view is the only thing the training pipeline reads
 
 **Why the tier alone was not enough — the rule-1 lesson again.** The tier
-records what the Worker *asked for*. The model that answers is not always the
+records what the Worker _asked for_. The model that answers is not always the
 model that was asked for: `infer()` degrades to Workers AI when both the
 Gateway and the direct provider are unreachable, and an **AI Gateway dynamic
 route can substitute the model from a dashboard — no deploy, no code review.**
@@ -119,17 +121,17 @@ from what happened is a label, not a control.**
 Precision here is not pedantry — it is the difference between a defensible
 claim and one a journalist can puncture.
 
-| Don't say | Do say |
-|---|---|
-| "open source model" | "open weights" — GLM-5.3 ships under a bespoke licence, not MIT/Apache (GLM-5.3-Flash *is* MIT) |
-| "your data stays in Africa" (for Cloud) | Sovereignty attaches to Mind + Ground only. **Never to Cloud.** |
-| "we built our own model" | "We train Shamwari Mind. We route Shamwari Cloud." |
+| Don't say                               | Do say                                                                                          |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| "open source model"                     | "open weights" — GLM-5.3 ships under a bespoke licence, not MIT/Apache (GLM-5.3-Flash _is_ MIT) |
+| "your data stays in Africa" (for Cloud) | Sovereignty attaches to Mind + Ground only. **Never to Cloud.**                                 |
+| "we built our own model"                | "We train Shamwari Mind. We route Shamwari Cloud."                                              |
 
 GLM-5.3's licence: explicitly permits use, fine-tuning and derivative works;
 the only gate is a security review for Model-as-a-Service operators above
 $10B revenue over any 12 months. Nowhere near that threshold.
 **Read the LICENSE file directly before shipping**
-(https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE) — do not trust
+(<https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE>) — do not trust
 this summary.
 
 ---
@@ -208,6 +210,7 @@ consecutive weeks means a fallback has rotted while users noticed nothing.
 ### Supabase `shamwari_ai_db` (project `hxjblxsheosjbjqgmlhx`, eu-west-1, PG17)
 
 Applied as migrations on 2026-08-27:
+
 - `add_license_class_provenance_gate` — `license_class` enum; columns on
   `documents`, `chunks`, `synthetic_jobs`; CHECK on `synthetic_jobs`;
   `mind_training_chunks` and `corpus_coverage` views
@@ -233,6 +236,7 @@ with service_role/authenticated split. Security advisors return zero lints.
 ### MongoDB Atlas `nyuchi-platform-doc-db` (project `6989ca17b7b03d132b6deb78`)
 
 Indexes created 2026-08-27:
+
 - `shamwari.knowledgeBase` — `ground_vector_search` (vectorSearch, 1024 dims,
   cosine, scalar quantization; filters: isActive, resourceType, ownerEntityId,
   jurisdiction, language, supersededBy) · `ground_text_search` (Atlas Search,
@@ -249,16 +253,16 @@ names. Reference only.
 
 ### Collections that already existed — use these, do not create new ones
 
-| Need | Existing collection | Existing index to use |
-|---|---|---|
-| accounts | `entity.entities` (12,298 docs) | — |
-| persons | `identity.persons` | — |
-| API keys | `platform.apiKeys` | `keyPrefix` |
-| usage/billing | `platform.usageEvents` | `apiKeyId+billingPeriod`, `ownerEntityId+billingPeriod` |
-| rate limits | `platform.rateLimits` | — |
-| conversations | `shamwari.conversations` | `ownerPersonId+lastMessageAt`, `surfaceContext+lastMessageAt` |
-| messages | `shamwari.messages` | `conversationId+sequence` |
-| Ground chunks | `shamwari.knowledgeBase` | `ground_vector_search` |
+| Need          | Existing collection             | Existing index to use                                         |
+| ------------- | ------------------------------- | ------------------------------------------------------------- |
+| accounts      | `entity.entities` (12,298 docs) | —                                                             |
+| persons       | `identity.persons`              | —                                                             |
+| API keys      | `platform.apiKeys`              | `keyPrefix`                                                   |
+| usage/billing | `platform.usageEvents`          | `apiKeyId+billingPeriod`, `ownerEntityId+billingPeriod`       |
+| rate limits   | `platform.rateLimits`           | —                                                             |
+| conversations | `shamwari.conversations`        | `ownerPersonId+lastMessageAt`, `surfaceContext+lastMessageAt` |
+| messages      | `shamwari.messages`             | `conversationId+sequence`                                     |
+| Ground chunks | `shamwari.knowledgeBase`        | `ground_vector_search`                                        |
 
 Also present, unused so far: `platform.signingKeys`, `auditLog`,
 `featureFlags`, `serviceHealth`, `jobRuns`, `ucpCapabilities`, `ucpProfiles`,
@@ -278,15 +282,15 @@ unqueryable vectors. Keep that behaviour.
 
 ## Current state
 
-| Piece | Status |
-|---|---|
-| Supabase schema + provenance gates | live, advisors clean |
-| Mongo indexes, Ground vector + text | live, READY |
-| 22 corpus sources seeded | 5 blocked pending licence review |
-| `core/` | written, syntax-verified, **not deployed** |
-| `gateway/` | written, typecheck clean, structural assertions pass, **not deployed** |
-| rule-1 enforcement downstream of the gate | fixed 2026-08-27, 3 defects, tests added |
-| `shamwari.knowledgeBase` content | **EMPTY — this is the only blocker to a demo** |
+| Piece                                     | Status                                                                 |
+| ----------------------------------------- | ---------------------------------------------------------------------- |
+| Supabase schema + provenance gates        | live, advisors clean                                                   |
+| Mongo indexes, Ground vector + text       | live, READY                                                            |
+| 22 corpus sources seeded                  | 5 blocked pending licence review                                       |
+| `core/`                                   | written, syntax-verified, **not deployed**                             |
+| `gateway/`                                | written, typecheck clean, structural assertions pass, **not deployed** |
+| rule-1 enforcement downstream of the gate | fixed 2026-08-27, 3 defects, tests added                               |
+| `shamwari.knowledgeBase` content          | **EMPTY — this is the only blocker to a demo**                         |
 
 ### The single next step
 
@@ -311,13 +315,13 @@ Five corpus sources are `is_approved = false` because their terms have not been
 read. `ingest_ground.py` **refuses** them rather than warning and continuing.
 Keep that behaviour.
 
-| Source | Why blocked |
-|---|---|
-| ZimLII | Likely CC-BY via AfricanLII/Laws.Africa. **Highest-value unblock, probably a 5-minute read.** |
-| Veritas Zimbabwe | Best SI coverage in Zimbabwe. Partnership candidate — approach before scraping. |
-| AGRITEX | Ministry terms unconfirmed |
-| MoHCC / EDLIZ | Clinical accuracy — human review mandatory before Ground eligibility |
-| ZIMSEC | **DO NOT SCRAPE.** Copyrighted, needs a licence agreement. Probably the most commercially valuable education asset once licensed. |
+| Source           | Why blocked                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| ZimLII           | Likely CC-BY via AfricanLII/Laws.Africa. **Highest-value unblock, probably a 5-minute read.**                                     |
+| Veritas Zimbabwe | Best SI coverage in Zimbabwe. Partnership candidate — approach before scraping.                                                   |
+| AGRITEX          | Ministry terms unconfirmed                                                                                                        |
+| MoHCC / EDLIZ    | Clinical accuracy — human review mandatory before Ground eligibility                                                              |
+| ZIMSEC           | **DO NOT SCRAPE.** Copyrighted, needs a licence agreement. Probably the most commercially valuable education asset once licensed. |
 
 Scraped news (`news.articles`, 23,231 docs) is Ground-eligible with citation
 and link-out. **Not** Mind training data without a redistribution licence.
@@ -354,9 +358,9 @@ catalogue check on 2026-08-27, so they are not rediscovered:
   proprietary; FLUX `dev` is restricted while `schnell` is not; Whisper is
   permissive. That has to be stamped per model.
 - **There is no Shona or Ndebele text-to-speech in the catalogue.** Aura is
-  English and Spanish, MeloTTS covers neither. Voice *output* in either
+  English and Spanish, MeloTTS covers neither. Voice _output_ in either
   language cannot be served from Cloudflare at all. Whisper has some Shona
-  in its training mix, so voice *input* is worth measuring rather than
+  in its training mix, so voice _input_ is worth measuring rather than
   assuming.
 
 Vision has one convenience, better than it used to be: GLM-5.3-Flash is
