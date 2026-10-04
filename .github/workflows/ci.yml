@@ -10,6 +10,10 @@ on:
     # the worst shape for it to take.
     branches: [main, "claude/**"]
 
+# Every job only reads the repository. Least privilege for GITHUB_TOKEN.
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
