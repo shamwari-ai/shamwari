@@ -437,6 +437,8 @@ Load the Mzizi **dev skills** before starting work:
 - **Digital hygiene.** Check free disk before starting, clone only under
   `$TMPDIR`, share build caches, and audit, then delete, your clones once the
   work merges (`digital-hygiene` skill).
+- **Clone isolation.** Clone only into a directory unique to you; never touch
+  another agent's.
 - **Progress reports.** All dev work runs on a 10-minute progress-report loop
   (`progress-report` skill): measured bars, what changed, and a final "Needs
   you:" line. Report ticks never publish, release, merge or deploy without the
