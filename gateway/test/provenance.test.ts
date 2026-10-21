@@ -19,6 +19,14 @@ describe('resolveLicenseClass', () => {
     expect(resolveLicenseClass('workers-ai', WORKERS_AI_FALLBACK_MODEL)).toBe('open_weight');
   });
 
+  it('admits GLM-5.3 when Workers AI serves it, and only under its real id', () => {
+    expect(resolveLicenseClass('workers-ai', '@cf/zai-org/glm-5.3')).toBe('open_weight');
+    // The neighbours on the same host stay unlisted until someone reads
+    // their terms.
+    expect(resolveLicenseClass('workers-ai', '@cf/zai-org/glm-5.2')).toBe('restricted');
+    expect(resolveLicenseClass('workers-ai', 'glm-5.3')).toBe('restricted');
+  });
+
   it('fails closed for a model nobody has read the terms of', () => {
     // The whole point. An unlisted model is not assumed permissive just
     // because it sits behind a provider whose other models are.

@@ -50,6 +50,11 @@ const OPEN_WEIGHT: ReadonlySet<string> = new Set<string>([
   // Workers AI last-resort fallback. Same GLM-5.3-Flash weights,
   // Cloudflare-hosted.
   `workers-ai/${'@cf/zai-org/glm-5.3-flash'}`,
+
+  // The standard tier served from Workers AI, as the dynamic route does
+  // when its GLM-5.3 node runs there. Same GLM-5.3 weights and licence as
+  // `zai/glm-5.3` above; only the host differs.
+  'workers-ai/@cf/zai-org/glm-5.3',
 ]);
 
 /**
