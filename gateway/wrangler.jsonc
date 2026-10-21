@@ -9,8 +9,9 @@
   "ai": { "binding": "AI" },
 
   "kv_namespaces": [
-    { "binding": "AUTH_CACHE", "id": "REPLACE_ME" },
-    // wrangler kv namespace create AUTH_CACHE
+    // Created 2026-10-21 as "shamwari-gateway-AUTH_CACHE" in the Nyuchi Web
+    // Services account. A namespace id is not a credential.
+    { "binding": "AUTH_CACHE", "id": "aef87f10881e4ba99f68045026ce18b1" },
   ],
 
   // Weekly degradation probe. Exercises all three inference paths and writes
