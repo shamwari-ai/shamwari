@@ -25,6 +25,8 @@ describe('resolveLicenseClass', () => {
     // their terms.
     expect(resolveLicenseClass('workers-ai', '@cf/zai-org/glm-5.2')).toBe('restricted');
     expect(resolveLicenseClass('workers-ai', 'glm-5.3')).toBe('restricted');
+    // Header values arrive with whatever casing and padding the provider sent.
+    expect(resolveLicenseClass(' Workers-AI ', ' @CF/zai-org/GLM-5.3 ')).toBe('open_weight');
   });
 
   it('fails closed for a model nobody has read the terms of', () => {

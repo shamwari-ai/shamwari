@@ -119,6 +119,16 @@ describe('provenance follows the model that actually served', () => {
     expect(r.licenseClass).toBe('open_weight');
   });
 
+  it('stamps open_weight when the route serves GLM-5.3 from Workers AI', async () => {
+    stubGateway({ 'cf-aig-provider': 'workers-ai', 'cf-aig-model': '@cf/zai-org/glm-5.3' });
+    const env = fakeEnv();
+    const r = await infer(env, targets(env).standard, messages, meta);
+    expect(r.provider).toBe('workers-ai');
+    expect(r.model).toBe('@cf/zai-org/glm-5.3');
+    expect(r.substituted).toBe(true);
+    expect(r.licenseClass).toBe('open_weight');
+  });
+
   it('stamps restricted when a route substitutes a restricted model', async () => {
     // THE ASSERTION THAT WOULD HAVE CAUGHT THE DEFECT. The Worker asked for
     // an open-weight tier; the route answered with Claude. Nothing in the

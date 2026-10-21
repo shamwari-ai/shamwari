@@ -71,7 +71,8 @@ describe('rule 2 — every path stays open-weight', () => {
   // so the stamp is only true while every reachable provider is
   // open-weight. Adding a restricted provider here means the Worker must
   // stamp from the cf-aig-provider response header instead.
-  // 'zai' is the custom-provider slug this account must create. 'workers-ai'
+  // 'zai' would be a custom provider this account does not have: the route
+  // is Cloudflare-billed, so every node is on 'workers-ai'. 'workers-ai'
   // is what the dashboard itself serialises for Workers AI — see
   // docs/workers-ai-models.md.
   const OPEN_WEIGHT = new Set(['zai', 'workers-ai']);
@@ -108,7 +109,8 @@ describe('the route matches the Worker it fronts', () => {
     const [rate] = byType('rate');
     const fallback = rate?.outputs.fallback?.elementId;
     const target = elements.find((e) => e.id === fallback);
-    expect(target?.properties?.provider).toBe('zai');
+    expect(target?.properties?.provider).toBe('workers-ai');
+    expect(target?.properties?.model).toBe('@cf/zai-org/glm-5.3-flash');
   });
 });
 
