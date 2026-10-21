@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import route from '../dynamic-route.json';
 import phase1 from '../dynamic-route-phase1.json';
+import { openWeightModels, resolveLicenseClass } from '../src/provenance';
 
 type Element = {
   id: string;
@@ -87,6 +88,38 @@ describe('rule 2 — every path stays open-weight', () => {
     for (const restricted of ['anthropic', 'claude', 'openai', 'gpt-', 'azure']) {
       expect(flat).not.toContain(restricted);
     }
+  });
+});
+
+describe('rule 2 — every model node is on the provenance allowlist', () => {
+  // The provider check above is coarse: 'zai' is an open-weight provider, but
+  // a route edit that swaps in a different Z.ai model would still pass it.
+  // provenance.ts is the allowlist the Worker stamps from, and Core re-checks
+  // against it, so the route may only name pairs that allowlist already
+  // resolves as open_weight. Anything else would be stamped restricted at
+  // runtime, silently dropping its training rows, so fail here instead.
+  const pair = (e: Element) =>
+    `${e.properties?.provider as string}/${e.properties?.model as string}`.toLowerCase();
+
+  it('names a provider and a model on every model node', () => {
+    for (const e of byType('model')) {
+      expect(e.properties?.provider, e.id).toEqual(expect.any(String));
+      expect(e.properties?.model, e.id).toEqual(expect.any(String));
+    }
+  });
+
+  it('resolves every model node to open_weight', () => {
+    for (const e of byType('model')) {
+      expect(
+        resolveLicenseClass(e.properties?.provider as string, e.properties?.model as string),
+        pair(e),
+      ).toBe('open_weight');
+    }
+  });
+
+  it('only names pairs that are in the allowlist itself', () => {
+    const allowed = new Set(openWeightModels);
+    for (const e of byType('model')) expect(allowed, pair(e)).toContain(pair(e));
   });
 });
 
