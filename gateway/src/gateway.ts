@@ -17,7 +17,7 @@ export interface InferenceResult {
   licenseClass: LicenseClass;
   /** True when a dynamic route or a fallback answered with something else. */
   substituted: boolean;
-  path: 'gateway' | 'direct' | 'workers-ai';
+  path: 'gateway' | 'workers-ai';
 }
 
 /**
@@ -76,13 +76,17 @@ async function post(
 }
 
 /**
- * Step 1 of the degradation chain. Caching, spend limits, observability and
- * dynamic routing.
+ * Step 1 of the degradation chain: the AI Gateway's dynamic route.
+ *
+ * The route (`dynamic/<CF_ROUTE_NAME>`) holds the spend cap, the tier branch
+ * and its own fallbacks, all on Workers AI and billed through Cloudflare, so
+ * no provider key is sent: `cf-aig-authorization` is the only credential.
+ * Caching, spend limits and observability come with it.
  *
  * Returns null rather than throwing when the step is unavailable, so the
  * caller decides whether to degrade or to report. `skipCache` exists for the
  * probe: its prompt is constant, so a cached HIT would report a healthy
- * gateway while the provider behind it was unreachable.
+ * gateway while the route behind it was failing.
  */
 export async function viaGateway(
   env: Env,
@@ -96,11 +100,10 @@ export async function viaGateway(
       `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/compat/chat/completions`,
       {
         'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-        Authorization: `Bearer ${target.apiKey(env)}`,
         'cf-aig-metadata': JSON.stringify(buildMetadata(meta)),
         ...(skipCache ? { 'cf-aig-skip-cache': 'true' } : {}),
       },
-      `${target.provider}/${target.model}`,
+      `dynamic/${env.CF_ROUTE_NAME}`,
       messages,
     );
     if (res.ok) {
@@ -113,30 +116,9 @@ export async function viaGateway(
   return null;
 }
 
-/** Step 2. The same provider with no Cloudflare in the path. */
-export async function viaDirect(
-  env: Env,
-  target: Target,
-  messages: Message[],
-): Promise<InferenceResult | null> {
-  if (!target.directUrl) return null;
-  try {
-    const res = await post(
-      target.directUrl,
-      { Authorization: `Bearer ${target.apiKey(env)}` },
-      target.model,
-      messages,
-    );
-    if (res.ok) return parse(res, target, false, 'direct');
-    console.warn('direct', res.status);
-  } catch (e) {
-    console.warn('direct threw', String(e));
-  }
-  return null;
-}
-
 /**
- * Step 3. Last resort, lower quality, still answers.
+ * Step 2. Last resort: the Workers AI binding with no AI Gateway in the path.
+ * Lower quality, still answers.
  *
  * A general model, not the coder variant: this answers Shona and Ndebele
  * questions about law and tax when both providers are unreachable.
@@ -166,17 +148,17 @@ export async function viaWorkersAI(
 }
 
 /**
- * Three-step degradation, so Cloudflare is an enhancement and not a
- * dependency:
- *   1. AI Gateway   caching, spend limits, observability, dynamic routing
- *   2. Direct       same provider, no Cloudflare in the path
- *   3. Workers AI   last resort, lower quality, still answers
+ * Two-step degradation:
+ *   1. AI Gateway   dynamic route: caching, spend limits, observability,
+ *                   tier branch and its own fallbacks
+ *   2. Workers AI   the binding directly, no AI Gateway in the path
  *
- * The steps are separate exported functions rather than inline blocks so
- * that `probe.ts` can exercise each one **on its own**. In one composed
- * function the later steps are only reachable when the earlier ones fail,
- * which is exactly why they rotted: nothing ever ran step 2 or 3 on a
- * healthy day. See docs/degradation-probe.md.
+ * Everything runs on Cloudflare (no third-party provider, no provider key),
+ * so Cloudflare is the dependency; the second step only removes the AI
+ * Gateway from the path. The steps are separate exported functions so that
+ * `probe.ts` can exercise each one **on its own**: in one composed function
+ * the second step is only reachable when the first fails, which is exactly
+ * why fallbacks rot. See docs/degradation-probe.md.
  */
 export async function infer(
   env: Env,
@@ -185,9 +167,7 @@ export async function infer(
   meta: RequestMetadata,
 ): Promise<InferenceResult> {
   return (
-    (await viaGateway(env, target, messages, meta)) ??
-    (await viaDirect(env, target, messages)) ??
-    (await viaWorkersAI(env, target, messages))
+    (await viaGateway(env, target, messages, meta)) ?? (await viaWorkersAI(env, target, messages))
   );
 }
 
@@ -202,9 +182,8 @@ async function parse(
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
 
-  // A dynamic route reports what it chose in these headers. They are absent
-  // on the direct path and on a plain single-model gateway request, in which
-  // case what was asked for is what served.
+  // A dynamic route reports what it chose in these headers. When they are
+  // absent, what was asked for is taken to be what served.
   const provider = res.headers.get('cf-aig-provider')?.trim() || target.provider;
   const model = res.headers.get('cf-aig-model')?.trim() || target.model;
 

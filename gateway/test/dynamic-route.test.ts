@@ -9,6 +9,7 @@
 import { describe, expect, it } from 'vitest';
 import route from '../dynamic-route.json';
 import phase1 from '../dynamic-route-phase1.json';
+import { openWeightModels, resolveLicenseClass } from '../src/provenance';
 
 type Element = {
   id: string;
@@ -71,7 +72,8 @@ describe('rule 2 — every path stays open-weight', () => {
   // so the stamp is only true while every reachable provider is
   // open-weight. Adding a restricted provider here means the Worker must
   // stamp from the cf-aig-provider response header instead.
-  // 'zai' is the custom-provider slug this account must create. 'workers-ai'
+  // 'zai' would be a custom provider this account does not have: the route
+  // is Cloudflare-billed, so every node is on 'workers-ai'. 'workers-ai'
   // is what the dashboard itself serialises for Workers AI — see
   // docs/workers-ai-models.md.
   const OPEN_WEIGHT = new Set(['zai', 'workers-ai']);
@@ -87,6 +89,38 @@ describe('rule 2 — every path stays open-weight', () => {
     for (const restricted of ['anthropic', 'claude', 'openai', 'gpt-', 'azure']) {
       expect(flat).not.toContain(restricted);
     }
+  });
+});
+
+describe('rule 2 — every model node is on the provenance allowlist', () => {
+  // The provider check above is coarse: 'zai' is an open-weight provider, but
+  // a route edit that swaps in a different Z.ai model would still pass it.
+  // provenance.ts is the allowlist the Worker stamps from, and Core re-checks
+  // against it, so the route may only name pairs that allowlist already
+  // resolves as open_weight. Anything else would be stamped restricted at
+  // runtime, silently dropping its training rows, so fail here instead.
+  const pair = (e: Element) =>
+    `${e.properties?.provider as string}/${e.properties?.model as string}`.toLowerCase();
+
+  it('names a provider and a model on every model node', () => {
+    for (const e of byType('model')) {
+      expect(e.properties?.provider, e.id).toEqual(expect.any(String));
+      expect(e.properties?.model, e.id).toEqual(expect.any(String));
+    }
+  });
+
+  it('resolves every model node to open_weight', () => {
+    for (const e of byType('model')) {
+      expect(
+        resolveLicenseClass(e.properties?.provider as string, e.properties?.model as string),
+        pair(e),
+      ).toBe('open_weight');
+    }
+  });
+
+  it('only names pairs that are in the allowlist itself', () => {
+    const allowed = new Set(openWeightModels);
+    for (const e of byType('model')) expect(allowed, pair(e)).toContain(pair(e));
   });
 });
 
@@ -108,7 +142,8 @@ describe('the route matches the Worker it fronts', () => {
     const [rate] = byType('rate');
     const fallback = rate?.outputs.fallback?.elementId;
     const target = elements.find((e) => e.id === fallback);
-    expect(target?.properties?.provider).toBe('zai');
+    expect(target?.properties?.provider).toBe('workers-ai');
+    expect(target?.properties?.model).toBe('@cf/zai-org/glm-5.3-flash');
   });
 });
 

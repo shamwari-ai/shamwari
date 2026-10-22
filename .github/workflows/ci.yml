@@ -2,13 +2,18 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, staging]
   pull_request:
     # Not just main. Stacked pull requests target the branch below them in
     # the stack, and a filter of [main] silently gives every layer but the
     # bottom one zero checks — the failure looks like a green PR, which is
     # the worst shape for it to take.
-    branches: [main, "claude/**"]
+    branches: [main, staging, "claude/**"]
+  # Merge queue. A queued pull request is re-tested on a temporary
+  # gh-readonly-queue/* branch, and that run only starts if the workflow
+  # listens for this event. Without it every queued PR waits on checks that
+  # never begin, which looks like a stuck queue rather than a missing trigger.
+  merge_group:
 
 # Every job only reads the repository. Least privilege for GITHUB_TOKEN.
 permissions:

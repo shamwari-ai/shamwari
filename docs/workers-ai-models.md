@@ -13,23 +13,30 @@ CLAUDE.md's deferred-work list carries the summary.
 
 ## AI Gateway provider slugs
 
-These 24 are the only natively supported provider slugs:
+Re-read from the live account on 2026-10-21 (`GET
+/accounts/{id}/ai-gateway/providers`), these 35 are the natively supported
+provider slugs. The 24 listed here on 2026-08-27 had already moved on:
 
 ```
-anthropic  azureopenai  baseten  bedrock  cartesia  cerebras  cohere
-deepgram   deepseek     elevenlabs  fal    google-ai-studio  grok  groq
-huggingface  ideogram   mistral  openai  openrouter  parallel  perplexity
-replicate  vertex       workersai
+adobe-firefly  anthropic  assemblyai  aws-bedrock  azure-openai  baseten
+bytedance  cartesia  cerebras  cohere  deepseek  elevenlabs  exa  fal
+fireworks  google-ai-studio  google-vertex-ai  grok  groq  huggingface
+ideogram  mistral  moonshot  openai  openrouter  parallel  perplexity-ai
+pruna  reflection  replicate  typesafe  unbiased  universal  vidu  workers-ai
 ```
 
-**There is no `qwen`, `moonshot`, or `zai` provider.** All three need a
-custom provider (`POST /accounts/{id}/ai-gateway/custom-providers`, requires
-`name`, `slug`, `base_url`) or must be reached through `openrouter`. The
-current gateway config (`src/router.ts`) uses `zai`, pointed at
-`https://api.z.ai/api/paas/v4/chat/completions` — the `qwen`/`moonshot`
-entries below are the historical record of the mistakes that established
-this pattern, kept because the pattern, not the specific provider, is the
-expensive part to rediscover.
+**There is no `qwen` or `zai` provider.** Both need a custom provider
+(`POST /accounts/{id}/ai-gateway/custom-providers`, requires `name`, `slug`,
+`base_url`) or must be reached through `openrouter`. `moonshot` _is_ a
+built-in slug; the earlier note here that it was not was wrong. The account has
+no custom providers, so the dynamic route runs every node on `workers-ai`,
+billed through Cloudflare with no BYOK key (decided 2026-10-21, tracked on
+shamwari-ai/shamwari#53). The Worker's own direct-provider step (`directUrl`
+in `src/router.ts`, used by `src/gateway.ts`) is separate and still calls Z.ai
+at `https://api.z.ai/api/paas/v4/chat/completions`. The `qwen` entries below are
+the historical record of the mistakes that established this pattern, kept
+because the pattern, not the specific provider, is the expensive part to
+rediscover.
 
 **The Workers AI provider value is `workers-ai`.** The docs page lives at
 `/ai-gateway/usage/providers/workersai/`, and that URL slug is not the API
@@ -42,7 +49,7 @@ for its own schema.
 | Was                                                           | Reality                                                                                                                                      |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `provider: "qwen"`                                            | not a provider slug — needs a custom provider                                                                                                |
-| `provider: "moonshot"`                                        | not a provider slug — needs a custom provider                                                                                                |
+| `provider: "moonshot"`                                        | a built-in slug (checked 2026-10-21). The Kimi models on Workers AI are reached as `workers-ai` with an `@cf/moonshotai/...` id              |
 | `provider: "workers-ai"`                                      | correct after all — see the note above. It was briefly "corrected" to `workersai` on the strength of a docs URL slug, which was not evidence |
 | `model: "qwen3-32b-instruct"`                                 | does not exist in any Cloudflare catalogue                                                                                                   |
 | `@cf/qwen/qwen2.5-coder-32b-instruct` as the general fallback | it is a **code-specific** model; a poor last resort for Shona/Ndebele legal and tax questions                                                |
@@ -57,25 +64,25 @@ only reachable via a custom provider or OpenRouter. Workers AI carries
 Verified ids, current generation only. Full list has 46 entries, many
 deprecated.
 
-| Model id                                       | Notes                                                                                                                                                                          |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `@cf/qwen/qwen3-30b-a3b-fp8`                   | Qwen3 MoE. Reasoning, function calling, batch. Cheap per token — the economy shape                                                                                             |
-| `@cf/qwen/qwen3.8-27b`                         | Qwen 3.8. Listed as Image-Text-to-Text: **vision plus** text and agentic                                                                                                       |
-| `@cf/qwen/qwq-32b`                             | Qwen reasoning specialist                                                                                                                                                      |
-| `@cf/moonshotai/kimi-k2.6`                     | Kimi K2.6. Reasoning, function calling                                                                                                                                         |
-| `@cf/moonshotai/kimi-k2.7-code`                | Kimi, code-specialised                                                                                                                                                         |
-| `@cf/zai-org/glm-5.3`                          | GLM 5.3 flagship. **Current standard tier**, via Z.ai directly (see gateway/README.md) — this Workers AI entry is a same-weights alternative, not what the gateway calls today |
-| `@cf/zai-org/glm-5.3-flash`                    | GLM 5.3 Flash, MIT-licensed, natively multimodal. **Current economy tier** (via Z.ai) and the Workers AI last-resort fallback                                                  |
-| `@cf/zai-org/glm-5.2`                          | GLM 5.2 flagship. Reasoning, function calling                                                                                                                                  |
-| `@cf/zai-org/glm-4.7-flash`                    | GLM 4.7 Flash                                                                                                                                                                  |
-| `@cf/deepseek/deepseek-v4-pro-0813`            | 1M context, agentic                                                                                                                                                            |
-| `@cf/deepseek/deepseek-v4-flash-0731`          | Faster DeepSeek V4                                                                                                                                                             |
-| `@cf/mistralai/mistral-small-3.1-24b-instruct` | Function calling                                                                                                                                                               |
-| `@cf/google/gemma-4-26b-a4b-it`                | Reasoning, function calling                                                                                                                                                    |
-| `@cf/nvidia/nemotron-3-120b-a12b`              | Also does Image-to-Text                                                                                                                                                        |
-| `@cf/meta/llama-3.3-70b-instruct-fp8-fast`     | Function calling, batch                                                                                                                                                        |
-| `@cf/meta/llama-4-scout-17b-16e-instruct`      | Function calling, batch                                                                                                                                                        |
-| `@cf/openai/gpt-oss-120b`, `gpt-oss-20b`       | OpenAI's **open-weight** release — not the API models. Licence is not the OpenAI API terms; confirm before treating as `open_weight`                                           |
+| Model id                                       | Notes                                                                                                                                                                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@cf/qwen/qwen3-30b-a3b-fp8`                   | Qwen3 MoE. Reasoning, function calling, batch. Cheap per token — the economy shape                                                                                                                            |
+| `@cf/qwen/qwen3.8-27b`                         | Qwen 3.8. Listed as Image-Text-to-Text: **vision plus** text and agentic                                                                                                                                      |
+| `@cf/qwen/qwq-32b`                             | Qwen reasoning specialist                                                                                                                                                                                     |
+| `@cf/moonshotai/kimi-k2.6`                     | Kimi K2.6. Reasoning, function calling                                                                                                                                                                        |
+| `@cf/moonshotai/kimi-k2.7-code`                | Kimi, code-specialised                                                                                                                                                                                        |
+| `@cf/zai-org/glm-5.3`                          | GLM 5.3 flagship. **Standard tier on the dynamic route** (Workers AI, Cloudflare-billed). The Worker's own direct call still goes to Z.ai (see gateway/README.md); both pairs are on the provenance allowlist |
+| `@cf/zai-org/glm-5.3-flash`                    | GLM 5.3 Flash, MIT-licensed, natively multimodal. **Current economy tier** (via Z.ai) and the Workers AI last-resort fallback                                                                                 |
+| `@cf/zai-org/glm-5.2`                          | GLM 5.2 flagship. Reasoning, function calling                                                                                                                                                                 |
+| `@cf/zai-org/glm-4.7-flash`                    | GLM 4.7 Flash                                                                                                                                                                                                 |
+| `@cf/deepseek/deepseek-v4-pro-0813`            | 1M context, agentic                                                                                                                                                                                           |
+| `@cf/deepseek/deepseek-v4-flash-0731`          | Faster DeepSeek V4                                                                                                                                                                                            |
+| `@cf/mistralai/mistral-small-3.1-24b-instruct` | Function calling                                                                                                                                                                                              |
+| `@cf/google/gemma-4-26b-a4b-it`                | Reasoning, function calling                                                                                                                                                                                   |
+| `@cf/nvidia/nemotron-3-120b-a12b`              | Also does Image-to-Text                                                                                                                                                                                       |
+| `@cf/meta/llama-3.3-70b-instruct-fp8-fast`     | Function calling, batch                                                                                                                                                                                       |
+| `@cf/meta/llama-4-scout-17b-16e-instruct`      | Function calling, batch                                                                                                                                                                                       |
+| `@cf/openai/gpt-oss-120b`, `gpt-oss-20b`       | OpenAI's **open-weight** release — not the API models. Licence is not the OpenAI API terms; confirm before treating as `open_weight`                                                                          |
 
 ## A timeout of 0 disables the fallback chain
 

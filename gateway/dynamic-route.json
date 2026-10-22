@@ -15,7 +15,7 @@
       "type": "rate",
       "properties": {
         "limitType": "cost",
-        "key": "metadata.ownerEntityId",
+        "key": "metadata.owner_entity_id",
         "limit": 50,
         "window": 2592000
       },
@@ -56,8 +56,8 @@
       "id": "standard_glm",
       "type": "model",
       "properties": {
-        "provider": "zai",
-        "model": "glm-5.3",
+        "provider": "workers-ai",
+        "model": "@cf/zai-org/glm-5.3",
         "timeout": 30000,
         "retries": 1
       },
@@ -74,8 +74,8 @@
       "id": "economy_glm",
       "type": "model",
       "properties": {
-        "provider": "zai",
-        "model": "glm-5.3-flash",
+        "provider": "workers-ai",
+        "model": "@cf/zai-org/glm-5.3-flash",
         "timeout": 20000,
         "retries": 1
       },
