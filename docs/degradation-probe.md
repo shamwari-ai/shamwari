@@ -2,20 +2,21 @@
 
 ## What it is for
 
-"Cloudflare is an enhancement, never a dependency" is a claim about three
-inference paths in `gateway/src/gateway.ts`:
+The two inference paths in `gateway/src/gateway.ts` are both on Cloudflare
+(no third-party provider, no provider key), so Cloudflare is the dependency.
+The second path only removes the AI Gateway from the way:
 
-| Step | Path         | Reached when         |
-| ---- | ------------ | -------------------- |
-| 1    | `gateway`    | always tried first   |
-| 2    | `direct`     | step 1 failed        |
-| 3    | `workers-ai` | steps 1 and 2 failed |
+| Step | Path         | Reached when       |
+| ---- | ------------ | ------------------ |
+| 1    | `gateway`    | always tried first |
+| 2    | `workers-ai` | step 1 failed      |
 
-The claim is only true while steps 2 and 3 work. **On a healthy day nothing
-reaches them.** That is the whole problem: they can be broken for months —
-a rotated provider key, a changed direct URL, a model id retired from the
-catalogue — and every user request still succeeds through step 1, so nothing
-looks wrong until the outage that finally needs them.
+Step 1 is the AI Gateway's dynamic route (`dynamic/<CF_ROUTE_NAME>`), and step
+2 is the Workers AI binding called directly. Step 2 only helps while it works.
+**On a healthy day nothing reaches it.** That is the whole problem: it can be
+broken for months — a model id retired from the catalogue, a binding change —
+and every user request still succeeds through step 1, so nothing looks wrong
+until the outage that finally needs it.
 
 This used to be handled by an instruction in `CLAUDE.md`: _break the Gateway
 credential deliberately once a month_. That is a manual chore. It will be
@@ -24,12 +25,12 @@ skipped, and **skipping it looks exactly like passing it.**
 ## What replaced it
 
 A weekly cron (`triggers.crons` in `gateway/wrangler.jsonc`, Mondays 06:00
-UTC) runs `probe()`, which exercises all three paths **independently** and
+UTC) runs `probe()`, which exercises both paths **independently** and
 writes one row to `platform.serviceHealth`.
 
 Independently is the load-bearing word. `infer()` stops at the first success,
 so a probe built on `infer()` would only ever report on the gateway. That is
-why `gateway.ts` exposes `viaGateway` / `viaDirect` / `viaWorkersAI` as
+why `gateway.ts` exposes `viaGateway` / `viaWorkersAI` as
 separate functions and `infer()` composes them — the probe calls each one
 directly, so there is no second copy of the logic to drift.
 
@@ -42,7 +43,7 @@ directly, so there is no second copy of the logic to drift.
   refusing every request.
 - **A thrown step is a failed step, not a failed probe.** Each path is timed
   and caught separately, so one exploding DNS lookup still yields a reading
-  on the other two.
+  on the other.
 
 ## Reading the result
 
@@ -56,22 +57,21 @@ One document per run in `platform.serviceHealth`:
   allPathsHealthy: false,   // every path answered
   serviceable: true,        // at least one answered
   gatewayOk: true,
-  directOk: false,          // <- rotted, and invisible to users
-  workersAiOk: true,
+  workersAiOk: false,       // <- rotted, and invisible to users
   paths: [ { path, ok, latencyMs, served, error }, ... ],
   startedAt, createdAt
 }
 ```
 
-`gatewayOk` / `directOk` / `workersAiOk` are hoisted out of `paths` so the
+`gatewayOk` / `workersAiOk` are hoisted out of `paths` so the
 alert you actually want is an equality match rather than an array traversal.
 
 ### What to alert on
 
 - `serviceable: false` — page someone. No path answered; the next user
   request fails.
-- `directOk: false` or `workersAiOk: false` for **two consecutive weeks** —
-  a fallback has rotted. Not urgent, and not user-visible, which is exactly
+- `workersAiOk: false` for **two consecutive weeks** —
+  the fallback has rotted. Not urgent, and not user-visible, which is exactly
   why it needs an alert rather than a dashboard nobody opens. One week alone
   is more likely a provider blip than rot.
 - A step's `latencyMs` moving by more than roughly 2× against its own recent
@@ -83,7 +83,7 @@ happened; alerting belongs where the data is.
 
 ## What it does not carry
 
-The probe reaches three third-party providers on a schedule and its metadata
+The probe reaches Workers AI on a schedule and its metadata
 lands in Cloudflare's logs, so it sends nothing personal:
 
 - a fixed, dull prompt (`Reply with the single word: ok`)
@@ -95,6 +95,6 @@ message content reaches the health row.
 
 ## Cost
 
-Three small completions a week. If that ever becomes a number worth
+Two small completions a week. If that ever becomes a number worth
 discussing, the fallback paths are not being relied on enough to be worth
 keeping.

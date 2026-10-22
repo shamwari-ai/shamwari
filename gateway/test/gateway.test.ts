@@ -27,10 +27,10 @@ function fakeEnv() {
     AI: { run },
     CF_ACCOUNT_ID: 'acct',
     CF_GATEWAY_ID: 'gw',
+    CF_ROUTE_NAME: 'shamwari',
     CF_AIG_TOKEN: 'aig',
-    ECONOMY_MODEL: 'glm-5.3-flash',
-    STANDARD_MODEL: 'glm-5.3',
-    ZAI_API_KEY: 'z',
+    ECONOMY_MODEL: '@cf/zai-org/glm-5.3-flash',
+    STANDARD_MODEL: '@cf/zai-org/glm-5.3',
   } as unknown as Env;
 }
 
@@ -102,19 +102,19 @@ describe('provenance follows the model that actually served', () => {
     stubGateway();
     const env = fakeEnv();
     const r = await infer(env, targets(env).standard, messages, meta);
-    expect(r.provider).toBe('zai');
-    expect(r.model).toBe('glm-5.3');
+    expect(r.provider).toBe('workers-ai');
+    expect(r.model).toBe('@cf/zai-org/glm-5.3');
     expect(r.substituted).toBe(false);
     expect(r.licenseClass).toBe('open_weight');
   });
 
   it('reads cf-aig-model and cf-aig-provider when a dynamic route substitutes', async () => {
-    stubGateway({ 'cf-aig-provider': 'zai', 'cf-aig-model': 'glm-5.3-flash' });
+    stubGateway({ 'cf-aig-provider': 'workers-ai', 'cf-aig-model': '@cf/zai-org/glm-5.3-flash' });
     const env = fakeEnv();
     const r = await infer(env, targets(env).standard, messages, meta);
-    expect(r.provider).toBe('zai');
-    expect(r.model).toBe('glm-5.3-flash');
-    expect(r.requestedModel).toBe('glm-5.3');
+    expect(r.provider).toBe('workers-ai');
+    expect(r.model).toBe('@cf/zai-org/glm-5.3-flash');
+    expect(r.requestedModel).toBe('@cf/zai-org/glm-5.3');
     expect(r.substituted).toBe(true);
     expect(r.licenseClass).toBe('open_weight');
   });
@@ -125,7 +125,8 @@ describe('provenance follows the model that actually served', () => {
     const r = await infer(env, targets(env).standard, messages, meta);
     expect(r.provider).toBe('workers-ai');
     expect(r.model).toBe('@cf/zai-org/glm-5.3');
-    expect(r.substituted).toBe(true);
+    // The standard tier asks for exactly this pair, so nothing was swapped.
+    expect(r.substituted).toBe(false);
     expect(r.licenseClass).toBe('open_weight');
   });
 
@@ -154,19 +155,34 @@ describe('provenance follows the model that actually served', () => {
     expect(r.substituted).toBe(true);
   });
 
-  it('still degrades gateway -> direct -> workers-ai', async () => {
-    let call = 0;
-    vi.stubGlobal('fetch', async () => {
-      call += 1;
-      // 1: gateway fails. 2: direct succeeds.
-      if (call === 1) return new Response('nope', { status: 500 });
+  it('degrades gateway -> workers-ai when the route fails', async () => {
+    vi.stubGlobal('fetch', async () => new Response('nope', { status: 500 }));
+    const env = fakeEnv();
+    const r = await infer(env, targets(env).standard, messages, meta);
+    expect(r.path).toBe('workers-ai');
+    expect(r.substituted).toBe(true);
+    expect(r.licenseClass).toBe('open_weight');
+  });
+
+  it('calls the dynamic route and sends no provider key', async () => {
+    const seen = stubGateway();
+    const env = fakeEnv();
+    await infer(env, targets(env).standard, messages, meta);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.url).toContain('/acct/gw/compat/chat/completions');
+    expect(seen[0]?.headers['cf-aig-authorization']).toBe('Bearer aig');
+    // No third-party provider: Authorization would carry a provider key.
+    expect(seen[0]?.headers.Authorization).toBeUndefined();
+  });
+
+  it('names the route as dynamic/<CF_ROUTE_NAME> in the request body', async () => {
+    let sent = '';
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      sent = String(init.body);
       return new Response(body, { headers: { 'Content-Type': 'application/json' } });
     });
     const env = fakeEnv();
-    const r = await infer(env, targets(env).standard, messages, meta);
-    expect(r.path).toBe('direct');
-    // The direct path has no cf-aig-* headers, so requested is what served.
-    expect(r.substituted).toBe(false);
-    expect(r.licenseClass).toBe('open_weight');
+    await infer(env, targets(env).economy, messages, meta);
+    expect((JSON.parse(sent) as { model: string }).model).toBe('dynamic/shamwari');
   });
 });
