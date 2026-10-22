@@ -202,7 +202,8 @@ Inference runs on Workers AI through the AI Gateway dynamic route, so
 Cloudflare is a dependency for Cloud inference, not an enhancement. The claim
 that survives is narrower: if the AI Gateway fails, the Worker falls back to
 Workers AI directly. The direct-provider step was removed with the Z.ai key.
-Every response carries `inference_path` (`gateway` | `workers-ai`). The fallback paths are
+Every response carries `inference_path` (`gateway` | `workers-ai`).
+
 The fallback path is what makes the narrower claim true, and **on a healthy day
 nothing reaches it** — it runs only when the gateway fails — so it rots
 silently and the rot is invisible until the outage that needs it.
