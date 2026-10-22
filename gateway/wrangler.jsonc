@@ -38,16 +38,21 @@
   },
 
   "vars": {
+    // Not secrets: an account id and a route name identify, they do not
+    // authorise. `wrangler deploy` replaces vars, so they live here and not
+    // only in the dashboard.
+    "CF_ACCOUNT_ID": "125a2dfbc21f76a25c980609609e8218",
     "CF_GATEWAY_ID": "shamwari",
+    "CF_ROUTE_NAME": "shamwari",
     "CORE_URL": "https://core.shamwari.ai",
     "EMBEDDING_MODEL": "@cf/baai/bge-m3",
     "GROUND_TOP_K": "6",
     "AUTH_CACHE_TTL": "60",
-    // Model ids as Z.ai names them, not as Workers AI names them: the
-    // economy and standard tiers both go to Z.ai (api.z.ai) through an AI
-    // Gateway custom provider. See docs/workers-ai-models.md.
-    "ECONOMY_MODEL": "glm-5.3-flash",
-    "STANDARD_MODEL": "glm-5.3",
+    // Workers AI model ids, billed through Cloudflare; there is no Z.ai API
+    // and no provider key. See docs/workers-ai-models.md. These are the
+    // intended models; dynamic-route.json decides what actually answers.
+    "ECONOMY_MODEL": "@cf/zai-org/glm-5.3-flash",
+    "STANDARD_MODEL": "@cf/zai-org/glm-5.3",
     "SURFACE": "shamwari.ai",
 
     // Gates /v1/ground/context, the retrieval-only endpoint Mind calls.
@@ -61,7 +66,6 @@
   },
 
   // wrangler secret put:
-  //   CF_ACCOUNT_ID, CF_AIG_TOKEN
-  //   SHAMWARI_CORE_TOKEN
-  //   ZAI_API_KEY
+  //   CF_AIG_TOKEN        AI Gateway authentication token
+  //   SHAMWARI_CORE_TOKEN shared with Core
 }

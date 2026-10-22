@@ -1,16 +1,14 @@
 import type { Env, Message, SinkMessage } from './types';
 import { targets } from './router';
-import { viaGateway, viaDirect, viaWorkersAI } from './gateway';
+import { viaGateway, viaWorkersAI } from './gateway';
 import type { RequestMetadata } from './gateway';
 
 /**
  * MAKES THE CLAIM CHECKABLE.
  *
- * "Cloudflare is an enhancement, never a dependency" is only true while the
- * fallback paths work, and the fallback paths are unreachable on a healthy
- * day — step 2 runs only when step 1 fails, step 3 only when both do. So
- * they rot silently, and the rot is invisible until the outage that needed
- * them.
+ * The fallback path is unreachable on a healthy day: step 2 runs only when
+ * step 1 fails. So it rots silently, and the rot is invisible until the
+ * outage that needed it.
  *
  * CLAUDE.md's answer was "break the Gateway credential deliberately once a
  * month". That is a manual chore, it will be skipped, and skipping it looks
@@ -24,20 +22,20 @@ import type { RequestMetadata } from './gateway';
 
 /**
  * Deliberately dull, deliberately constant, deliberately not a real user's
- * question. It reaches three third-party providers on a schedule and lands
+ * question. It reaches Workers AI on a schedule and lands
  * in Cloudflare's logs, so it must carry nothing personal — and being
  * constant is what lets a latency change mean something.
  *
  * Constant also means cacheable, which is why the gateway step is probed
  * with `cf-aig-skip-cache`. A cached HIT would report a healthy gateway
- * while the provider behind it was refusing every request.
+ * while the route behind it was refusing every request.
  */
 const PROBE_MESSAGES: Message[] = [
   { role: 'user', content: 'Reply with the single word: ok' },
 ];
 
 export interface PathResult {
-  path: 'gateway' | 'direct' | 'workers-ai';
+  path: 'gateway' | 'workers-ai';
   ok: boolean;
   latencyMs: number;
   /** What answered, when something did. Null when the step was unavailable. */
@@ -73,7 +71,7 @@ async function timed(
     };
   } catch (e) {
     // A step that throws is a failed step, not a failed probe. The whole
-    // point is to get a reading on all three.
+    // point is to get a reading on both.
     return {
       path,
       ok: false,
@@ -85,11 +83,10 @@ async function timed(
 }
 
 /**
- * Exercise all three paths independently, in sequence.
+ * Exercise both paths independently, in sequence.
  *
- * Sequential rather than parallel: three simultaneous calls to the same
- * provider can trip its own rate limiting and report a fault that the probe
- * itself caused.
+ * Sequential rather than parallel: simultaneous calls to the same model can
+ * trip its own rate limiting and report a fault that the probe itself caused.
  */
 export async function probe(env: Env, tier: 'economy' | 'standard' = 'economy'): Promise<ProbeReport> {
   const target = targets(env)[tier];
@@ -108,7 +105,6 @@ export async function probe(env: Env, tier: 'economy' | 'standard' = 'economy'):
 
   const results: PathResult[] = [
     await timed('gateway', () => viaGateway(env, target, PROBE_MESSAGES, meta, true)),
-    await timed('direct', () => viaDirect(env, target, PROBE_MESSAGES)),
     await timed('workers-ai', () => viaWorkersAI(env, target, PROBE_MESSAGES)),
   ];
 
@@ -145,7 +141,6 @@ export function healthDoc(report: ProbeReport): SinkMessage {
       // Hoisted so the common alert — "a fallback path has rotted" — is an
       // equality match rather than an array traversal.
       gatewayOk: byPath.gateway?.ok ?? false,
-      directOk: byPath.direct?.ok ?? false,
       workersAiOk: byPath['workers-ai']?.ok ?? false,
       startedAt: report.startedAt,
       createdAt: new Date().toISOString(),

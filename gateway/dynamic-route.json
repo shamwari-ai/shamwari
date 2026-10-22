@@ -15,7 +15,7 @@
       "type": "rate",
       "properties": {
         "limitType": "cost",
-        "key": "metadata.ownerEntityId",
+        "key": "metadata.owner_entity_id",
         "limit": 50,
         "window": 2592000
       },
