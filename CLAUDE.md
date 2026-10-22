@@ -98,8 +98,10 @@ fine-tune and create derivative works.
 - `core/main.py::sink_bulk` — rejects any conversation missing a valid
   `licenseClass` rather than defaulting it, and rejects
   `licenseClass: restricted` together with `trainingEligible: true`
-- Postgres `training_examples.license_class` has `CHECK (= 'open_weight')` — a
-  restricted row physically cannot enter the table
+- Postgres `synthetic_jobs` carries the `license_class` CHECK, and the
+  `mind_training_chunks` view admits only `open_weight` — a restricted row
+  cannot reach training. (There is no `training_examples` table; this line used
+  to say there was.)
 - `mind_training_chunks` view is the only thing the training pipeline reads
 
 **Why the tier alone was not enough — the rule-1 lesson again.** The tier
@@ -142,27 +144,38 @@ this summary.
 Client
   │
   ▼
-gateway/          Cloudflare Workers, TypeScript
+edge Worker       Cloudflare Workers. Rust target (workers-rs); TypeScript in
+                  gateway/ until the rebuild lands.
                   routing · KV auth cache · AI Gateway · scope gate · queue producer
-                  holds NO database credentials, never talks to Mongo
+                  holds NO database credentials. Service bindings where needed.
   │
-  ├──► Cloudflare AI Gateway ──► GLM-5.3-Flash (economy) / GLM-5.3 (standard), via Z.ai
-  │         └─ degradation: gateway → direct provider → Workers AI
+  ├──► Cloudflare AI Gateway ──► GLM-5.3-Flash (economy) / GLM-5.3 (standard),
+  │         served by Workers AI, billed by Cloudflare. No Z.ai key, no BYOK.
+  │         └─ degradation: gateway → Workers AI
   │
-  └──► core/      FastAPI on Nyuchi infrastructure
-                  owns MongoDB · Ground retrieval · auth · scope enforcement
-                    │
-                    ├──► MongoDB Atlas    conversations, usageEvents, knowledgeBase
-                    └──► Supabase Postgres  training corpus, audit trail
+  └──► private tunnel ──► core/   the workhorse on Fly, no public IP
+                          Rust target; FastAPI in core/ until the rebuild lands.
+                          auth · Ground retrieval · scope enforcement · sink
+                            │
+                            ├──► MongoDB Atlas    conversations, usageEvents, knowledgeBase
+                            └──► Supabase Postgres  training corpus, audit trail
+                                 (Ground lives in Mongo or Postgres by need,
+                                  following the rest of the platform)
 ```
 
-### Why TypeScript at the edge, not Rust
+Shamwari is a namespace (`/v1/shamwari/*`) on both the B2B Nyuchi API and the
+internal Nyuchi Servers API. Core stays in this monorepo.
 
-A gateway is I/O-bound — HTTP routing, header rewriting, `fetch`. Zero
-CPU-bound work. workers-rs compiles to WASM, costing bundle size and cold-start
-time, and the bindings this depends on (AI Gateway, Queues, KV) are
-TypeScript-first. Rust earns its place in the future `deno_core` sandbox host
-and in queue consumers doing real computation. **Not in the gateway.**
+### Why Rust, replacing "why TypeScript at the edge"
+
+This section used to argue for TypeScript at the edge. The owner decided on
+2026-10-22 that Core and the gateway are rebuilt in Rust, and that the data
+infrastructure gateways in `nyuchi-api` and the Servers API follow the same
+pattern: the edge sits on Workers, the workhorse sits behind it on Fly, joined
+by a tunnel, with service bindings at the edge. The reference scaffold is
+`nyuchi-api` branch `claude/rust-data-gateway` (`rust/`, three crates: `core`,
+`origin`, `edge`). Tracking: issue #66. Until the rebuild lands, `gateway/`
+(TypeScript) and `core/` (Python) are what is deployed or deployable.
 
 ### Why Core exists
 
@@ -183,25 +196,26 @@ Linux, matching CI and the deploy target; on macOS or Windows the
 platform-specific `uvicorn[standard]` wheels will not satisfy the hashes, so
 develop against `requirements.in` there.
 
-### Cloudflare is an enhancement, never a dependency
+### Degradation, and what Cloudflare now is
 
-Three-step degradation in `gateway/src/gateway.ts`. Every response carries
-`inference_path` (`gateway` | `direct` | `workers-ai`). The fallback paths are
-what make the claim true, and **on a healthy day nothing reaches them** —
-step 2 runs only when step 1 fails, step 3 only when both do — so they rot
-silently and the rot is invisible until the outage that needs them.
+Inference runs on Workers AI through the AI Gateway dynamic route, so
+Cloudflare is a dependency for Cloud inference, not an enhancement. The claim
+that survives is narrower: if the AI Gateway fails, the Worker falls back to
+Workers AI directly. The direct-provider step was removed with the Z.ai key.
+Every response carries `inference_path` (`gateway` | `workers-ai`). The fallback paths are
+The fallback path is what makes the narrower claim true, and **on a healthy day
+nothing reaches it** — it runs only when the gateway fails — so it rots
+silently and the rot is invisible until the outage that needs it.
 
-This used to say "break the Gateway credential deliberately once a month".
-That was a manual chore, and skipping it looks exactly like passing it. It is
-now a weekly cron: `probe()` exercises all three paths **independently** and
-writes one row to `platform.serviceHealth`. `gateway.ts` therefore exposes
-`viaGateway` / `viaDirect` / `viaWorkersAI` separately and `infer()` composes
-them — a probe built on `infer()` would only ever report on the gateway,
-because `infer()` stops at the first success.
+A weekly cron, `probe()`, exercises both paths **independently** and writes one
+row to `platform.serviceHealth`. `gateway.ts` therefore exposes `viaGateway` and
+`viaWorkersAI` separately and `infer()` composes them — a probe built on
+`infer()` would only ever report on the gateway, because `infer()` stops at the
+first success.
 
 `docs/degradation-probe.md` has what to alert on. The short version:
-`serviceable: false` pages someone; `directOk`/`workersAiOk` false for two
-consecutive weeks means a fallback has rotted while users noticed nothing.
+`serviceable: false` pages someone; `workersAiOk` false for two consecutive
+weeks means the fallback has rotted while users noticed nothing.
 
 ---
 
