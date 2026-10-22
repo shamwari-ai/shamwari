@@ -15,7 +15,7 @@ function fakeEnv(aiOk = true) {
     CF_ACCOUNT_ID: 'acct',
     CF_GATEWAY_ID: 'gw',
     CF_ROUTE_NAME: 'shamwari',
-    CF_AIG_TOKEN: 'aig',
+    CF_AIG_TOKEN: { get: async () => 'aig' },
     ECONOMY_MODEL: '@cf/zai-org/glm-5.3-flash',
     STANDARD_MODEL: '@cf/zai-org/glm-5.3',
     SURFACE: 'shamwari.ai',
