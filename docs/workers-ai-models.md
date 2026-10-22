@@ -13,23 +13,30 @@ CLAUDE.md's deferred-work list carries the summary.
 
 ## AI Gateway provider slugs
 
-These 24 are the only natively supported provider slugs:
+Re-read from the live account on 2026-10-21 (`GET
+/accounts/{id}/ai-gateway/providers`), these 35 are the natively supported
+provider slugs. The 24 listed here on 2026-08-27 had already moved on:
 
 ```
-anthropic  azureopenai  baseten  bedrock  cartesia  cerebras  cohere
-deepgram   deepseek     elevenlabs  fal    google-ai-studio  grok  groq
-huggingface  ideogram   mistral  openai  openrouter  parallel  perplexity
-replicate  vertex       workersai
+adobe-firefly  anthropic  assemblyai  aws-bedrock  azure-openai  baseten
+bytedance  cartesia  cerebras  cohere  deepseek  elevenlabs  exa  fal
+fireworks  google-ai-studio  google-vertex-ai  grok  groq  huggingface
+ideogram  mistral  moonshot  openai  openrouter  parallel  perplexity-ai
+pruna  reflection  replicate  typesafe  unbiased  universal  vidu  workers-ai
 ```
 
-**There is no `qwen`, `moonshot`, or `zai` provider.** All three need a
-custom provider (`POST /accounts/{id}/ai-gateway/custom-providers`, requires
-`name`, `slug`, `base_url`) or must be reached through `openrouter`. The
-current gateway config (`src/router.ts`) uses `zai`, pointed at
-`https://api.z.ai/api/paas/v4/chat/completions` — the `qwen`/`moonshot`
-entries below are the historical record of the mistakes that established
-this pattern, kept because the pattern, not the specific provider, is the
-expensive part to rediscover.
+**There is no `qwen` or `zai` provider.** Both need a custom provider
+(`POST /accounts/{id}/ai-gateway/custom-providers`, requires `name`, `slug`,
+`base_url`) or must be reached through `openrouter`. `moonshot` _is_ a
+built-in slug; the earlier note here that it was not was wrong. The account has
+no custom providers, so the dynamic route runs every node on `workers-ai`,
+billed through Cloudflare with no BYOK key (decided 2026-10-21, tracked on
+shamwari-ai/shamwari#53). The Worker's own direct-provider step (`directUrl`
+in `src/router.ts`, used by `src/gateway.ts`) is separate and still calls Z.ai
+at `https://api.z.ai/api/paas/v4/chat/completions`. The `qwen` entries below are
+the historical record of the mistakes that established this pattern, kept
+because the pattern, not the specific provider, is the expensive part to
+rediscover.
 
 **The Workers AI provider value is `workers-ai`.** The docs page lives at
 `/ai-gateway/usage/providers/workersai/`, and that URL slug is not the API
@@ -42,7 +49,7 @@ for its own schema.
 | Was                                                           | Reality                                                                                                                                      |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
 | `provider: "qwen"`                                            | not a provider slug — needs a custom provider                                                                                                |
-| `provider: "moonshot"`                                        | not a provider slug — needs a custom provider                                                                                                |
+| `provider: "moonshot"`                                        | a built-in slug (checked 2026-10-21). The Kimi models on Workers AI are reached as `workers-ai` with an `@cf/moonshotai/...` id              |
 | `provider: "workers-ai"`                                      | correct after all — see the note above. It was briefly "corrected" to `workersai` on the strength of a docs URL slug, which was not evidence |
 | `model: "qwen3-32b-instruct"`                                 | does not exist in any Cloudflare catalogue                                                                                                   |
 | `@cf/qwen/qwen2.5-coder-32b-instruct` as the general fallback | it is a **code-specific** model; a poor last resort for Shona/Ndebele legal and tax questions                                                |
