@@ -34,13 +34,15 @@ wrangler kv namespace create AUTH_CACHE     # paste id into wrangler.jsonc
 wrangler queues create shamwari-sink
 wrangler queues create shamwari-sink-dlq
 
-wrangler secret put CF_ACCOUNT_ID
-wrangler secret put CF_AIG_TOKEN
-wrangler secret put SHAMWARI_CORE_TOKEN
-wrangler secret put ZAI_API_KEY
+wrangler secret put CF_AIG_TOKEN            # AI Gateway authentication token
+wrangler secret put SHAMWARI_CORE_TOKEN     # shared with Core
 
 npm run dev
 ```
+
+`CF_ACCOUNT_ID`, `CF_GATEWAY_ID` and `CF_ROUTE_NAME` are plain vars in
+`wrangler.jsonc` (an id and a name authorise nothing). There is no provider
+key: inference runs on Workers AI and is billed through Cloudflare.
 
 Shamwari Core must be reachable at `CORE_URL` first.
 
@@ -134,10 +136,9 @@ being a guess.
 **Pass 3 is not needed.** `dynamic-route.json` runs every node on
 `workers-ai`: both GLM tiers are natively on Workers AI and billed through
 Cloudflare, so there is no custom `zai` provider and no gateway-side key to
-manage (owner decision, 2026-10-21, tracked on #53). The cost is that steps
-1 and 3 of the degradation now share a Cloudflare dependency. Step 2, the
-direct provider call in `src/gateway.ts`, is unaffected: it does not go
-through the route.
+manage (owner decision, 2026-10-21, tracked on #53). There is also no direct
+third-party step any more: the Worker calls the route, and falls back to the
+Workers AI binding.
 
 ### One command, if you have an API token
 
@@ -209,14 +210,13 @@ accurate rather than approximate.
 
 Then call it with `model: "dynamic/shamwari"` on `/compat/chat/completions`.
 
-### It replaces step 1 of the degradation, not all three
+### It is step 1 of two
 
-`src/gateway.ts` degrades AI Gateway → direct provider → Workers AI. The
-second step exists precisely because it has no Cloudflare in the path. A
-dynamic route lives _inside_ AI Gateway, so it cannot provide that: if the
-Gateway is down, the route is down with it. Keep steps 2 and 3 in
-`gateway.ts`. The route makes step 1 smarter; it does not make the rest
-redundant.
+`src/gateway.ts` degrades AI Gateway route → Workers AI binding. A dynamic
+route lives _inside_ AI Gateway, so if the Gateway is down the route is down
+with it; the binding is called directly, with no Gateway in the path. Keep
+the second step in `gateway.ts`. The route makes step 1 smarter; it does not
+make the binding redundant.
 
 ### Every node must stay open-weight — this is rule 2
 
@@ -272,9 +272,10 @@ to economy.
 
 ## Degradation
 
-AI Gateway → direct provider → Workers AI. Cloudflare is an enhancement, not
-a dependency. `inference_path` in every response tells you which was used —
-watch it, because steps 2 and 3 rot silently if never exercised.
+AI Gateway route → Workers AI binding. Both are Cloudflare, so Cloudflare is
+the dependency; the second step only takes the AI Gateway out of the path.
+`inference_path` in every response tells you which was used — watch it,
+because step 2 rots silently if never exercised.
 
 ## Provenance
 
