@@ -26,8 +26,8 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "playwright": "^1.63.0",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "typescript": "^5.9.0",
-    "wrangler": "^4.147.0"
+    "wrangler": "^4.151.3"
   }
 }
