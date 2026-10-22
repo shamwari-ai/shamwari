@@ -22,7 +22,6 @@ describe('targets', () => {
     const t = targets(env);
     expect(t.premium.licenseClass).toBe('restricted');
     expect(t.premium.provider).toBe('unconfigured');
-    expect(t.premium.directUrl).toBe('');
   });
 });
 

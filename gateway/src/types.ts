@@ -6,11 +6,11 @@ export interface Env {
   CF_ACCOUNT_ID: string;
   CF_AIG_TOKEN: string;
   CF_GATEWAY_ID: string;
+  /** The dynamic route on that gateway, called as `dynamic/<name>`. */
+  CF_ROUTE_NAME: string;
 
   CORE_URL: string;
   SHAMWARI_CORE_TOKEN: string;
-
-  ZAI_API_KEY: string;
 
   EMBEDDING_MODEL: string;
   GROUND_TOP_K: string;
