@@ -131,16 +131,13 @@ JSON view and copy what the dashboard wrote for `properties.conditions` and
 `rate.key` into `dynamic-route.json`. That is the moment the spec stops
 being a guess.
 
-**Pass 3, only for the target route.** `dynamic-route.json` sends both
-economy and standard to `zai`. That is not a Cloudflare provider slug — it
-needs a custom provider created first, pointed at `api.z.ai`
-(`https://api.z.ai/api/paas/v4/chat/completions`). That is the configuration
-the drop intended, and it is what keeps step 2 of the degradation
-meaningful: `workersai` is Cloudflare, so a route built only on it makes
-Cloudflare a dependency rather than an enhancement. Even though Workers AI
-now hosts GLM-5.3 natively (unlike Kimi K3 before it), routing the primary
-path through Workers AI instead of Z.ai's own API would collapse steps 1
-and 3 of the degradation into the same Cloudflare dependency.
+**Pass 3 is not needed.** `dynamic-route.json` runs every node on
+`workers-ai`: both GLM tiers are natively on Workers AI and billed through
+Cloudflare, so there is no custom `zai` provider and no gateway-side key to
+manage (owner decision, 2026-10-21, tracked on #53). The cost is that steps
+1 and 3 of the degradation now share a Cloudflare dependency. Step 2, the
+direct provider call in `src/gateway.ts`, is unaffected: it does not go
+through the route.
 
 ### One command, if you have an API token
 
@@ -178,8 +175,8 @@ exists when you wire its output:
 | --- | -------------- | ------------ | --------------------------------------------------------------------- | ------------------------------------------------ |
 | 1   | `done`         | End          | —                                                                     | —                                                |
 | 2   | `workers_ai`   | Model        | Workers AI · `@cf/zai-org/glm-5.3-flash` · timeout 15000 · retries 0  | success → `done`, fallback → `done`              |
-| 3   | `economy_glm`  | Model        | Z.ai · `glm-5.3-flash` · timeout 20000 · retries 1                    | success → `done`, fallback → `workers_ai`        |
-| 4   | `standard_glm` | Model        | Z.ai · `glm-5.3` · timeout 30000 · retries 1                          | success → `done`, fallback → `economy_glm`       |
+| 3   | `economy_glm`  | Model        | Workers AI · `@cf/zai-org/glm-5.3-flash` · timeout 20000 · retries 1  | success → `done`, fallback → `workers_ai`        |
+| 4   | `standard_glm` | Model        | Workers AI · `@cf/zai-org/glm-5.3` · timeout 30000 · retries 1        | success → `done`, fallback → `economy_glm`       |
 | 5   | `tier_check`   | Conditional  | `metadata.tier` equals `standard`                                     | true → `standard_glm`, false → `economy_glm`     |
 | 6   | `budget_month` | Budget Limit | cost · key `metadata.ownerEntityId` · limit 50 · window 2592000 (30d) | success → `tier_check`, fallback → `economy_glm` |
 
