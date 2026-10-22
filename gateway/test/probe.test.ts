@@ -1,6 +1,6 @@
 // "Cloudflare is an enhancement, never a dependency" holds only while the
 // fallback paths work — and on a healthy day nothing reaches them, which is
-// why they rot. These tests cover the probe that reads all three.
+// why they rot. These tests cover the probe that reads both.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { probe, healthDoc } from '../src/probe';
 import type { Env } from '../src/types';
@@ -14,10 +14,10 @@ function fakeEnv(aiOk = true) {
     AI: { run },
     CF_ACCOUNT_ID: 'acct',
     CF_GATEWAY_ID: 'gw',
+    CF_ROUTE_NAME: 'shamwari',
     CF_AIG_TOKEN: 'aig',
-    ECONOMY_MODEL: 'glm-5.3-flash',
-    STANDARD_MODEL: 'glm-5.3',
-    ZAI_API_KEY: 'z',
+    ECONOMY_MODEL: '@cf/zai-org/glm-5.3-flash',
+    STANDARD_MODEL: '@cf/zai-org/glm-5.3',
     SURFACE: 'shamwari.ai',
   } as unknown as Env;
 }
@@ -50,17 +50,17 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe('probe', () => {
-  it('exercises all three paths even when the first one succeeds', async () => {
+  it('exercises both paths even when the first one succeeds', async () => {
     // The point of the whole file. infer() stops at the first success, so a
     // probe built on infer() would only ever report on the gateway.
     const seen = stubFetch(() => new Response(okBody, { status: 200 }));
     const env = fakeEnv();
     const r = await probe(env);
 
-    expect(r.results.map((x) => x.path)).toEqual(['gateway', 'direct', 'workers-ai']);
+    expect(r.results.map((x) => x.path)).toEqual(['gateway', 'workers-ai']);
     expect(r.allPathsHealthy).toBe(true);
-    // Gateway and direct are HTTP; workers-ai goes through the AI binding.
-    expect(seen.length).toBe(2);
+    // The gateway step is HTTP; workers-ai goes through the AI binding.
+    expect(seen.length).toBe(1);
     expect(env.AI.run).toHaveBeenCalledTimes(1);
   });
 
@@ -74,16 +74,14 @@ describe('probe', () => {
   });
 
   it('reports a rotted fallback while the service is still serviceable', async () => {
-    // Gateway fine, direct provider broken. A user request would succeed and
-    // nothing would look wrong — this is the exact failure the probe exists
-    // to surface.
-    stubFetch((call) =>
-      call === 1 ? new Response(okBody, { status: 200 }) : new Response('nope', { status: 500 }),
-    );
-    const r = await probe(fakeEnv());
+    // Gateway fine, Workers AI binding broken. A user request would succeed
+    // and nothing would look wrong — this is the exact failure the probe
+    // exists to surface.
+    stubFetch(() => new Response(okBody, { status: 200 }));
+    const r = await probe(fakeEnv(false));
 
     expect(r.results.find((x) => x.path === 'gateway')?.ok).toBe(true);
-    expect(r.results.find((x) => x.path === 'direct')?.ok).toBe(false);
+    expect(r.results.find((x) => x.path === 'workers-ai')?.ok).toBe(false);
     expect(r.allPathsHealthy).toBe(false);
     expect(r.serviceable).toBe(true);
   });
@@ -93,7 +91,7 @@ describe('probe', () => {
       throw new Error('dns exploded');
     });
     const r = await probe(fakeEnv(false));
-    expect(r.results).toHaveLength(3);
+    expect(r.results).toHaveLength(2);
     expect(r.serviceable).toBe(false);
     expect(r.results.every((x) => x.ok === false)).toBe(true);
   });
@@ -109,13 +107,13 @@ describe('probe', () => {
   it('names what served each healthy path', async () => {
     stubFetch(() => new Response(okBody, { status: 200 }));
     const r = await probe(fakeEnv(), 'standard');
-    expect(r.results.find((x) => x.path === 'gateway')?.served).toBe('zai/glm-5.3');
+    expect(r.results.find((x) => x.path === 'gateway')?.served).toBe('workers-ai/@cf/zai-org/glm-5.3');
     expect(r.results.find((x) => x.path === 'workers-ai')?.served).toBe(
       'workers-ai/@cf/zai-org/glm-5.3-flash',
     );
   });
 
-  it('sends nothing personal — it reaches three providers on a schedule', async () => {
+  it('sends nothing personal — it reaches Workers AI on a schedule', async () => {
     const seen = stubFetch(() => new Response(okBody, { status: 200 }));
     await probe(fakeEnv());
     for (const call of seen) {
@@ -132,16 +130,14 @@ describe('probe', () => {
 
 describe('healthDoc', () => {
   it('writes to platform.serviceHealth with per-path booleans hoisted', async () => {
-    stubFetch((call) =>
-      call === 1 ? new Response(okBody, { status: 200 }) : new Response('nope', { status: 500 }),
-    );
-    const doc = healthDoc(await probe(fakeEnv()));
+    stubFetch(() => new Response(okBody, { status: 200 }));
+    const doc = healthDoc(await probe(fakeEnv(false)));
 
     expect(doc.database).toBe('platform');
     expect(doc.collection).toBe('serviceHealth');
     expect(doc.doc.gatewayOk).toBe(true);
-    expect(doc.doc.directOk).toBe(false);
-    expect(doc.doc.workersAiOk).toBe(true);
+    expect(doc.doc.directOk).toBeUndefined();
+    expect(doc.doc.workersAiOk).toBe(false);
     expect(doc.doc.allPathsHealthy).toBe(false);
     expect(doc.doc.check).toBe('inference-degradation');
   });

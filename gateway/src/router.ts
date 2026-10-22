@@ -6,14 +6,13 @@ export interface Target {
   provider: string;
   model: string;
   licenseClass: LicenseClass;
-  directUrl: string;
-  apiKey: (env: Env) => string;
 }
 
 /**
- * VERIFY provider slugs against the AI Gateway provider list before deploy.
- * Anything not natively supported is added as an OpenAI-compatible custom
- * provider in the Gateway dashboard.
+ * Both live tiers run on Workers AI, billed through Cloudflare: there is no
+ * provider API key and no custom provider. The dynamic route (`dynamic/<name>`
+ * on the AI Gateway) chooses between them from the `tier` metadata; what is
+ * recorded here is the intent, and `provenance.ts` stamps what served.
  *
  * Provider identity and licenseClass stay here rather than in
  * routing-policy.json. They are provenance-bearing: Core rejects restricted
@@ -24,19 +23,15 @@ export function targets(env: Env): Record<Tier, Target> {
   return {
     economy: {
       tier: 'economy',
-      provider: 'zai',
+      provider: 'workers-ai',
       model: env.ECONOMY_MODEL,
       licenseClass: 'open_weight',
-      directUrl: 'https://api.z.ai/api/paas/v4/chat/completions',
-      apiKey: (e) => e.ZAI_API_KEY,
     },
     standard: {
       tier: 'standard',
-      provider: 'zai',
+      provider: 'workers-ai',
       model: env.STANDARD_MODEL,
       licenseClass: 'open_weight',
-      directUrl: 'https://api.z.ai/api/paas/v4/chat/completions',
-      apiKey: (e) => e.ZAI_API_KEY,
     },
     // Premium is deliberately unconfigured. When Claude or GPT are added,
     // licenseClass MUST stay 'restricted' — their terms bar using outputs
@@ -47,8 +42,6 @@ export function targets(env: Env): Record<Tier, Target> {
       provider: 'unconfigured',
       model: '',
       licenseClass: 'restricted',
-      directUrl: '',
-      apiKey: () => '',
     },
   };
 }

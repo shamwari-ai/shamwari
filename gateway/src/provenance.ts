@@ -50,6 +50,16 @@ const OPEN_WEIGHT: ReadonlySet<string> = new Set<string>([
   // Workers AI last-resort fallback. Same GLM-5.3-Flash weights,
   // Cloudflare-hosted.
   `workers-ai/${'@cf/zai-org/glm-5.3-flash'}`,
+
+  // The standard tier served from Workers AI, which is where
+  // dynamic-route.json runs its GLM-5.3 node (Cloudflare-billed, no BYOK).
+  // Same GLM-5.3 weights and licence as `zai/glm-5.3` above; only the host
+  // differs. LICENSE read directly on 2026-10-21 from
+  // https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE: it grants the
+  // right to fine-tune and create derivative works, and its one gate is the
+  // $10B Model-as-a-Service security review. Workers AI's catalog entry
+  // lists no separate terms link, so the model's own licence is the terms.
+  `workers-ai/${'@cf/zai-org/glm-5.3'}`,
 ]);
 
 /**
