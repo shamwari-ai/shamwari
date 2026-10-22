@@ -14,6 +14,17 @@
     { "binding": "AUTH_CACHE", "id": "aef87f10881e4ba99f68045026ce18b1" },
   ],
 
+  // The AI Gateway authentication token lives in the account's Secrets Store
+  // as SHAMWARI_AI_TOKEN and is bound here, so no copy of it sits in the
+  // Worker's own secrets. Creating or rotating it is a Secrets Store action.
+  "secrets_store_secrets": [
+    {
+      "binding": "CF_AIG_TOKEN",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "SHAMWARI_AI_TOKEN",
+    },
+  ],
+
   // Weekly degradation probe. Exercises all three inference paths and writes
   // the reading to platform.serviceHealth. This replaces "break the Gateway
   // credential deliberately once a month" — a manual chore, which will be
@@ -66,6 +77,5 @@
   },
 
   // wrangler secret put:
-  //   CF_AIG_TOKEN        AI Gateway authentication token
   //   SHAMWARI_CORE_TOKEN shared with Core
 }
