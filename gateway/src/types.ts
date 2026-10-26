@@ -4,7 +4,8 @@ export interface Env {
   SINK: Queue<SinkMessage>;
 
   CF_ACCOUNT_ID: string;
-  CF_AIG_TOKEN: string;
+  /** Secrets Store binding: the AI Gateway authentication token. Read with `.get()`. */
+  CF_AIG_TOKEN: SecretsStoreSecret;
   CF_GATEWAY_ID: string;
   /** The dynamic route on that gateway, called as `dynamic/<name>`. */
   CF_ROUTE_NAME: string;

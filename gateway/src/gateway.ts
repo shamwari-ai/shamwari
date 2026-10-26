@@ -96,10 +96,14 @@ export async function viaGateway(
   skipCache = false,
 ): Promise<InferenceResult | null> {
   try {
+    // A Secrets Store binding, so the token is read at request time and never
+    // sits in the Worker's own secrets. If the read fails the step is
+    // unavailable and the caller degrades, like any other gateway failure.
+    const aigToken = await env.CF_AIG_TOKEN.get();
     const res = await post(
       `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/compat/chat/completions`,
       {
-        'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+        'cf-aig-authorization': `Bearer ${aigToken}`,
         'cf-aig-metadata': JSON.stringify(buildMetadata(meta)),
         ...(skipCache ? { 'cf-aig-skip-cache': 'true' } : {}),
       },
