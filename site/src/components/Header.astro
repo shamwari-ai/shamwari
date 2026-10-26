@@ -10,13 +10,13 @@ const path = Astro.url.pathname;
 const isActive = (href: string) => !href.startsWith('http') && (path === href || (href !== '/' && path.startsWith(href)));
 ---
 <header class="sticky top-0 z-40 border-b border-border bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-  <div class="container-custom flex items-center justify-between gap-6 py-4">
+  <div class="container-custom flex items-center justify-between gap-4 py-3 md:gap-6 md:py-4">
     <a href="/" class="flex items-baseline gap-2 font-serif text-h4 font-semibold text-primary no-underline">
       Shamwari
       <span class="font-sans text-caption font-semibold uppercase tracking-widest text-muted-foreground">AI</span>
     </a>
 
-    <nav aria-label="Primary" class="flex flex-wrap items-center gap-x-6 gap-y-2">
+    <nav aria-label="Primary" class="hidden items-center gap-x-6 md:flex">
       {nav.map((item) => (
         <a
           href={item.path}
@@ -31,5 +31,37 @@ const isActive = (href: string) => !href.startsWith('http') && (path === href ||
       ))}
       <Button href="/contact/" size="sm">Get in touch</Button>
     </nav>
+
+    <!-- Below md: a native <details> menu. No client JavaScript, keyboard and
+         screen-reader friendly, 44px targets. -->
+    <details class="group relative md:hidden">
+      <summary
+        class="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-md border border-border px-4 text-body-sm font-semibold text-foreground [&::-webkit-details-marker]:hidden"
+        aria-label="Menu"
+      >
+        Menu
+        <span aria-hidden="true" class="text-muted-foreground transition-transform group-open:rotate-180">&#9662;</span>
+      </summary>
+      <nav
+        aria-label="Primary (menu)"
+        class="absolute right-0 top-full mt-2 flex w-[min(18rem,calc(100vw-2rem))] flex-col rounded-lg border border-border bg-card p-2 shadow-lg"
+      >
+        {nav.map((item) => (
+          <a
+            href={item.path}
+            {...externalLinkAttrs(item.external)}
+            class:list={[
+              'flex min-h-11 items-center rounded-md px-3 text-body-sm no-underline',
+              isActive(item.path) ? 'font-semibold text-foreground' : 'text-muted-foreground',
+            ]}
+          >
+            {item.label}
+          </a>
+        ))}
+        <div class="p-2">
+          <Button href="/contact/" size="sm" class="w-full">Get in touch</Button>
+        </div>
+      </nav>
+    </details>
   </div>
 </header>
