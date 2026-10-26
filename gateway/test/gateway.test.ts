@@ -28,7 +28,7 @@ function fakeEnv() {
     CF_ACCOUNT_ID: 'acct',
     CF_GATEWAY_ID: 'gw',
     CF_ROUTE_NAME: 'shamwari',
-    CF_AIG_TOKEN: 'aig',
+    CF_AIG_TOKEN: { get: async () => 'aig' },
     ECONOMY_MODEL: '@cf/zai-org/glm-5.3-flash',
     STANDARD_MODEL: '@cf/zai-org/glm-5.3',
   } as unknown as Env;
@@ -162,6 +162,14 @@ describe('provenance follows the model that actually served', () => {
     expect(r.path).toBe('workers-ai');
     expect(r.substituted).toBe(true);
     expect(r.licenseClass).toBe('open_weight');
+  });
+
+  it('degrades to workers-ai when the gateway token cannot be read', async () => {
+    const seen = stubGateway();
+    const env = { ...fakeEnv(), CF_AIG_TOKEN: { get: async () => { throw new Error('store down'); } } } as unknown as Env;
+    const r = await infer(env, targets(env).standard, messages, meta);
+    expect(r.path).toBe('workers-ai');
+    expect(seen).toHaveLength(0);
   });
 
   it('calls the dynamic route and sends no provider key', async () => {
