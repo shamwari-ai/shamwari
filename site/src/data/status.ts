@@ -62,8 +62,13 @@ export const STATUS: StatusItem[] = [
   {
     state: 'planned',
     title: 'Shamwari Factory',
-    body: 'The coding agent: create projects and build in a sandbox. Available to paying customers only. Not built yet.',
+    body: 'The coding agent: create projects and build in a sandbox, working in your GitHub repositories. Available to paying customers only. Not built yet.',
     issues: [66],
+  },
+  {
+    state: 'building',
+    title: 'Shamwari for GitHub',
+    body: 'A GitHub App and MCP server that reviews pull requests and works with issues. It is deployed, and for now limited to a short list of Nyuchi repositories and to our own team. It comments and never approves or merges. Opening it to your repositories comes with Factory.',
   },
   {
     state: 'planned',

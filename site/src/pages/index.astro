@@ -18,7 +18,7 @@ const stateOf = (title: string) => {
 const panel = [
   { name: 'Chat', title: 'Shamwari Chat', note: 'Ask in Shona, Ndebele or English, with the source cited' },
   { name: 'CLI', title: 'Shamwari CLI', note: 'Shamwari in your terminal' },
-  { name: 'Factory', title: 'Shamwari Factory', note: 'The coding agent, for paying customers' },
+  { name: 'Factory', title: 'Shamwari Factory', note: 'The coding agent, working in your GitHub repositories, for paying customers' },
   { name: 'MCP', title: 'Shamwari MCP server', note: 'Connect Shamwari to your own agents and tools' },
   { name: 'API', title: 'Shamwari API', note: 'An OpenAI-style API, pay as you go' },
 ].map((p) => ({ ...p, state: stateOf(p.title) }));
