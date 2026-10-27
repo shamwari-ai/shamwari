@@ -6,6 +6,22 @@ import SectionHeader from '@bundu/ui/SectionHeader.astro';
 import { Button } from '@bundu/ui/ui/button';
 import { Card } from '@bundu/ui/ui/card';
 import StatusPill from '../components/StatusPill.astro';
+import { STATUS } from '../data/status';
+// The hero's right-hand panel, in the way nyuchi.com lists what it runs:
+// the five products, each with its honest state. The state is read from the
+// one STATUS list that /project/ also renders, so the two cannot disagree.
+const stateOf = (title: string) => {
+  const item = STATUS.find((s) => s.title === title);
+  if (!item) throw new Error(`hero panel: no STATUS item titled "${title}"`);
+  return item.state;
+};
+const panel = [
+  { name: 'Chat', title: 'Shamwari Chat', note: 'Ask in Shona, Ndebele or English, with the source cited' },
+  { name: 'CLI', title: 'Shamwari CLI', note: 'Shamwari in your terminal' },
+  { name: 'Factory', title: 'Shamwari Factory', note: 'The coding agent, working in your GitHub repositories, for paying customers' },
+  { name: 'MCP', title: 'Shamwari MCP server', note: 'Connect Shamwari to your own agents and tools' },
+  { name: 'API', title: 'Shamwari API', note: 'An OpenAI-style API, pay as you go' },
+].map((p) => ({ ...p, state: stateOf(p.title) }));
 ---
 <Layout
   title="Shamwari AI — an African AI companion that cites its sources"
@@ -20,7 +36,28 @@ import StatusPill from '../components/StatusPill.astro';
     variant="showcase"
     layout="split"
   >
-    <img slot="media" src="/shamwari-icon.png" alt="" aria-hidden="true" width="640" height="640" class="mx-auto h-auto w-full max-w-sm rounded-2xl border border-border lg:max-w-md" />
+    <Card slot="media" class="w-full max-w-md lg:ml-auto">
+      <div class="flex items-center gap-3 border-b border-border pb-4">
+        <img src="/shamwari-icon.png" alt="" aria-hidden="true" width="32" height="32" class="h-8 w-8 rounded-md" />
+        <p class="eyebrow !mb-0">The five products</p>
+      </div>
+      <p class="pt-4 text-body-sm text-muted-foreground">
+        One companion, five ways in. Each is labelled with where it honestly stands.
+      </p>
+      <ul class="divide-y divide-border">
+        {panel.map((row) => (
+          <li class="flex items-start justify-between gap-4 py-4">
+            <div class="min-w-0">
+              <p class="font-serif text-h5 text-foreground">
+                {row.name}
+              </p>
+              <p class="mt-1 text-body-sm text-muted-foreground">{row.note}</p>
+            </div>
+            <StatusPill state={row.state} />
+          </li>
+        ))}
+      </ul>
+    </Card>
   </Hero>
 
   <Section bg="secondary" space="tight" border>
@@ -37,71 +74,12 @@ import StatusPill from '../components/StatusPill.astro';
     </div>
   </Section>
 
-  <Section>
-    <SectionHeader
-      eyebrow="What it is"
-      title="One companion, three places it can run"
-      description="Which one answers a question depends on whose question it is — not on which plan you're paying for."
-    />
-    <div class="mt-10 grid grid-cols-1 gap-5 md:grid-cols-3">
-      <Card>
-        <h3 class="font-serif text-h5 text-foreground">Cloud</h3>
-        <p class="mt-2 text-body-sm text-muted-foreground">
-          Routed third-party models. Fast, general knowledge, no persistent
-          memory of you.
-        </p>
-      </Card>
-      <Card>
-        <h3 class="font-serif text-h5 text-foreground">Ground</h3>
-        <p class="mt-2 text-body-sm text-muted-foreground">
-          The Zimbabwean corpus — law, tax, regulation — kept fresh and cited
-          by section.
-        </p>
-      </Card>
-      <Card>
-        <h3 class="font-serif text-h5 text-foreground">Mind</h3>
-        <p class="mt-2 text-body-sm text-muted-foreground">
-          A small, open-weight model on your own device — the only part that
-          ever sees anything personal.
-        </p>
-      </Card>
-    </div>
-    <p class="mt-8">
-      <Button href="/blueprint/" variant="ghost" arrow>Read the full blueprint</Button>
-    </p>
-  </Section>
-
-  <Section bg="secondary" border>
-    <SectionHeader
-      eyebrow="Where we are"
-      title="Built in the open, honestly labelled"
-      description="We'd rather this page be a little less impressive and stay true than round anything up."
-    />
-    <div class="mt-10 grid grid-cols-1 gap-5 md:grid-cols-3">
-      <Card class="flex flex-col gap-3">
-        <StatusPill state="live" />
-        <p class="text-body text-foreground">The architecture, documented and enforced in code.</p>
-      </Card>
-      <Card class="flex flex-col gap-3">
-        <StatusPill state="building" />
-        <p class="text-body text-foreground">The Zimbabwean legal and tax corpus — starting with the Constitution of Zimbabwe.</p>
-      </Card>
-      <Card class="flex flex-col gap-3">
-        <StatusPill state="planned" />
-        <p class="text-body text-foreground">Shamwari Mind, the on-device model.</p>
-      </Card>
-    </div>
-    <p class="mt-8">
-      <Button href="/project/" variant="ghost" arrow>See the full project page</Button>
-    </p>
-  </Section>
-
   <Section space="loose">
     <SectionHeader
       align="center"
       eyebrow="Get in touch"
       title="Talk to us before you talk to a consultant"
-      description="We're bringing on the first customers by hand — mostly around Zimbabwean tax and regulatory compliance, where being wrong costs real money and the answer changes monthly."
+      description="We're bringing on the first customers by hand, mostly around Zimbabwean tax and regulatory compliance."
       max="max-w-xl"
     />
     <div class="mt-8 flex justify-center">
