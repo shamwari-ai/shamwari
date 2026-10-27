@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@astrojs/react": "^6.0.5",
-    "@bundu/ui": "^0.1.1",
+    "@bundu/ui": "^0.7.0",
     "@tailwindcss/vite": "^4.3.3",
     "astro": "^7.2.8",
     "react": "^19.2.8",
@@ -29,5 +29,8 @@
     "sharp": "^0.35.4",
     "typescript": "^5.9.0",
     "wrangler": "^4.147.0"
+  },
+  "overrides": {
+    "undici@7.29.1": "7.30.1"
   }
 }
