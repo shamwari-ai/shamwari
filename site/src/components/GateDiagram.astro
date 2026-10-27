@@ -19,7 +19,7 @@ const stages = [
 ];
 ---
 <div class="gate-diagram">
-  <div class="panel inputs">
+  <div class="panel dark inputs">
     <p class="panel-title">A question arrives</p>
     <div class="row"><span class="dot"></span>A general question</div>
     <div class="row"><span class="dot"></span>A question about you</div>
@@ -27,7 +27,7 @@ const stages = [
 
   <Icon name="arrow-right" class="connector" title="flows into" />
 
-  <div class="panel gate">
+  <div class="panel dark gate">
     <p class="panel-title">The gate — checked twice</p>
     {stages.map((s) => (
       <div class="stage">
@@ -43,16 +43,16 @@ const stages = [
   <Icon name="arrow-right" class="connector" title="routes to" />
 
   <div class="outputs">
-    <div class="panel destinations">
+    <div class="panel dark destinations">
       <p class="panel-title">Where it goes</p>
       <div class="row"><span class="dot"></span>Shamwari Cloud <span class="muted">→ routed provider</span></div>
       <div class="row"><span class="dot dot-blocked"></span>Shamwari Mind <span class="muted">→ on your device</span></div>
     </div>
-    <div class="panel terminal">
+    <div class="panel dark terminal">
       <p class="term-line"><span class="prompt">&gt;</span> POST /v1/chat/completions <span class="muted">{'{scope: "personal"}'}</span></p>
       <p class="term-line term-error">409 scope_requires_local_inference</p>
       <p class="term-line"><span class="prompt">&gt;</span> POST /v1/chat/completions <span class="muted">{'{scope: "community"}'}</span></p>
-      <p class="term-line term-ok">200 → routed to Shamwari Cloud (Qwen)</p>
+      <p class="term-line term-ok">200 → routed to Shamwari Cloud</p>
     </div>
   </div>
 </div>
@@ -63,12 +63,12 @@ const stages = [
     justify-content: center;
   }
   .panel {
-    background: #131A3E; border: 1px solid #2B3466; border-radius: 14px;
-    padding: 1.25rem 1.4rem; color: #E4E9F6;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 1.25rem 1.4rem; color: var(--overlay-foreground);
   }
   .panel-title {
     font-size: 0.78rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
-    color: #8AA6E8; margin: 0 0 1rem;
+    color: var(--color-storm); margin: 0 0 1rem;
   }
   .inputs { flex: 1 1 220px; max-width: 260px; align-self: center; }
   .gate { flex: 2 1 360px; max-width: 440px; }
@@ -77,35 +77,35 @@ const stages = [
 
   .row {
     display: flex; align-items: center; gap: 0.6rem; font-size: 0.9rem;
-    padding: 0.5rem 0; border-bottom: 1px solid #212A54;
+    padding: 0.5rem 0; border-bottom: 1px solid var(--border);
   }
   .row:last-child { border-bottom: none; }
-  .muted { color: #7C87B8; font-size: 0.82em; margin-left: auto; }
+  .muted { color: var(--muted-foreground); font-size: 0.82em; margin-left: auto; }
 
   .dot {
     width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
-    background: #8AA6E8; box-shadow: 0 0 8px #8aa6e8aa;
+    background: var(--color-storm); box-shadow: 0 0 8px color-mix(in srgb, var(--color-storm) 67%, transparent);
   }
-  .dot-blocked { background: #D89767; box-shadow: 0 0 8px #d89767aa; }
+  .dot-blocked { background: var(--color-terracotta); box-shadow: 0 0 8px color-mix(in srgb, var(--color-terracotta) 67%, transparent); }
 
   .stage { display: flex; gap: 0.7rem; padding: 0.55rem 0; }
   .stage .dot { margin-top: 0.4rem; }
   .stage-label { font-size: 0.9rem; font-weight: 600; margin: 0; display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
   .stage-label code {
     font-family: var(--mono, ui-monospace, monospace); font-size: 0.72rem; font-weight: 400;
-    color: #8AA6E8; background: #1D2452; padding: 0.1em 0.4em; border-radius: 3px;
+    color: var(--color-storm); background: var(--overlay); padding: 0.1em 0.4em; border-radius: 3px;
   }
-  .stage-detail { margin: 0.2rem 0 0; font-size: 0.82rem; color: #A7B0D8; }
+  .stage-detail { margin: 0.2rem 0 0; font-size: 0.82rem; color: var(--text-secondary); }
 
-  .terminal { background: #0B0F26; font-family: var(--mono, ui-monospace, monospace); font-size: 0.78rem; }
-  .term-line { margin: 0 0 0.5rem; color: #C5CAE9; }
+  .terminal { background: var(--pitch); font-family: var(--mono, ui-monospace, monospace); font-size: 0.78rem; }
+  .term-line { margin: 0 0 0.5rem; color: var(--overlay-foreground); }
   .term-line:last-child { margin-bottom: 0; }
-  .prompt { color: #8AA6E8; }
-  .term-error { color: #E5A17A; }
-  .term-ok { color: #8FE3C0; }
+  .prompt { color: var(--color-storm); }
+  .term-error { color: var(--color-ember); }
+  .term-ok { color: var(--color-malachite); }
 
   .connector {
-    display: none; align-self: center; flex-shrink: 0; color: var(--primary, #283593);
+    display: none; align-self: center; flex-shrink: 0; color: var(--primary);
     width: 1.4rem; height: 1.4rem;
   }
   @media (min-width: 60rem) {
