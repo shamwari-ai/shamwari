@@ -6,6 +6,21 @@ import SectionHeader from '@bundu/ui/SectionHeader.astro';
 import { Button } from '@bundu/ui/ui/button';
 import { Card } from '@bundu/ui/ui/card';
 import StatusPill from '../components/StatusPill.astro';
+import { STATUS } from '../data/status';
+// The hero's right-hand panel, in the way nyuchi.com lists what it runs:
+// each part of Shamwari with its honest state. The state is read from the
+// one STATUS list that /project/ also renders, so the two cannot disagree.
+const stateOf = (title: string) => {
+  const item = STATUS.find((s) => s.title === title);
+  if (!item) throw new Error(`hero panel: no STATUS item titled "${title}"`);
+  return item.state;
+};
+const panel = [
+  { name: 'Cloud', note: 'Routed inference, GLM first', state: stateOf('Shamwari Cloud') },
+  { name: 'Ground', note: 'Zimbabwean law and tax, cited by section', state: stateOf('The Zimbabwean legal and tax corpus') },
+  { name: 'Mind', note: 'The open-weight model on your device', state: stateOf('Shamwari Mind') },
+  { name: 'Documentation', note: 'How it works, checked against the code', state: stateOf('The architecture, in writing'), href: 'https://docs.shamwari.ai' },
+];
 ---
 <Layout
   title="Shamwari AI — an African AI companion that cites its sources"
@@ -20,7 +35,25 @@ import StatusPill from '../components/StatusPill.astro';
     variant="showcase"
     layout="split"
   >
-    <img slot="media" src="/shamwari-icon.png" alt="" aria-hidden="true" width="640" height="640" class="mx-auto h-auto w-full max-w-sm rounded-2xl border border-border lg:max-w-md" />
+    <Card slot="media" class="w-full max-w-md lg:ml-auto">
+      <div class="flex items-center gap-3 border-b border-border pb-4">
+        <img src="/shamwari-icon.png" alt="" aria-hidden="true" width="32" height="32" class="h-8 w-8 rounded-md" />
+        <p class="eyebrow !mb-0">What Shamwari is</p>
+      </div>
+      <ul class="divide-y divide-border">
+        {panel.map((row) => (
+          <li class="flex items-start justify-between gap-4 py-4">
+            <div class="min-w-0">
+              <p class="font-serif text-h5 text-foreground">
+                {row.href ? <a href={row.href} class="no-underline hover:underline" target="_blank" rel="noopener noreferrer">{row.name}</a> : row.name}
+              </p>
+              <p class="mt-1 text-body-sm text-muted-foreground">{row.note}</p>
+            </div>
+            <StatusPill state={row.state} />
+          </li>
+        ))}
+      </ul>
+    </Card>
   </Hero>
 
   <Section bg="secondary" space="tight" border>
