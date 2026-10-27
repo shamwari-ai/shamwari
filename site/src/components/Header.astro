@@ -32,12 +32,12 @@ const isActive = (href: string) => !href.startsWith('http') && (path === href ||
       <Button href="/contact/" size="sm">Get in touch</Button>
     </nav>
 
-    <!-- Below md: a native <details> menu. No client JavaScript, keyboard and
-         screen-reader friendly, 44px targets. -->
+    <!-- Below md: a native <details> menu, so no client JavaScript. The summary
+         and the link rows are at least 44px tall; the CTA keeps the Button
+         component's own size. -->
     <details class="group relative md:hidden">
       <summary
         class="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-md border border-border px-4 text-body-sm font-semibold text-foreground [&::-webkit-details-marker]:hidden"
-        aria-label="Menu"
       >
         Menu
         <span aria-hidden="true" class="text-muted-foreground transition-transform group-open:rotate-180">&#9662;</span>
