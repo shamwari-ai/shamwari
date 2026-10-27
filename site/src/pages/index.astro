@@ -8,7 +8,7 @@ import { Card } from '@bundu/ui/ui/card';
 import StatusPill from '../components/StatusPill.astro';
 import { STATUS } from '../data/status';
 // The hero's right-hand panel, in the way nyuchi.com lists what it runs:
-// each part of Shamwari with its honest state. The state is read from the
+// the five products, each with its honest state. The state is read from the
 // one STATUS list that /project/ also renders, so the two cannot disagree.
 const stateOf = (title: string) => {
   const item = STATUS.find((s) => s.title === title);
@@ -16,11 +16,12 @@ const stateOf = (title: string) => {
   return item.state;
 };
 const panel = [
-  { name: 'Cloud', note: 'Routed inference, GLM first', state: stateOf('Shamwari Cloud') },
-  { name: 'Ground', note: 'Zimbabwean law and tax, cited by section', state: stateOf('The Zimbabwean legal and tax corpus') },
-  { name: 'Mind', note: 'The open-weight model on your device', state: stateOf('Shamwari Mind') },
-  { name: 'Documentation', note: 'How it works, checked against the code', state: stateOf('The architecture, in writing'), href: 'https://docs.shamwari.ai' },
-];
+  { name: 'Chat', title: 'Shamwari Chat', note: 'Ask in Shona, Ndebele or English, with the source cited' },
+  { name: 'CLI', title: 'Shamwari CLI', note: 'Shamwari in your terminal' },
+  { name: 'Factory', title: 'Shamwari Factory', note: 'The coding agent, for paying customers' },
+  { name: 'MCP', title: 'Shamwari MCP server', note: 'Connect Shamwari to your own agents and tools' },
+  { name: 'API', title: 'Shamwari API', note: 'An OpenAI-style API, pay as you go' },
+].map((p) => ({ ...p, state: stateOf(p.title) }));
 ---
 <Layout
   title="Shamwari AI — an African AI companion that cites its sources"
@@ -38,17 +39,17 @@ const panel = [
     <Card slot="media" class="w-full max-w-md lg:ml-auto">
       <div class="flex items-center gap-3 border-b border-border pb-4">
         <img src="/shamwari-icon.png" alt="" aria-hidden="true" width="32" height="32" class="h-8 w-8 rounded-md" />
-        <p class="eyebrow !mb-0">What Shamwari is</p>
+        <p class="eyebrow !mb-0">The five products</p>
       </div>
       <p class="pt-4 text-body-sm text-muted-foreground">
-        Three places it can run. Which one answers depends on whose question it is, not on which plan you pay for.
+        One companion, five ways in. Each is labelled with where it honestly stands.
       </p>
       <ul class="divide-y divide-border">
         {panel.map((row) => (
           <li class="flex items-start justify-between gap-4 py-4">
             <div class="min-w-0">
               <p class="font-serif text-h5 text-foreground">
-                {row.href ? <a href={row.href} class="no-underline hover:underline" target="_blank" rel="noopener noreferrer">{row.name}</a> : row.name}
+                {row.name}
               </p>
               <p class="mt-1 text-body-sm text-muted-foreground">{row.note}</p>
             </div>
