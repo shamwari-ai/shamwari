@@ -1,6 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import HomeHero from '../components/HomeHero.astro';
+import Hero from '@bundu/ui/Hero.astro';
 import Section from '@bundu/ui/Section.astro';
 import SectionHeader from '@bundu/ui/SectionHeader.astro';
 import { Button } from '@bundu/ui/ui/button';
@@ -11,13 +11,17 @@ import StatusPill from '../components/StatusPill.astro';
   title="Shamwari AI — an African AI companion that cites its sources"
   description="Shamwari is an AI companion built in Zimbabwe. It answers in Shona, Ndebele and English, cites the actual statute instead of guessing, and is built so your personal data can never reach a cloud model."
 >
-  <HomeHero
+  <Hero
     subtitle="Community pillar of the Bundu Ecosystem"
     title="A friend that serves; a friend that does not control."
     description="Shamwari — Shona for friend — is an AI companion built in Zimbabwe. It answers in Shona, Ndebele and English, cites the actual provision of the actual statute instead of guessing, and is built so that anything it knows about you specifically can never leave your own device."
     primaryCTA={{ text: 'Read the Blueprint', href: '/blueprint/' }}
     secondaryCTA={{ text: 'See the Project', href: '/project/' }}
-  />
+    variant="showcase"
+    layout="split"
+  >
+    <img slot="media" src="/shamwari-icon.png" alt="" aria-hidden="true" width="640" height="640" class="mx-auto h-auto w-full max-w-sm rounded-2xl border border-border lg:max-w-md" />
+  </Hero>
 
   <Section bg="secondary" space="tight" border>
     <div class="max-w-2xl mx-auto">
