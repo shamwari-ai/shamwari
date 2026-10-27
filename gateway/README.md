@@ -34,7 +34,6 @@ wrangler kv namespace create AUTH_CACHE     # paste id into wrangler.jsonc
 wrangler queues create shamwari-sink
 wrangler queues create shamwari-sink-dlq
 
-wrangler secret put CF_AIG_TOKEN            # AI Gateway authentication token
 wrangler secret put SHAMWARI_CORE_TOKEN     # shared with Core
 
 npm run dev
@@ -43,6 +42,11 @@ npm run dev
 `CF_ACCOUNT_ID`, `CF_GATEWAY_ID` and `CF_ROUTE_NAME` are plain vars in
 `wrangler.jsonc` (an id and a name authorise nothing). There is no provider
 key: inference runs on Workers AI and is billed through Cloudflare.
+
+The AI Gateway authentication token is `SHAMWARI_AI_TOKEN` in the account's
+Secrets Store, bound to the Worker as `CF_AIG_TOKEN` in `wrangler.jsonc`. It is
+read at request time with `env.CF_AIG_TOKEN.get()`; there is no `wrangler secret
+put` for it.
 
 Shamwari Core must be reachable at `CORE_URL` first.
 
