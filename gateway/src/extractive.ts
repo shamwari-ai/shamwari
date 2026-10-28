@@ -40,11 +40,34 @@ export interface ExtractiveAnswer {
 /** Core fills this in when a field is missing. It names nothing, so it is not cited. */
 const PLACEHOLDER_AUTHORITY = 'Unknown';
 
-function citation(c: GroundChunk, max: number): string {
+export interface ExtractiveOptions {
+  /**
+   * Replace typographic characters (curly quotes, en and em dashes, the
+   * ellipsis, non-breaking spaces) with their plain ASCII forms. One such
+   * character forces an SMS into UCS-2, at 70 characters a segment instead
+   * of 160, so a "three segment" answer would become seven. This does not
+   * make text GSM-7 clean (an accented letter still is not); it removes the
+   * characters this module and typeset sources introduce. The words are never
+   * changed.
+   */
+  plainText?: boolean;
+}
+
+function plain(text: string): string {
+  return text
+    .replace(/[\u2018\u2019\u201B]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\u2026/g, '...')
+    .replace(/\u00A0/g, ' ');
+}
+
+function citation(c: GroundChunk, max: number, opts: ExtractiveOptions): string {
   const where = [c.title, c.heading].filter(Boolean).join(' — ');
   const by = c.authority && c.authority !== PLACEHOLDER_AUTHORITY ? ` (${c.authority})` : '';
   const eff = c.effective_from ? `, effective ${c.effective_from}` : '';
-  return clip(`Closest source: ${where}${by}${eff}`, max).text;
+  const text = `Closest source: ${where}${by}${eff}`;
+  return clip(opts.plainText ? plain(text) : text, max, opts.plainText ? '...' : '…').text;
 }
 
 /**
@@ -52,15 +75,18 @@ function citation(c: GroundChunk, max: number): string {
  * breaks are kept: they carry the numbering of subsections, and losing them
  * can merge a rule into its exception.
  */
-function clip(text: string, max: number): { text: string; truncated: boolean } {
+function clip(text: string, max: number, ellipsis: string): { text: string; truncated: boolean } {
   const t = text
     .trim()
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n');
   if (t.length <= max) return { text: t, truncated: false };
-  const cut = t.slice(0, Math.max(0, max - 1));
+  const cut = t.slice(0, Math.max(0, max - ellipsis.length));
   const at = Math.max(cut.lastIndexOf(' '), cut.lastIndexOf('\n'));
-  return { text: `${(at > max * 0.5 ? cut.slice(0, at) : cut).trimEnd()}…`, truncated: true };
+  return {
+    text: `${(at > max * 0.5 ? cut.slice(0, at) : cut).trimEnd()}${ellipsis}`,
+    truncated: true,
+  };
 }
 
 /**
@@ -72,27 +98,32 @@ function clip(text: string, max: number): { text: string; truncated: boolean } {
 export function extractiveAnswer(
   chunks: GroundChunk[],
   maxChars: number = EXTRACTIVE_MAX_CHARS,
+  opts: ExtractiveOptions = {},
 ): ExtractiveAnswer | null {
   const first = chunks[0];
   if (!first) return null;
 
+  const ellipsis = opts.plainText ? '...' : '…';
+  const body = (c: GroundChunk) =>
+    clip(opts.plainText ? plain(c.content) : c.content, room, ellipsis);
+
   // The citation may take at most 40% of the budget, so a very long title
   // cannot push the answer over the limit or crowd out the passage.
   const citeMax = Math.floor(maxChars * 0.4);
-  const cite = citation(first, citeMax);
+  const cite = citation(first, citeMax, opts);
   const room = Math.max(20, maxChars - cite.length - 1);
-  const head = clip(first.content, room);
+  const head = body(first);
   const parts: string[] = [`${head.text}\n${cite}`];
   const used: GroundChunk[] = [first];
   let truncated = head.truncated;
 
   for (const c of chunks.slice(1)) {
-    const body = clip(c.content, room);
-    const next = `${body.text}\n${citation(c, citeMax)}`;
+    const b = body(c);
+    const next = `${b.text}\n${citation(c, citeMax, opts)}`;
     if ([...parts, next].join('\n\n').length > maxChars) break;
     parts.push(next);
     used.push(c);
-    truncated = truncated || body.truncated;
+    truncated = truncated || b.truncated;
   }
 
   return { text: parts.join('\n\n'), used, truncated };
