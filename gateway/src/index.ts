@@ -1,10 +1,12 @@
-import type { Env, Message, SinkMessage, AuthContext } from './types';
+import type { Env, Message, SinkMessage, AuthContext, GroundChunk } from './types';
 import { authenticate } from './auth';
 import { parseScope, decideDestination, ScopeRefusal } from './scope';
 import type { Capability, ScopeDecision } from './scope';
 import { route } from './router';
 import { infer } from './gateway';
 import { ground } from './ground';
+import type { GroundResult } from './ground';
+import { extractiveAnswer, NO_SOURCE_MESSAGE } from './extractive';
 import { drain } from './sink';
 import { detectLanguage } from './lang';
 import { core } from './core';
@@ -15,6 +17,16 @@ const json = (body: unknown, status = 200) =>
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+
+/** The citations a caller sees, in the shape every response uses. */
+const citationsOf = (chunks: GroundChunk[]) =>
+  chunks.map((c) => ({
+    title: c.title,
+    heading: c.heading,
+    authority: c.authority,
+    effective_from: c.effective_from,
+    url: c.source_url,
+  }));
 
 function billingPeriod(d = new Date()): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -37,6 +49,8 @@ interface ChatBody {
   messages?: Message[];
   model?: string;
   scope?: string;
+  /** `extractive` answers from Ground alone, with no inference call. */
+  mode?: string;
 }
 
 /**
@@ -50,7 +64,13 @@ async function admit(
   capability: Capability,
 ): Promise<
   | { ok: false; response: Response }
-  | { ok: true; auth: AuthContext; body: ChatBody; messages: Message[]; decision: ScopeDecision }
+  | {
+      ok: true;
+      auth: AuthContext;
+      body: ChatBody;
+      messages: Message[];
+      decision: ScopeDecision;
+    }
 > {
   const auth = await authenticate(req, env);
   if (!auth) return { ok: false, response: json({ error: 'invalid_api_key' }, 401) };
@@ -83,7 +103,13 @@ async function admit(
   // Scope gate, before anything expensive happens.
   const scope = parseScope(body.scope);
   try {
-    return { ok: true, auth, body, messages, decision: decideDestination(scope, env, capability) };
+    return {
+      ok: true,
+      auth,
+      body,
+      messages,
+      decision: decideDestination(scope, env, capability),
+    };
   } catch (e) {
     if (e instanceof ScopeRefusal) return { ok: false, response: json(e.toPayload(), 409) };
     throw e;
@@ -156,13 +182,91 @@ async function groundContext(req: Request, env: Env, ctx: ExecutionContext): Pro
       grounded: g.hit,
       inference_path: 'mind',
       latency_ms: latencyMs,
-      citations: g.chunks.map((c) => ({
-        title: c.title,
-        heading: c.heading,
-        authority: c.authority,
-        effective_from: c.effective_from,
-        url: c.source_url,
-      })),
+      citations: citationsOf(g.chunks),
+    },
+  });
+}
+
+/**
+ * The extractive rung: the cited passage from Ground, with no generation.
+ *
+ * Reached two ways: the caller asks for it (`mode: "extractive"`, the cheap
+ * path for narrow channels), or every inference path failed and Ground has
+ * something to say (`degraded`). Either way the scope gate has already run in
+ * admit(), and nothing here reaches a provider.
+ *
+ * It writes a usage event and NO conversation row. An extractive answer has no
+ * teacher model, so there is no honest `licenseClass` to stamp, and the chunks
+ * it quotes carry their own `mind_eligible` terms that are not visible here.
+ * Storing it as a conversation would put text of unknown training status in
+ * the corpus that rule 2 protects, so it is metered and nothing more.
+ */
+function extractiveResponse(
+  ctx: ExecutionContext,
+  env: Env,
+  a: {
+    auth: AuthContext;
+    decision: ScopeDecision;
+    g: GroundResult;
+    language: string | null;
+    requestId: string;
+    started: number;
+    degraded: boolean;
+  },
+): Response {
+  const { auth, decision, g, language, requestId, started, degraded } = a;
+  const built = extractiveAnswer(g.chunks);
+  const text = built ? built.text : NO_SOURCE_MESSAGE;
+  const used = built ? built.used : [];
+  const latencyMs = Date.now() - started;
+
+  ctx.waitUntil(
+    env.SINK.send({
+      database: 'platform',
+      collection: 'usageEvents',
+      doc: {
+        ownerEntityId: auth.ownerEntityId,
+        apiKeyId: auth.apiKeyId,
+        requestId,
+        billingPeriod: billingPeriod(),
+        tier: 'extractive',
+        provider: null,
+        model: null,
+        licenseClass: null,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheHit: false,
+        groundHit: g.hit,
+        inferencePath: 'extractive',
+        degraded,
+        latencyMs,
+        createdAt: new Date().toISOString(),
+      },
+    }).catch((e) => console.error('sink enqueue failed', String(e))),
+  );
+
+  return json({
+    id: requestId,
+    model: 'shamwari-extractive',
+    choices: [
+      {
+        index: 0,
+        message: { role: 'assistant', content: text },
+        finish_reason: 'stop',
+      },
+    ],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+    shamwari: {
+      tier: 'extractive',
+      scope: decision.scope,
+      language,
+      grounded: g.hit,
+      cache_hit: false,
+      inference_path: 'extractive',
+      degraded,
+      truncated: built?.truncated ?? false,
+      latency_ms: latencyMs,
+      citations: citationsOf(used),
     },
   });
 }
@@ -190,6 +294,12 @@ export default {
     if (!a.ok) return a.response;
     const { auth, body, messages, decision } = a;
 
+    // Only this endpoint has modes. /v1/ground/context shares admit() and must
+    // not start refusing a field it has always ignored.
+    if (body.mode !== undefined && body.mode !== 'extractive') {
+      return json({ error: 'invalid_mode', allowed: ['extractive'] }, 400);
+    }
+
     const requestId = crypto.randomUUID();
     const started = Date.now();
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');
@@ -203,19 +313,45 @@ export default {
       decision.destination,
       language,
     );
+    const rung = { auth, decision, g, language, requestId, started };
+    if (body.mode === 'extractive') {
+      // "Ground could not be asked" is not "Ground has nothing": only the
+      // second may be said to a person as a fact about the corpus.
+      if (g.unavailable) {
+        return new Response(JSON.stringify({ error: 'ground_unavailable', retry: true }, null, 2), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
+        });
+      }
+      return extractiveResponse(ctx, env, { ...rung, degraded: false });
+    }
+
     const target = route(messages, body.model, env);
-    const result = await infer(
-      env,
-      target,
-      [{ role: 'system', content: g.systemPrompt }, ...messages.filter((m) => m.role !== 'system')],
-      {
-        tier: target.tier,
-        scope: decision.scope,
-        ownerEntityId: auth.ownerEntityId,
-        surface: env.SURFACE,
-        requestId,
-      },
-    );
+    let result: Awaited<ReturnType<typeof infer>>;
+    try {
+      result = await infer(
+        env,
+        target,
+        [
+          { role: 'system', content: g.systemPrompt },
+          ...messages.filter((m) => m.role !== 'system'),
+        ],
+        {
+          tier: target.tier,
+          scope: decision.scope,
+          ownerEntityId: auth.ownerEntityId,
+          surface: env.SURFACE,
+          requestId,
+        },
+      );
+    } catch (e) {
+      // Every inference path failed. With a Ground hit there is still a cited
+      // answer to give; without one there is nothing honest to say, so the
+      // failure stands.
+      if (!g.hit) throw e;
+      console.error('inference unavailable, answering from Ground', String(e));
+      return extractiveResponse(ctx, env, { ...rung, degraded: true });
+    }
     const latencyMs = Date.now() - started;
 
     const now = new Date().toISOString();
@@ -302,7 +438,11 @@ export default {
       id: requestId,
       model: `shamwari-${target.tier}`,
       choices: [
-        { index: 0, message: { role: 'assistant', content: result.text }, finish_reason: 'stop' },
+        {
+          index: 0,
+          message: { role: 'assistant', content: result.text },
+          finish_reason: 'stop',
+        },
       ],
       usage: {
         prompt_tokens: result.inputTokens,
@@ -321,13 +461,7 @@ export default {
         // substituting the model is otherwise invisible to the caller.
         model_substituted: result.substituted,
         latency_ms: latencyMs,
-        citations: g.chunks.map((c) => ({
-          title: c.title,
-          heading: c.heading,
-          authority: c.authority,
-          effective_from: c.effective_from,
-          url: c.source_url,
-        })),
+        citations: citationsOf(g.chunks),
       },
     });
   },

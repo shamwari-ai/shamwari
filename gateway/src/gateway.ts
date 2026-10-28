@@ -111,9 +111,19 @@ export async function viaGateway(
       messages,
     );
     if (res.ok) {
-      return parse(res, target, res.headers.get('cf-aig-cache-status') === 'HIT', 'gateway');
+      const out = await parse(
+        res,
+        target,
+        res.headers.get('cf-aig-cache-status') === 'HIT',
+        'gateway',
+      );
+      // A 200 with no text is not an answer. Treated as a failure so the next
+      // rung engages, and so a blank is never stored as a teacher output.
+      if (out.text.trim()) return out;
+      console.warn('gateway returned no text');
+    } else {
+      console.warn('gateway', res.status);
     }
-    console.warn('gateway', res.status);
   } catch (e) {
     console.warn('gateway threw', String(e));
   }
@@ -136,8 +146,14 @@ export async function viaWorkersAI(
     messages,
   } as never)) as { response?: string };
 
+  // No text is a failure, not an answer. This used to substitute a canned
+  // apology, which then travelled as the model's output: stored as a
+  // conversation under an open-weight teacher label and flagged trainable.
+  // Throwing lets the extractive rung engage and the probe see the failure.
+  if (!fb.response?.trim()) throw new Error('workers ai returned no text');
+
   return {
-    text: fb.response ?? 'Shamwari cannot answer right now. Please retry.',
+    text: fb.response,
     inputTokens: 0,
     outputTokens: 0,
     cacheHit: false,
