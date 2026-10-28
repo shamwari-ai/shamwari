@@ -444,7 +444,9 @@ Each item is a small, testable change that can merge on its own.
 1. Degradation ladder with the **extractive rung**, and `inference_path` reporting
    the rung (gateway).
 2. Tier and rung as routing inputs, per-tier token caps (gateway, `routing-policy.json`).
-3. The compact envelope and idempotent request ids (gateway).
+3. The compact envelope and idempotent request ids (gateway). **Built** (best-effort
+   dedupe on KV; exact double-billing protection needs the nyuchi-api sink to dedupe
+   on `requestId`).
 4. Channel-adapter interface with the Rule 1 gate and tests that count provider
    calls, then the SMS/USSD adapter against a fake operator.
 5. Ground pack build job and the signed, versioned pack format.
