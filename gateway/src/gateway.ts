@@ -62,16 +62,20 @@ export function buildMetadata(meta: RequestMetadata): Record<string, string> {
   };
 }
 
+/** The ceiling when a request names no reach. A reach lowers it, never raises it. */
+export const DEFAULT_MAX_OUTPUT_TOKENS = 2048;
+
 async function post(
   url: string,
   headers: Record<string, string>,
   model: string,
   messages: Message[],
+  maxTokens: number,
 ): Promise<Response> {
   return fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: 2048 }),
+    body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: maxTokens }),
   });
 }
 
@@ -94,6 +98,7 @@ export async function viaGateway(
   messages: Message[],
   meta: RequestMetadata,
   skipCache = false,
+  maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
 ): Promise<InferenceResult | null> {
   try {
     // A Secrets Store binding, so the token is read at request time and never
@@ -109,6 +114,7 @@ export async function viaGateway(
       },
       `dynamic/${env.CF_ROUTE_NAME}`,
       messages,
+      Math.min(maxTokens, DEFAULT_MAX_OUTPUT_TOKENS),
     );
     if (res.ok) {
       const out = await parse(
@@ -141,10 +147,18 @@ export async function viaWorkersAI(
   env: Env,
   target: Target,
   messages: Message[],
+  maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
 ): Promise<InferenceResult> {
-  const fb = (await env.AI.run(WORKERS_AI_FALLBACK_MODEL as never, {
-    messages,
-  } as never)) as { response?: string };
+  const fb = (await env.AI.run(
+    WORKERS_AI_FALLBACK_MODEL as never,
+    {
+      messages,
+      // Only when a reach asks for less. A request with no reach is sent exactly
+      // as it was before, so this fallback step is not exposed to a parameter it
+      // has never been called with.
+      ...(maxTokens < DEFAULT_MAX_OUTPUT_TOKENS ? { max_tokens: maxTokens } : {}),
+    } as never,
+  )) as { response?: string };
 
   // No text is a failure, not an answer. This used to substitute a canned
   // apology, which then travelled as the model's output: stored as a
@@ -185,9 +199,11 @@ export async function infer(
   target: Target,
   messages: Message[],
   meta: RequestMetadata,
+  maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
 ): Promise<InferenceResult> {
   return (
-    (await viaGateway(env, target, messages, meta)) ?? (await viaWorkersAI(env, target, messages))
+    (await viaGateway(env, target, messages, meta, false, maxTokens)) ??
+    (await viaWorkersAI(env, target, messages, maxTokens))
   );
 }
 

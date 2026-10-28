@@ -296,6 +296,26 @@ was cut. If Core cannot be reached, `mode: "extractive"` returns 503
 reply with no text counts as a failure at both inference steps, so the next
 rung engages. See `docs/tiered-access-design.md`.
 
+## Reach
+
+How the caller reaches Shamwari, sent as `"reach": "r0" | "r1" | "r2"` on
+`/v1/chat/completions` (r0 SMS/USSD, r1 chat app, r2 Lite PWA; see
+`docs/tiered-access-design.md`). An unknown value is a 400 `invalid_reach`, and
+a request with no reach behaves exactly as before. Reach is a **ceiling, never
+a floor**, set in `routing-policy.json`:
+
+- `max_tier` clamps the routed model tier down (r0 cannot reach `standard`).
+  `premium` is never a reach ceiling: the policy validator rejects it, so a
+  channel alone cannot choose a model with different terms and cost.
+- `max_output_tokens` caps generation (never above the 2048 default).
+- `extractive_max_chars` caps an extractive answer.
+
+The response carries `shamwari.reach` and `shamwari.reach_clamped`, and the
+usage event and conversation record the reach, so per-tier cost can be read
+from `usageEvents`. Reach changes nothing about scope: r0 to r2 all hand text to
+a provider, so personal scope is still a 409 on every one of them. The clamped
+tier's `licenseClass` still comes from `router.ts`, never from the policy file.
+
 ## Provenance
 
 `licenseClass` is stamped on every conversation and usage event at generation

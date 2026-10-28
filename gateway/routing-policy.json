@@ -4,10 +4,17 @@
   "notes": [
     "What is NOT here, deliberately: tier identity, provider slugs, direct provider URLs, API key bindings, and licenseClass. Those are provenance-bearing and live in src/router.ts. Rule 2 of CLAUDE.md hardcodes premium as 'restricted'; moving that into an editable file would put it one careless edit away from stamping restricted output as Mind-trainable.",
     "Model ids are not here either. They come from the ECONOMY_MODEL and STANDARD_MODEL wrangler vars, which are already the place to change a model without a code edit. Duplicating them here would create a second source of truth.",
+    "reach: how the caller reaches Shamwari (docs/tiered-access-design.md): r0 SMS/USSD, r1 chat app, r2 Lite PWA. Each is a ceiling, never a floor: max_tier clamps the model tier down (premium is never a reach ceiling, it stays opt-in outside the ladder), max_output_tokens caps generation, extractive_max_chars caps an extractive answer. A request with no reach is unchanged. R3 is on-device Mind and never reaches this gateway for personal data.",
     "This is a deploy-time config, not runtime-dynamic: the file is bundled into the Worker. Edit, then `wrangler deploy`."
   ],
 
   "default_tier": "economy",
+
+  "reach": {
+    "r0": { "max_tier": "economy", "max_output_tokens": 200, "extractive_max_chars": 450 },
+    "r1": { "max_tier": "standard", "max_output_tokens": 512, "extractive_max_chars": 1200 },
+    "r2": { "max_tier": "standard", "max_output_tokens": 1024, "extractive_max_chars": 3000 }
+  },
 
   "model_aliases": {
     "shamwari-economy": "economy",
