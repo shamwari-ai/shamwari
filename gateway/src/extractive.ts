@@ -22,8 +22,8 @@ import type { GroundChunk } from './types';
  * nothing more.
  */
 
-/** About three SMS segments of text plus a citation. Tier caps come later. */
-export const EXTRACTIVE_MAX_CHARS = 480;
+/** Under three GSM-7 SMS segments (3 x 153 = 459). Per-channel caps come later. */
+export const EXTRACTIVE_MAX_CHARS = 450;
 
 /** Said plainly, as the system prompt requires, when Ground has nothing. */
 export const NO_SOURCE_MESSAGE =
