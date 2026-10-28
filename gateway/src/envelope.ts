@@ -7,9 +7,11 @@
  *
  * `via` is the rung that served it (gateway, workers-ai, extractive). Usage,
  * model names, latency and language are left out: they cost bytes a 2G link
- * pays for and a feature-phone adapter never reads. Labels use plain ASCII so
- * an SMS adapter does not meet a dash that forces UCS-2.
+ * pays for and a feature-phone adapter never reads. On r0 the labels are
+ * made plain, so an SMS adapter does not meet a dash that forces UCS-2.
  */
+import { plain } from './extractive';
+
 export const FORMATS = ['compact'] as const;
 export type Format = (typeof FORMATS)[number];
 
@@ -29,14 +31,16 @@ interface Verbose {
   };
 }
 
-export function toCompact(v: Verbose) {
+/** Replace what forces an SMS into UCS-2; the same set extractive.ts uses. */
+export function toCompact(v: Verbose, asciiLabels = false) {
+  const label = (t: string) => (asciiLabels ? plain(t) : t);
   const s = v.shamwari;
   return {
     id: v.id,
     answer: v.choices[0]?.message.content ?? '',
     cites: s.citations.map((c, i) => ({
       n: i + 1,
-      label: [c.title, c.heading].filter(Boolean).join(' - '),
+      label: label([c.title, c.heading].filter(Boolean).join(' - ')),
       ...(c.url ? { url: c.url } : {}),
     })),
     scope: s.scope,

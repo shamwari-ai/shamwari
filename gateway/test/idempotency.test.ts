@@ -6,7 +6,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import worker from '../src/index';
 import { toCompact } from '../src/envelope';
-import { DONE_TTL_SECONDS, PENDING_TTL_SECONDS } from '../src/idempotency';
+import { complete, DONE_TTL_SECONDS, PENDING_TTL_SECONDS } from '../src/idempotency';
 import type { Env, GroundChunk, SinkMessage } from '../src/types';
 
 const CHUNK: GroundChunk = {
@@ -39,7 +39,9 @@ interface Counts {
 function makeKv() {
   const store = new Map<string, string>();
   const puts: { key: string; ttl: number | undefined }[] = [];
-  return { store, puts };
+  /** `down` makes the idempotency keys throw, as a KV outage would; `over` is a spent quota. */
+  const ctl = { down: false, over: false };
+  return { store, puts, ctl };
 }
 
 function setup(opts: {
@@ -54,9 +56,14 @@ function setup(opts: {
   const env = {
     AI: { run: vi.fn(async () => ({ data: [Array.from({ length: 1024 }, () => 0.1)] })) },
     AUTH_CACHE: {
-      get: async (k: string) =>
-        k.startsWith('auth:') ? authFor(opts.owner ?? 'e1') : JSON.parse(kv.store.get(k) ?? 'null'),
+      get: async (k: string) => {
+        if (kv.ctl.down && k.startsWith('idem:')) throw new Error('KV down');
+        return k.startsWith('auth:')
+          ? authFor(opts.owner ?? 'e1')
+          : JSON.parse(kv.store.get(k) ?? 'null');
+      },
       put: async (k: string, v: string, o?: { expirationTtl?: number }) => {
+        if (kv.ctl.down && k.startsWith('idem:')) throw new Error('KV down');
         if (!k.startsWith('auth:')) {
           kv.store.set(k, v);
           kv.puts.push({ key: k, ttl: o?.expirationTtl });
@@ -86,7 +93,7 @@ function setup(opts: {
 
   vi.stubGlobal('fetch', async (url: string) => {
     const u = String(url);
-    if (u.includes('/rollup')) return Response.json({ total_tokens: 0 });
+    if (u.includes('/rollup')) return Response.json({ total_tokens: kv.ctl.over ? 1e9 : 0 });
     if (u.includes('/ground/search')) {
       counts.ground += 1;
       return Response.json({ chunks, hit: chunks.length > 0 });
@@ -198,11 +205,10 @@ describe('Idempotency-Key', () => {
     // Start one and do not let it settle: its pending marker is what a retry sees.
     const first = worker.fetch(ask({}, 'slow'), env, ctx);
     await first;
-    const key = [...kv.store.keys()][0]!;
-    kv.store.set(
-      key,
-      JSON.stringify({ ...JSON.parse(kv.store.get(key)!), state: 'pending', response: undefined }),
-    );
+    const done = [...kv.store.keys()].find((k) => k.endsWith(':d'))!;
+    const fp = JSON.parse(kv.store.get(done)!).fp;
+    kv.store.delete(done);
+    kv.store.set(done.replace(/:d$/, ':p'), JSON.stringify({ fp }));
     const before = counts.inference;
     const res = await worker.fetch(ask({}, 'slow'), env, ctx);
     expect(res.status).toBe(409);
@@ -260,6 +266,77 @@ describe('Idempotency-Key', () => {
     expect(stored.map((p) => p.ttl)).toEqual([PENDING_TTL_SECONDS, DONE_TTL_SECONDS]);
     expect(stored.every((p) => !p.key.includes('my-secret-looking-key'))).toBe(true);
     expect(stored.every((p) => p.key.startsWith('idem:e1:'))).toBe(true);
+  });
+});
+
+describe('review findings', () => {
+  it('a retry of an answered request is replayed even when the quota is now spent', async () => {
+    const { env, kv, counts } = setup({});
+    expect((await worker.fetch(ask({}, 'paid'), env, ctx)).status).toBe(200);
+    await settle();
+    kv.ctl.over = true;
+    const retry = await worker.fetch(ask({}, 'paid'), env, ctx);
+    expect(retry.status).toBe(200);
+    expect(retry.headers.get('Idempotent-Replayed')).toBe('true');
+    // A genuinely new request is still refused, and its marker is released.
+    const fresh = await worker.fetch(ask({}, 'new-one'), env, ctx);
+    await settle();
+    expect(fresh.status).toBe(429);
+    kv.ctl.over = false;
+    expect((await worker.fetch(ask({}, 'new-one'), env, ctx)).status).toBe(200);
+    expect(counts.inference).toBe(2);
+  });
+
+  it('a degraded answer is not stored, so the retry can get a proper one', async () => {
+    const { env, kv, counts } = setup({ inferenceFails: true });
+    const first = await worker.fetch(ask({}, 'degrade'), env, ctx);
+    await settle();
+    expect(first.status).toBe(200);
+    expect(((await first.json()) as { shamwari: { degraded: boolean } }).shamwari.degraded).toBe(
+      true,
+    );
+    expect([...kv.store.keys()].some((k) => k.endsWith(':d'))).toBe(false);
+    const before = counts.ground;
+    await worker.fetch(ask({}, 'degrade'), env, ctx);
+    expect(counts.ground).toBeGreaterThan(before);
+  });
+
+  it('the store refuses a personal-scope answer itself, whatever the caller did', async () => {
+    const kv = { put: vi.fn(), get: vi.fn(), delete: vi.fn() } as unknown as KVNamespace;
+    await complete(kv, 'idem:e1:x', 'fp', { status: 200, body: '{}' }, 'personal');
+    expect(kv.put).not.toHaveBeenCalled();
+    await complete(kv, 'idem:e1:x', 'fp', { status: 200, body: '{}' }, 'platform');
+    expect(kv.put).toHaveBeenCalledTimes(1);
+  });
+
+  it('a KV outage runs the request unprotected rather than failing it', async () => {
+    const { env, kv, counts } = setup({});
+    kv.ctl.down = true;
+    const res = await worker.fetch(ask({}, 'outage'), env, ctx);
+    await settle();
+    expect(res.status).toBe(200);
+    expect(counts.inference).toBe(1);
+  });
+
+  it('the answer goes to its own key, so a fast answer never rewrites the marker key', async () => {
+    const { env, kv } = setup({});
+    await worker.fetch(ask({}, 'fast'), env, ctx);
+    await settle();
+    const keys = kv.puts.filter((p) => p.key.startsWith('idem:')).map((p) => p.key);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('compact is minified, and r0 labels are plain ASCII', async () => {
+    const { env } = setup({
+      chunks: [
+        { ...CHUNK, title: 'Constitution \u2013 \u201CZimbabwe\u201D', heading: 'S\u00A048' },
+      ],
+    });
+    const res = await worker.fetch(ask({ format: 'compact', reach: 'r0' }), env, ctx);
+    const text = await res.text();
+    expect(text).not.toContain('\n');
+    const label = (JSON.parse(text) as { cites: { label: string }[] }).cites[0]!.label;
+    expect(label).toBe('Constitution - "Zimbabwe" - S 48');
   });
 });
 

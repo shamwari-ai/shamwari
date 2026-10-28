@@ -16,10 +16,10 @@ import { detectLanguage } from './lang';
 import { core } from './core';
 import { probe, healthDoc } from './probe';
 
-const json = (body: unknown, status = 200) =>
+const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body, null, 2), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
   });
 
 /** The citations a caller sees, in the shape every response uses. */
@@ -70,6 +70,7 @@ async function admit(
   req: Request,
   env: Env,
   capability: Capability,
+  deferQuota = false,
 ): Promise<
   | { ok: false; response: Response }
   | {
@@ -78,22 +79,28 @@ async function admit(
       body: ChatBody;
       messages: Message[];
       decision: ScopeDecision;
+      /** Only meaningful with `deferQuota`: the 429, or null when there is quota left. */
+      quota: () => Promise<Response | null>;
     }
 > {
   const auth = await authenticate(req, env);
   if (!auth) return { ok: false, response: json({ error: 'invalid_api_key' }, 401) };
-  if (await overQuota(env, auth)) {
-    return {
-      ok: false,
-      response: json(
-        {
-          error: 'quota_exceeded',
-          tier: auth.tier,
-          upgrade: 'https://platform.shamwari.ai/billing',
-        },
-        429,
-      ),
-    };
+  const quota = async (): Promise<Response | null> =>
+    (await overQuota(env, auth))
+      ? json(
+          {
+            error: 'quota_exceeded',
+            tier: auth.tier,
+            upgrade: 'https://platform.shamwari.ai/billing',
+          },
+          429,
+        )
+      : null;
+  // A retry of an answered request is replayed without a quota check, so the
+  // chat endpoint defers it until it knows the request is new.
+  if (!deferQuota) {
+    const over = await quota();
+    if (over) return { ok: false, response: over };
   }
 
   let body: ChatBody;
@@ -117,6 +124,7 @@ async function admit(
       body,
       messages,
       decision: decideDestination(scope, env, capability),
+      quota,
     };
   } catch (e) {
     if (e instanceof ScopeRefusal) return { ok: false, response: json(e.toPayload(), 409) };
@@ -309,9 +317,9 @@ export default {
       return json({ error: 'not_found' }, 404);
     }
 
-    const a = await admit(req, env, 'cloud_inference');
+    const a = await admit(req, env, 'cloud_inference', true);
     if (!a.ok) return a.response;
-    const { auth, body, messages, decision } = a;
+    const { auth, body, messages, decision, quota } = a;
 
     // Only this endpoint has modes. /v1/ground/context shares admit() and must
     // not start refusing a field it has always ignored.
@@ -519,10 +527,24 @@ export default {
     const shaped = async (): Promise<Response> => {
       const res = await produce();
       if (format !== 'compact' || res.status !== 200) return res;
-      return json(toCompact(await res.json()));
+      return new Response(JSON.stringify(toCompact(await res.json(), reach === 'r0')), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
     };
 
-    if (rawKey === null) return shaped();
+    // A degraded answer (every inference path failed, Ground answered) is real
+    // but not final: the retry should get the chance of a proper one.
+    const worthStoring = (text: string): boolean => {
+      try {
+        const o = JSON.parse(text);
+        return !(o.degraded ?? o.shamwari?.degraded);
+      } catch {
+        return false;
+      }
+    };
+
+    if (rawKey === null) return (await quota()) ?? shaped();
 
     // The key is scoped to the entity and to the whole request: the same key
     // with a different request is a mistake, not a retry.
@@ -543,14 +565,11 @@ export default {
       );
     }
     if (begun.state === 'in_progress') {
-      return new Response(JSON.stringify({ error: 'request_in_progress', retry: true }, null, 2), {
-        status: 409,
-        headers: { 'Content-Type': 'application/json', 'Retry-After': '2' },
-      });
+      return json({ error: 'request_in_progress', retry: true }, 409, { 'Retry-After': '2' });
     }
     if (begun.state === 'replay') {
-      // No Ground, no inference, no usage event: a replay is free and is not
-      // stored again.
+      // No quota check, no Ground, no inference, no usage event: a replay is
+      // free, is not stored again, and is an answer the caller already earned.
       return new Response(begun.body, {
         status: begun.status,
         headers: { 'Content-Type': 'application/json', 'Idempotent-Replayed': 'true' },
@@ -558,10 +577,25 @@ export default {
     }
 
     try {
+      const over = await quota();
+      if (over) {
+        ctx.waitUntil(idem.release(env.AUTH_CACHE, k));
+        return over;
+      }
       const res = await shaped();
       if (res.status === 200) {
         const text = await res.clone().text();
-        ctx.waitUntil(idem.complete(env.AUTH_CACHE, k, fp, { status: res.status, body: text }));
+        ctx.waitUntil(
+          worthStoring(text)
+            ? idem.complete(
+                env.AUTH_CACHE,
+                k,
+                fp,
+                { status: res.status, body: text },
+                decision.scope,
+              )
+            : idem.release(env.AUTH_CACHE, k),
+        );
       } else {
         ctx.waitUntil(idem.release(env.AUTH_CACHE, k));
       }

@@ -336,9 +336,12 @@ no inference and no usage event. The same key with a different request
 (messages, model, scope, mode, reach or format) is a 422
 `idempotency_key_reuse`. A request still running is a 409 `request_in_progress`
 with `Retry-After`. Only a 200 is stored; a failure is released so the retry
-runs. Keys are scoped to the calling entity.
+runs. Keys are scoped to the calling entity. A replay skips the quota check (the
+caller already earned that answer), and a degraded answer (every inference path
+failed, Ground answered) is not stored, so the retry can get a proper one.
 
-- It is best-effort, not exactly-once. It uses the existing KV namespace, which
+- It fails open: a KV error is logged and the request runs unprotected. It is
+  best-effort, not exactly-once. It uses the existing KV namespace, which
   is eventually consistent, so two simultaneous first attempts in different
   locations can both run. It stops the common retry; it does not make billing
   exact. For that the sink must also dedupe on the request id.
@@ -346,7 +349,7 @@ runs. Keys are scoped to the calling entity.
   **Personal scope stores nothing**: it is refused before this code runs, and a
   stored answer would be a second copy of the user's data outside their pod.
 
-**`"format": "compact"`** returns
+**`"format": "compact"`** (minified; on r0 the labels are plain ASCII) returns
 `{id, answer, cites: [{n, label, url?}], scope, via, truncated, degraded}`
 instead of the OpenAI-shaped body. Every channel adapter reads this one shape.
 An unknown format is a 400 `invalid_format`. It is applied last, so the
