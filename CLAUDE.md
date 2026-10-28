@@ -356,8 +356,9 @@ upstream; not something to paper over here.
 ## Deliberately not in this phase
 
 Streaming responses · semantic caching · premium tier (Claude/GPT) ·
-self-serve billing · Shamwari Mind · `code.shamwari.ai` sandboxes ·
-voice and image.
+self-serve billing · `code.shamwari.ai` sandboxes · image. Shamwari Mind and
+voice are in the first release by the owner's decision of 2026-10-28 (see
+`docs/tiered-access-design.md`); the voice findings below still apply.
 
 On voice and image, when that phase starts — three findings from the
 catalogue check on 2026-08-27, so they are not rediscovered:
