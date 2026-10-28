@@ -75,7 +75,11 @@ function citation(c: GroundChunk, max: number, opts: ExtractiveOptions): string 
  * breaks are kept: they carry the numbering of subsections, and losing them
  * can merge a rule into its exception.
  */
-function clip(text: string, max: number, ellipsis: string): { text: string; truncated: boolean } {
+export function clip(
+  text: string,
+  max: number,
+  ellipsis: string,
+): { text: string; truncated: boolean } {
   const t = text
     .trim()
     .replace(/[ \t]+/g, ' ')
