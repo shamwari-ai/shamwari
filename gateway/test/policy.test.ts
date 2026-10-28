@@ -119,3 +119,44 @@ describe('validatePolicy rejects', () => {
     expect(() => validatePolicy(p)).toThrow(/must be an array/);
   });
 });
+
+describe('the reach ceilings', () => {
+  it('ship for r0, r1 and r2, and never name premium', () => {
+    expect(Object.keys(policy.reach)).toEqual(['r0', 'r1', 'r2']);
+    expect(policy.reach.r0.max_tier).toBe('economy');
+    for (const r of Object.values(policy.reach)) {
+      expect(['economy', 'standard']).toContain(r.max_tier);
+    }
+  });
+
+  it('get looser as the channel gets richer', () => {
+    expect(policy.reach.r0.max_output_tokens).toBeLessThan(policy.reach.r1.max_output_tokens);
+    expect(policy.reach.r1.max_output_tokens).toBeLessThan(policy.reach.r2.max_output_tokens);
+    expect(policy.reach.r0.extractive_max_chars).toBeLessThan(policy.reach.r1.extractive_max_chars);
+  });
+
+  it('are rejected when missing, extra, or pointing at premium', () => {
+    const p = valid();
+    delete p.reach;
+    expect(() => validatePolicy(p)).toThrow(/reach must be an object/);
+
+    const extra = valid();
+    (extra.reach as Record<string, unknown>).r3 = { max_tier: 'standard' };
+    expect(() => validatePolicy(extra)).toThrow(/reach must name exactly/);
+
+    const prem = valid();
+    (prem.reach as Record<string, Record<string, unknown>>).r1!.max_tier = 'premium';
+    expect(() => validatePolicy(prem)).toThrow(/max_tier must be economy or standard/);
+  });
+
+  it('are rejected when a cap is not a sane positive integer', () => {
+    for (const bad of [0, -5, 1.5, '200', null, 100000]) {
+      const p = valid();
+      (p.reach as Record<string, Record<string, unknown>>).r0!.max_output_tokens = bad;
+      expect(() => validatePolicy(p)).toThrow(/max_output_tokens/);
+    }
+    const p = valid();
+    (p.reach as Record<string, Record<string, unknown>>).r2!.extractive_max_chars = 0;
+    expect(() => validatePolicy(p)).toThrow(/extractive_max_chars/);
+  });
+});
