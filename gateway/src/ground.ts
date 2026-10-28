@@ -13,6 +13,12 @@ export interface GroundResult {
   chunks: GroundChunk[];
   systemPrompt: string;
   hit: boolean;
+  /**
+   * Core could not be reached. Distinct from a miss: "Ground has nothing on
+   * this" and "Ground could not be asked" are different statements, and only
+   * the first may be said to a person as a fact about the corpus.
+   */
+  unavailable: boolean;
 }
 
 async function embed(env: Env, text: string): Promise<number[]> {
@@ -33,7 +39,7 @@ export async function ground(
   language: string | null,
 ): Promise<GroundResult> {
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-  if (!lastUser) return { chunks: [], systemPrompt: BASE, hit: false };
+  if (!lastUser) return { chunks: [], systemPrompt: BASE, hit: false, unavailable: false };
 
   // RULE 1, IN THE LEAK PATH.
   //
@@ -51,9 +57,21 @@ export async function ground(
   // infrastructure, not a third-party inference provider, and Core already
   // stores the conversation — so this adds no exposure that rule 1 has not
   // already accepted.
-  const embedding = destination === 'cloud' ? await embed(env, lastUser.content) : null;
+  //
+  // An embedding failure is an outage of Workers AI, which is exactly when the
+  // lower rungs must still work. It degrades to the same keyword search a mind
+  // destination gets: weaker ranking over the same corpus, never a different one.
+  let embedding: number[] | null = null;
+  if (destination === 'cloud') {
+    try {
+      embedding = await embed(env, lastUser.content);
+    } catch (e) {
+      console.warn('embedding unavailable, searching by keyword', String(e));
+    }
+  }
 
   let chunks: GroundChunk[] = [];
+  let unavailable = false;
   try {
     // Core runs $rankFusion over the vector and lexical indexes and applies
     // the scope filter. It also logs the miss if there is one.
@@ -73,9 +91,10 @@ export async function ground(
   } catch (e) {
     // Ungrounded is degraded, not broken. Answer anyway and say so.
     console.warn('ground unavailable', String(e));
+    unavailable = true;
   }
 
-  if (chunks.length === 0) return { chunks: [], systemPrompt: BASE, hit: false };
+  if (chunks.length === 0) return { chunks: [], systemPrompt: BASE, hit: false, unavailable };
 
   const context = chunks
     .map((c, i) => {
@@ -88,6 +107,7 @@ export async function ground(
   return {
     chunks,
     hit: true,
+    unavailable: false,
     systemPrompt: `${BASE}\n\n--- SHAMWARI GROUND CONTEXT ---\n${context}\n--- END CONTEXT ---`,
   };
 }
