@@ -53,7 +53,7 @@ export interface ExtractiveOptions {
   plainText?: boolean;
 }
 
-function plain(text: string): string {
+export function plain(text: string): string {
   return text
     .replace(/[\u2018\u2019\u201B]/g, "'")
     .replace(/[\u201C\u201D]/g, '"')
