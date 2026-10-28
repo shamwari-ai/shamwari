@@ -342,6 +342,16 @@ Expo (React Native, TypeScript)           ArkTS app (ArkUI), standalone
   native C++ layer under ArkTS; MindSpore Lite with NNRt can use Kirin NPUs but
   needs models converted to `.ms`. **No official Huawei guidance on llama.cpp was
   found**, so HarmonyOS inference speed is _unmeasured_ until the spike.
+- **Mzizi components and WebAssembly.** Mzizi has its own component set; a
+  third-party Rust UI engine is not part of this plan. The PWA (R2) is built from
+  Mzizi components, with WebAssembly used where heavy lifting needs it (for
+  example full-text search over a pack, or signature checks). **The Expo app does
+  not run WebAssembly in its JavaScript engine** (Hermes, to verify against
+  Expo's current docs), so mobile heavy lifting stays native: llama.cpp for Mind
+  and SQLite for packs. Mzizi's web components reach the Expo app through
+  tokens plus React Native primitives; hosting web components inside the app
+  (Expo's DOM components render in a web view) is possible but costs memory, so
+  it is kept to non-core screens and measured first.
 - **No shared Rust core in the first phase.** It was the earlier plan; it adds a
   native toolchain per platform for logic that is small. The Rust core stays an
   option once the Rust rebuild lands and the contract is stable.
