@@ -5,8 +5,14 @@
 // its licence class from code (router.ts), not from the policy file.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import worker from '../src/index';
-import { applyReach, targets, policy } from '../src/router';
-import { viaGateway, viaWorkersAI, DEFAULT_MAX_OUTPUT_TOKENS } from '../src/gateway';
+import {
+  applyReach,
+  targets,
+  policy,
+  validatePolicy,
+  DEFAULT_MAX_OUTPUT_TOKENS,
+} from '../src/router';
+import { viaGateway, viaWorkersAI } from '../src/gateway';
 import type { Env, GroundChunk, SinkMessage, Message } from '../src/types';
 
 const CHUNK: GroundChunk = {
@@ -125,7 +131,11 @@ describe('applyReach', () => {
 
   it('leaves a request with no reach untouched', () => {
     const t = targets(env).standard;
-    expect(applyReach(t, undefined, env)).toEqual({ target: t, clamped: false });
+    expect(applyReach(t, undefined, env)).toEqual({
+      target: t,
+      clamped: false,
+      routedTier: 'standard',
+    });
   });
 
   it('can never be the way to premium: a premium target is clamped to the ceiling', () => {
@@ -185,7 +195,7 @@ describe('through the handler', () => {
     expect(convo.doc).toMatchObject({ reach: 'r1' });
   });
 
-  it('rejects a reach it does not know, before anything is called', async () => {
+  it('rejects a reach it does not know, before any embedding, retrieval or inference', async () => {
     const { env, seen } = setup();
     for (const bad of ['r3', 'R0', 'sms', 5, null]) {
       const res = await worker.fetch(ask({ reach: bad }), env, ctx);
@@ -266,5 +276,64 @@ describe('the token cap at the inference steps', () => {
     const calls = (e.AI.run as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     expect(calls[0]![1]).not.toHaveProperty('max_tokens');
     expect(calls[1]![1]).toMatchObject({ max_tokens: 200 });
+  });
+});
+
+describe('what the review of this change found', () => {
+  it('keeps the tier it was routed to before the clamp, so clamping can be measured', async () => {
+    const { env, seen } = setup();
+    await worker.fetch(ask({ reach: 'r0' }, ESCALATING), env, ctx);
+    await Promise.resolve();
+    const usage = seen.sink.find((m) => m.collection === 'usageEvents')!;
+    expect(usage.doc).toMatchObject({
+      tier: 'economy',
+      routedTier: 'standard',
+      reachClamped: true,
+    });
+  });
+
+  it('tells the caller when the output cap cut the answer off', async () => {
+    const { env } = setup();
+    vi.stubGlobal('fetch', async (url: string) => {
+      const u = String(url);
+      if (u.includes('/rollup')) return Response.json({ total_tokens: 0 });
+      if (u.includes('/ground/search')) return Response.json({ chunks: [CHUNK], hit: true });
+      return Response.json({
+        choices: [{ message: { content: 'cut off mid' }, finish_reason: 'length' }],
+      });
+    });
+    const j = (await (await worker.fetch(ask({ reach: 'r0' }), env, ctx)).json()) as any;
+    expect(j.choices[0].finish_reason).toBe('length');
+    expect(j.shamwari.truncated).toBe(true);
+  });
+
+  it('does not accept a cap the code would never honour', () => {
+    const p = JSON.parse(JSON.stringify(policy)) as typeof policy;
+    p.reach.r2.max_output_tokens = DEFAULT_MAX_OUTPUT_TOKENS + 1;
+    expect(() => validatePolicy(p)).toThrow(/max_output_tokens must be at most/);
+  });
+
+  it('keeps r0 extractive text to plain characters, so an SMS stays in one encoding', async () => {
+    const fancy: GroundChunk = {
+      ...CHUNK,
+      title: 'Constitution \u2014 Zimbabwe',
+      content: 'It\u2019s \u201Cthe right\u201D \u2013 and more\u2026',
+    };
+    const { env } = setup();
+    vi.stubGlobal('fetch', async (url: string) => {
+      const u = String(url);
+      if (u.includes('/rollup')) return Response.json({ total_tokens: 0 });
+      return Response.json({ chunks: [fancy], hit: true });
+    });
+    const r0 = (await (
+      await worker.fetch(ask({ reach: 'r0', mode: 'extractive' }), env, ctx)
+    ).json()) as any;
+    const text: string = r0.choices[0].message.content;
+    expect(text).not.toMatch(/[\u2013\u2014\u2018\u2019\u201C\u201D\u2026]/);
+    expect(text).toContain('It\'s "the right" - and more...');
+    const r1 = (await (
+      await worker.fetch(ask({ reach: 'r1', mode: 'extractive' }), env, ctx)
+    ).json()) as any;
+    expect(r1.choices[0].message.content).toContain('\u2014');
   });
 });

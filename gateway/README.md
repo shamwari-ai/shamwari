@@ -301,14 +301,22 @@ rung engages. See `docs/tiered-access-design.md`.
 How the caller reaches Shamwari, sent as `"reach": "r0" | "r1" | "r2"` on
 `/v1/chat/completions` (r0 SMS/USSD, r1 chat app, r2 Lite PWA; see
 `docs/tiered-access-design.md`). An unknown value is a 400 `invalid_reach`, and
-a request with no reach behaves exactly as before. Reach is a **ceiling, never
-a floor**, set in `routing-policy.json`:
+a request with no reach behaves exactly as before. For the model tier and the
+generation length, reach is a **ceiling, never a floor**, set in
+`routing-policy.json`:
 
 - `max_tier` clamps the routed model tier down (r0 cannot reach `standard`).
   `premium` is never a reach ceiling: the policy validator rejects it, so a
-  channel alone cannot choose a model with different terms and cost.
-- `max_output_tokens` caps generation (never above the 2048 default).
-- `extractive_max_chars` caps an extractive answer.
+  channel alone cannot choose a model with different terms and cost. The tier
+  it was routed to before the clamp is recorded as `routedTier`.
+- `max_output_tokens` caps generation. It can only lower the 2048 default (the
+  validator rejects more), and `finish_reason: "length"` and
+  `shamwari.truncated` say when the cap cut an answer off.
+- `extractive_max_chars` is different: it is the **length budget of that
+  channel** for an extractive answer, not a ceiling over a default (a request
+  with no reach keeps the 450-character default, so r1 and r2 may return
+  more). On r0 the text is also plain: typographic quotes, dashes and the
+  ellipsis become ASCII, because one such character forces an SMS into UCS-2.
 
 The response carries `shamwari.reach` and `shamwari.reach_clamped`, and the
 usage event and conversation record the reach, so per-tier cost can be read

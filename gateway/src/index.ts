@@ -219,9 +219,12 @@ function extractiveResponse(
   },
 ): Response {
   const { auth, decision, g, language, requestId, started, degraded, reach } = a;
+  // r0 is SMS/USSD: typographic characters would force UCS-2 and turn three
+  // segments into seven, so the text is plain there.
   const built = extractiveAnswer(
     g.chunks,
     reach ? policy.reach[reach].extractive_max_chars : undefined,
+    { plainText: reach === 'r0' },
   );
   const text = built ? built.text : NO_SOURCE_MESSAGE;
   const used = built ? built.used : [];
@@ -246,6 +249,8 @@ function extractiveResponse(
         groundHit: g.hit,
         inferencePath: 'extractive',
         reach: reach ?? null,
+        // No model tier is chosen on this rung, so there is nothing to clamp.
+        reachClamped: false,
         degraded,
         latencyMs,
         createdAt: new Date().toISOString(),
@@ -312,7 +317,7 @@ export default {
     if (body.reach !== undefined && !isReach(body.reach)) {
       return json({ error: 'invalid_reach', allowed: REACHES }, 400);
     }
-    const reach: Reach | undefined = body.reach as Reach | undefined;
+    const reach: Reach | undefined = isReach(body.reach) ? body.reach : undefined;
     const limits = reach ? policy.reach[reach] : undefined;
 
     const requestId = crypto.randomUUID();
@@ -431,6 +436,7 @@ export default {
           tier: target.tier,
           reach: reach ?? null,
           reachClamped: routed.clamped,
+          routedTier: routed.routedTier,
           provider: result.provider,
           model: result.model,
           requestedProvider: result.requestedProvider,
@@ -461,7 +467,7 @@ export default {
         {
           index: 0,
           message: { role: 'assistant', content: result.text },
-          finish_reason: 'stop',
+          finish_reason: result.finishReason,
         },
       ],
       usage: {
@@ -473,6 +479,7 @@ export default {
         tier: target.tier,
         reach: reach ?? null,
         reach_clamped: routed.clamped,
+        truncated: result.finishReason === 'length',
         scope: decision.scope,
         language,
         grounded: g.hit,

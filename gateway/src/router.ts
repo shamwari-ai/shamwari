@@ -53,6 +53,13 @@ const TIERS: readonly Tier[] = ['economy', 'standard', 'premium'];
  * does not use this gateway for personal data, and a cloud request cannot claim
  * it.
  */
+/**
+ * The most a generation may ask for, with or without a reach. A reach lowers
+ * it and cannot raise it, so the policy validator caps `max_output_tokens`
+ * here: a larger number would validate but never be honoured.
+ */
+export const DEFAULT_MAX_OUTPUT_TOKENS = 2048;
+
 export const REACHES = ['r0', 'r1', 'r2'] as const;
 export type Reach = (typeof REACHES)[number];
 
@@ -123,7 +130,11 @@ function validateReach(input: unknown): Record<Reach, ReachLimits> {
     }
     out[r] = {
       max_tier: lim.max_tier,
-      max_output_tokens: positiveInt(lim.max_output_tokens, `reach.${r}.max_output_tokens`, 4096),
+      max_output_tokens: positiveInt(
+        lim.max_output_tokens,
+        `reach.${r}.max_output_tokens`,
+        DEFAULT_MAX_OUTPUT_TOKENS,
+      ),
       extractive_max_chars: positiveInt(
         lim.extractive_max_chars,
         `reach.${r}.extractive_max_chars`,
@@ -255,9 +266,10 @@ export function applyReach(
   target: Target,
   reach: Reach | undefined,
   env: Env,
-): { target: Target; clamped: boolean } {
-  if (!reach) return { target, clamped: false };
+): { target: Target; clamped: boolean; routedTier: Tier } {
+  const routedTier = target.tier;
+  if (!reach) return { target, clamped: false, routedTier };
   const ceiling = policy.reach[reach].max_tier;
-  if (RANK[target.tier] <= RANK[ceiling]) return { target, clamped: false };
-  return { target: targets(env)[ceiling], clamped: true };
+  if (RANK[routedTier] <= RANK[ceiling]) return { target, clamped: false, routedTier };
+  return { target: targets(env)[ceiling], clamped: true, routedTier };
 }

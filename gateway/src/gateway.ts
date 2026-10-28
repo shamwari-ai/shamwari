@@ -1,5 +1,6 @@
 import type { Env, Message, LicenseClass, Scope, Tier } from './types';
 import type { Target } from './router';
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './router';
 import { resolveLicenseClass, WORKERS_AI_FALLBACK_MODEL } from './provenance';
 
 export interface InferenceResult {
@@ -18,6 +19,8 @@ export interface InferenceResult {
   /** True when a dynamic route or a fallback answered with something else. */
   substituted: boolean;
   path: 'gateway' | 'workers-ai';
+  /** The model's own stop reason: `length` means the output cap cut it off. */
+  finishReason: string;
 }
 
 /**
@@ -62,8 +65,7 @@ export function buildMetadata(meta: RequestMetadata): Record<string, string> {
   };
 }
 
-/** The ceiling when a request names no reach. A reach lowers it, never raises it. */
-export const DEFAULT_MAX_OUTPUT_TOKENS = 2048;
+export { DEFAULT_MAX_OUTPUT_TOKENS };
 
 async function post(
   url: string,
@@ -178,6 +180,7 @@ export async function viaWorkersAI(
     licenseClass: resolveLicenseClass('workers-ai', WORKERS_AI_FALLBACK_MODEL),
     substituted: true,
     path: 'workers-ai',
+    finishReason: 'stop',
   };
 }
 
@@ -214,7 +217,7 @@ async function parse(
   path: InferenceResult['path'],
 ): Promise<InferenceResult> {
   const j = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
 
@@ -225,6 +228,7 @@ async function parse(
 
   return {
     text: j.choices?.[0]?.message?.content ?? '',
+    finishReason: j.choices?.[0]?.finish_reason ?? 'stop',
     inputTokens: j.usage?.prompt_tokens ?? 0,
     outputTokens: j.usage?.completion_tokens ?? 0,
     cacheHit,
