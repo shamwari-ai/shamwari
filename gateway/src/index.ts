@@ -2,7 +2,8 @@ import type { Env, Message, SinkMessage, AuthContext, GroundChunk } from './type
 import { authenticate } from './auth';
 import { parseScope, decideDestination, ScopeRefusal } from './scope';
 import type { Capability, ScopeDecision } from './scope';
-import { route } from './router';
+import { route, applyReach, isReach, policy, REACHES } from './router';
+import type { Reach } from './router';
 import { infer } from './gateway';
 import { ground } from './ground';
 import type { GroundResult } from './ground';
@@ -51,6 +52,8 @@ interface ChatBody {
   scope?: string;
   /** `extractive` answers from Ground alone, with no inference call. */
   mode?: string;
+  /** How the caller reaches Shamwari: r0 SMS/USSD, r1 chat app, r2 Lite PWA. */
+  reach?: string;
 }
 
 /**
@@ -212,10 +215,17 @@ function extractiveResponse(
     requestId: string;
     started: number;
     degraded: boolean;
+    reach: Reach | undefined;
   },
 ): Response {
-  const { auth, decision, g, language, requestId, started, degraded } = a;
-  const built = extractiveAnswer(g.chunks);
+  const { auth, decision, g, language, requestId, started, degraded, reach } = a;
+  // r0 is SMS/USSD: typographic characters would force UCS-2 and turn three
+  // segments into seven, so the text is plain there.
+  const built = extractiveAnswer(
+    g.chunks,
+    reach ? policy.reach[reach].extractive_max_chars : undefined,
+    { plainText: reach === 'r0' },
+  );
   const text = built ? built.text : NO_SOURCE_MESSAGE;
   const used = built ? built.used : [];
   const latencyMs = Date.now() - started;
@@ -238,6 +248,9 @@ function extractiveResponse(
         cacheHit: false,
         groundHit: g.hit,
         inferencePath: 'extractive',
+        reach: reach ?? null,
+        // No model tier is chosen on this rung, so there is nothing to clamp.
+        reachClamped: false,
         degraded,
         latencyMs,
         createdAt: new Date().toISOString(),
@@ -263,6 +276,7 @@ function extractiveResponse(
       grounded: g.hit,
       cache_hit: false,
       inference_path: 'extractive',
+      reach: reach ?? null,
       degraded,
       truncated: built?.truncated ?? false,
       latency_ms: latencyMs,
@@ -300,6 +314,12 @@ export default {
       return json({ error: 'invalid_mode', allowed: ['extractive'] }, 400);
     }
 
+    if (body.reach !== undefined && !isReach(body.reach)) {
+      return json({ error: 'invalid_reach', allowed: REACHES }, 400);
+    }
+    const reach: Reach | undefined = isReach(body.reach) ? body.reach : undefined;
+    const limits = reach ? policy.reach[reach] : undefined;
+
     const requestId = crypto.randomUUID();
     const started = Date.now();
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');
@@ -313,7 +333,7 @@ export default {
       decision.destination,
       language,
     );
-    const rung = { auth, decision, g, language, requestId, started };
+    const rung = { auth, decision, g, language, requestId, started, reach };
     if (body.mode === 'extractive') {
       // "Ground could not be asked" is not "Ground has nothing": only the
       // second may be said to a person as a fact about the corpus.
@@ -326,7 +346,8 @@ export default {
       return extractiveResponse(ctx, env, { ...rung, degraded: false });
     }
 
-    const target = route(messages, body.model, env);
+    const routed = applyReach(route(messages, body.model, env), reach, env);
+    const target = routed.target;
     let result: Awaited<ReturnType<typeof infer>>;
     try {
       result = await infer(
@@ -343,6 +364,7 @@ export default {
           surface: env.SURFACE,
           requestId,
         },
+        limits?.max_output_tokens,
       );
     } catch (e) {
       // Every inference path failed. With a Ground hit there is still a cited
@@ -384,6 +406,7 @@ export default {
           requestedModel: `${result.requestedProvider}/${result.requestedModel}`,
           modelSubstituted: result.substituted,
           tier: target.tier,
+          reach: reach ?? null,
           grounded: g.hit,
           // Two independent gates, and a row needs both.
           //
@@ -411,6 +434,9 @@ export default {
           requestId,
           billingPeriod: billingPeriod(),
           tier: target.tier,
+          reach: reach ?? null,
+          reachClamped: routed.clamped,
+          routedTier: routed.routedTier,
           provider: result.provider,
           model: result.model,
           requestedProvider: result.requestedProvider,
@@ -441,7 +467,7 @@ export default {
         {
           index: 0,
           message: { role: 'assistant', content: result.text },
-          finish_reason: 'stop',
+          finish_reason: result.finishReason,
         },
       ],
       usage: {
@@ -451,6 +477,9 @@ export default {
       },
       shamwari: {
         tier: target.tier,
+        reach: reach ?? null,
+        reach_clamped: routed.clamped,
+        truncated: result.finishReason === 'length',
         scope: decision.scope,
         language,
         grounded: g.hit,

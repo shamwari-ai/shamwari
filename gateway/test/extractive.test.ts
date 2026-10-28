@@ -100,4 +100,13 @@ describe('extractiveAnswer', () => {
     expect(extractiveAnswer([chunk()])?.text).toContain('Closest source:');
     expect(extractiveAnswer([chunk()])?.text).not.toMatch(/(^|\n)Source:/);
   });
+
+  it('can keep its own marker plain too: an ellipsis of three dots, and still within the cap', () => {
+    const a = extractiveAnswer([chunk({ content: 'alpha beta gamma delta '.repeat(100) })], 120, {
+      plainText: true,
+    });
+    expect(a?.text.length).toBeLessThanOrEqual(120);
+    expect(a?.text).toContain('...');
+    expect(a?.text).not.toContain('\u2026');
+  });
 });
