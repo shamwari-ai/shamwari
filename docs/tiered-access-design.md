@@ -72,10 +72,14 @@ Nyuchi API             /v1/shamwari. B2B: businesses building on Nyuchi
 
 - **Shamwari API (`api.shamwari.ai`)** is for consumers. It is the only
   Shamwari API a consumer ever calls.
-- **Nyuchi API `/v1/shamwari`** is B2B: businesses building on Nyuchi
-  infrastructure. What a business may call there (for example cited Ground
-  search and usage for its own entity) is a product decision that is still
-  open.
+- **Nyuchi API `/v1/shamwari`** is B2B: Shamwari offered to businesses
+  through Nyuchi's platform, the way a model vendor's own API is also offered
+  through a cloud provider's AI service. It is the same Shamwari reached with
+  the platform's own keys, quotas and billing, on Nyuchi infrastructure, instead
+  of with a Shamwari consumer key. A business builds on it; it is not the
+  consumer API. Which routes it exposes (the Shamwari chat and grounded-answer
+  API itself, or less) and how it meters and bills are still open. Every Rule 1
+  and Rule 2 check applies on this path exactly as on the consumer path.
 - **Nyuchi Servers API `/v1/shamwari`** is internal only, between internal apps.
   It is where Core's access to the Nyuchi platform belongs. It is not deployed
   yet (merging to its `main` deploys it, which needs the owner's yes), so until
