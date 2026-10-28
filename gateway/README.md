@@ -281,6 +281,15 @@ the dependency; the second step only takes the AI Gateway out of the path.
 `inference_path` in every response tells you which was used — watch it,
 because step 2 rots silently if never exercised.
 
+A third rung sits beneath both: **extractive**. Ground's cited passage is
+returned with no generation, either because the caller sent
+`"mode": "extractive"` or because every inference path failed and Ground had a
+hit (`shamwari.degraded: true`). It makes no inference call, cannot invent a
+citation, and is metered as a usage event only: no conversation row is
+written, because it has no teacher model to stamp a `licenseClass` from and the
+quoted chunks carry their own `mind_eligible` terms. The scope gate runs
+first, so personal scope is still a 409. See `docs/tiered-access-design.md`.
+
 ## Provenance
 
 `licenseClass` is stamped on every conversation and usage event at generation

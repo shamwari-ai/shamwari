@@ -1,0 +1,188 @@
+// The extractive rung through the real handler. The counts are the tests:
+// an extractive answer must make no inference call, must never be stored as a
+// conversation (rule 2: no teacher model, unknown mind_eligible terms), and the
+// scope gate must run before any of it (rule 1).
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import worker from '../src/index';
+import type { Env, GroundChunk, SinkMessage } from '../src/types';
+
+const CHUNK: GroundChunk = {
+  content: 'Every person has the right to life.',
+  heading: 'Section 48',
+  title: 'Constitution of Zimbabwe',
+  authority: 'Parliament of Zimbabwe',
+  resource_type: 'legislation',
+  source_url: 'https://example.invalid/constitution',
+  effective_from: '2013-05-22',
+  scope: 'platform',
+};
+
+const AUTH = {
+  apiKeyId: 'k1',
+  ownerEntityId: 'e1',
+  ownerPersonId: null,
+  keyType: 'standard',
+  tier: 'community',
+  monthlyTokenCap: 100_000,
+};
+
+interface Calls {
+  embed: number;
+  ground: number;
+  inference: number;
+  sink: SinkMessage[];
+}
+
+function setup(opts: { chunks?: GroundChunk[]; inferenceFails?: boolean; mind?: boolean } = {}) {
+  const calls: Calls = { embed: 0, ground: 0, inference: 0, sink: [] };
+  const chunks = opts.chunks ?? [CHUNK];
+  const env = {
+    AI: {
+      run: vi.fn(async () => {
+        calls.embed += 1;
+        if (opts.inferenceFails && calls.embed > 1) throw new Error('workers ai down');
+        return { data: [Array.from({ length: 1024 }, () => 0.1)], response: 'generated' };
+      }),
+    },
+    AUTH_CACHE: { get: async () => AUTH, put: async () => {} },
+    SINK: {
+      send: async (m: SinkMessage) => void calls.sink.push(m),
+      sendBatch: async (ms: { body: SinkMessage }[]) =>
+        void calls.sink.push(...ms.map((m) => m.body)),
+    },
+    CORE_URL: 'https://core.example',
+    SHAMWARI_CORE_TOKEN: 't',
+    EMBEDDING_MODEL: '@cf/baai/bge-m3',
+    GROUND_TOP_K: '6',
+    AUTH_CACHE_TTL: '300',
+    ECONOMY_MODEL: '@cf/zai-org/glm-5.3-flash',
+    STANDARD_MODEL: '@cf/zai-org/glm-5.3',
+    SURFACE: 'shamwari.ai',
+    MIND_AVAILABLE: opts.mind ? 'true' : 'false',
+    CF_ACCOUNT_ID: 'acct',
+    CF_GATEWAY_ID: 'gw',
+    CF_ROUTE_NAME: 'shamwari',
+    CF_AIG_TOKEN: { get: async () => 'aig' },
+  } as unknown as Env;
+
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+    const u = String(url);
+    if (u.includes('/rollup')) return Response.json({ total_tokens: 0 });
+    if (u.includes('/ground/search')) {
+      calls.ground += 1;
+      return Response.json({ chunks, hit: chunks.length > 0 });
+    }
+    calls.inference += 1;
+    void init;
+    return opts.inferenceFails
+      ? new Response('down', { status: 503 })
+      : Response.json({ choices: [{ message: { content: 'generated' } }], usage: {} });
+  });
+  return { env, calls };
+}
+
+const ctx = {
+  waitUntil: (p: Promise<unknown>) => void p.catch(() => {}),
+} as unknown as ExecutionContext;
+
+function ask(body: Record<string, unknown>) {
+  return new Request('https://gw.example/v1/chat/completions', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer sk_shamwari_test', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: 'Do I have a right to life?' }],
+      ...body,
+    }),
+  });
+}
+
+beforeEach(() => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
+});
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+describe('mode: extractive', () => {
+  it('answers with the cited passage and makes no inference call', async () => {
+    const { env, calls } = setup();
+    const res = await worker.fetch(ask({ mode: 'extractive' }), env, ctx);
+    const j = (await res.json()) as any;
+    expect(res.status).toBe(200);
+    expect(j.choices[0].message.content).toContain('Every person has the right to life.');
+    expect(j.choices[0].message.content).toContain('Source: Constitution of Zimbabwe');
+    expect(j.shamwari.inference_path).toBe('extractive');
+    expect(j.shamwari.degraded).toBe(false);
+    expect(j.shamwari.citations).toHaveLength(1);
+    expect(j.usage.total_tokens).toBe(0);
+    expect(calls.inference).toBe(0);
+  });
+
+  it('is metered, and is never stored as a conversation or marked trainable', async () => {
+    const { env, calls } = setup();
+    await worker.fetch(ask({ mode: 'extractive' }), env, ctx);
+    await Promise.resolve();
+    expect(calls.sink.map((m) => m.collection)).toEqual(['usageEvents']);
+    expect(calls.sink.some((m) => m.collection === 'conversations')).toBe(false);
+    expect(calls.sink[0]?.doc).toMatchObject({
+      inferencePath: 'extractive',
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+  });
+
+  it('says plainly that it found nothing, and cites nothing, when Ground is empty', async () => {
+    const { env } = setup({ chunks: [] });
+    const j = (await (await worker.fetch(ask({ mode: 'extractive' }), env, ctx)).json()) as any;
+    expect(j.shamwari.grounded).toBe(false);
+    expect(j.shamwari.citations).toEqual([]);
+    expect(j.choices[0].message.content).toMatch(/will not guess/);
+  });
+
+  // RULE 1. The scope gate runs in admit(), before the mode is read.
+  it('still refuses personal scope for a cloud destination, before anything is called', async () => {
+    const { env, calls } = setup();
+    const res = await worker.fetch(ask({ mode: 'extractive', scope: 'personal' }), env, ctx);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as any).error).toBe('scope_requires_local_inference');
+    expect(calls.embed + calls.ground + calls.inference).toBe(0);
+  });
+
+  it('rejects a mode it does not know instead of ignoring it', async () => {
+    const { env, calls } = setup();
+    const res = await worker.fetch(ask({ mode: 'turbo' }), env, ctx);
+    expect(res.status).toBe(400);
+    expect(calls.embed + calls.ground + calls.inference).toBe(0);
+  });
+});
+
+describe('when every inference path fails', () => {
+  it('answers from Ground, says it degraded, rather than failing', async () => {
+    const { env } = setup({ inferenceFails: true });
+    const res = await worker.fetch(ask({}), env, ctx);
+    const j = (await res.json()) as any;
+    expect(res.status).toBe(200);
+    expect(j.shamwari.inference_path).toBe('extractive');
+    expect(j.shamwari.degraded).toBe(true);
+    expect(j.choices[0].message.content).toContain('Source: Constitution of Zimbabwe');
+  });
+
+  it('has nothing honest to say without a Ground hit, so the failure stands', async () => {
+    const { env } = setup({ inferenceFails: true, chunks: [] });
+    await expect(worker.fetch(ask({}), env, ctx)).rejects.toThrow();
+  });
+});
+
+describe('a normal answer is unchanged', () => {
+  it('still goes to inference and still stores the conversation', async () => {
+    const { env, calls } = setup();
+    const res = await worker.fetch(ask({}), env, ctx);
+    const j = (await res.json()) as any;
+    expect(j.shamwari.inference_path).toBe('gateway');
+    expect(calls.inference).toBe(1);
+    await Promise.resolve();
+    expect(calls.sink.map((m) => m.collection).sort()).toEqual(['conversations', 'usageEvents']);
+  });
+});
