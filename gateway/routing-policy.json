@@ -11,9 +11,21 @@
   "default_tier": "economy",
 
   "reach": {
-    "r0": { "max_tier": "economy", "max_output_tokens": 200, "extractive_max_chars": 450 },
-    "r1": { "max_tier": "standard", "max_output_tokens": 512, "extractive_max_chars": 1200 },
-    "r2": { "max_tier": "standard", "max_output_tokens": 1024, "extractive_max_chars": 3000 }
+    "r0": {
+      "max_tier": "economy",
+      "max_output_tokens": 200,
+      "extractive_max_chars": 450
+    },
+    "r1": {
+      "max_tier": "standard",
+      "max_output_tokens": 512,
+      "extractive_max_chars": 1200
+    },
+    "r2": {
+      "max_tier": "standard",
+      "max_output_tokens": 1024,
+      "extractive_max_chars": 3000
+    }
   },
 
   "model_aliases": {
