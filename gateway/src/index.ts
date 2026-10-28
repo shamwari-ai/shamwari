@@ -10,6 +10,9 @@ import type { GroundResult } from './ground';
 import { extractiveAnswer, NO_SOURCE_MESSAGE } from './extractive';
 import { FORMATS, isFormat, toCompact } from './envelope';
 import type { Format } from './envelope';
+import { handleChannel } from './channels/channel';
+import { sms } from './channels/sms';
+import { ussd } from './channels/ussd';
 import * as idem from './idempotency';
 import { drain } from './sink';
 import { detectLanguage } from './lang';
@@ -298,7 +301,7 @@ function extractiveResponse(
   });
 }
 
-export default {
+const worker = {
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
 
@@ -312,6 +315,12 @@ export default {
     }
     if (url.pathname === '/v1/ground/context' && req.method === 'POST') {
       return groundContext(req, env, ctx);
+    }
+    if (url.pathname === '/v1/channels/sms' && req.method === 'POST') {
+      return handleChannel(sms, req, env, (r) => worker.fetch(r, env, ctx));
+    }
+    if (url.pathname === '/v1/channels/ussd' && req.method === 'POST') {
+      return handleChannel(ussd, req, env, (r) => worker.fetch(r, env, ctx));
     }
     if (url.pathname !== '/v1/chat/completions' || req.method !== 'POST') {
       return json({ error: 'not_found' }, 404);
@@ -643,3 +652,5 @@ export default {
     );
   },
 } satisfies ExportedHandler<Env, SinkMessage>;
+
+export default worker;

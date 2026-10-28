@@ -355,6 +355,35 @@ instead of the OpenAI-shaped body. Every channel adapter reads this one shape.
 An unknown format is a 400 `invalid_format`. It is applied last, so the
 extractive rung and a replay agree with the inference rung.
 
+## Channels: SMS and USSD
+
+`POST /v1/channels/sms` and `POST /v1/channels/ussd` take a message from an
+operator and answer in that channel's own limit (459 characters for SMS, three
+GSM-7 segments; 182 for a USSD screen), as plain ASCII, with one source line.
+They are clients of the gateway, like Mind: the adapter calls
+`/v1/chat/completions` in-process with the channel's own key, so quota,
+scope, provenance and idempotency are the ones every API caller gets.
+
+- **The operator is verified first.** The body is signed with HMAC-SHA256 in
+  `X-Signature`. A bad or missing signature is a 401, and a channel missing
+  either secret below is a 503. Nothing is called in either case.
+- **Rule 1.** The scope belongs to the adapter (`platform`), never to the
+  message, so a person cannot declare `personal`. An adapter that carried it
+  would be refused at the adapter, before the chat path, with a short message
+  that points to the app. The chat path checks again.
+- **The sender is never forwarded.** A phone number is not in the chat
+  request, the idempotency key, the stored conversation or a log line; the
+  tests scan every outbound call for it. The operator's message id and the text
+  are hashed into the idempotency key, so an operator retry is the same answer.
+- **The wire formats are placeholders** (`{id, from, text}` to `{reply}`;
+  `{sessionId, msisdn, input}` to `{message, end}`) until an operator or
+  aggregator is chosen. A real one changes `parse` and `render` in
+  `src/channels/sms.ts` or `ussd.ts` and nothing else.
+
+Secrets, set by the owner (not in `wrangler.toml`): `CHANNEL_WEBHOOK_SECRET`
+(shared with the operator) and `CHANNEL_API_KEY` (a customer-style key for the
+entity that pays for the channel).
+
 ## Provenance
 
 `licenseClass` is stamped on every conversation and usage event at generation
