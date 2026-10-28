@@ -275,6 +275,111 @@ past its budget. Mzizi Roots (Rust) is the target for the edge adapters when the
 Rust rebuild lands (`shamwari-ai/shamwari#66`); until then the adapters are
 TypeScript in `gateway/`.
 
+## The mobile app: Android, iOS and HarmonyOS (ArkTS)
+
+One app on three platforms, owner priority. It is where R3 (on-device Mind) and
+a native R2 (offline, packs, queue) live. The PWA remains the zero-install
+fallback.
+
+### What the market says
+
+External figures, read on 2026-10-28 and not verified against primary data:
+
+| Measure                               | Figure                                                             | Source                                                                      |
+| ------------------------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| Africa mobile vendor share (Aug 2026) | Samsung ~32%, Apple ~18.6%, Xiaomi ~7.4%, Oppo ~6.7%, Huawei ~6.1% | [Statcounter](https://gs.statcounter.com/vendor-market-share/mobile/africa) |
+| Africa smartphone shipments, 2026     | down ~26%; the sub-$100 segment down ~34%                          | [Omdia, via TelecomLead](https://telecomlead.com/?p=127414)                 |
+| Largest vendor by shipments (2Q26)    | TRANSSION (TECNO, Infinix, itel), ~47%                             | same                                                                        |
+
+Two readings that matter. **Most users are on Android, many on low-end
+Transsion handsets**, so Android Go-class devices are the primary target, and
+Statcounter (installed base, by use) and Omdia (shipments) measure different
+things. **HarmonyOS NEXT devices (ArkTS; no Android apps) are a small part of
+that**: Huawei's whole share is about 6%, and that includes Android phones
+without Google services. No figure for HarmonyOS NEXT devices in Zimbabwe or
+Africa was found. ArkTS is in scope by the owner's priority; what outcome it is
+for (a Huawei programme, AppGallery reach, a partner) is an open question, and
+it decides how much to spend.
+
+### Architecture: one Rust core, three native shells
+
+```
+Android (Kotlin, Compose)   iOS (Swift, SwiftUI)   HarmonyOS (ArkTS, ArkUI)
+        │ bindings                │ bindings              │ N-API
+        └───────────────┬─────────┴───────────────────────┘
+                        ▼
+            shared core (Rust): envelope, idempotent queue, pack reader and
+            signature check, client-side scope gate, sync, resumable download
+                        ▼
+            on-device inference runtime (llama.cpp, GGUF) → Mind
+```
+
+- **Shared core in Rust.** The protocol, the offline queue, pack reading and
+  signature verification are written once. This follows the Rust direction in
+  `shamwari-ai/shamwari#66` and Mzizi Roots, and it keeps the three apps from
+  drifting on the rules that matter (scope, idempotency, staleness). Rust
+  targets for Android and iOS are mature. The OpenHarmony target
+  (`*-linux-ohos`) exists, but its support tier and the ArkTS glue (N-API over a
+  native layer) are to be verified in the spike.
+- **Native UI per platform**, from Mzizi tokens. Mzizi publishes Swift, Kotlin and
+  ArkTS token nodes (registry release 4.0.36). Its component library for native
+  is not built: Mzizi names "native Swift/ArkTS/Kotlin codegen from the same Rust
+  core" as a later, separately scoped track, and offers `mzizi-ui` through
+  Dioxus as the near-term mobile route. So the three UIs are small and
+  hand-built from tokens (chat, packs, settings), not generated. The app is
+  small enough for that to be cheap, and native keeps the binary and memory low
+  on 2 GB phones.
+- **Considered and not chosen as the default:** Flutter and React Native have
+  HarmonyOS ports (community and vendor-backed, not first-party), and Kotlin
+  Multiplatform's HarmonyOS support is early. A cross-platform engine would add
+  weight on exactly the devices that can least afford it, and would make
+  HarmonyOS depend on a third party's port. Dioxus via `mzizi-ui` is the
+  alternative if three UIs prove too costly.
+- **On-device inference: llama.cpp (GGUF) is the common runtime**, so one Mind
+  file serves all three. Metal on iOS; CPU, with GPU back-ends where they help,
+  on Android. On HarmonyOS the documented route is a native C++ layer under
+  ArkTS; MindSpore Lite with the NNRt back-end can use Kirin NPUs but needs
+  models converted to `.ms`. **No official Huawei guidance on llama.cpp was
+  found**; the only example is a single blog, so HarmonyOS inference speed is
+  _unmeasured_ until the spike.
+
+### Per-platform constraints
+
+- **Android.** Target Go-class devices (about 2 GB RAM) first. Do not depend on
+  Google Play services: Huawei Android phones lack them, and a push or
+  licensing call that needs them breaks those users. Distribute on Google Play,
+  AppGallery and as a direct APK (many low-end devices are reached outside the
+  Play Store).
+- **iOS.** A smaller share of low-end users, but the strongest devices for Mind
+  (a recent iPhone runs a ~4B quantised model). App Store review of an app that
+  downloads a model needs checking.
+- **HarmonyOS.** ArkTS/ArkUI, HAP/HSP packaging, AppGallery distribution. Android
+  apps do not run on HarmonyOS NEXT, so this is a separate build. The API level
+  to target, and the account and device needed to build and test, are owner
+  inputs.
+
+### Rules on the device
+
+- **Rule 1.** Personal data stays in the app's sandbox. No analytics or crash SDK
+  that can see conversation content; telemetry carries counts, not text. The
+  model downloads from a first-party host, resumably, with a signature check.
+  Permissions are the minimum (no contacts or location unless a feature needs
+  it and says so).
+- **Rule 2.** An exchange handled by on-device Mind never leaves the device, so
+  it cannot become Mind training data. That is a property of the architecture,
+  and it must stay true: no "improve the model" upload in the app.
+- **Staleness.** The app shows a pack's "as of" date and refuses to present an
+  old pack as current (see Ground packs).
+
+### Test matrix and measurements to take
+
+One low-end Android Go phone (about 2 GB), one mid Android (about 4 GB), one
+Samsung A-series, one older and one recent iPhone, and one HarmonyOS NEXT
+device. Per device: install size, cold start, resident memory, tokens per
+second for the smallest and the largest Mind the device can hold, battery per
+ten turns, and the time to resume a dropped model download. All
+_unmeasured_ today.
+
 ## Trade-offs
 
 | Decision                               | Gain                                    | Cost                                                     |
@@ -302,6 +407,8 @@ TypeScript in `gateway/`.
 3. Mind base model and generation source (#78).
 4. Android Go native app versus PWA only for R2.
 5. Customer key format and the Worker-to-Core path (#81).
+6. What the ArkTS/HarmonyOS build is for, and the developer accounts and test devices for it.
+7. Native UI per platform (recommended) or a cross-platform engine.
 
 ## Build order
 
@@ -318,3 +425,8 @@ Each item is a small, testable change that can merge on its own.
 7. Per-tier cost telemetry on `usageEvents` (it already has `tier` and `latencyMs`).
 8. Voice: measure Whisper on Shona and Ndebele, then the IVR/voice-note adapter.
 9. Mind device tiering and the resumable model delivery manager (after #78).
+10. Retrieval score from Ground and a calibrated threshold for the extractive rung.
+11. Mobile spike: the shared Rust core built for Android, iOS and OpenHarmony, doing "ask, get a cited extractive answer from a pack" on all three.
+12. On-device inference spike: llama.cpp with a small Qwen GGUF on a low-end Android, an iPhone and a HarmonyOS device, taking the measurements above.
+13. Native shells from Mzizi tokens (Compose, SwiftUI, ArkUI): chat, pack manager, settings.
+14. Distribution: Google Play, App Store, AppGallery and a direct APK, with no Google-services dependency.
