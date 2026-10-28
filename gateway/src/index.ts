@@ -455,8 +455,15 @@ const worker = {
             // trainingEligible, and a restricted row that is merely *labelled*
             // restricted while still flagged eligible relies on every future
             // reader joining the two fields correctly.
+            //
+            // Channel traffic (SMS, USSD) is never trainable. It arrives from
+            // people who have not been asked, in the channel where they are
+            // most likely to type something personal, so it is metered and
+            // nothing more until the owner decides on consent.
             trainingEligible:
-              decision.scope !== 'personal' && result.licenseClass === 'open_weight',
+              decision.scope !== 'personal' &&
+              result.licenseClass === 'open_weight' &&
+              !req.headers.has('X-Shamwari-Channel'),
             promoted: false,
             lastMessageAt: now,
             createdAt: now,

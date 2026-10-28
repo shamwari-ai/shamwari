@@ -4,7 +4,8 @@
 // appears in no outbound call at all.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import worker from '../src/index';
-import { handleChannel, compose, MESSAGES } from '../src/channels/channel';
+import { handleChannel, compose, gsm7, MESSAGES, NO_SOURCE_LINE } from '../src/channels/channel';
+import { fingerprint, sha256Hex, storageKey } from '../src/idempotency';
 import type { ChannelAdapter } from '../src/channels/channel';
 import { sms, SMS_MAX_CHARS } from '../src/channels/sms';
 import { USSD_MAX_CHARS } from '../src/channels/ussd';
@@ -321,5 +322,120 @@ describe('compose', () => {
       expect(compose(long, [{ label: 'L'.repeat(500) }], max).length).toBeLessThanOrEqual(max);
       expect(compose(long, [], max).length).toBeLessThanOrEqual(max);
     }
+  });
+});
+
+describe('review findings', () => {
+  it('a message still in flight is told to wait, not that its question was personal', async () => {
+    const { env, w } = setup();
+    const id = 'inflight';
+    const q = 'Do I have a right to life?';
+    const k = await storageKey('channel-owner', await sha256Hex(`sms\n${id}\n${q}`));
+    const fp = await fingerprint({
+      messages: [{ role: 'user', content: q }],
+      scope: 'platform',
+      reach: 'r0',
+      format: 'compact',
+    });
+    await env.AUTH_CACHE.put(`${k}:p`, JSON.stringify({ fp }));
+    const res = await worker.fetch(await operator('/v1/channels/sms', text(id, q)), env, ctx);
+    expect(((await res.json()) as { reply: string }).reply).toBe(MESSAGES.retry);
+    expect(w.inference).toBe(0);
+  });
+
+  it('a chat path that throws still gets the operator an answer in its own format', async () => {
+    const { env } = setup();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await handleChannel(
+      sms,
+      await operator('/v1/channels/sms', text('t1')),
+      env,
+      async () => {
+        throw new Error('all inference paths failed');
+      },
+    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { reply: string }).reply).toBe(MESSAGES.busy);
+    expect(JSON.stringify(err.mock.calls)).not.toContain('771234567');
+    err.mockRestore();
+  });
+
+  it('a refusal from the chat path is logged with its status and code, never the sender', async () => {
+    const { env } = setup();
+    env.CHANNEL_API_KEY = 'x';
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = await handleChannel(
+      sms,
+      await operator('/v1/channels/sms', text('t2')),
+      env,
+      async () => Response.json({ error: 'invalid_api_key' }, { status: 401 }),
+    );
+    expect(((await res.json()) as { reply: string }).reply).toBe(MESSAGES.busy);
+    const logged = JSON.stringify(err.mock.calls);
+    expect(logged).toContain('401');
+    expect(logged).toContain('invalid_api_key');
+    expect(logged).not.toContain('771234567');
+    err.mockRestore();
+  });
+
+  it('an oversized body is refused before it is read, with nothing called', async () => {
+    const { env, w } = setup();
+    const big = new Request('https://gw.example/v1/channels/sms', {
+      method: 'POST',
+      headers: { 'Content-Length': '1000000', 'X-Signature': 'a'.repeat(64) },
+      body: 'x',
+    });
+    expect((await worker.fetch(big, env, ctx)).status).toBe(413);
+    nothingCalled(w);
+  });
+
+  it('a reply is GSM-7 clean: no emoji, accents, euro sign or extension characters', async () => {
+    expect(gsm7('caf\u00E9 \u20AC5 [Section 48] {x} ^~|\\ \u{1F600} ok')).toBe(
+      'cafe EUR5 (Section 48) (x) // ok',
+    );
+    const { env } = setup({ answer: 'Right to life \u{1F600} see [s.48] \u20AC' });
+    const res = await worker.fetch(await operator('/v1/channels/sms', text('g1')), env, ctx);
+    const { reply } = (await res.json()) as { reply: string };
+    expect(/^[\n\x20-\x7E]*$/.test(reply)).toBe(true);
+    expect(/[[\]{}^~|\\]/.test(reply)).toBe(false);
+  });
+
+  it('an extractive answer keeps its hedged "Closest source" line and is never relabelled', () => {
+    const extractive =
+      'Every person has the right to life.\nClosest source: Constitution - Section 48 (Parliament)\n\nOther passage.\nClosest source: Other';
+    for (const max of [182, 459]) {
+      const out = compose(extractive, [{ label: 'Constitution - Section 48' }], max, 'extractive');
+      expect(out).toContain('Closest source: Constitution');
+      expect(out).not.toMatch(/(^|\n)Source:/);
+      expect(out.length).toBeLessThanOrEqual(max);
+    }
+  });
+
+  it('an answer with no source says so instead of going out unsourced', () => {
+    expect(compose('From general knowledge.', [], 459, 'gateway')).toContain(NO_SOURCE_LINE);
+    expect(compose('x', [{ label: '' }, { label: 'Later' }], 459, 'gateway')).toContain(
+      'Source: Later',
+    );
+  });
+
+  it('channel traffic is never stored as training material', async () => {
+    const direct = setup();
+    const ask = new Request('https://gw.example/v1/chat/completions', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer sk_shamwari_test', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'Do I have a right to life?' }] }),
+    });
+    await worker.fetch(ask, direct.env, ctx);
+    await settle();
+    const conv = (w: World) =>
+      w.sink.find((m) => m.collection === 'conversations')?.doc as { trainingEligible: boolean };
+    // The control: the same question through the API is trainable, so the
+    // channel result below is the header's doing and not an artefact of the harness.
+    expect(conv(direct.w).trainingEligible).toBe(true);
+
+    const via = setup();
+    await worker.fetch(await operator('/v1/channels/sms', text('tr1')), via.env, ctx);
+    await settle();
+    expect(conv(via.w).trainingEligible).toBe(false);
   });
 });

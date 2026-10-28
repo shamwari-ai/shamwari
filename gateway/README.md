@@ -375,6 +375,23 @@ scope, provenance and idempotency are the ones every API caller gets.
   request, the idempotency key, the stored conversation or a log line; the
   tests scan every outbound call for it. The operator's message id and the text
   are hashed into the idempotency key, so an operator retry is the same answer.
+- **Replies are GSM-7 clean.** Accents, the euro sign, emoji and the
+  extension characters (`[ ] { } ^ ~ | \\`) are folded or removed, because one of
+  them puts the whole message in UCS-2. An answer with no source says so
+  ("No source found") rather than going out unsourced, and an extractive answer
+  keeps its hedged "Closest source" line.
+- **Channel traffic is never training material.** The adapter marks its calls
+  with `X-Shamwari-Channel`, and the chat path stores those conversations with
+  `trainingEligible: false`. These are people who have not been asked, in the
+  channel where they are most likely to type something personal. Whether to
+  seek consent is the owner's call.
+- **Refusals are logged**, with the status and error code and never the
+  sender, so a rotated `CHANNEL_API_KEY` shows up in the log instead of looking
+  like a polite "busy" to every user.
+- **Known limit:** the placeholder signature covers the body only, so a
+  captured signed request can be replayed after the idempotency entry expires.
+  A real operator's scheme (usually a timestamp or nonce in the signature)
+  replaces `hmacOk` when one is chosen.
 - **The wire formats are placeholders** (`{id, from, text}` to `{reply}`;
   `{sessionId, msisdn, input}` to `{message, end}`) until an operator or
   aggregator is chosen. A real one changes `parse` and `render` in
