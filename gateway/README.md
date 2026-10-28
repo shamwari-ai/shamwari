@@ -288,7 +288,13 @@ hit (`shamwari.degraded: true`). It makes no inference call, cannot invent a
 citation, and is metered as a usage event only: no conversation row is
 written, because it has no teacher model to stamp a `licenseClass` from and the
 quoted chunks carry their own `mind_eligible` terms. The scope gate runs
-first, so personal scope is still a 409. See `docs/tiered-access-design.md`.
+first, so personal scope is still a 409. It does not judge relevance: Ground
+returns the nearest passage whether or not it answers the question, so the
+citation reads "Closest source", and `shamwari.truncated` says when a passage
+was cut. If Core cannot be reached, `mode: "extractive"` returns 503
+`ground_unavailable` rather than claiming the corpus has nothing. A model
+reply with no text counts as a failure at both inference steps, so the next
+rung engages. See `docs/tiered-access-design.md`.
 
 ## Provenance
 

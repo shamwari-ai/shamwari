@@ -1,4 +1,4 @@
-import type { Env, Message, SinkMessage, AuthContext } from './types';
+import type { Env, Message, SinkMessage, AuthContext, GroundChunk } from './types';
 import { authenticate } from './auth';
 import { parseScope, decideDestination, ScopeRefusal } from './scope';
 import type { Capability, ScopeDecision } from './scope';
@@ -17,6 +17,16 @@ const json = (body: unknown, status = 200) =>
     status,
     headers: { 'Content-Type': 'application/json' },
   });
+
+/** The citations a caller sees, in the shape every response uses. */
+const citationsOf = (chunks: GroundChunk[]) =>
+  chunks.map((c) => ({
+    title: c.title,
+    heading: c.heading,
+    authority: c.authority,
+    effective_from: c.effective_from,
+    url: c.source_url,
+  }));
 
 function billingPeriod(d = new Date()): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -88,13 +98,6 @@ async function admit(
   const messages = body.messages ?? [];
   if (messages.length === 0) {
     return { ok: false, response: json({ error: 'messages_required' }, 400) };
-  }
-
-  if (body.mode !== undefined && body.mode !== 'extractive') {
-    return {
-      ok: false,
-      response: json({ error: 'invalid_mode', allowed: ['extractive'] }, 400),
-    };
   }
 
   // Scope gate, before anything expensive happens.
@@ -179,13 +182,7 @@ async function groundContext(req: Request, env: Env, ctx: ExecutionContext): Pro
       grounded: g.hit,
       inference_path: 'mind',
       latency_ms: latencyMs,
-      citations: g.chunks.map((c) => ({
-        title: c.title,
-        heading: c.heading,
-        authority: c.authority,
-        effective_from: c.effective_from,
-        url: c.source_url,
-      })),
+      citations: citationsOf(g.chunks),
     },
   });
 }
@@ -267,14 +264,9 @@ function extractiveResponse(
       cache_hit: false,
       inference_path: 'extractive',
       degraded,
+      truncated: built?.truncated ?? false,
       latency_ms: latencyMs,
-      citations: used.map((c) => ({
-        title: c.title,
-        heading: c.heading,
-        authority: c.authority,
-        effective_from: c.effective_from,
-        url: c.source_url,
-      })),
+      citations: citationsOf(used),
     },
   });
 }
@@ -302,6 +294,12 @@ export default {
     if (!a.ok) return a.response;
     const { auth, body, messages, decision } = a;
 
+    // Only this endpoint has modes. /v1/ground/context shares admit() and must
+    // not start refusing a field it has always ignored.
+    if (body.mode !== undefined && body.mode !== 'extractive') {
+      return json({ error: 'invalid_mode', allowed: ['extractive'] }, 400);
+    }
+
     const requestId = crypto.randomUUID();
     const started = Date.now();
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');
@@ -316,8 +314,17 @@ export default {
       language,
     );
     const rung = { auth, decision, g, language, requestId, started };
-    if (body.mode === 'extractive')
+    if (body.mode === 'extractive') {
+      // "Ground could not be asked" is not "Ground has nothing": only the
+      // second may be said to a person as a fact about the corpus.
+      if (g.unavailable) {
+        return new Response(JSON.stringify({ error: 'ground_unavailable', retry: true }, null, 2), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
+        });
+      }
       return extractiveResponse(ctx, env, { ...rung, degraded: false });
+    }
 
     const target = route(messages, body.model, env);
     let result: Awaited<ReturnType<typeof infer>>;
@@ -454,13 +461,7 @@ export default {
         // substituting the model is otherwise invisible to the caller.
         model_substituted: result.substituted,
         latency_ms: latencyMs,
-        citations: g.chunks.map((c) => ({
-          title: c.title,
-          heading: c.heading,
-          authority: c.authority,
-          effective_from: c.effective_from,
-          url: c.source_url,
-        })),
+        citations: citationsOf(g.chunks),
       },
     });
   },

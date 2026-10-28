@@ -33,13 +33,22 @@ interface Calls {
   sink: SinkMessage[];
 }
 
-function setup(opts: { chunks?: GroundChunk[]; inferenceFails?: boolean; mind?: boolean } = {}) {
+function setup(
+  opts: {
+    chunks?: GroundChunk[];
+    inferenceFails?: boolean;
+    embedFails?: boolean;
+    coreDown?: boolean;
+    mind?: boolean;
+  } = {},
+) {
   const calls: Calls = { embed: 0, ground: 0, inference: 0, sink: [] };
   const chunks = opts.chunks ?? [CHUNK];
   const env = {
     AI: {
       run: vi.fn(async () => {
         calls.embed += 1;
+        if (opts.embedFails) throw new Error('workers ai down');
         if (opts.inferenceFails && calls.embed > 1) throw new Error('workers ai down');
         return { data: [Array.from({ length: 1024 }, () => 0.1)], response: 'generated' };
       }),
@@ -70,6 +79,7 @@ function setup(opts: { chunks?: GroundChunk[]; inferenceFails?: boolean; mind?: 
     if (u.includes('/rollup')) return Response.json({ total_tokens: 0 });
     if (u.includes('/ground/search')) {
       calls.ground += 1;
+      if (opts.coreDown) return new Response('down', { status: 503 });
       return Response.json({ chunks, hit: chunks.length > 0 });
     }
     calls.inference += 1;
@@ -112,7 +122,7 @@ describe('mode: extractive', () => {
     const j = (await res.json()) as any;
     expect(res.status).toBe(200);
     expect(j.choices[0].message.content).toContain('Every person has the right to life.');
-    expect(j.choices[0].message.content).toContain('Source: Constitution of Zimbabwe');
+    expect(j.choices[0].message.content).toContain('Closest source: Constitution of Zimbabwe');
     expect(j.shamwari.inference_path).toBe('extractive');
     expect(j.shamwari.degraded).toBe(false);
     expect(j.shamwari.citations).toHaveLength(1);
@@ -166,7 +176,7 @@ describe('when every inference path fails', () => {
     expect(res.status).toBe(200);
     expect(j.shamwari.inference_path).toBe('extractive');
     expect(j.shamwari.degraded).toBe(true);
-    expect(j.choices[0].message.content).toContain('Source: Constitution of Zimbabwe');
+    expect(j.choices[0].message.content).toContain('Closest source: Constitution of Zimbabwe');
   });
 
   it('has nothing honest to say without a Ground hit, so the failure stands', async () => {
@@ -184,5 +194,53 @@ describe('a normal answer is unchanged', () => {
     expect(calls.inference).toBe(1);
     await Promise.resolve();
     expect(calls.sink.map((m) => m.collection).sort()).toEqual(['conversations', 'usageEvents']);
+  });
+});
+
+describe('what the review found', () => {
+  it('still answers when the embedding model is down, by keyword search', async () => {
+    const { env, calls } = setup({ embedFails: true });
+    const res = await worker.fetch(ask({ mode: 'extractive' }), env, ctx);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as any).shamwari.grounded).toBe(true);
+    expect(calls.ground).toBe(1);
+  });
+
+  it('does not tell a person the corpus lacks something when Core could not be asked', async () => {
+    const { env } = setup({ coreDown: true });
+    const res = await worker.fetch(ask({ mode: 'extractive' }), env, ctx);
+    expect(res.status).toBe(503);
+    expect(res.headers.get('Retry-After')).toBe('30');
+    expect(((await res.json()) as any).error).toBe('ground_unavailable');
+  });
+
+  it('the degraded answer is metered as degraded and is never stored as a conversation', async () => {
+    const { env, calls } = setup({ inferenceFails: true });
+    await worker.fetch(ask({}), env, ctx);
+    await Promise.resolve();
+    expect(calls.sink.map((m) => m.collection)).toEqual(['usageEvents']);
+    expect(calls.sink[0]?.doc).toMatchObject({ inferencePath: 'extractive', degraded: true });
+  });
+
+  it('personal scope is refused on the degraded path as well, with nothing called', async () => {
+    const { env, calls } = setup({ inferenceFails: true });
+    const res = await worker.fetch(ask({ scope: 'personal' }), env, ctx);
+    expect(res.status).toBe(409);
+    expect(calls.embed + calls.ground + calls.inference).toBe(0);
+  });
+
+  it('does not make the mind endpoint start refusing a field it has always ignored', async () => {
+    const { env } = setup({ mind: true });
+    const req = new Request('https://gw.example/v1/ground/context', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer sk_shamwari_test', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'ndiri kuda alert' }],
+        scope: 'personal',
+        mode: 'chat',
+      }),
+    });
+    const res = await worker.fetch(req, env, ctx);
+    expect(res.status).toBe(200);
   });
 });

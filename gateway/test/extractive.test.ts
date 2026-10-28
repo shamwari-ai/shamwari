@@ -27,14 +27,19 @@ describe('extractiveAnswer', () => {
     const a = extractiveAnswer([chunk()]);
     expect(a?.text).toBe(
       'Every person has the right to life.\n' +
-        'Source: Constitution of Zimbabwe Amendment (No. 20) Act 2013 — Section 48 — Right to life ' +
+        'Closest source: Constitution of Zimbabwe Amendment (No. 20) Act 2013 — Section 48 — Right to life ' +
         '(Parliament of Zimbabwe), effective 2013-05-22',
     );
     expect(a?.used).toHaveLength(1);
   });
 
   it('never states a section, rate or date that is not in the chunk', () => {
-    const bare = chunk({ title: 'Income Tax Act', heading: null, authority: '', effective_from: null });
+    const bare = chunk({
+      title: 'Income Tax Act',
+      heading: null,
+      authority: '',
+      effective_from: null,
+    });
     const text = extractiveAnswer([bare])?.text ?? '';
     expect(text).not.toMatch(/Section|effective|\(/);
     expect(text).toContain(bare.title);
@@ -44,8 +49,9 @@ describe('extractiveAnswer', () => {
     const long = chunk({ content: 'word '.repeat(2000) });
     const a = extractiveAnswer([long]);
     expect(a?.text.length).toBeLessThanOrEqual(EXTRACTIVE_MAX_CHARS);
-    expect(a?.text).toContain('Source: ');
+    expect(a?.text).toContain('Closest source: ');
     expect(a?.text).toContain('…');
+    expect(a?.truncated).toBe(true);
   });
 
   it('clips on a word boundary, never mid-word', () => {
@@ -61,8 +67,37 @@ describe('extractiveAnswer', () => {
       10_000,
     );
     expect(a?.used).toHaveLength(3);
-    const tight = extractiveAnswer([chunk(), chunk({ content: 'Second.' })], 230);
+    const one = extractiveAnswer([chunk()]);
+    const tight = extractiveAnswer(
+      [chunk(), chunk({ content: 'Second.' })],
+      (one?.text.length ?? 0) + 5,
+    );
     expect(tight?.used).toHaveLength(1);
     expect(tight?.text).not.toContain('Second.');
+  });
+
+  it('stays within the cap even when the title is enormous', () => {
+    const huge = chunk({ title: 'T'.repeat(2000), heading: 'H'.repeat(2000) });
+    const a = extractiveAnswer([huge]);
+    expect(a?.text.length).toBeLessThanOrEqual(EXTRACTIVE_MAX_CHARS);
+    expect(a?.text).toContain('Closest source: ');
+  });
+
+  it('does not cite the placeholder Core fills in for a missing authority', () => {
+    const text = extractiveAnswer([chunk({ authority: 'Unknown' })])?.text ?? '';
+    expect(text).not.toContain('Unknown');
+  });
+
+  it('says whether a passage was cut, and keeps line breaks that number subsections', () => {
+    const short = extractiveAnswer([
+      chunk({ content: '(1) A person may.\n(2) Except where barred.' }),
+    ]);
+    expect(short?.truncated).toBe(false);
+    expect(short?.text).toContain('(1) A person may.\n(2) Except where barred.');
+  });
+
+  it('labels the source as the closest one, not as proof it answers the question', () => {
+    expect(extractiveAnswer([chunk()])?.text).toContain('Closest source:');
+    expect(extractiveAnswer([chunk()])?.text).not.toMatch(/(^|\n)Source:/);
   });
 });
