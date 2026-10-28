@@ -324,6 +324,37 @@ from `usageEvents`. Reach changes nothing about scope: r0 to r2 all hand text to
 a provider, so personal scope is still a 409 on every one of them. The clamped
 tier's `licenseClass` still comes from `router.ts`, never from the policy file.
 
+## Idempotent requests and the compact envelope
+
+Two opt-ins on `/v1/chat/completions` for callers on weak networks, where a
+request is often retried and every byte is paid for.
+
+**`Idempotency-Key`** (1 to 64 of `A-Za-z0-9_.:-`; otherwise 400
+`invalid_idempotency_key`). A retry with the same key and the same request
+returns the stored answer with `Idempotent-Replayed: true` and runs no Ground,
+no inference and no usage event. The same key with a different request
+(messages, model, scope, mode, reach or format) is a 422
+`idempotency_key_reuse`. A request still running is a 409 `request_in_progress`
+with `Retry-After`. Only a 200 is stored; a failure is released so the retry
+runs. Keys are scoped to the calling entity. A replay skips the quota check (the
+caller already earned that answer), and a degraded answer (every inference path
+failed, Ground answered) is not stored, so the retry can get a proper one.
+
+- It fails open: a KV error is logged and the request runs unprotected. It is
+  best-effort, not exactly-once. It uses the existing KV namespace, which
+  is eventually consistent, so two simultaneous first attempts in different
+  locations can both run. It stops the common retry; it does not make billing
+  exact. For that the sink must also dedupe on the request id.
+- What is stored is the response body for ten minutes, under a hash of the key.
+  **Personal scope stores nothing**: it is refused before this code runs, and a
+  stored answer would be a second copy of the user's data outside their pod.
+
+**`"format": "compact"`** (minified; on r0 the labels are plain ASCII) returns
+`{id, answer, cites: [{n, label, url?}], scope, via, truncated, degraded}`
+instead of the OpenAI-shaped body. Every channel adapter reads this one shape.
+An unknown format is a 400 `invalid_format`. It is applied last, so the
+extractive rung and a replay agree with the inference rung.
+
 ## Provenance
 
 `licenseClass` is stamped on every conversation and usage event at generation
