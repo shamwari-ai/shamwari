@@ -448,7 +448,9 @@ Each item is a small, testable change that can merge on its own.
    dedupe on KV; exact double-billing protection needs the nyuchi-api sink to dedupe
    on `requestId`).
 4. Channel-adapter interface with the Rule 1 gate and tests that count provider
-   calls, then the SMS/USSD adapter against a fake operator.
+   calls, then the SMS/USSD adapter against a fake operator. **Built**, with
+   placeholder wire formats until an operator is chosen. Not yet built: the "more"
+   code for answers longer than one message, and chat-app adapters.
 5. Ground pack build job and the signed, versioned pack format.
 6. R2 Lite PWA on Mzizi with the offline queue and the byte-budget check.
 7. Per-tier cost telemetry on `usageEvents` (it already has `tier` and `latencyMs`).
