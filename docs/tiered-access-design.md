@@ -294,60 +294,77 @@ External figures, read on 2026-10-28 and not verified against primary data:
 Two readings that matter. **Most users are on Android, many on low-end
 Transsion handsets**, so Android Go-class devices are the primary target, and
 Statcounter (installed base, by use) and Omdia (shipments) measure different
-things. **HarmonyOS NEXT devices (ArkTS; no Android apps) are a small part of
-that**: Huawei's whole share is about 6%, and that includes Android phones
-without Google services. No figure for HarmonyOS NEXT devices in Zimbabwe or
-Africa was found. ArkTS is in scope by the owner's priority; what outcome it is
-for (a Huawei programme, AppGallery reach, a partner) is an open question, and
-it decides how much to spend.
+things.
 
-### Architecture: one Rust core, three native shells
+**The Huawei programme** (owner, 2026-10-28: the number of Huawei phones in
+Africa is high) is the reason for the HarmonyOS work. It has two parts that
+need different builds, and the figures above only separate them a little:
+
+1. **Huawei phones running Android with Huawei Mobile Services** (no Google
+   services). Most of Huawei's African installed base is this. An Android app
+   serves them, if it does not depend on Google Play services and is listed on
+   AppGallery. This part is cheap and comes with the Android build.
+2. **HarmonyOS NEXT phones** (ArkTS; they do not run Android apps). A separate
+   native app. No figure for NEXT devices in Zimbabwe or Africa was found, so
+   whether they ship there, and in what number, is the thing to establish
+   before spending on it.
+
+### Architecture: Expo for iOS and Android, ArkTS standalone
 
 ```
-Android (Kotlin, Compose)   iOS (Swift, SwiftUI)   HarmonyOS (ArkTS, ArkUI)
-        │ bindings                │ bindings              │ N-API
-        └───────────────┬─────────┴───────────────────────┘
-                        ▼
-            shared core (Rust): envelope, idempotent queue, pack reader and
-            signature check, client-side scope gate, sync, resumable download
-                        ▼
-            on-device inference runtime (llama.cpp, GGUF) → Mind
+Expo (React Native, TypeScript)           ArkTS app (ArkUI), standalone
+  iOS + Android, one codebase               HarmonyOS NEXT only
+        │                                          │
+        └──────────── the same contract ───────────┘
+          API envelope · pack format · queue rules · scope-gate rules
+          · Mzizi tokens · shared conformance test vectors
+        ▼                                          ▼
+   llama.rn → llama.cpp (GGUF)          native C++ llama.cpp under ArkTS (N-API)
 ```
 
-- **Shared core in Rust.** The protocol, the offline queue, pack reading and
-  signature verification are written once. This follows the Rust direction in
-  `shamwari-ai/shamwari#66` and Mzizi Roots, and it keeps the three apps from
-  drifting on the rules that matter (scope, idempotency, staleness). Rust
-  targets for Android and iOS are mature. The OpenHarmony target
-  (`*-linux-ohos`) exists, but its support tier and the ArkTS glue (N-API over a
-  native layer) are to be verified in the spike.
-- **Native UI per platform**, from Mzizi tokens. Mzizi publishes Swift, Kotlin and
-  ArkTS token nodes (registry release 4.0.36). Its component library for native
-  is not built: Mzizi names "native Swift/ArkTS/Kotlin codegen from the same Rust
-  core" as a later, separately scoped track, and offers `mzizi-ui` through
-  Dioxus as the near-term mobile route. So the three UIs are small and
-  hand-built from tokens (chat, packs, settings), not generated. The app is
-  small enough for that to be cheap, and native keeps the binary and memory low
-  on 2 GB phones.
-- **Considered and not chosen as the default:** Flutter and React Native have
-  HarmonyOS ports (community and vendor-backed, not first-party), and Kotlin
-  Multiplatform's HarmonyOS support is early. A cross-platform engine would add
-  weight on exactly the devices that can least afford it, and would make
-  HarmonyOS depend on a third party's port. Dioxus via `mzizi-ui` is the
-  alternative if three UIs prove too costly.
-- **On-device inference: llama.cpp (GGUF) is the common runtime**, so one Mind
-  file serves all three. Metal on iOS; CPU, with GPU back-ends where they help,
-  on Android. On HarmonyOS the documented route is a native C++ layer under
-  ArkTS; MindSpore Lite with the NNRt back-end can use Kirin NPUs but needs
-  models converted to `.ms`. **No official Huawei guidance on llama.cpp was
-  found**; the only example is a single blog, so HarmonyOS inference speed is
-  _unmeasured_ until the spike.
+- **Expo for iOS and Android.** One TypeScript codebase for the two platforms,
+  built with EAS, with over-the-air updates for the JavaScript layer. This
+  replaces the earlier default of three native shells over a Rust core: it fits
+  a small team and the TypeScript the rest of the stack uses, and Mzizi has
+  React Native token nodes (registry release 4.0.36). On-device Mind runs
+  through [llama.rn](https://cdn.jsdelivr.net/npm/cui-llama.rn@1.12.2/README.md),
+  the React Native binding for llama.cpp (GGUF; Metal on iOS, CPU and Vulkan or
+  OpenCL on Android). **It needs a development build, not Expo Go**, because it
+  carries native code; that is normal Expo practice (`expo prebuild`, EAS).
+- **ArkTS is standalone.** HarmonyOS NEXT does not run Android apps and Expo
+  does not target it, so it is a separate ArkUI/ArkTS codebase. React Native has
+  an OpenHarmony port, but it is community and vendor work outside Expo, so it
+  is not the plan. **What the two apps share is the contract, not code:** the
+  response envelope, the pack format, the queue and idempotency rules, the
+  scope-gate rules, Mzizi tokens (it has ArkTS and React Native token nodes), and
+  a set of conformance test vectors (the same JSON fixtures) that both apps run
+  in CI so they cannot drift. On the device the ArkTS app runs llama.cpp in a
+  native C++ layer under ArkTS; MindSpore Lite with NNRt can use Kirin NPUs but
+  needs models converted to `.ms`. **No official Huawei guidance on llama.cpp was
+  found**, so HarmonyOS inference speed is _unmeasured_ until the spike.
+- **No shared Rust core in the first phase.** It was the earlier plan; it adds a
+  native toolchain per platform for logic that is small. The Rust core stays an
+  option once the Rust rebuild lands and the contract is stable.
+
+**Checked and not yet verified:**
+
+- Expo SDK 55 requires the New Architecture and builds for Android 7+ and
+  iOS 15.1+ (secondary sources; confirm at
+  [expo.dev/changelog](https://expo.dev/changelog)).
+- **The cost of a React Native baseline on a 2 GB Android Go phone is
+  unmeasured**: install size, cold start and resident memory before any model
+  loads. Nothing found answered it. It decides the choice, so the first spike
+  measures it. If the baseline leaves too little memory for the smallest Mind,
+  the fallback is a native Android shell for those devices.
+- Expo's push notifications use Firebase on Android, which needs Google
+  services; Huawei Android phones lack them. Use a push route that works
+  without Google services (HMS Push, or polling) for that segment.
 
 ### Per-platform constraints
 
 - **Android.** Target Go-class devices (about 2 GB RAM) first. Do not depend on
-  Google Play services: Huawei Android phones lack them, and a push or
-  licensing call that needs them breaks those users. Distribute on Google Play,
+  Google Play services: Huawei Android phones lack them (part 1 of the Huawei
+  programme), and a push or licensing call that needs them breaks those users. Distribute on Google Play,
   AppGallery and as a direct APK (many low-end devices are reached outside the
   Play Store).
 - **iOS.** A smaller share of low-end users, but the strongest devices for Mind
@@ -407,8 +424,8 @@ _unmeasured_ today.
 3. Mind base model and generation source (#78).
 4. Android Go native app versus PWA only for R2.
 5. Customer key format and the Worker-to-Core path (#81).
-6. What the ArkTS/HarmonyOS build is for, and the developer accounts and test devices for it.
-7. Native UI per platform (recommended) or a cross-platform engine.
+6. The Huawei programme's terms, and the developer accounts and test devices (Go-class Android, iPhone, HarmonyOS NEXT phone).
+7. Evidence on HarmonyOS NEXT devices in Zimbabwe and Africa, to size the ArkTS build against the Huawei programme.
 
 ## Build order
 
@@ -426,7 +443,7 @@ Each item is a small, testable change that can merge on its own.
 8. Voice: measure Whisper on Shona and Ndebele, then the IVR/voice-note adapter.
 9. Mind device tiering and the resumable model delivery manager (after #78).
 10. Retrieval score from Ground and a calibrated threshold for the extractive rung.
-11. Mobile spike: the shared Rust core built for Android, iOS and OpenHarmony, doing "ask, get a cited extractive answer from a pack" on all three.
-12. On-device inference spike: llama.cpp with a small Qwen GGUF on a low-end Android, an iPhone and a HarmonyOS device, taking the measurements above.
-13. Native shells from Mzizi tokens (Compose, SwiftUI, ArkUI): chat, pack manager, settings.
-14. Distribution: Google Play, App Store, AppGallery and a direct APK, with no Google-services dependency.
+11. Expo spike: a development build with llama.rn and a small GGUF on a Go-class Android and an iPhone, measuring the React Native baseline (install size, cold start, memory) and tokens per second. Decides Expo against a native Android shell.
+12. ArkTS spike: a standalone HarmonyOS NEXT app doing "ask, get a cited extractive answer from a pack" with llama.cpp in a native layer, plus the shared conformance vectors running in both apps.
+13. The Expo app from Mzizi React Native tokens (chat, pack manager, settings), then the ArkTS app from the ArkTS tokens.
+14. Distribution: Google Play, App Store, AppGallery (also for Huawei Android phones) and a direct APK, with no Google-services dependency.
