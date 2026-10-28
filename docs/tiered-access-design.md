@@ -50,28 +50,38 @@ UI system.
 
 ## API surfaces
 
-There are two APIs, and only one of them is for customers.
+Three APIs, three audiences. They are easy to blur, so they are named here.
 
 ```
 person / app / channel adapter (SMS, USSD, chat, voice, PWA, Mind)
         │  consumer key
         ▼
-api.shamwari.ai        Consumer API: the gateway Worker. Authenticates the
-        │              caller, runs the Rule 1 scope gate first, routes.
-        ▼
+Shamwari API           api.shamwari.ai. For consumers. The gateway Worker:
+        │              authenticates the caller, runs the Rule 1 scope gate
+        ▼              first, routes.
 Core (Fly)             Decides scope again; holds no database login.
         │  internal key, over Fly 6PN, never public
         ▼
-Business API           /v1/shamwari on the Nyuchi API (api.nyuchi.com today,
-                       nyuchi-servers-api later). Pulls from the Nyuchi
-                       platform: Ground, usage, keys. Internal only.
+Nyuchi Servers API     /v1/shamwari. Internal only, between internal apps.
+                       Pulls from the Nyuchi platform. Decided, not built.
+
+Nyuchi API             /v1/shamwari. B2B: businesses building on Nyuchi
+(api.nyuchi.com)       infrastructure, with their own keys. Not on the path
+                       above; it is a product surface of its own.
 ```
 
-- **Consumer API (`api.shamwari.ai`).** What customers, apps and channel
-  adapters call. It is the only Shamwari API with a public address.
-- **Business API (`/v1/shamwari`).** Internal only, between internal apps. Its
-  callers are internal services holding an internal key; no customer, app key or
-  person token ever reaches it, and it is not in any public key catalogue.
+- **Shamwari API (`api.shamwari.ai`)** is for consumers. It is the only
+  Shamwari API a consumer ever calls.
+- **Nyuchi API `/v1/shamwari`** is B2B: businesses building on Nyuchi
+  infrastructure. What a business may call there (for example cited Ground
+  search and usage for its own entity) is a product decision that is still
+  open.
+- **Nyuchi Servers API `/v1/shamwari`** is internal only, between internal apps.
+  It is where Core's access to the Nyuchi platform belongs. It is not deployed
+  yet (merging to its `main` deploys it, which needs the owner's yes), so until
+  it is, Core's service routes are served by the Nyuchi API behind an internal
+  key scoped `shamwari:service`. That is an interim, and the service routes move
+  when the Servers API is live.
 
 ## The tiers
 
