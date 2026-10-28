@@ -3,16 +3,20 @@
 Bundu Foundation / Nyuchi Africa · design v1 · October 2026 · tracked in the
 issue linked from the pull request that added this file.
 
-**Status: design, not built.** Everything below is decided direction or a
-proposal. Where it says "built", it names the code. Numbers marked _assumed_ or
+**Status: design; item 1 of the build order is built** (the extractive rung,
+PR #85). Everything else below is decided direction or a proposal. Where it
+says "built", it names the code. Numbers marked _assumed_ or
 _unmeasured_ have no measurement behind them yet.
 
 ## Goal
 
 By the first release, a person in Zimbabwe on a feature phone, a low-end Android
 on 2G, or a capable phone gets a **cited answer** in English, Shona or Ndebele,
-at a **cloud cost of about $0.20 per active user per month**, with
-**personal-scope data never leaving the device**.
+at a **cloud cost of about $0.20 per active user per month** (inference and
+infrastructure only; channel fees are a separate line, see
+[Cost model](#cost-model-at--020-per-user-per-month)), with **personal-scope
+data never leaving the device**. Language support is per tier: R0 starts in
+English, and Shona and Ndebele arrive first where the channel can carry them.
 
 Owner decisions this design starts from (2026-10-28): all four access tiers are
 in the first release; the unit-cost target is about $0.20; Zimbabwe first, with a
@@ -43,6 +47,31 @@ need the owner's named yes.
 **Constraints:** a small team, Cloudflare Workers at the edge, Core on Fly,
 Ground in MongoDB through the Nyuchi API, open-weights models, and Mzizi as the
 UI system.
+
+## API surfaces
+
+There are two APIs, and only one of them is for customers.
+
+```
+person / app / channel adapter (SMS, USSD, chat, voice, PWA, Mind)
+        │  consumer key
+        ▼
+api.shamwari.ai        Consumer API: the gateway Worker. Authenticates the
+        │              caller, runs the Rule 1 scope gate first, routes.
+        ▼
+Core (Fly)             Decides scope again; holds no database login.
+        │  internal key, over Fly 6PN, never public
+        ▼
+Business API           /v1/shamwari on the Nyuchi API (api.nyuchi.com today,
+                       nyuchi-servers-api later). Pulls from the Nyuchi
+                       platform: Ground, usage, keys. Internal only.
+```
+
+- **Consumer API (`api.shamwari.ai`).** What customers, apps and channel
+  adapters call. It is the only Shamwari API with a public address.
+- **Business API (`/v1/shamwari`).** Internal only, between internal apps. Its
+  callers are internal services holding an internal key; no customer, app key or
+  person token ever reaches it, and it is not in any public key catalogue.
 
 ## The tiers
 
@@ -86,14 +115,24 @@ One ladder for every tier. A request takes the first rung that works and the
 response says which rung served it (as `inference_path` does today).
 
 1. **Mind** on the device (R3 only, and the only rung that may see personal scope).
-2. **Ground-only, extractive.** Retrieval alone returns the cited clause with no
-   generation. It costs no inference, works from a cached pack offline, and
-   cannot invent a citation. For "what does the Constitution say about X" it is
+2. **Ground-only, extractive.** Retrieval alone returns the closest cited
+   passage with no generation. It costs no inference, works from a cached pack
+   offline, and cannot invent a citation. It does not judge relevance, so it
+   says "Closest source", and it carries the pack's "as of" date when it
+   answered from a pack. For "what does the Constitution say about X" it is
    often the right answer, not a consolation.
 3. **Cloud economy** (GLM-5.3-Flash class), grounded.
 4. **Cloud standard** (GLM-5.3 class) for reasoning and long context only.
 5. **Queue.** Store the ask, tell the person when to look, deliver when the
    network returns.
+
+**Personal scope uses rung 1 only.** A personal-scope request that cannot reach
+Mind (no device model, no network to a device, any of R0 to R2) gets the 409
+`scope_requires_local_inference`, mapped to a short human message. It never
+falls to rungs 2 to 5, and the queue never stores a personal-scope ask, because
+a stored ask would be delivered to Cloud later. An R3 device with no model
+therefore answers personal questions with a refusal that says why, not with an
+R2 answer.
 
 This is the cost lever. Rung 2 is free, rung 3 is the default, rung 4 is rare,
 and premium models stay opt-in outside this ladder.
@@ -104,15 +143,22 @@ No price for any of this is verified in this repository, so this is a method,
 not a result. `docs/workers-ai-models.md` lists model ids, not prices.
 
 ```
-monthly cost per user ≈ turns × [ (1 − extractive share − cache hit)
-                                   × (tokens_in × p_in + tokens_out × p_out) ]
-                       + retrieval + embedding + channel fees
-budget per turn       ≈ $0.20 ÷ turns          (30 turns → about $0.0067 per turn)
+per-turn cost  = embedding + retrieval                       (every turn, even extractive)
+               + P(cloud generation) × (tokens_in × p_in + tokens_out × p_out)
+P(cloud gen)   = 1 − P(extractive) − P(exact-match cache hit)   (only if the three are disjoint)
+monthly cost   = turns × per-turn cost + channel fees
+budget per turn ≈ $0.20 ÷ turns          (30 turns → about $0.0067 per turn)
 ```
+
+Embedding and retrieval are per-turn costs: even a turn that never reaches a
+generative model embeds the question and queries the corpus. "Exact-match
+cache" means the AI Gateway cache, keyed on an identical request; semantic
+caching is out of the first phase, and a turn that is both cached and
+extractive is counted once.
 
 Levers, in order of size:
 
-1. **Extractive and cached share.** Every turn that never reaches a model is free.
+1. **Extractive and cached share.** A turn that never reaches a generative model costs only its embedding and retrieval.
    The first measurement to take is what fraction of real questions rung 2 can
    answer well enough.
 2. **Token caps per tier.** R0 replies are capped near three segments, so the
@@ -144,17 +190,33 @@ with the channel deciding the encoding.
 - Compression by default (Brotli/gzip), no per-request JSON bloat, no
   third-party scripts on R2.
 - R0 truncates on word boundaries, numbers the segments, and ends with a short
-  code for "more" rather than dropping the citation.
+  code for "more" rather than dropping the citation. The limit is per channel
+  and encoding, not one number: a GSM-7 SMS segment holds 160 characters (153
+  when concatenated, so three segments hold about 459), and any character
+  outside GSM-7 switches the message to UCS-2 at 70 (67 concatenated); a USSD
+  screen is about 182 characters. The envelope is specified against the
+  channel's own limit, and the gateway's default of 450 characters stays under
+  three GSM-7 segments.
 
 ## Ground packs (offline retrieval)
 
-A build job that turns approved, mind-eligible slices of
+A build job that turns approved, **ground-eligible** slices of
 `shamwari.knowledgeBase` into compact offline packs a phone can hold (for
 example a SQLite file with full-text search per topic and language), versioned
-and signed so the device can check it. Packs honour the existing gates: only
-`ground_eligible` sources, never a source whose terms are unread, and
-`supersededBy` content is excluded so a pack never cites repealed law. Pack
-size and the refresh cadence are _unmeasured_.
+and signed so the device can check it. Packs key on `ground_eligible`, the
+retrieval gate: `mind_eligible` is the training gate and does not apply to
+retrieval, so scraped news (ground-eligible with citation and link-out, not
+Mind training data) can be in a pack. If a pack were ever used as training
+material, `mind_eligible` would apply to it, and that is a separate decision.
+Never a source whose terms are unread, and `supersededBy` content is excluded at
+build time.
+
+**A signature proves integrity, not currency.** A pack on a phone ages: a
+statute can be superseded after the download. So a pack carries a version and an
+"as of" date; an answer from a pack states that date; there is a maximum pack
+age after which the device refuses to present an answer as current and says the
+pack is stale; and the refresh cadence is tied to Ground's `refresh_cadence`.
+Pack size and the maximum age are _unmeasured_.
 
 ## Channel adapters
 
@@ -182,7 +244,12 @@ code (`router.ts`, `provenance.ts`) and never moves into that file. New in this
 design: the policy gains the **tier** and the **rung** as inputs, so R0 can never
 select a long-context model and a premium model can never be chosen by tier
 alone. GLM is primary; Kimi (2.7 or newer) and Qwen sit behind it and are used
-when needed. No model is pinned as a threshold.
+when needed. No model is pinned as a threshold. Whichever model serves, its
+licence class is resolved from the model that actually answered, against the
+allowlist in `provenance.ts`, which fails closed to `restricted` for anything
+unlisted: a newer Kimi or a Qwen is stamped `restricted` until a reviewed code
+change lists it, and `licenseClass` never moves into `routing-policy.json`. How
+they are reached (an AI Gateway route, or Workers AI) is part of that change.
 
 ## Mzizi and the UI
 
