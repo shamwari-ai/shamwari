@@ -8,6 +8,9 @@ import { infer } from './gateway';
 import { ground } from './ground';
 import type { GroundResult } from './ground';
 import { extractiveAnswer, NO_SOURCE_MESSAGE } from './extractive';
+import { FORMATS, isFormat, toCompact } from './envelope';
+import type { Format } from './envelope';
+import * as idem from './idempotency';
 import { drain } from './sink';
 import { detectLanguage } from './lang';
 import { core } from './core';
@@ -54,6 +57,8 @@ interface ChatBody {
   mode?: string;
   /** How the caller reaches Shamwari: r0 SMS/USSD, r1 chat app, r2 Lite PWA. */
   reach?: string;
+  /** `compact` asks for the compact envelope (src/envelope.ts). */
+  format?: string;
 }
 
 /**
@@ -320,179 +325,251 @@ export default {
     const reach: Reach | undefined = isReach(body.reach) ? body.reach : undefined;
     const limits = reach ? policy.reach[reach] : undefined;
 
-    const requestId = crypto.randomUUID();
-    const started = Date.now();
-    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-    const language = lastUser ? detectLanguage(lastUser.content) : null;
+    if (body.format !== undefined && !isFormat(body.format)) {
+      return json({ error: 'invalid_format', allowed: FORMATS }, 400);
+    }
+    const format: Format | undefined = isFormat(body.format) ? body.format : undefined;
 
-    const g = await ground(
-      env,
-      messages,
-      auth.ownerEntityId,
-      decision.scope,
-      decision.destination,
-      language,
-    );
-    const rung = { auth, decision, g, language, requestId, started, reach };
-    if (body.mode === 'extractive') {
-      // "Ground could not be asked" is not "Ground has nothing": only the
-      // second may be said to a person as a fact about the corpus.
-      if (g.unavailable) {
-        return new Response(JSON.stringify({ error: 'ground_unavailable', retry: true }, null, 2), {
-          status: 503,
-          headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
-        });
-      }
-      return extractiveResponse(ctx, env, { ...rung, degraded: false });
+    const rawKey = req.headers.get('Idempotency-Key');
+    if (rawKey !== null && !idem.KEY_PATTERN.test(rawKey)) {
+      return json({ error: 'invalid_idempotency_key', pattern: idem.KEY_PATTERN.source }, 400);
     }
 
-    const routed = applyReach(route(messages, body.model, env), reach, env);
-    const target = routed.target;
-    let result: Awaited<ReturnType<typeof infer>>;
-    try {
-      result = await infer(
+    const produce = async (): Promise<Response> => {
+      const requestId = crypto.randomUUID();
+      const started = Date.now();
+      const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+      const language = lastUser ? detectLanguage(lastUser.content) : null;
+
+      const g = await ground(
         env,
-        target,
-        [
-          { role: 'system', content: g.systemPrompt },
-          ...messages.filter((m) => m.role !== 'system'),
-        ],
-        {
-          tier: target.tier,
-          scope: decision.scope,
-          ownerEntityId: auth.ownerEntityId,
-          surface: env.SURFACE,
-          requestId,
-        },
-        limits?.max_output_tokens,
+        messages,
+        auth.ownerEntityId,
+        decision.scope,
+        decision.destination,
+        language,
       );
-    } catch (e) {
-      // Every inference path failed. With a Ground hit there is still a cited
-      // answer to give; without one there is nothing honest to say, so the
-      // failure stands.
-      if (!g.hit) throw e;
-      console.error('inference unavailable, answering from Ground', String(e));
-      return extractiveResponse(ctx, env, { ...rung, degraded: true });
-    }
-    const latencyMs = Date.now() - started;
+      const rung = { auth, decision, g, language, requestId, started, reach };
+      if (body.mode === 'extractive') {
+        // "Ground could not be asked" is not "Ground has nothing": only the
+        // second may be said to a person as a fact about the corpus.
+        if (g.unavailable) {
+          return new Response(
+            JSON.stringify({ error: 'ground_unavailable', retry: true }, null, 2),
+            {
+              status: 503,
+              headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
+            },
+          );
+        }
+        return extractiveResponse(ctx, env, { ...rung, degraded: false });
+      }
 
-    const now = new Date().toISOString();
-    const sink: SinkMessage[] = [
-      {
-        database: 'shamwari',
-        collection: 'conversations',
-        doc: {
-          ownerEntityId: auth.ownerEntityId,
-          ownerPersonId: auth.ownerPersonId,
-          requestId,
-          surfaceContext: env.SURFACE,
+      const routed = applyReach(route(messages, body.model, env), reach, env);
+      const target = routed.target;
+      let result: Awaited<ReturnType<typeof infer>>;
+      try {
+        result = await infer(
+          env,
+          target,
+          [
+            { role: 'system', content: g.systemPrompt },
+            ...messages.filter((m) => m.role !== 'system'),
+          ],
+          {
+            tier: target.tier,
+            scope: decision.scope,
+            ownerEntityId: auth.ownerEntityId,
+            surface: env.SURFACE,
+            requestId,
+          },
+          limits?.max_output_tokens,
+        );
+      } catch (e) {
+        // Every inference path failed. With a Ground hit there is still a cited
+        // answer to give; without one there is nothing honest to say, so the
+        // failure stands.
+        if (!g.hit) throw e;
+        console.error('inference unavailable, answering from Ground', String(e));
+        return extractiveResponse(ctx, env, { ...rung, degraded: true });
+      }
+      const latencyMs = Date.now() - started;
+
+      const now = new Date().toISOString();
+      const sink: SinkMessage[] = [
+        {
+          database: 'shamwari',
+          collection: 'conversations',
+          doc: {
+            ownerEntityId: auth.ownerEntityId,
+            ownerPersonId: auth.ownerPersonId,
+            requestId,
+            surfaceContext: env.SURFACE,
+            scope: decision.scope,
+            language,
+            messages,
+            response: result.text,
+            citations: g.chunks.map((c) => ({
+              title: c.title,
+              heading: c.heading,
+              authority: c.authority,
+              url: c.source_url,
+              effectiveFrom: c.effective_from,
+            })),
+            teacherModel: `${result.provider}/${result.model}`,
+            // Resolved from the model that actually answered, not from the
+            // tier that was asked for. A dynamic route can substitute the
+            // model without a deploy, and the Workers AI fallback always
+            // does. See provenance.ts.
+            licenseClass: result.licenseClass,
+            requestedModel: `${result.requestedProvider}/${result.requestedModel}`,
+            modelSubstituted: result.substituted,
+            tier: target.tier,
+            reach: reach ?? null,
+            grounded: g.hit,
+            // Two independent gates, and a row needs both.
+            //
+            // licenseClass gates the teacher model's terms. This gates the
+            // user's: a personal-scope exchange is the user's own pod data and
+            // is never Mind training material, whatever licence the teacher
+            // model carries. Core rejects that combination outright.
+            //
+            // The licenceClass half is here too because the pipeline reads
+            // trainingEligible, and a restricted row that is merely *labelled*
+            // restricted while still flagged eligible relies on every future
+            // reader joining the two fields correctly.
+            trainingEligible:
+              decision.scope !== 'personal' && result.licenseClass === 'open_weight',
+            promoted: false,
+            lastMessageAt: now,
+            createdAt: now,
+          },
+        },
+        {
+          database: 'platform',
+          collection: 'usageEvents',
+          doc: {
+            ownerEntityId: auth.ownerEntityId,
+            apiKeyId: auth.apiKeyId,
+            requestId,
+            billingPeriod: billingPeriod(),
+            tier: target.tier,
+            reach: reach ?? null,
+            reachClamped: routed.clamped,
+            routedTier: routed.routedTier,
+            provider: result.provider,
+            model: result.model,
+            requestedProvider: result.requestedProvider,
+            requestedModel: result.requestedModel,
+            modelSubstituted: result.substituted,
+            licenseClass: result.licenseClass,
+            inputTokens: result.inputTokens,
+            outputTokens: result.outputTokens,
+            cacheHit: result.cacheHit,
+            groundHit: g.hit,
+            inferencePath: result.path,
+            latencyMs,
+            createdAt: now,
+          },
+        },
+      ];
+
+      ctx.waitUntil(
+        env.SINK.sendBatch(sink.map((b) => ({ body: b }))).catch((e) =>
+          console.error('sink enqueue failed', String(e)),
+        ),
+      );
+
+      return json({
+        id: requestId,
+        model: `shamwari-${target.tier}`,
+        choices: [
+          {
+            index: 0,
+            message: { role: 'assistant', content: result.text },
+            finish_reason: result.finishReason,
+          },
+        ],
+        usage: {
+          prompt_tokens: result.inputTokens,
+          completion_tokens: result.outputTokens,
+          total_tokens: result.inputTokens + result.outputTokens,
+        },
+        shamwari: {
+          tier: target.tier,
+          reach: reach ?? null,
+          reach_clamped: routed.clamped,
+          truncated: result.finishReason === 'length',
           scope: decision.scope,
           language,
-          messages,
-          response: result.text,
-          citations: g.chunks.map((c) => ({
-            title: c.title,
-            heading: c.heading,
-            authority: c.authority,
-            url: c.source_url,
-            effectiveFrom: c.effective_from,
-          })),
-          teacherModel: `${result.provider}/${result.model}`,
-          // Resolved from the model that actually answered, not from the
-          // tier that was asked for. A dynamic route can substitute the
-          // model without a deploy, and the Workers AI fallback always
-          // does. See provenance.ts.
-          licenseClass: result.licenseClass,
-          requestedModel: `${result.requestedProvider}/${result.requestedModel}`,
-          modelSubstituted: result.substituted,
-          tier: target.tier,
-          reach: reach ?? null,
           grounded: g.hit,
-          // Two independent gates, and a row needs both.
-          //
-          // licenseClass gates the teacher model's terms. This gates the
-          // user's: a personal-scope exchange is the user's own pod data and
-          // is never Mind training material, whatever licence the teacher
-          // model carries. Core rejects that combination outright.
-          //
-          // The licenceClass half is here too because the pipeline reads
-          // trainingEligible, and a restricted row that is merely *labelled*
-          // restricted while still flagged eligible relies on every future
-          // reader joining the two fields correctly.
-          trainingEligible: decision.scope !== 'personal' && result.licenseClass === 'open_weight',
-          promoted: false,
-          lastMessageAt: now,
-          createdAt: now,
+          cache_hit: result.cacheHit,
+          inference_path: result.path,
+          model_served: `${result.provider}/${result.model}`,
+          // Surfaced rather than buried in the usage event: a dynamic route
+          // substituting the model is otherwise invisible to the caller.
+          model_substituted: result.substituted,
+          latency_ms: latencyMs,
+          citations: citationsOf(g.chunks),
         },
-      },
-      {
-        database: 'platform',
-        collection: 'usageEvents',
-        doc: {
-          ownerEntityId: auth.ownerEntityId,
-          apiKeyId: auth.apiKeyId,
-          requestId,
-          billingPeriod: billingPeriod(),
-          tier: target.tier,
-          reach: reach ?? null,
-          reachClamped: routed.clamped,
-          routedTier: routed.routedTier,
-          provider: result.provider,
-          model: result.model,
-          requestedProvider: result.requestedProvider,
-          requestedModel: result.requestedModel,
-          modelSubstituted: result.substituted,
-          licenseClass: result.licenseClass,
-          inputTokens: result.inputTokens,
-          outputTokens: result.outputTokens,
-          cacheHit: result.cacheHit,
-          groundHit: g.hit,
-          inferencePath: result.path,
-          latencyMs,
-          createdAt: now,
-        },
-      },
-    ];
+      });
+    };
 
-    ctx.waitUntil(
-      env.SINK.sendBatch(sink.map((b) => ({ body: b }))).catch((e) =>
-        console.error('sink enqueue failed', String(e)),
-      ),
-    );
+    // Compact is a shape, applied last, so both rungs and the replay agree.
+    const shaped = async (): Promise<Response> => {
+      const res = await produce();
+      if (format !== 'compact' || res.status !== 200) return res;
+      return json(toCompact(await res.json()));
+    };
 
-    return json({
-      id: requestId,
-      model: `shamwari-${target.tier}`,
-      choices: [
-        {
-          index: 0,
-          message: { role: 'assistant', content: result.text },
-          finish_reason: result.finishReason,
-        },
-      ],
-      usage: {
-        prompt_tokens: result.inputTokens,
-        completion_tokens: result.outputTokens,
-        total_tokens: result.inputTokens + result.outputTokens,
-      },
-      shamwari: {
-        tier: target.tier,
-        reach: reach ?? null,
-        reach_clamped: routed.clamped,
-        truncated: result.finishReason === 'length',
-        scope: decision.scope,
-        language,
-        grounded: g.hit,
-        cache_hit: result.cacheHit,
-        inference_path: result.path,
-        model_served: `${result.provider}/${result.model}`,
-        // Surfaced rather than buried in the usage event: a dynamic route
-        // substituting the model is otherwise invisible to the caller.
-        model_substituted: result.substituted,
-        latency_ms: latencyMs,
-        citations: citationsOf(g.chunks),
-      },
+    if (rawKey === null) return shaped();
+
+    // The key is scoped to the entity and to the whole request: the same key
+    // with a different request is a mistake, not a retry.
+    const k = await idem.storageKey(auth.ownerEntityId, rawKey);
+    const fp = await idem.fingerprint({
+      messages,
+      model: body.model,
+      scope: body.scope,
+      mode: body.mode,
+      reach: body.reach,
+      format: body.format,
     });
+    const begun = await idem.begin(env.AUTH_CACHE, k, fp);
+    if (begun.state === 'conflict') {
+      return json(
+        { error: 'idempotency_key_reuse', message: 'This key was used for a different request.' },
+        422,
+      );
+    }
+    if (begun.state === 'in_progress') {
+      return new Response(JSON.stringify({ error: 'request_in_progress', retry: true }, null, 2), {
+        status: 409,
+        headers: { 'Content-Type': 'application/json', 'Retry-After': '2' },
+      });
+    }
+    if (begun.state === 'replay') {
+      // No Ground, no inference, no usage event: a replay is free and is not
+      // stored again.
+      return new Response(begun.body, {
+        status: begun.status,
+        headers: { 'Content-Type': 'application/json', 'Idempotent-Replayed': 'true' },
+      });
+    }
+
+    try {
+      const res = await shaped();
+      if (res.status === 200) {
+        const text = await res.clone().text();
+        ctx.waitUntil(idem.complete(env.AUTH_CACHE, k, fp, { status: res.status, body: text }));
+      } else {
+        ctx.waitUntil(idem.release(env.AUTH_CACHE, k));
+      }
+      return res;
+    } catch (e) {
+      ctx.waitUntil(idem.release(env.AUTH_CACHE, k));
+      throw e;
+    }
   },
 
   async queue(batch: MessageBatch<SinkMessage>, env: Env): Promise<void> {
