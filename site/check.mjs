@@ -30,11 +30,24 @@ const PERMITTED = ['not the same as being open source', 'Say open weights, not o
 
 // The diagram takes its colours from design tokens, so light and dark both
 // work; a hard-coded colour would be right in one and wrong in the other.
+// Removing a comment can join the text around it into a new comment opener, so
+// strip until nothing changes. (This reads our own source, not user input; the
+// loop is what makes the removal complete.)
+const stripUntilStable = (text, patterns) => {
+  let prev;
+  do {
+    prev = text;
+    for (const p of patterns) text = text.replace(p, '');
+  } while (text !== prev);
+  return text;
+};
+
 for (const src of ['src/components/DataScopes.astro', 'src/pages/index.astro']) {
-  const code = readFileSync(src, 'utf8')
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
+  const code = stripUntilStable(readFileSync(src, 'utf8'), [
+    /<!--[\s\S]*?-->/g,
+    /\/\*[\s\S]*?\*\//g,
+    /^\s*\/\/.*$/gm,
+  ]);
   // Fallbacks inside var() count: a hex fallback is a hard-coded colour too.
   if (/(?<![\w&])#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/i.test(code.replace(/href="[^"]*"/g, ''))) {
     fail.push(`${src}: hard-coded colour; use design tokens (var(--…))`);
@@ -88,8 +101,7 @@ for (const page of pages) {
   // model" or "our own model", on any page.
   // Block ends become sentence ends, so a heading cannot lend its words to the
   // list item after it, and entities are decoded so "isn&#39;t" is "isn't".
-  const text = html
-    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+  const text = stripUntilStable(html, [/<(script|style)[\s\S]*?<\/\1>/gi])
     .replace(/<\/(p|li|h[1-6]|div|section|figcaption|td|th|tr|text|title|desc|blockquote|summary)>/gi, '. ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&#39;|&apos;|&rsquo;/g, "'")
