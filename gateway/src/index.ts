@@ -1,5 +1,6 @@
 import type { Env, Message, SinkMessage, AuthContext, GroundChunk } from './types';
 import { authenticate } from './auth';
+import { keyService, usageMeter } from './keys';
 import { parseScope, decideDestination, ScopeRefusal } from './scope';
 import type { Capability, ScopeDecision } from './scope';
 import { route, applyReach, isReach, policy, REACHES } from './router';
@@ -16,7 +17,6 @@ import { ussd } from './channels/ussd';
 import * as idem from './idempotency';
 import { drain } from './sink';
 import { detectLanguage } from './lang';
-import { core } from './core';
 import { probe, healthDoc } from './probe';
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
@@ -41,11 +41,8 @@ function billingPeriod(d = new Date()): string {
 
 async function overQuota(env: Env, auth: AuthContext): Promise<boolean> {
   try {
-    const r = await core<{ total_tokens: number }>(
-      env,
-      `/rollup?owner_entity_id=${auth.ownerEntityId}&billing_period=${billingPeriod()}`,
-    );
-    return r.total_tokens > auth.monthlyTokenCap;
+    const total = await keyService(env).usageTotal(auth.ownerEntityId, billingPeriod());
+    return total > auth.monthlyTokenCap;
   } catch {
     // Fail open. A rollup outage must not stop a paying customer.
     return false;
@@ -86,8 +83,15 @@ async function admit(
       quota: () => Promise<Response | null>;
     }
 > {
-  const auth = await authenticate(req, env);
-  if (!auth) return { ok: false, response: json({ error: 'invalid_api_key' }, 401) };
+  const authed = await authenticate(req, env);
+  if (!authed.ok) {
+    // 'unavailable' is a 503, not a 401: the caller's key may be fine, and a
+    // client that drops a good key on a 401 would turn our outage into theirs.
+    return authed.reason === 'unavailable'
+      ? { ok: false, response: json({ error: 'auth_unavailable' }, 503, { 'Retry-After': '5' }) }
+      : { ok: false, response: json({ error: 'invalid_api_key' }, 401) };
+  }
+  const auth = authed.auth;
   const quota = async (): Promise<Response | null> =>
     (await overQuota(env, auth))
       ? json(
@@ -167,10 +171,7 @@ async function groundContext(req: Request, env: Env, ctx: ExecutionContext): Pro
   // answer on this path, and a personal-scope exchange is not Mind training
   // data — see the trainingEligible note on the completion path.
   ctx.waitUntil(
-    env.SINK.send({
-      database: 'platform',
-      collection: 'usageEvents',
-      doc: {
+    usageMeter(env).record({
         ownerEntityId: auth.ownerEntityId,
         apiKeyId: auth.apiKeyId,
         requestId,
@@ -187,8 +188,7 @@ async function groundContext(req: Request, env: Env, ctx: ExecutionContext): Pro
         edgeEmbedding: decision.destination === 'cloud',
         latencyMs,
         createdAt: new Date().toISOString(),
-      },
-    }).catch((e) => console.error('sink enqueue failed', String(e))),
+      }),
   );
 
   return json({
@@ -247,10 +247,7 @@ function extractiveResponse(
   const latencyMs = Date.now() - started;
 
   ctx.waitUntil(
-    env.SINK.send({
-      database: 'platform',
-      collection: 'usageEvents',
-      doc: {
+    usageMeter(env).record({
         ownerEntityId: auth.ownerEntityId,
         apiKeyId: auth.apiKeyId,
         requestId,
@@ -270,8 +267,7 @@ function extractiveResponse(
         degraded,
         latencyMs,
         createdAt: new Date().toISOString(),
-      },
-    }).catch((e) => console.error('sink enqueue failed', String(e))),
+      }),
   );
 
   return json({
@@ -498,10 +494,16 @@ const worker = {
         },
       ];
 
+      // Usage goes to the meter, which may be the Servers API; everything
+      // else (conversations, messages) stays on the sink queue.
+      const meter = usageMeter(env);
       ctx.waitUntil(
-        env.SINK.sendBatch(sink.map((b) => ({ body: b }))).catch((e) =>
-          console.error('sink enqueue failed', String(e)),
-        ),
+        Promise.all([
+          env.SINK.sendBatch(
+            sink.filter((b) => b.collection !== 'usageEvents').map((b) => ({ body: b })),
+          ).catch((e) => console.error('sink enqueue failed', String(e))),
+          ...sink.filter((b) => b.collection === 'usageEvents').map((b) => meter.record(b.doc)),
+        ]),
       );
 
       return json({
