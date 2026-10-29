@@ -57,7 +57,7 @@ leaving. A flaky-remote simulation checks that every event is counted exactly on
 
 ## Running it
 
-- `POST /replay/usage` (Core token) runs one bounded pass. Schedule it about once
+- `POST /replay/usage` (operator token, `SHAMWARI_OPS_TOKEN`; the edge Worker's token is refused) runs one bounded pass. Schedule it about once
   a minute. It is safe to run concurrently on two machines: the Servers API
   deduplicates, and one machine skips while a pass is running.
 - `GET /replay/stats` returns `pending`, `oldest_pending_age_seconds`, `rejected`
@@ -72,7 +72,7 @@ leaving. A flaky-remote simulation checks that every event is counted exactly on
 
 ## Owner-only steps (nothing here has been run)
 
-1. Set the three environment values on Core, and schedule the call.
+1. Set `SHAMWARI_OPS_TOKEN` and the three `SERVERS_API_*` values on Core, and schedule the call with the operator token.
 2. Create a Mongo index so the pending query is not a scan, on
    `platform.usageEvents`: `{ spilled: 1, replayedAt: 1, replayRejectedAt: 1, createdAt: 1 }`
    (a partial index on `spilled: true` is smaller). This changes a live database,
