@@ -2,11 +2,20 @@
 // cannot know about. Modelled on docs-site/check.mjs.
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { findClaimProblems, selfTest } from './claims.mjs';
 
 const walk = (dir) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
     e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)],
   );
+
+// The claim rules are tested before they are used: if a rule has stopped
+// catching what it exists to catch, fail here rather than pass every page.
+const broken = selfTest();
+if (broken.length) {
+  console.error('FAIL\n' + broken.map((f) => '  - claims.mjs self-test: ' + f).join('\n'));
+  process.exit(1);
+}
 
 const files = walk('dist');
 const pages = files.filter((f) => f.endsWith('.html'));
@@ -18,6 +27,19 @@ const assets = new Set(files.map((f) => f.replace(/^dist/, '')));
 
 // The one permitted family of uses: naming the phrase in order to reject it.
 const PERMITTED = ['not the same as being open source', 'Say open weights, not open source'];
+
+// The diagram takes its colours from design tokens, so light and dark both
+// work; a hard-coded colour would be right in one and wrong in the other.
+for (const src of ['src/components/DataScopes.astro', 'src/pages/index.astro']) {
+  const code = readFileSync(src, 'utf8')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  // Fallbacks inside var() count: a hex fallback is a hard-coded colour too.
+  if (/(?<![\w&])#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/i.test(code.replace(/href="[^"]*"/g, ''))) {
+    fail.push(`${src}: hard-coded colour; use design tokens (var(--…))`);
+  }
+}
 
 let biggest = 0;
 
@@ -60,6 +82,54 @@ for (const page of pages) {
   // Cloud — sovereignty on this site means user-sovereign, never residency.
   if (/data (stays|remains) in africa/i.test(flat)) {
     fail.push(`${where}: claims data residency, which Cloud cannot promise — see the language table in CLAUDE.md`);
+  }
+
+  // Sovereignty is never claimed for Cloud, and it is never an "open source
+  // model" or "our own model", on any page.
+  // Block ends become sentence ends, so a heading cannot lend its words to the
+  // list item after it, and entities are decoded so "isn&#39;t" is "isn't".
+  const text = html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<\/(p|li|h[1-6]|div|section|figcaption|td|th|tr|text|title|desc|blockquote|summary)>/gi, '. ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#39;|&apos;|&rsquo;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&');
+  for (const p of findClaimProblems(text)) fail.push(`${where}: ${p}`);
+
+  // The home page is SVG only: no raster image anywhere on it.
+  if (where === 'index.html' && /<img[^>]+src="[^"]+\.(png|jpe?g|gif|webp|avif)"/i.test(html)) {
+    fail.push(`${where}: a raster <img> on the SVG-only home page`);
+  }
+
+  // The scope diagram is an image to a screen reader: role="img" with a title
+  // and a description, both real text, both referenced by aria-labelledby.
+  if (where === 'index.html') {
+    const svgs = [...html.matchAll(/<svg\b[^>]*>[\s\S]*?<\/svg>/g)]
+      .map((m) => m[0])
+      .filter((tag) => /\brole="img"/.test(tag.slice(0, tag.indexOf('>') + 1)));
+    if (!svgs.length) {
+      fail.push(`${where}: the data-scopes diagram has no <svg role="img">`);
+    }
+    for (const svg of svgs) {
+      const open = svg.slice(0, svg.indexOf('>') + 1);
+      const labelled = open.match(/\baria-labelledby="([^"]+)"/);
+      if (!labelled) {
+        fail.push(`${where}: an <svg role="img"> has no aria-labelledby`);
+        continue;
+      }
+      for (const id of labelled[1].split(/\s+/)) {
+        const el = svg.match(new RegExp(`<(title|desc) id="${id}"[^>]*>([\\s\\S]*?)</\\1>`));
+        const t = el ? el[2].replace(/\s+/g, ' ').trim() : '';
+        const min = el && el[1] === 'title' ? 8 : 80;
+        if (t.length < min) fail.push(`${where}: diagram ${id} is missing or too short to be alt text (${t.length} < ${min})`);
+      }
+    }
+    const scopes = svgs.find((v) => /scopes-title/.test(v));
+    if (scopes && !/personal[\s\S]{0,400}Mind[\s\S]{0,400}(never|not)[\s\S]{0,200}provider/i.test(scopes)) {
+      fail.push(`${where}: the diagram's description must say personal data goes to Mind and never to a provider`);
+    }
   }
 
   // No client JavaScript: nothing on this site needs it. @bundu/ui's React
