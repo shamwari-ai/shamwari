@@ -12,6 +12,7 @@ import {
   keyService,
   usageMeter,
   usageEventPayload,
+  USAGE_EVENT_FIELDS,
   CoreKeyService,
   QueueUsageMeter,
   ServersApiKeyService,
@@ -222,6 +223,27 @@ describe('Servers API key verification', () => {
     expect(seen).toHaveLength(0);
   });
 
+  it('sends the internal-key second factor on every route when configured, and not otherwise', async () => {
+    const seen: { url: string; key: string | null }[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      seen.push({ url, key: new Headers(init.headers).get('x-nyuchi-internal-key') });
+      return url.includes('/keys/verify')
+        ? Response.json(GOOD)
+        : url.includes('/rollup')
+          ? Response.json({ total_tokens: 1 })
+          : Response.json({});
+    });
+    const withKey = makeEnv({ ...SERVERS, SERVERS_API_INTERNAL_KEY: 'nyk_a.nys_b' }).env;
+    await new ServersApiKeyService(withKey).verify('sk_shamwari_', 'h');
+    await new ServersApiKeyService(withKey).usageTotal('e1', '2026-10');
+    await new ServersApiUsageMeter(withKey).record({ requestId: 'r' });
+    expect(seen.map((c) => c.key)).toEqual(['nyk_a.nys_b', 'nyk_a.nys_b', 'nyk_a.nys_b']);
+
+    seen.length = 0;
+    await new ServersApiKeyService(makeEnv(SERVERS).env).verify('sk_shamwari_', 'h');
+    expect(seen[0]!.key).toBeNull();
+  });
+
   it('a recovered service is believed at once (no outage verdict was cached)', async () => {
     let up = false;
     fakeServers({
@@ -346,7 +368,41 @@ describe('Servers API usage metering', () => {
     await expect(meter.record(doc)).rejects.toThrow('queue down');
   });
 
-  it('RULE 1: carries no prompt, answer or scope content, whatever the event holds', async () => {
+  it.each([
+    ['an object', { pod: 'x', data: 'my clinic results' }],
+    ['a pod identifier', 'pod:abc123'],
+    ['free text', 'my clinic results'],
+    ['an empty string', ''],
+  ])('RULE 1: scope is a label only; %s is dropped, not forwarded', (_n, scope) => {
+    const out = usageEventPayload({ requestId: 'r1', scope });
+    expect(out).toEqual({ requestId: 'r1' });
+    expect(JSON.stringify(out)).not.toContain('clinic');
+  });
+
+  it('RULE 1: every key on the wire is on the allowlist, so a new body field fails here', async () => {
+    const seen = fakeServers();
+    const { env } = makeEnv(SERVERS);
+    const junk = Object.fromEntries(
+      [
+        'messages',
+        'content',
+        'prompt',
+        'completion',
+        'answer',
+        'text',
+        'citations',
+        'systemPrompt',
+        'embedding',
+        'newField',
+      ].map((k) => [k, 'x']),
+    );
+    await new ServersApiUsageMeter(env).record({ ...doc, ...junk });
+    const sent = Object.keys((seen[0]!.body as { events: object[] }).events[0]!);
+    for (const k of sent) expect(USAGE_EVENT_FIELDS as readonly string[]).toContain(k);
+    for (const k of Object.keys(junk)) expect(sent).not.toContain(k);
+  });
+
+  it('RULE 1: carries no prompt, answer or scope-gated content, whatever the event holds', async () => {
     const seen = fakeServers();
     const { env } = makeEnv(SERVERS);
     await new ServersApiUsageMeter(env).record({
@@ -361,7 +417,9 @@ describe('Servers API usage metering', () => {
     const sent = JSON.stringify(seen[0]!.body);
     expect(sent).not.toContain('secret');
     expect(sent).not.toContain('clinic');
-    expect(sent).not.toContain('personal');
+    expect(Object.keys(JSON.parse(sent).events[0])).not.toContain('messages');
+    // The scope *label* is allowed; the scope word is not what must stay out.
+    expect(JSON.parse(sent).events[0].scope).toBe('personal');
     expect(Object.keys(usageEventPayload({ messages: 1, content: 1, requestId: 'r' }))).toEqual([
       'requestId',
     ]);

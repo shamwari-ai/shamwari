@@ -11,7 +11,9 @@ Core and the sink queue remain the live path until the owner turns it on.
 Keys belong in the ledger's `platform.api_keys`, not Mongo. Nyuchi-Doris is
 search and analytics and is never on this read path.
 
-All calls: `Authorization: Bearer <SERVERS_API_TOKEN>`, JSON, namespace
+All calls: `Authorization: Bearer <SERVERS_API_TOKEN>` (scope `shamwari`) and,
+because these are internal routes, `x-nyuchi-internal-key: nyk_<clientId>.nys_<secret>`
+(`SERVERS_API_INTERNAL_KEY`, sent whenever it is set), JSON, namespace
 `/v1/shamwari/*`. The token is a service credential for the gateway only.
 
 ## 1. Verify a key — `POST /v1/shamwari/keys/verify`
@@ -50,7 +52,8 @@ in constant time, honouring `isActive`/revocation and expiry.
 
 A 200 that is not JSON, lacks a required field, has an empty id or tier, or has
 a `monthly_token_cap` that is not a positive integer is treated as unavailable.
-"This key is bad" must carry `{"error":"invalid_key"}`; the gateway will not cache
+"This key is bad" must carry `{"error":"invalid_key"}` (as an extension member of an
+RFC 9457 problem+json body is fine); the gateway will not cache
 a verdict on a good key because its own credential or route is wrong.
 
 **Latency budget:** p95 ≤ 150 ms, hard client timeout 800 ms. KV absorbs
@@ -76,10 +79,30 @@ fails open.
 { "events": [ { "requestId": "…", "ownerEntityId": "…", "apiKeyId": "…", "…": "…" } ] }
 ```
 
-Fields are an allowlist (`USAGE_EVENT_FIELDS` in `keys.ts`): identifiers,
-period, tier/model/provider, `licenseClass`, token counts, cache/ground flags,
-`inferencePath`, `latencyMs`, `createdAt`. **No prompt, answer, message, scope or
-system-prompt content is ever sent** (Rule 1); the Servers API must not ask for any.
+Fields are an allowlist (`USAGE_EVENT_FIELDS` in `keys.ts`). Per request the
+gateway sends:
+
+Not every event carries every field: absent means not applicable (for example a
+retrieval-only `mind` event has no `provider` or `model`). Treat unknown or
+missing fields as ordinary, not as errors.
+
+- **who:** `ownerEntityId`, `apiKeyId`, `requestId`, `billingPeriod`
+- **scope and route:** `scope` (exactly `personal`, `community` or `platform`; a label only, any other value is dropped by the gateway), `tier`, `routedTier`, `reach`, `reachClamped`
+- **what served it:** `provider`, `model` (the model that actually served),
+  `requestedProvider`, `requestedModel`, `modelSubstituted`, `licenseClass`,
+  `inferencePath`
+- **cost:** `inputTokens`, `outputTokens`, `cacheHit`, `groundHit`,
+  `edgeEmbedding`, `latencyMs`
+- **outcome:** derived, not a field. `inferencePath` (`gateway`, `workers-ai`,
+  `extractive`, `mind`) says how it was answered, and `degraded: true` (sent on
+  extractive events; absent elsewhere, meaning not degraded) marks a fallback
+  answer. A refused request (401, 409, 429) is not metered.
+- **when:** `createdAt` (ISO 8601)
+
+**No prompt, completion, message, citation, embedding or system-prompt content is
+ever sent** (Rule 1). `test/keys.test.ts` fails if any key outside the allowlist
+reaches the wire, so a new body field needs a deliberate allowlist change and a
+review. The Servers API must not ask for any.
 
 - **Idempotent on `requestId`.** The gateway may send an event twice (fallback,
   queue retry). A repeat must be accepted and not double-counted.
@@ -90,6 +113,12 @@ system-prompt content is ever sent** (Rule 1); the Servers API must not ask for 
   replay of spilled Core `usageEvents` rows into `POST /usage/events`, safe
   because of the `requestId` dedup. A timeout after acceptance can spill a
   duplicate; the dedup makes that harmless.
+- **Batching:** today one event per call (`events` has length 1). Accept 1 to 100
+  per call so the gateway can batch later without a contract change.
+- **Buffering and retry:** the gateway does not retry in-process. A failed or
+  timed-out call spills to the existing sink queue (durable, retried by the queue
+  five times, then its dead-letter queue). Replay from there into this route is
+  the Servers API's job (see below).
 - Fire-and-forget from the request path (`waitUntil`); metering never delays
   or fails a user answer.
 

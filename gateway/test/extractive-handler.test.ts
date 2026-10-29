@@ -137,6 +137,7 @@ describe('mode: extractive', () => {
     expect(calls.sink.map((m) => m.collection)).toEqual(['usageEvents']);
     expect(calls.sink.some((m) => m.collection === 'conversations')).toBe(false);
     expect(calls.sink[0]?.doc).toMatchObject({
+      scope: 'platform',
       inferencePath: 'extractive',
       inputTokens: 0,
       outputTokens: 0,
@@ -194,6 +195,10 @@ describe('a normal answer is unchanged', () => {
     expect(calls.inference).toBe(1);
     await Promise.resolve();
     expect(calls.sink.map((m) => m.collection).sort()).toEqual(['conversations', 'usageEvents']);
+    // Every usage event carries the scope label, on every path.
+    expect(calls.sink.find((m) => m.collection === 'usageEvents')?.doc).toMatchObject({
+      scope: 'platform',
+    });
   });
 });
 
@@ -240,7 +245,15 @@ describe('what the review found', () => {
         mode: 'chat',
       }),
     });
+    const calls = (env as unknown as { SINK: { send: (m: unknown) => void } }).SINK;
+    const sent: any[] = [];
+    calls.send = (m) => void sent.push(m);
     const res = await worker.fetch(req, env, ctx);
     expect(res.status).toBe(200);
+    await Promise.resolve();
+    expect(sent.find((m) => m.collection === 'usageEvents')?.doc).toMatchObject({
+      scope: 'personal',
+      inferencePath: 'mind',
+    });
   });
 });
