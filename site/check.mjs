@@ -30,9 +30,15 @@ const PERMITTED = ['not the same as being open source', 'Say open weights, not o
 
 // The diagram takes its colours from design tokens, so light and dark both
 // work; a hard-coded colour would be right in one and wrong in the other.
-const diagramSource = readFileSync('src/components/DataScopes.astro', 'utf8');
-if (/#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/i.test(diagramSource.replace(/var\([^)]*\)/g, ''))) {
-  fail.push('src/components/DataScopes.astro: hard-coded colour; use design tokens (var(--…))');
+for (const src of ['src/components/DataScopes.astro', 'src/pages/index.astro']) {
+  const code = readFileSync(src, 'utf8')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '');
+  // Fallbacks inside var() count: a hex fallback is a hard-coded colour too.
+  if (/(?<![\w&])#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/i.test(code.replace(/href="[^"]*"/g, ''))) {
+    fail.push(`${src}: hard-coded colour; use design tokens (var(--…))`);
+  }
 }
 
 let biggest = 0;
@@ -80,7 +86,16 @@ for (const page of pages) {
 
   // Sovereignty is never claimed for Cloud, and it is never an "open source
   // model" or "our own model", on any page.
-  const text = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ');
+  // Block ends become sentence ends, so a heading cannot lend its words to the
+  // list item after it, and entities are decoded so "isn&#39;t" is "isn't".
+  const text = html
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
+    .replace(/<\/(p|li|h[1-6]|div|section|figcaption|td|th|tr|text|title|desc|blockquote|summary)>/gi, '. ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&#39;|&apos;|&rsquo;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&');
   for (const p of findClaimProblems(text)) fail.push(`${where}: ${p}`);
 
   // The home page is SVG only: no raster image anywhere on it.
@@ -91,19 +106,29 @@ for (const page of pages) {
   // The scope diagram is an image to a screen reader: role="img" with a title
   // and a description, both real text, both referenced by aria-labelledby.
   if (where === 'index.html') {
-    const svg = html.match(/<svg[^>]*role="img"[^>]*aria-labelledby="([^"]+)"[\s\S]*?<\/svg>/);
-    if (!svg) {
-      fail.push(`${where}: the data-scopes diagram has no <svg role="img" aria-labelledby>`);
-    } else {
-      for (const id of svg[1].split(/\s+/)) {
-        const el = html.match(new RegExp(`<(title|desc) id="${id}"[^>]*>([\\s\\S]*?)</\\1>`));
+    const svgs = [...html.matchAll(/<svg\b[^>]*>[\s\S]*?<\/svg>/g)]
+      .map((m) => m[0])
+      .filter((tag) => /\brole="img"/.test(tag.slice(0, tag.indexOf('>') + 1)));
+    if (!svgs.length) {
+      fail.push(`${where}: the data-scopes diagram has no <svg role="img">`);
+    }
+    for (const svg of svgs) {
+      const open = svg.slice(0, svg.indexOf('>') + 1);
+      const labelled = open.match(/\baria-labelledby="([^"]+)"/);
+      if (!labelled) {
+        fail.push(`${where}: an <svg role="img"> has no aria-labelledby`);
+        continue;
+      }
+      for (const id of labelled[1].split(/\s+/)) {
+        const el = svg.match(new RegExp(`<(title|desc) id="${id}"[^>]*>([\\s\\S]*?)</\\1>`));
         const t = el ? el[2].replace(/\s+/g, ' ').trim() : '';
         const min = el && el[1] === 'title' ? 8 : 80;
         if (t.length < min) fail.push(`${where}: diagram ${id} is missing or too short to be alt text (${t.length} < ${min})`);
       }
-      if (!/personal[\s\S]{0,400}Mind[\s\S]{0,400}(never|not)[\s\S]{0,200}provider/i.test(svg[0])) {
-        fail.push(`${where}: the diagram's description must say personal data goes to Mind and never to a provider`);
-      }
+    }
+    const scopes = svgs.find((v) => /scopes-title/.test(v));
+    if (scopes && !/personal[\s\S]{0,400}Mind[\s\S]{0,400}(never|not)[\s\S]{0,200}provider/i.test(scopes)) {
+      fail.push(`${where}: the diagram's description must say personal data goes to Mind and never to a provider`);
     }
   }
 

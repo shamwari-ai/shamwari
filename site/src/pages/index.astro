@@ -31,8 +31,9 @@ const panel = [
   <Hero
     subtitle="Community pillar of the Bundu Ecosystem"
     title="A friend that serves; a friend that does not control."
-    description="For Zimbabweans who need the current law or tax rule, in Shona, Ndebele or English. Shamwari looks up the actual provision and shows you where it came from. It runs on open-weights models, and it is built so that what it knows about you stays on your own device (Shamwari Mind) and the cloud model never sees it."
+    description="For Zimbabweans who need the current law or tax rule, in Shona, Ndebele or English. Shamwari is being built to look up the actual provision and show you where it came from. It runs on open-weights models, and it is built so that what it knows about you stays on your own device (Shamwari Mind) and the cloud model never sees it."
     primaryCTA={{ text: 'Talk to us', href: '/contact/' }}
+    secondaryCTA={{ text: 'See where things stand', href: '/project/' }}
     variant="showcase"
     layout="split"
   >
@@ -40,8 +41,8 @@ const panel = [
       <div class="flex items-center gap-3 border-b border-border pb-4">
         <svg viewBox="0 0 32 32" width="32" height="32" class="h-8 w-8" aria-hidden="true" focusable="false">
           <rect width="32" height="32" rx="7" fill="var(--primary)" />
-          <path d="M9 21c0-6 3-10 7-10s7 4 7 10" fill="none" stroke="var(--primary-foreground, #fff)" stroke-width="2.4" stroke-linecap="round" />
-          <circle cx="16" cy="21.5" r="1.8" fill="var(--primary-foreground, #fff)" />
+          <path d="M9 21c0-6 3-10 7-10s7 4 7 10" fill="none" stroke="var(--primary-foreground)" stroke-width="2.4" stroke-linecap="round" />
+          <circle cx="16" cy="21.5" r="1.8" fill="var(--primary-foreground)" />
         </svg>
         <p class="eyebrow !mb-0">The five products</p>
       </div>
@@ -82,7 +83,7 @@ const panel = [
     <SectionHeader
       eyebrow="Where your data goes"
       title="Your own data goes to your device, and nowhere else"
-      description="Shamwari sorts every question into one of three scopes before anything leaves. Personal data is only ever handled by Mind, on your device. If a personal question is headed for the cloud, Shamwari refuses it instead of quietly answering a different question."
+      description="Shamwari sorts every question into one of three scopes before anything leaves. Personal data is only ever handled by Mind, on your device. If a personal question is headed for the cloud, Shamwari refuses it instead of quietly answering a different question. Mind, the on-device part, is still being built, and until it ships a personal question is refused rather than sent anywhere else."
       max="max-w-2xl"
     />
     <div class="mt-8">

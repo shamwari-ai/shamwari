@@ -65,7 +65,7 @@ const inWords = [
       <rect x="16" y="150" width="150" height="30" rx="8" class="box ghost" />
       <text x="28" y="169" class="small">A third-party provider</text>
       <text x="176" y="106" class="refusal">409</text>
-      <text x="176" y="120" class="refusal">scope_requires_local_inference</text>
+      <text x="176" y="120" class="refusal" textLength="186" lengthAdjust="spacingAndGlyphs">scope_requires_local_inference</text>
       <text x="176" y="136" class="small">Refused, and not downgraded</text>
       <text x="176" y="150" class="small">to a general answer.</text>
     </g>
@@ -93,7 +93,6 @@ const inWords = [
   .label { font-size: 13px; font-weight: 700; }
   .small { font-size: 11px; fill: var(--muted-foreground); }
   .refusal { font-size: 10px; font-weight: 700; fill: var(--destructive, var(--foreground)); }
-  .ghost-text { fill: var(--muted-foreground); }
   .box { fill: var(--card); stroke: var(--border); stroke-width: 1.5; }
   .box.strong { stroke: var(--primary); stroke-width: 2.5; }
   .box.ghost { stroke-dasharray: 4 3; fill: none; }
