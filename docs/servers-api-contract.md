@@ -69,6 +69,9 @@ lowercase hex of the full key), which must be unique in the table.
 
 A 200 that is not JSON, lacks a required field, has an empty id, type or tier, or has
 a `monthly_token_cap` that is not a positive integer is treated as unavailable.
+There is no "unlimited" encoding: a key with no cap must be given a very large
+integer, because `0`, `null` and a missing cap are all indistinguishable from a
+schema mismatch and must not be admitted.
 "This key is bad" must carry `{"error":"invalid_key"}` (as an extension member of an
 RFC 9457 problem+json body is fine); the gateway will not cache
 a verdict on a good key because its own credential or route is wrong.

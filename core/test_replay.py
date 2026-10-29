@@ -226,6 +226,28 @@ class Replay(unittest.TestCase):
         self.assertLess(len(store.sent), 300)
         self.assertTrue(all(f"r{i}" in remote.received for i in store.sent))
 
+    def test_slow_retries_cannot_overrun_the_deadline(self):
+        """One batch of failing, backing-off sends must stop at the deadline too."""
+        now = [0.0]
+
+        async def slow_fail(body):
+            now[0] += 6.0  # each attempt takes 6s
+            return "retry"
+
+        async def sleeping(d):
+            now[0] += d
+
+        store = FakeStore([event(i) for i in range(3)])
+        report = run(
+            replay.replay_once(
+                store, slow_fail, max_attempts=50, sleep=sleeping, jitter=lambda: 1,
+                deadline=25, clock=lambda: now[0],
+            )
+        )
+        self.assertLessEqual(now[0], 25 + 6)  # at most one attempt past the line
+        self.assertEqual(store.sent, set())
+        self.assertEqual(report.stopped, "deadline")
+
     def test_only_a_missing_request_id_is_dead_lettered_locally(self):
         for k in ("apiKeyId", "createdAt", "ownerEntityId"):
             d = event(1)
