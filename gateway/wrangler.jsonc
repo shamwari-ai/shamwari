@@ -74,8 +74,15 @@
     // a plaintext value is what makes it auditable in `wrangler deploy`
     // output and in the /health response.
     "MIND_AVAILABLE": "false",
+
+    // Moves API-key verification and usage metering from Core to the Nyuchi
+    // Servers API. Off until that service exists and the owner says so. When
+    // on, set SERVERS_API_URL here and SERVERS_API_TOKEN as a secret. Contract:
+    // docs/servers-api-contract.md. If on but unconfigured, auth fails closed.
+    "SERVERS_API_ENABLED": "false",
   },
 
   // wrangler secret put:
   //   SHAMWARI_CORE_TOKEN shared with Core
+  //   SERVERS_API_TOKEN   only when SERVERS_API_ENABLED is true
 }
