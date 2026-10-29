@@ -5,9 +5,9 @@
 // What these fail on: auth failing open when the Servers API is down, an
 // outage being cached as a verdict on a good key, content leaving the
 // gateway in a usage event (rule 1), and metering being dropped on outage.
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import worker from "../src/index";
-import { authenticate } from "../src/auth";
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import worker from '../src/index';
+import { authenticate } from '../src/auth';
 import {
   keyService,
   usageMeter,
@@ -16,16 +16,16 @@ import {
   QueueUsageMeter,
   ServersApiKeyService,
   ServersApiUsageMeter,
-} from "../src/keys";
-import type { Env, SinkMessage } from "../src/types";
+} from '../src/keys';
+import type { Env, SinkMessage } from '../src/types';
 
-const RAW = "sk_shamwari_abcdefghijklmnop";
+const RAW = 'sk_shamwari_abcdefghijklmnop';
 const GOOD = {
-  api_key_id: "k1",
-  owner_entity_id: "e1",
+  api_key_id: 'k1',
+  owner_entity_id: 'e1',
   owner_person_id: null,
-  key_type: "standard",
-  tier: "community",
+  key_type: 'standard',
+  tier: 'community',
   monthly_token_cap: 100_000,
 };
 
@@ -34,31 +34,29 @@ function makeEnv(extra: Record<string, unknown> = {}) {
   const sink: SinkMessage[] = [];
   const env = {
     AUTH_CACHE: {
-      get: async (k: string) =>
-        store.has(k) ? JSON.parse(store.get(k)!) : null,
+      get: async (k: string) => (store.has(k) ? JSON.parse(store.get(k)!) : null),
       put: async (k: string, v: string) => void store.set(k, v),
     },
     SINK: {
       send: async (m: SinkMessage) => void sink.push(m),
-      sendBatch: async (ms: { body: SinkMessage }[]) =>
-        void sink.push(...ms.map((m) => m.body)),
+      sendBatch: async (ms: { body: SinkMessage }[]) => void sink.push(...ms.map((m) => m.body)),
     },
-    CORE_URL: "https://core.example",
-    SHAMWARI_CORE_TOKEN: "core-token",
-    AUTH_CACHE_TTL: "60",
+    CORE_URL: 'https://core.example',
+    SHAMWARI_CORE_TOKEN: 'core-token',
+    AUTH_CACHE_TTL: '60',
     ...extra,
   } as unknown as Env;
   return { env, store, sink };
 }
 
 const SERVERS = {
-  SERVERS_API_ENABLED: "true",
-  SERVERS_API_URL: "https://servers.example/",
-  SERVERS_API_TOKEN: "servers-token",
+  SERVERS_API_ENABLED: 'true',
+  SERVERS_API_URL: 'https://servers.example/',
+  SERVERS_API_TOKEN: 'servers-token',
 };
 
 const req = () =>
-  new Request("https://x/v1/chat/completions", {
+  new Request('https://x/v1/chat/completions', {
     headers: { Authorization: `Bearer ${RAW}` },
   });
 
@@ -76,42 +74,41 @@ function fakeServers(
     body: unknown;
     auth: string | null;
   }[] = [];
-  vi.stubGlobal("fetch", async (url: string, init: RequestInit = {}) => {
+  vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
     seen.push({
       url,
-      method: init.method ?? "GET",
+      method: init.method ?? 'GET',
       body: init.body ? JSON.parse(init.body as string) : null,
-      auth: new Headers(init.headers).get("Authorization"),
+      auth: new Headers(init.headers).get('Authorization'),
     });
-    if (url.includes("/keys/verify"))
-      return (opts.verify ?? (() => Response.json(GOOD)))();
-    if (url.includes("/usage/events"))
+    if (url.includes('/keys/verify')) return (opts.verify ?? (() => Response.json(GOOD)))();
+    if (url.includes('/usage/events'))
       return (opts.usage ?? (() => Response.json({ accepted: 1 })))();
-    if (url.includes("/usage/rollup"))
+    if (url.includes('/usage/rollup'))
       return (opts.rollup ?? (() => Response.json({ total_tokens: 5 })))();
     throw new Error(`unexpected fetch ${url}`);
   });
   return seen;
 }
 
-beforeEach(() => vi.spyOn(console, "warn").mockImplementation(() => {}));
+beforeEach(() => vi.spyOn(console, 'warn').mockImplementation(() => {}));
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
-describe("default implementation", () => {
+describe('default implementation', () => {
   it('is Core and the queue unless the flag is exactly "true"', () => {
-    for (const flag of [undefined, "", "false", "TRUE", "1"]) {
+    for (const flag of [undefined, '', 'false', 'TRUE', '1']) {
       const { env } = makeEnv({ ...SERVERS, SERVERS_API_ENABLED: flag });
       expect(keyService(env)).toBeInstanceOf(CoreKeyService);
       expect(usageMeter(env)).toBeInstanceOf(QueueUsageMeter);
     }
   });
 
-  it("verifies against Core and never touches the Servers API", async () => {
+  it('verifies against Core and never touches the Servers API', async () => {
     const urls: string[] = [];
-    vi.stubGlobal("fetch", async (url: string) => {
+    vi.stubGlobal('fetch', async (url: string) => {
       urls.push(url);
       return Response.json(GOOD);
     });
@@ -119,29 +116,29 @@ describe("default implementation", () => {
     const r = await authenticate(req(), env);
     expect(r).toMatchObject({
       ok: true,
-      auth: { apiKeyId: "k1", ownerEntityId: "e1" },
+      auth: { apiKeyId: 'k1', ownerEntityId: 'e1' },
     });
-    expect(urls).toEqual(["https://core.example/auth/verify"]);
+    expect(urls).toEqual(['https://core.example/auth/verify']);
   });
 
-  it("keeps the legacy failure shape: a Core error is a cached invalid, still closed", async () => {
-    vi.stubGlobal("fetch", async () => new Response("boom", { status: 500 }));
+  it('keeps the legacy failure shape: a Core error is a cached invalid, still closed', async () => {
+    vi.stubGlobal('fetch', async () => new Response('boom', { status: 500 }));
     const { env, store } = makeEnv(SERVERS_OFF());
     expect(await authenticate(req(), env)).toEqual({
       ok: false,
-      reason: "invalid",
+      reason: 'invalid',
     });
     expect([...store.values()]).toEqual(['"invalid"']);
   });
 
-  it("meters through the queue", async () => {
+  it('meters through the queue', async () => {
     const { env, sink } = makeEnv(SERVERS_OFF());
-    await usageMeter(env).record({ requestId: "r1" });
+    await usageMeter(env).record({ requestId: 'r1' });
     expect(sink).toEqual([
       {
-        database: "platform",
-        collection: "usageEvents",
-        doc: { requestId: "r1" },
+        database: 'platform',
+        collection: 'usageEvents',
+        doc: { requestId: 'r1' },
       },
     ]);
   });
@@ -151,82 +148,84 @@ function SERVERS_OFF() {
   return {};
 }
 
-describe("Servers API key verification", () => {
-  it("sends only the prefix and the hash, to the contract path, with the service token", async () => {
+describe('Servers API key verification', () => {
+  it('sends only the prefix and the hash, to the contract path, with the service token', async () => {
     const seen = fakeServers();
     const { env } = makeEnv(SERVERS);
     const r = await authenticate(req(), env);
     expect(r).toMatchObject({
       ok: true,
-      auth: { tier: "community", monthlyTokenCap: 100_000 },
+      auth: { tier: 'community', monthlyTokenCap: 100_000 },
     });
     expect(seen).toHaveLength(1);
-    expect(seen[0]!.url).toBe("https://servers.example/v1/shamwari/keys/verify");
-    expect(seen[0]!.auth).toBe("Bearer servers-token");
-    expect(Object.keys(seen[0]!.body as object).sort()).toEqual([
-      "key_hash",
-      "key_prefix",
-    ]);
+    expect(seen[0]!.url).toBe('https://servers.example/v1/shamwari/keys/verify');
+    expect(seen[0]!.auth).toBe('Bearer servers-token');
+    expect(Object.keys(seen[0]!.body as object).sort()).toEqual(['key_hash', 'key_prefix']);
     expect(JSON.stringify(seen[0]!.body)).not.toContain(RAW);
   });
 
   it.each([401, 403, 404])(
-    "%i is a definitive invalid, and is cached as one",
+    '%i with {"error":"invalid_key"} is a definitive invalid, cached as one',
     async (status) => {
-      fakeServers({ verify: () => new Response("no", { status }) });
+      fakeServers({ verify: () => Response.json({ error: 'invalid_key' }, { status }) });
       const { env, store } = makeEnv(SERVERS);
       expect(await authenticate(req(), env)).toEqual({
         ok: false,
-        reason: "invalid",
+        reason: 'invalid',
       });
       expect([...store.values()]).toEqual(['"invalid"']);
     },
   );
 
+  it.each([401, 403, 404])(
+    'a bare %i (our own token or route is wrong) is unavailable, so good keys are not poisoned',
+    async (status) => {
+      fakeServers({ verify: () => new Response('nope', { status }) });
+      const { env, store } = makeEnv(SERVERS);
+      expect(await authenticate(req(), env)).toEqual({ ok: false, reason: 'unavailable' });
+      expect(store.size).toBe(0);
+    },
+  );
+
   const outages: [string, () => Response | Promise<Response>][] = [
-    ["500", () => new Response("x", { status: 500 })],
-    ["502", () => new Response("x", { status: 502 })],
-    ["429", () => new Response("x", { status: 429 })],
-    ["a thrown network error", () => Promise.reject(new Error("ECONNRESET"))],
-    ["a timeout", () => Promise.reject(new DOMException("t", "TimeoutError"))],
-    ["a 200 that is not JSON", () => new Response("<html>", { status: 200 })],
-    [
-      "a 200 missing required fields",
-      () => Response.json({ api_key_id: "k1" }),
-    ],
-    [
-      "a 200 with a string cap",
-      () => Response.json({ ...GOOD, monthly_token_cap: "100000" }),
-    ],
+    ['500', () => new Response('x', { status: 500 })],
+    ['502', () => new Response('x', { status: 502 })],
+    ['429', () => new Response('x', { status: 429 })],
+    ['a thrown network error', () => Promise.reject(new Error('ECONNRESET'))],
+    ['a timeout', () => Promise.reject(new DOMException('t', 'TimeoutError'))],
+    ['a 200 that is not JSON', () => new Response('<html>', { status: 200 })],
+    ['a 200 missing required fields', () => Response.json({ api_key_id: 'k1' })],
+    ['a 200 with a zero cap', () => Response.json({ ...GOOD, monthly_token_cap: 0 })],
+    ['a 200 with an empty owner', () => Response.json({ ...GOOD, owner_entity_id: '' })],
+    ['a 200 with a string cap', () => Response.json({ ...GOOD, monthly_token_cap: '100000' })],
   ];
   it.each(outages)(
-    "FAILS CLOSED on %s: unavailable, not ok, and nothing cached",
+    'FAILS CLOSED on %s: unavailable, not ok, and nothing cached',
     async (_n, verify) => {
       fakeServers({ verify });
       const { env, store } = makeEnv(SERVERS);
       expect(await authenticate(req(), env)).toEqual({
         ok: false,
-        reason: "unavailable",
+        reason: 'unavailable',
       });
       expect(store.size).toBe(0);
     },
   );
 
-  it("FAILS CLOSED when enabled but unconfigured, and does not fall back to Core", async () => {
+  it('FAILS CLOSED when enabled but unconfigured, and does not fall back to Core', async () => {
     const seen = fakeServers();
-    const { env } = makeEnv({ SERVERS_API_ENABLED: "true" });
+    const { env } = makeEnv({ SERVERS_API_ENABLED: 'true' });
     expect(await authenticate(req(), env)).toEqual({
       ok: false,
-      reason: "unavailable",
+      reason: 'unavailable',
     });
     expect(seen).toHaveLength(0);
   });
 
-  it("a recovered service is believed at once (no outage verdict was cached)", async () => {
+  it('a recovered service is believed at once (no outage verdict was cached)', async () => {
     let up = false;
     fakeServers({
-      verify: () =>
-        up ? Response.json(GOOD) : new Response("x", { status: 503 }),
+      verify: () => (up ? Response.json(GOOD) : new Response('x', { status: 503 })),
     });
     const { env } = makeEnv(SERVERS);
     expect((await authenticate(req(), env)).ok).toBe(false);
@@ -234,7 +233,16 @@ describe("Servers API key verification", () => {
     expect((await authenticate(req(), env)).ok).toBe(true);
   });
 
-  it("answers from the KV cache without calling the service", async () => {
+  it('a failing KV write does not deny a verified key', async () => {
+    fakeServers();
+    const { env } = makeEnv(SERVERS);
+    (env.AUTH_CACHE as unknown as { put: () => Promise<void> }).put = async () => {
+      throw new Error('kv 429');
+    };
+    expect((await authenticate(req(), env)).ok).toBe(true);
+  });
+
+  it('answers from the KV cache without calling the service', async () => {
     const seen = fakeServers();
     const { env } = makeEnv(SERVERS);
     await authenticate(req(), env);
@@ -243,32 +251,32 @@ describe("Servers API key verification", () => {
   });
 });
 
-describe("through the real handler", () => {
-  it("returns 503 auth_unavailable, with Retry-After, when the Servers API is down", async () => {
-    fakeServers({ verify: () => new Response("x", { status: 500 }) });
+describe('through the real handler', () => {
+  it('returns 503 auth_unavailable, with Retry-After, when the Servers API is down', async () => {
+    fakeServers({ verify: () => new Response('x', { status: 500 }) });
     const { env } = makeEnv(SERVERS);
     const res = await worker.fetch(
-      new Request("https://x/v1/chat/completions", {
-        method: "POST",
+      new Request('https://x/v1/chat/completions', {
+        method: 'POST',
         headers: { Authorization: `Bearer ${RAW}` },
-        body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+        body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
       }),
       env,
       { waitUntil() {} } as unknown as ExecutionContext,
     );
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: "auth_unavailable" });
-    expect(res.headers.get("Retry-After")).toBe("5");
+    expect(await res.json()).toEqual({ error: 'auth_unavailable' });
+    expect(res.headers.get('Retry-After')).toBe('5');
   });
 
-  it("returns 401 for an invalid key", async () => {
-    fakeServers({ verify: () => new Response("no", { status: 404 }) });
+  it('returns 401 for an invalid key', async () => {
+    fakeServers({ verify: () => Response.json({ error: 'invalid_key' }, { status: 404 }) });
     const { env } = makeEnv(SERVERS);
     const res = await worker.fetch(
-      new Request("https://x/v1/chat/completions", {
-        method: "POST",
+      new Request('https://x/v1/chat/completions', {
+        method: 'POST',
         headers: { Authorization: `Bearer ${RAW}` },
-        body: "{}",
+        body: '{}',
       }),
       env,
       { waitUntil() {} } as unknown as ExecutionContext,
@@ -277,91 +285,85 @@ describe("through the real handler", () => {
   });
 });
 
-describe("Servers API quota rollup", () => {
-  it("returns the total, and throws when it cannot say (the caller decides what that means)", async () => {
+describe('Servers API quota rollup', () => {
+  it('returns the total, and throws when it cannot say (the caller decides what that means)', async () => {
     fakeServers({ rollup: () => Response.json({ total_tokens: 42 }) });
     const { env } = makeEnv(SERVERS);
     const svc = new ServersApiKeyService(env);
-    expect(await svc.usageTotal("e1", "2026-10")).toBe(42);
+    expect(await svc.usageTotal('e1', '2026-10')).toBe(42);
 
-    fakeServers({ rollup: () => new Response("x", { status: 500 }) });
-    await expect(svc.usageTotal("e1", "2026-10")).rejects.toThrow();
+    fakeServers({ rollup: () => new Response('x', { status: 500 }) });
+    await expect(svc.usageTotal('e1', '2026-10')).rejects.toThrow();
     fakeServers({ rollup: () => Response.json({}) });
-    await expect(svc.usageTotal("e1", "2026-10")).rejects.toThrow();
+    await expect(svc.usageTotal('e1', '2026-10')).rejects.toThrow();
   });
 });
 
-describe("Servers API usage metering", () => {
+describe('Servers API usage metering', () => {
   const doc = {
-    requestId: "r1",
-    ownerEntityId: "e1",
-    apiKeyId: "k1",
-    billingPeriod: "2026-10",
+    requestId: 'r1',
+    ownerEntityId: 'e1',
+    apiKeyId: 'k1',
+    billingPeriod: '2026-10',
     inputTokens: 10,
     outputTokens: 5,
-    createdAt: "2026-10-29T00:00:00Z",
+    createdAt: '2026-10-29T00:00:00Z',
   };
 
-  it("posts an idempotent batch and does not queue when accepted", async () => {
+  it('posts an idempotent batch and does not queue when accepted', async () => {
     const seen = fakeServers();
     const { env, sink } = makeEnv(SERVERS);
     await new ServersApiUsageMeter(env).record(doc);
-    expect(seen[0]!.url).toBe(
-      "https://servers.example/v1/shamwari/usage/events",
-    );
+    expect(seen[0]!.url).toBe('https://servers.example/v1/shamwari/usage/events');
     expect(seen[0]!.body).toEqual({ events: [doc] });
     expect(sink).toHaveLength(0);
   });
 
   it.each([
-    ["a 500", () => new Response("x", { status: 500 })],
-    ["a network error", () => Promise.reject(new Error("down"))],
+    ['a 500', () => new Response('x', { status: 500 })],
+    ['a network error', () => Promise.reject(new Error('down'))],
   ] as [string, () => Response | Promise<Response>][])(
-    "queues the event instead of dropping it on %s",
+    'queues the event instead of dropping it on %s',
     async (_n, usage) => {
       fakeServers({ usage });
       const { env, sink } = makeEnv(SERVERS);
       await new ServersApiUsageMeter(env).record(doc);
-      expect(sink).toEqual([
-        { database: "platform", collection: "usageEvents", doc },
-      ]);
+      expect(sink).toEqual([{ database: 'platform', collection: 'usageEvents', doc }]);
     },
   );
 
-  it("surfaces a failed fallback rather than swallowing it (the queue meter itself never throws)", async () => {
-    fakeServers({ usage: () => new Response("x", { status: 500 }) });
+  it('surfaces a failed fallback rather than swallowing it (the queue meter itself never throws)', async () => {
+    fakeServers({ usage: () => new Response('x', { status: 500 }) });
     const { env } = makeEnv(SERVERS);
     const meter = new ServersApiUsageMeter(env, {
       record: async () => {
-        throw new Error("queue down");
+        throw new Error('queue down');
       },
     });
     // The fallback's own failure is the caller's to see only via logs; the
     // request path wraps record() in waitUntil. Pin that it rejects visibly
     // rather than silently, so a lost event is at least logged upstream.
-    await expect(meter.record(doc)).rejects.toThrow("queue down");
+    await expect(meter.record(doc)).rejects.toThrow('queue down');
   });
 
-  it("RULE 1: carries no prompt, answer or scope content, whatever the event holds", async () => {
+  it('RULE 1: carries no prompt, answer or scope content, whatever the event holds', async () => {
     const seen = fakeServers();
     const { env } = makeEnv(SERVERS);
     await new ServersApiUsageMeter(env).record({
       ...doc,
-      messages: [{ role: "user", content: "my clinic results" }],
-      content: "secret",
-      prompt: "secret",
-      answer: "secret",
-      scope: "personal",
-      systemPrompt: "secret",
+      messages: [{ role: 'user', content: 'my clinic results' }],
+      content: 'secret',
+      prompt: 'secret',
+      answer: 'secret',
+      scope: 'personal',
+      systemPrompt: 'secret',
     });
     const sent = JSON.stringify(seen[0]!.body);
-    expect(sent).not.toContain("secret");
-    expect(sent).not.toContain("clinic");
-    expect(sent).not.toContain("personal");
-    expect(
-      Object.keys(
-        usageEventPayload({ messages: 1, content: 1, requestId: "r" }),
-      ),
-    ).toEqual(["requestId"]);
+    expect(sent).not.toContain('secret');
+    expect(sent).not.toContain('clinic');
+    expect(sent).not.toContain('personal');
+    expect(Object.keys(usageEventPayload({ messages: 1, content: 1, requestId: 'r' }))).toEqual([
+      'requestId',
+    ]);
   });
 });

@@ -35,13 +35,16 @@ export async function authenticate(req: Request, env: Env): Promise<AuthResult> 
   if (cached) return { ok: true, auth: cached as AuthContext };
 
   const outcome = await keyService(env).verify(raw.slice(0, 12), hash);
+  // The cache write is best-effort: a KV hiccup must not deny a verified key.
+  const remember = (v: unknown) =>
+    env.AUTH_CACHE.put(cacheKey, JSON.stringify(v), { expirationTtl: ttl }).catch(() => {});
   if (outcome.status === 'ok') {
-    await env.AUTH_CACHE.put(cacheKey, JSON.stringify(outcome.ctx), { expirationTtl: ttl });
+    await remember(outcome.ctx);
     return { ok: true, auth: outcome.ctx };
   }
   if (outcome.status === 'invalid') {
     // Cache the negative so key-guessing cannot hammer the service.
-    await env.AUTH_CACHE.put(cacheKey, JSON.stringify('invalid'), { expirationTtl: ttl });
+    await remember('invalid');
   }
   return { ok: false, reason: outcome.status };
 }

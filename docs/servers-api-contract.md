@@ -29,8 +29,8 @@ in constant time, honouring `isActive`/revocation and expiry.
 | Status          | Meaning                                  | Gateway does                                   |
 | --------------- | ---------------------------------------- | ---------------------------------------------- |
 | 200 + body      | key valid                                | caches the context for `AUTH_CACHE_TTL`, admits |
-| 401, 403, 404   | key unknown, revoked, expired, wrong hash | caches "invalid" for `AUTH_CACHE_TTL`, answers 401 |
-| anything else   | Servers API cannot say                   | **denies with 503 `auth_unavailable`, caches nothing** |
+| 401, 403 or 404 **with body `{"error":"invalid_key"}`** | key unknown, revoked, expired, wrong hash | caches "invalid" for `AUTH_CACHE_TTL`, answers 401 |
+| anything else, **including a bare 401/403/404** | Servers API cannot say (a rotated gateway token or wrong route looks like a bare 401/404) | **denies with 503 `auth_unavailable`, caches nothing** |
 
 200 body (all required except `owner_person_id` and `key_type`):
 
@@ -45,10 +45,10 @@ in constant time, honouring `isActive`/revocation and expiry.
 }
 ```
 
-A 200 that is not JSON, or lacks a required field or has the wrong type, is
-treated as unavailable. Use 401/403/404 **only** for "this key is bad". The
-service's own failures, including a bad `SERVERS_API_TOKEN` on its side, must be
-5xx, so the gateway never caches an outage as a verdict on a good key.
+A 200 that is not JSON, lacks a required field, has an empty id or tier, or has
+a `monthly_token_cap` that is not a positive integer is treated as unavailable.
+"This key is bad" must carry `{"error":"invalid_key"}`; the gateway will not cache
+a verdict on a good key because its own credential or route is wrong.
 
 **Latency budget:** p95 ≤ 150 ms, hard client timeout 800 ms. KV absorbs
 repeat traffic, so this is on the cold path only.
@@ -80,9 +80,13 @@ system-prompt content is ever sent** (Rule 1); the Servers API must not ask for 
 
 - **Idempotent on `requestId`.** The gateway may send an event twice (fallback,
   queue retry). A repeat must be accepted and not double-counted.
-- 2xx = accepted. Anything else, or a timeout (2 s), makes the gateway queue
-  the event to the existing sink (`platform.usageEvents` via Core), so an
-  outage delays billing data and never loses it.
+- 2xx = accepted. Anything else, or a timeout (2 s), makes the gateway spill
+  the event to the existing sink (`platform.usageEvents` via Core), so it is not
+  lost. **The spill is not counted** by quota or billing while the flag is on,
+  because those read the Servers API. **Needs from the Servers API owner:** a
+  replay of spilled Core `usageEvents` rows into `POST /usage/events`, safe
+  because of the `requestId` dedup. A timeout after acceptance can spill a
+  duplicate; the dedup makes that harmless.
 - Fire-and-forget from the request path (`waitUntil`); metering never delays
   or fails a user answer.
 
@@ -92,7 +96,7 @@ system-prompt content is ever sent** (Rule 1); the Servers API must not ask for 
 | -------- | -------------------------------------------------------------------------- |
 | verify   | cached good keys keep working for ≤ `AUTH_CACHE_TTL`; uncached keys get 503, never admitted, no negative cache entry |
 | rollup   | fail open (existing billing behaviour)                                      |
-| usage    | queue to the sink; deduped by `requestId` when it is replayed               |
+| usage    | spill to the sink; counted only once replayed to the Servers API (deduped by `requestId`) |
 
 Not done, on purpose: serving stale cached keys past their TTL (it would
 lengthen the revocation window), and falling back from the Servers API to Core
