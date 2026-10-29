@@ -2,11 +2,20 @@
 // cannot know about. Modelled on docs-site/check.mjs.
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { findClaimProblems, selfTest } from './claims.mjs';
 
 const walk = (dir) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
     e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)],
   );
+
+// The claim rules are tested before they are used: if a rule has stopped
+// catching what it exists to catch, fail here rather than pass every page.
+const broken = selfTest();
+if (broken.length) {
+  console.error('FAIL\n' + broken.map((f) => '  - claims.mjs self-test: ' + f).join('\n'));
+  process.exit(1);
+}
 
 const files = walk('dist');
 const pages = files.filter((f) => f.endsWith('.html'));
@@ -18,6 +27,13 @@ const assets = new Set(files.map((f) => f.replace(/^dist/, '')));
 
 // The one permitted family of uses: naming the phrase in order to reject it.
 const PERMITTED = ['not the same as being open source', 'Say open weights, not open source'];
+
+// The diagram takes its colours from design tokens, so light and dark both
+// work; a hard-coded colour would be right in one and wrong in the other.
+const diagramSource = readFileSync('src/components/DataScopes.astro', 'utf8');
+if (/#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/i.test(diagramSource.replace(/var\([^)]*\)/g, ''))) {
+  fail.push('src/components/DataScopes.astro: hard-coded colour; use design tokens (var(--…))');
+}
 
 let biggest = 0;
 
@@ -60,6 +76,35 @@ for (const page of pages) {
   // Cloud — sovereignty on this site means user-sovereign, never residency.
   if (/data (stays|remains) in africa/i.test(flat)) {
     fail.push(`${where}: claims data residency, which Cloud cannot promise — see the language table in CLAUDE.md`);
+  }
+
+  // Sovereignty is never claimed for Cloud, and it is never an "open source
+  // model" or "our own model", on any page.
+  const text = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ');
+  for (const p of findClaimProblems(text)) fail.push(`${where}: ${p}`);
+
+  // The home page is SVG only: no raster image anywhere on it.
+  if (where === 'index.html' && /<img[^>]+src="[^"]+\.(png|jpe?g|gif|webp|avif)"/i.test(html)) {
+    fail.push(`${where}: a raster <img> on the SVG-only home page`);
+  }
+
+  // The scope diagram is an image to a screen reader: role="img" with a title
+  // and a description, both real text, both referenced by aria-labelledby.
+  if (where === 'index.html') {
+    const svg = html.match(/<svg[^>]*role="img"[^>]*aria-labelledby="([^"]+)"[\s\S]*?<\/svg>/);
+    if (!svg) {
+      fail.push(`${where}: the data-scopes diagram has no <svg role="img" aria-labelledby>`);
+    } else {
+      for (const id of svg[1].split(/\s+/)) {
+        const el = html.match(new RegExp(`<(title|desc) id="${id}"[^>]*>([\\s\\S]*?)</\\1>`));
+        const t = el ? el[2].replace(/\s+/g, ' ').trim() : '';
+        const min = el && el[1] === 'title' ? 8 : 80;
+        if (t.length < min) fail.push(`${where}: diagram ${id} is missing or too short to be alt text (${t.length} < ${min})`);
+      }
+      if (!/personal[\s\S]{0,400}Mind[\s\S]{0,400}(never|not)[\s\S]{0,200}provider/i.test(svg[0])) {
+        fail.push(`${where}: the diagram's description must say personal data goes to Mind and never to a provider`);
+      }
+    }
   }
 
   // No client JavaScript: nothing on this site needs it. @bundu/ui's React

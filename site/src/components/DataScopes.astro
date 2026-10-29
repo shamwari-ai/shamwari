@@ -1,0 +1,106 @@
+---
+/**
+ * Where your data goes: the three scopes, as one inline SVG.
+ *
+ * The rule it draws (CLAUDE.md, Rule 1): personal-scope data is the user's own
+ * data and goes to Shamwari Mind on the device, never to a third-party model
+ * provider. A personal request bound for Cloud is refused with
+ * 409 scope_requires_local_inference. It is not quietly downgraded to a
+ * general answer. Community and platform data may go to Cloud or Ground.
+ *
+ * Sovereignty is claimed for Mind and Ground only, never for Cloud, and the
+ * diagram says so. check.mjs holds the page to that and to the alt text.
+ *
+ * Static, no animation (nothing to reduce), no client JS, no raster. Every
+ * colour is a design token, so light and dark follow the page. Portrait, so it
+ * reads on a narrow phone without zooming.
+ */
+const lanes = [
+  { y: 36, scope: 'personal', from: ['Your own', 'data'], to: 'Shamwari Mind', where: 'on your device', tone: 'primary' },
+  { y: 222, scope: 'community', from: ['Anonymised', 'platform data'], to: 'Shamwari Cloud', where: 'or Ground', tone: 'plain' },
+  { y: 316, scope: 'platform', from: ['Base Mukoko', 'knowledge'], to: 'Shamwari Cloud', where: 'or Ground', tone: 'plain' },
+];
+const inWords = [
+  'Personal scope, your own data, goes to Shamwari Mind on your device only. It never goes to a third-party model provider. A personal request bound for Cloud is refused with 409 scope_requires_local_inference. It is not downgraded to a general answer.',
+  'Community scope, anonymised platform data, may go to Shamwari Cloud or Ground.',
+  'Platform scope, base Mukoko knowledge, may go to Shamwari Cloud or Ground.',
+  'Sovereignty applies to Mind and Ground. It does not apply to Cloud, which routes your question to a provider.',
+];
+---
+<figure class="data-scopes">
+  <svg
+    viewBox="0 0 380 424"
+    role="img"
+    aria-labelledby="scopes-title scopes-desc"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <title id="scopes-title">Where your data goes, by scope</title>
+    <desc id="scopes-desc">
+      Three lanes. Personal scope, your own data, goes to Shamwari Mind on your
+      device only and never to a third-party model provider. That path is
+      crossed out and labelled 409 scope_requires_local_inference: refused, not
+      downgraded. Community scope, anonymised platform data, and platform
+      scope, base Mukoko knowledge, go to Shamwari Cloud or Ground. Sovereignty
+      applies to Mind and Ground, not to Cloud.
+    </desc>
+
+    {lanes.map((l) => (
+      <g>
+        <text x="16" y={l.y - 8} class="scope">{l.scope}</text>
+        <rect x="16" y={l.y} width="150" height="48" rx="8" class="box" />
+        <text x="28" y={l.y + 20} class="small">{l.from[0]}</text>
+        <text x="28" y={l.y + 35} class="small">{l.from[1]}</text>
+        <line x1="168" y1={l.y + 24} x2="206" y2={l.y + 24} class="arrow" marker-end="url(#head)" />
+        <rect x="210" y={l.y} width="154" height="48" rx="8" class={l.tone === 'primary' ? 'box strong' : 'box'} />
+        <text x="222" y={l.y + 20} class="label">{l.to}</text>
+        <text x="222" y={l.y + 36} class="small">{l.where}</text>
+      </g>
+    ))}
+
+    <!-- The path that does not exist: personal data to a third-party provider. -->
+    <g>
+      <line x1="91" y1="84" x2="91" y2="150" class="blocked" />
+      <line x1="83" y1="109" x2="99" y2="125" class="cross" />
+      <line x1="99" y1="109" x2="83" y2="125" class="cross" />
+      <rect x="16" y="150" width="150" height="30" rx="8" class="box ghost" />
+      <text x="28" y="169" class="small">A third-party provider</text>
+      <text x="176" y="106" class="refusal">409</text>
+      <text x="176" y="120" class="refusal">scope_requires_local_inference</text>
+      <text x="176" y="136" class="small">Refused, and not downgraded</text>
+      <text x="176" y="150" class="small">to a general answer.</text>
+    </g>
+
+    <text x="16" y="394" class="small">Sovereignty applies to Mind and Ground.</text>
+    <text x="16" y="412" class="small">It does not apply to Cloud.</text>
+
+    <defs>
+      <marker id="head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0 0 L10 5 L0 10 z" class="head" />
+      </marker>
+    </defs>
+  </svg>
+  <figcaption class="sr-only">A text version follows.</figcaption>
+  <ul class="in-words">
+    {inWords.map((t) => <li>{t}</li>)}
+  </ul>
+</figure>
+
+<style>
+  .data-scopes { margin: 0; }
+  svg { display: block; width: 100%; max-width: 26rem; height: auto; margin-inline: auto; }
+  text { font-family: var(--font-shamwari-sans, system-ui, sans-serif); fill: var(--foreground); }
+  .scope { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; fill: var(--muted-foreground); }
+  .label { font-size: 13px; font-weight: 700; }
+  .small { font-size: 11px; fill: var(--muted-foreground); }
+  .refusal { font-size: 10px; font-weight: 700; fill: var(--destructive, var(--foreground)); }
+  .ghost-text { fill: var(--muted-foreground); }
+  .box { fill: var(--card); stroke: var(--border); stroke-width: 1.5; }
+  .box.strong { stroke: var(--primary); stroke-width: 2.5; }
+  .box.ghost { stroke-dasharray: 4 3; fill: none; }
+  .arrow { stroke: var(--foreground); stroke-width: 1.8; }
+  .head { fill: var(--foreground); }
+  .blocked { stroke: var(--destructive, var(--foreground)); stroke-width: 1.8; stroke-dasharray: 4 3; }
+  .cross { stroke: var(--destructive, var(--foreground)); stroke-width: 2.2; }
+  .in-words { margin: 1rem 0 0; padding-left: 1.1rem; font-size: 0.9rem; color: var(--muted-foreground); }
+  .in-words li + li { margin-top: 0.4rem; }
+</style>
