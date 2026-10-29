@@ -1,0 +1,12 @@
+{
+  "version": "2026-10-29",
+  "status": "estimate, not billing grade",
+  "currency": "USD",
+  "source": "https://developers.cloudflare.com/workers-ai/platform/pricing/",
+  "retrieved": "2026-10-29",
+  "notes": "Keyed provider/model, the same key provenance.ts uses, so what is priced is what actually served. Input is priced uncached (the upper bound; cached-input token counts are not recorded). Excludes the edge embedding of the question and any Cloudflare plan or neuron allowances. A model not listed here is unpriced and its cost is null, never zero.",
+  "per_million_tokens": {
+    "workers-ai/@cf/zai-org/glm-5.3-flash": { "input": 0.15, "output": 0.5 },
+    "workers-ai/@cf/zai-org/glm-5.3": { "input": 1.4, "output": 4.4 }
+  }
+}

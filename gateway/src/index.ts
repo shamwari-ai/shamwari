@@ -1,6 +1,7 @@
 import type { Env, Message, SinkMessage, AuthContext, GroundChunk } from './types';
 import { authenticate } from './auth';
 import { keyService, usageMeter } from './keys';
+import { estimateCostUsd, PRICE_TABLE_VERSION } from './pricing';
 import { parseScope, decideDestination, ScopeRefusal } from './scope';
 import type { Capability, ScopeDecision } from './scope';
 import { route, applyReach, isReach, policy, REACHES } from './router';
@@ -491,6 +492,14 @@ const worker = {
             licenseClass: result.licenseClass,
             inputTokens: result.inputTokens,
             outputTokens: result.outputTokens,
+            // An estimate from a versioned table, never billing-grade; null
+            // when the model that served is not priced.
+            costUsdEstimate: estimateCostUsd(
+              `${result.provider}/${result.model}`,
+              result.inputTokens,
+              result.outputTokens,
+            ),
+            priceTableVersion: PRICE_TABLE_VERSION,
             cacheHit: result.cacheHit,
             groundHit: g.hit,
             inferencePath: result.path,

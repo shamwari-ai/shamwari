@@ -134,6 +134,8 @@ export const USAGE_EVENT_FIELDS = [
   'licenseClass',
   'inputTokens',
   'outputTokens',
+  'costUsdEstimate',
+  'priceTableVersion',
   'cacheHit',
   'groundHit',
   'inferencePath',
