@@ -37,6 +37,8 @@ src/components/Header.astro     nav — local, @bundu/ui ships no Header/Footer
 src/components/Footer.astro     sitemap + ecosystem links + legal line
 src/components/StatusPill.astro live / building / planned, on the mineral tokens
 src/components/GateDiagram.astro the scope-gate pipeline diagram
+src/components/DataScopes.astro  where your data goes: the three scopes, one inline SVG
+claims.mjs                       the language rules as functions, with a self-test
 src/styles/global.css           @import tailwindcss + @bundu/ui/styles/globals.css
 src/styles/brand-shamwari.css   --primary/--ring -> sodalite (see below)
 tailwind.config.mjs             @bundu/ui/tailwind-preset, this site's content glob
@@ -117,3 +119,16 @@ Every status claim on `/project/` (what's live, what's building, what's
 planned) has to match the "Current state" table in the root `CLAUDE.md`. If
 that table changes, this page is the thing that's now out of date — not the
 other way around.
+
+## What `npm run check` holds the page to
+
+After a build, `check.mjs` fails if any page: claims sovereignty or residency for
+Cloud (it attaches to Mind and Ground only), says "open source model" or "our own
+model" or "sovereign cloud", ships client JS, or goes over the 50 KB budget. It
+also fails if the home page has a raster image (the hero and the diagram are SVG
+only), if the data-scopes diagram loses its `role="img"`, `<title>` or `<desc>`,
+if that description stops saying personal data goes to Mind and never to a
+provider, or if the diagram hard-codes a colour instead of a design token. The
+claim rules are checked against fixtures first (`claims.mjs`), so a rule that
+stops catching what it exists to catch fails the check instead of passing every
+page.
