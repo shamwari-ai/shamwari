@@ -1,6 +1,6 @@
 import type { Env, Message, SinkMessage, AuthContext, GroundChunk } from './types';
 import { authenticate } from './auth';
-import { keyService, usageMeter } from './keys';
+import { keyService, permittedScopes, usageMeter } from './keys';
 import { estimateCostUsd, PRICE_TABLE_VERSION } from './pricing';
 import { parseScope, decideDestination, ScopeRefusal } from './scope';
 import type { Capability, ScopeDecision } from './scope';
@@ -126,14 +126,16 @@ async function admit(
   // Scope gate, before anything expensive happens.
   const scope = parseScope(body.scope);
   try {
-    return {
-      ok: true,
-      auth,
-      body,
-      messages,
-      decision: decideDestination(scope, env, capability),
-      quota,
-    };
+    // The sovereignty gate first, so personal scope bound for Cloud is still the
+    // 409 that says why. Then the key: a key may only ask for the scopes it holds.
+    const decision = decideDestination(scope, env, capability);
+    if (!permittedScopes(auth).includes(decision.scope)) {
+      return {
+        ok: false,
+        response: json({ error: 'scope_not_permitted_for_key', scope: decision.scope }, 403),
+      };
+    }
+    return { ok: true, auth, body, messages, decision, quota };
   } catch (e) {
     if (e instanceof ScopeRefusal) return { ok: false, response: json(e.toPayload(), 409) };
     throw e;

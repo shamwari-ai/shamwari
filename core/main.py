@@ -51,6 +51,10 @@ import telemetry
 
 MONGODB_URI = os.environ["MONGODB_URI"]
 CORE_TOKEN = os.environ["SHAMWARI_CORE_TOKEN"]
+#: Operator routes (replay, telemetry) take a DIFFERENT secret from the one the
+#: edge Worker holds, so a compromised Worker cannot trigger a replay, requeue
+#: dead-lettered events or read usage reports. Unset means those routes are shut.
+OPS_TOKEN = os.environ.get("SHAMWARI_OPS_TOKEN", "")
 DB_SHAMWARI = "shamwari"
 DB_PLATFORM = "platform"
 
@@ -64,8 +68,16 @@ client = AsyncIOMotorClient(MONGODB_URI, maxPoolSize=20, serverSelectionTimeoutM
 
 async def require_token(authorization: str = Header(...)) -> None:
     """Shared-secret gate. Only the Worker and the ingest job call this."""
-    if authorization != f"Bearer {CORE_TOKEN}":
+    if not hmac.compare_digest(authorization.encode(), f"Bearer {CORE_TOKEN}".encode()):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad core token")
+
+
+async def require_ops_token(authorization: str = Header(...)) -> None:
+    """Operator-only gate: a separate secret, constant-time compared, closed if unset."""
+    if not OPS_TOKEN:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "operator routes are not enabled")
+    if not hmac.compare_digest(authorization.encode(), f"Bearer {OPS_TOKEN}".encode()):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad operator token")
 
 
 # ---------------------------------------------------------------------------
@@ -577,7 +589,7 @@ def _sender(http: httpx.AsyncClient) -> replay.Send:
     return send
 
 
-@app.post("/replay/usage", dependencies=[Depends(require_token)])
+@app.post("/replay/usage", dependencies=[Depends(require_ops_token)])
 async def replay_usage() -> dict[str, Any]:
     """Run one bounded pass. Call it on a schedule (every minute or so)."""
     if not (SERVERS_API_URL and SERVERS_API_TOKEN):
@@ -598,13 +610,13 @@ async def replay_usage() -> dict[str, Any]:
     return out
 
 
-@app.post("/replay/requeue", dependencies=[Depends(require_token)])
+@app.post("/replay/requeue", dependencies=[Depends(require_ops_token)])
 async def replay_requeue() -> dict[str, Any]:
     """Put dead-lettered events back in the queue, after the cause is fixed."""
     return {"requeued": await MongoReplayStore().requeue_rejected()}
 
 
-@app.get("/replay/stats", dependencies=[Depends(require_token)])
+@app.get("/replay/stats", dependencies=[Depends(require_ops_token)])
 async def replay_stats() -> dict[str, Any]:
     """Spill depth and age. This is the quota-lag gauge: see docs/usage-replay.md."""
     col = client[DB_PLATFORM].usageEvents
@@ -628,7 +640,7 @@ async def replay_stats() -> dict[str, Any]:
     }
 
 
-@app.get("/rollup/by-tier", dependencies=[Depends(require_token)])
+@app.get("/rollup/by-tier", dependencies=[Depends(require_ops_token)])
 async def rollup_by_tier(billing_period: str, owner_entity_id: str | None = None) -> dict[str, Any]:
     """
     Tokens by reach, routed tier and inference path, with a labelled cost

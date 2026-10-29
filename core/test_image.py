@@ -37,6 +37,68 @@ class Image(unittest.TestCase):
         self.assertIn("usage_event_fields.json", needed)
         self.assertLessEqual(needed, self.copied(), needed - self.copied())
 
+    def test_every_base_image_is_pinned_by_digest(self):
+        froms = [
+            line.split()[1]
+            for line in (HERE / "Dockerfile").read_text().splitlines()
+            if line.startswith("FROM ")
+        ]
+        self.assertTrue(froms)
+        for ref in froms:
+            self.assertRegex(ref, r"@sha256:[0-9a-f]{64}$", f"{ref} is not pinned by digest")
+
+
+class LeastPrivilege(unittest.TestCase):
+    """What Core's Servers API credential can do: write usage events, nothing else."""
+
+    def test_core_calls_exactly_one_servers_api_route(self):
+        src = (HERE / "main.py").read_text() + (HERE / "replay.py").read_text()
+        routes = set(re.findall(r"/v1/shamwari/[\w/-]+", src))
+        self.assertEqual(routes, {"/v1/shamwari/usage/events"})
+
+    def test_core_never_issues_revokes_or_reads_keys(self):
+        src = (HERE / "main.py").read_text()
+        for word in ("keys/issue", "keys/revoke", "keys/list", "api_keys", "keys/create"):
+            self.assertNotIn(word, src)
+
+    def test_no_secret_reaches_a_log_or_the_report(self):
+        import asyncio
+        import contextlib
+        import io
+
+        import replay
+
+        secrets = ("tok-SECRET-1", "nyk_id.nys_SECRET-2")
+
+        class Store:
+            async def pending(self, n):
+                return [
+                    {"_id": 1, "requestId": "r1", "ownerEntityId": "e", "apiKeyId": "k",
+                     "createdAt": "2026-10-29T00:00:00Z"}
+                ]
+
+            async def mark_sent(self, ids):
+                pass
+
+            async def mark_rejected(self, id, reason):
+                pass
+
+            async def requeue_rejected(self):
+                return 0
+
+        async def send(body):
+            return "retry"
+
+        async def nosleep(_):
+            return None
+
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+            report = asyncio.run(replay.replay_once(Store(), send, sleep=nosleep, jitter=lambda: 0))
+        text = buf.getvalue() + repr(vars(report))
+        for s in secrets:
+            self.assertNotIn(s, text)
+
 
 if __name__ == "__main__":
     unittest.main()

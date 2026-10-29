@@ -5,7 +5,7 @@
 # Secrets are never in this file. Set them with `fly secrets set`:
 #   MONGODB_URI  SUPABASE_DB_URL  SHAMWARI_CORE_TOKEN  CF_ACCOUNT_ID  CF_API_TOKEN
 # Only when usage replay is switched on (docs/usage-replay.md):
-#   SERVERS_API_URL  SERVERS_API_TOKEN  SERVERS_API_INTERNAL_KEY
+#   SHAMWARI_OPS_TOKEN  SERVERS_API_URL  SERVERS_API_TOKEN  SERVERS_API_INTERNAL_KEY
 app = "shamwari-core"
 primary_region = "jnb"
 
