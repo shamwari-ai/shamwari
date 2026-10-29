@@ -13,6 +13,14 @@ export interface Env {
   CORE_URL: string;
   SHAMWARI_CORE_TOKEN: string;
 
+  /** "true" moves key verification and metering to the Servers API. Off by default. */
+  SERVERS_API_ENABLED?: string;
+  SERVERS_API_URL?: string;
+  /** Secret. */
+  SERVERS_API_TOKEN?: string;
+  /** Secret. Second factor the Servers API's internal routes require. */
+  SERVERS_API_INTERNAL_KEY?: string;
+
   EMBEDDING_MODEL: string;
   GROUND_TOP_K: string;
   AUTH_CACHE_TTL: string;
@@ -20,6 +28,15 @@ export interface Env {
   STANDARD_MODEL: string;
   SURFACE: string;
   MIND_AVAILABLE: string;
+
+  /**
+   * Channels (SMS, USSD). Both are secrets set by the owner; a channel with
+   * either missing answers 503 and nothing else. The key is an ordinary
+   * customer-style API key for the channel's owning entity, so the channel
+   * is metered and gated like any other caller.
+   */
+  CHANNEL_WEBHOOK_SECRET?: string;
+  CHANNEL_API_KEY?: string;
 }
 
 export type Tier = 'economy' | 'standard' | 'premium';
@@ -60,6 +77,13 @@ export interface AuthContext {
   keyType: string;
   tier: string;
   monthlyTokenCap: number;
+  /**
+   * What this key may ask for. Absent (an older cached context, or the Core
+   * path, which carries none) means community and platform only: personal is
+   * never implied. It can only narrow a request, never widen what the scope
+   * gate allows.
+   */
+  scopes?: Scope[];
 }
 
 export type SinkMessage = {
