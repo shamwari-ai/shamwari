@@ -587,9 +587,11 @@ async def replay_usage() -> dict[str, Any]:
     async with _replay_lock:
         _replay_started["at"] = datetime.now(timezone.utc).isoformat()
         _last_status.clear()
-        async with httpx.AsyncClient(timeout=5.0) as http:
-            report = await replay.replay_once(MongoReplayStore(), _sender(http))
-        _replay_started.pop("at", None)
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as http:
+                report = await replay.replay_once(MongoReplayStore(), _sender(http))
+        finally:
+            _replay_started.pop("at", None)
     out = {**vars(report), **_last_status}
     _last_replay.clear()
     _last_replay.update(out)

@@ -145,7 +145,7 @@ async def replay_once(
         if not ok_docs:
             continue
 
-        result = await _send_with_retry(ok_docs, send, report, max_attempts, sleep, jitter)
+        result = await _send_with_retry(ok_docs, send, report, max_attempts, sleep, jitter, clock, end)
         if result == "ok":
             await store.mark_sent([d["_id"] for d in ok_docs])
             report.sent += len(ok_docs)
@@ -158,7 +158,7 @@ async def replay_once(
                 if clock() >= end:
                     report.stopped = "deadline"
                     return report
-                r = await _send_with_retry([d], send, report, max_attempts, sleep, jitter)
+                r = await _send_with_retry([d], send, report, max_attempts, sleep, jitter, clock, end)
                 if r == "ok":
                     await store.mark_sent([d["_id"]])
                     report.sent += 1
@@ -179,7 +179,7 @@ async def replay_once(
                 report.stopped = "servers api rejected events with none accepted; not dead-lettering"
                 return report
         else:
-            report.stopped = "servers api unavailable"
+            report.stopped = "deadline" if clock() >= end else "servers api unavailable"
             return report
     return report
 
@@ -191,15 +191,25 @@ async def _send_with_retry(
     max_attempts: int,
     sleep: Callable[[float], Awaitable[None]],
     jitter: Callable[[], float],
+    clock: Callable[[], float],
+    end: float,
 ) -> SendResult:
+    """
+    Retries stop at the pass deadline too, not only between batches: one batch
+    with slow sends and backoff would otherwise run well past it, and a caller
+    that gives up mid-batch can cut the pass off between a send and its mark.
+    An exhausted deadline reads as 'retry': nothing is marked, nothing is lost.
+    """
     body = [payload(d) for d in docs]
     result: SendResult = "retry"
     for attempt in range(max_attempts):
+        if clock() >= end:
+            return "retry"
         report.attempts += 1
         result = await send(body)
         if result != "retry":
             return result
         if attempt < max_attempts - 1:
-            delay = min(MAX_DELAY, BASE_DELAY * (2**attempt))
-            await sleep(delay * (0.5 + jitter() / 2))
+            delay = min(MAX_DELAY, BASE_DELAY * (2**attempt)) * (0.5 + jitter() / 2)
+            await sleep(max(0.0, min(delay, end - clock())))
     return result
