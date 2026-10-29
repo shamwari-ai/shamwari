@@ -33,6 +33,7 @@ stamped 'restricted' at write time and filtered at read time.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import os
@@ -40,12 +41,20 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
 
+import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 
+import replay
+import telemetry
+
 MONGODB_URI = os.environ["MONGODB_URI"]
 CORE_TOKEN = os.environ["SHAMWARI_CORE_TOKEN"]
+#: Operator routes (replay, telemetry) take a DIFFERENT secret from the one the
+#: edge Worker holds, so a compromised Worker cannot trigger a replay, requeue
+#: dead-lettered events or read usage reports. Unset means those routes are shut.
+OPS_TOKEN = os.environ.get("SHAMWARI_OPS_TOKEN", "")
 DB_SHAMWARI = "shamwari"
 DB_PLATFORM = "platform"
 
@@ -59,8 +68,16 @@ client = AsyncIOMotorClient(MONGODB_URI, maxPoolSize=20, serverSelectionTimeoutM
 
 async def require_token(authorization: str = Header(...)) -> None:
     """Shared-secret gate. Only the Worker and the ingest job call this."""
-    if authorization != f"Bearer {CORE_TOKEN}":
+    if not hmac.compare_digest(authorization.encode(), f"Bearer {CORE_TOKEN}".encode()):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad core token")
+
+
+async def require_ops_token(authorization: str = Header(...)) -> None:
+    """Operator-only gate: a separate secret, constant-time compared, closed if unset."""
+    if not OPS_TOKEN:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "operator routes are not enabled")
+    if not hmac.compare_digest(authorization.encode(), f"Bearer {OPS_TOKEN}".encode()):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad operator token")
 
 
 # ---------------------------------------------------------------------------
@@ -493,6 +510,147 @@ async def rollup(owner_entity_id: str, billing_period: str) -> dict[str, Any]:
         "total_cost": float(r.get("total_cost") or 0.0),
         "requests": int(r.get("requests") or 0),
     }
+
+
+# ---------------------------------------------------------------------------
+# Replay of spilled usage events to the Servers API (see replay.py)
+# ---------------------------------------------------------------------------
+
+SERVERS_API_URL = os.environ.get("SERVERS_API_URL", "").rstrip("/")
+SERVERS_API_TOKEN = os.environ.get("SERVERS_API_TOKEN", "")
+SERVERS_API_INTERNAL_KEY = os.environ.get("SERVERS_API_INTERNAL_KEY", "")
+
+_SPILLED = {
+    "spilled": True,
+    "replayedAt": {"$exists": False},
+    "replayRejectedAt": {"$exists": False},
+}
+_replay_lock = asyncio.Lock()
+_last_replay: dict[str, Any] = {}
+_replay_started: dict[str, Any] = {}
+
+
+class MongoReplayStore:
+    """Spilled rows in platform.usageEvents. Rows are marked, never deleted."""
+
+    def __init__(self) -> None:
+        self.col = client[DB_PLATFORM].usageEvents
+
+    async def pending(self, limit: int) -> list[dict[str, Any]]:
+        cursor = self.col.find(_SPILLED).sort([("createdAt", 1), ("_id", 1)]).limit(limit)
+        return await cursor.to_list(length=limit)
+
+    async def mark_sent(self, ids: list[Any]) -> None:
+        await self.col.update_many(
+            {"_id": {"$in": ids}}, {"$set": {"replayedAt": datetime.now(timezone.utc)}}
+        )
+
+    async def mark_rejected(self, id: Any, reason: str) -> None:
+        await self.col.update_one(
+            {"_id": id},
+            {"$set": {"replayRejectedAt": datetime.now(timezone.utc), "replayRejectedReason": reason}},
+        )
+
+    async def requeue_rejected(self) -> int:
+        res = await self.col.update_many(
+            {"spilled": True, "replayRejectedAt": {"$exists": True}},
+            {"$unset": {"replayRejectedAt": "", "replayRejectedReason": ""}},
+        )
+        return res.modified_count
+
+
+_last_status: dict[str, Any] = {}
+
+
+def _sender(http: httpx.AsyncClient) -> replay.Send:
+    """One shared client per pass, not a new TLS handshake per send."""
+
+    async def send(body: list[dict[str, Any]]) -> replay.SendResult:
+        headers = {"Authorization": f"Bearer {SERVERS_API_TOKEN}"}
+        if SERVERS_API_INTERNAL_KEY:
+            headers["x-nyuchi-internal-key"] = SERVERS_API_INTERNAL_KEY
+        try:
+            res = await http.post(
+                f"{SERVERS_API_URL}/v1/shamwari/usage/events", json={"events": body}, headers=headers
+            )
+        except Exception as e:  # incl. a malformed URL: retry and report, never a 500
+            _last_status["last_error"] = type(e).__name__
+            return "retry"
+        _last_status["last_status"] = res.status_code
+        if 200 <= res.status_code < 300:
+            return "ok"
+        # Only a definite "this event is bad" dead-letters. A 401/403/404 may be
+        # OUR credential or route, so it is retried, never used to throw events
+        # away; last_status in the report says which one it is.
+        if res.status_code in (400, 422):
+            return "rejected"
+        return "retry"
+
+    return send
+
+
+@app.post("/replay/usage", dependencies=[Depends(require_ops_token)])
+async def replay_usage() -> dict[str, Any]:
+    """Run one bounded pass. Call it on a schedule (every minute or so)."""
+    if not (SERVERS_API_URL and SERVERS_API_TOKEN):
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "servers api not configured")
+    if _replay_lock.locked():
+        return {"skipped": "a replay is already running", "running_since": _replay_started.get("at")}
+    async with _replay_lock:
+        _replay_started["at"] = datetime.now(timezone.utc).isoformat()
+        _last_status.clear()
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as http:
+                report = await replay.replay_once(MongoReplayStore(), _sender(http))
+        finally:
+            _replay_started.pop("at", None)
+    out = {**vars(report), **_last_status}
+    _last_replay.clear()
+    _last_replay.update(out)
+    return out
+
+
+@app.post("/replay/requeue", dependencies=[Depends(require_ops_token)])
+async def replay_requeue() -> dict[str, Any]:
+    """Put dead-lettered events back in the queue, after the cause is fixed."""
+    return {"requeued": await MongoReplayStore().requeue_rejected()}
+
+
+@app.get("/replay/stats", dependencies=[Depends(require_ops_token)])
+async def replay_stats() -> dict[str, Any]:
+    """Spill depth and age. This is the quota-lag gauge: see docs/usage-replay.md."""
+    col = client[DB_PLATFORM].usageEvents
+    pending = await col.count_documents(_SPILLED)
+    oldest = await col.find(_SPILLED, {"createdAt": 1}).sort("createdAt", 1).limit(1).to_list(1)
+    age = None
+    if oldest and isinstance(oldest[0].get("createdAt"), datetime):
+        created = oldest[0]["createdAt"]
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        age = int((datetime.now(timezone.utc) - created).total_seconds())
+    rejected = await col.count_documents(
+        {"spilled": True, "replayRejectedAt": {"$exists": True}}
+    )
+    return {
+        "pending": pending,
+        "oldest_pending_age_seconds": age,
+        "rejected": rejected,
+        "running_since": _replay_started.get("at"),
+        "last_run": dict(_last_replay) or None,
+    }
+
+
+@app.get("/rollup/by-tier", dependencies=[Depends(require_ops_token)])
+async def rollup_by_tier(billing_period: str, owner_entity_id: str) -> dict[str, Any]:
+    """
+    Tokens by reach, routed tier and inference path for one owner, with a
+    labelled cost estimate. The owner is required so the query uses the
+    ownerEntityId + billingPeriod index instead of scanning the collection. Tokens are the fact; the cost is derived (see telemetry.py).
+    """
+    cursor = client[DB_PLATFORM].usageEvents.aggregate(
+        telemetry.by_tier_pipeline(billing_period, owner_entity_id)
+    )
+    return telemetry.shape(await cursor.to_list(length=500))
 
 
 @app.get("/health")

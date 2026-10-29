@@ -40,9 +40,35 @@ export const STATUS: StatusItem[] = [
   },
   {
     state: 'building',
-    title: 'Shamwari Cloud',
-    body: 'The gateway and API are written and tested, and not yet serving production traffic.',
+    title: 'Shamwari API',
+    body: 'An OpenAI-style API for Shamwari Cloud. The gateway is deployed and answers, but it cannot accept a key until Core is deployed. Keys, usage and token metering are next.',
     issues: [19],
+  },
+  {
+    state: 'planned',
+    title: 'Shamwari Chat',
+    body: 'Ask in Shona, Ndebele or English and get the answer with the section it came from. Not built yet.',
+  },
+  {
+    state: 'planned',
+    title: 'Shamwari CLI',
+    body: 'Shamwari in your terminal, for people who work there. Not built yet.',
+  },
+  {
+    state: 'planned',
+    title: 'Shamwari MCP server',
+    body: 'Connect Shamwari’s cited Zimbabwean law and tax to your own agents and tools. Not built yet.',
+  },
+  {
+    state: 'planned',
+    title: 'Shamwari Factory',
+    body: 'The coding agent: create projects and build in a sandbox, working in your GitHub repositories. Available to paying customers only. Not built yet.',
+    issues: [66],
+  },
+  {
+    state: 'building',
+    title: 'Shamwari for GitHub',
+    body: 'A GitHub App and MCP server that reviews pull requests and works with issues. It is deployed, and for now limited to a short list of Nyuchi repositories and to our own team. It comments and never approves or merges. Opening it to your repositories comes with Factory.',
   },
   {
     state: 'planned',

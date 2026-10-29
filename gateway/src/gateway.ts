@@ -1,5 +1,6 @@
 import type { Env, Message, LicenseClass, Scope, Tier } from './types';
 import type { Target } from './router';
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './router';
 import { resolveLicenseClass, WORKERS_AI_FALLBACK_MODEL } from './provenance';
 
 export interface InferenceResult {
@@ -18,6 +19,8 @@ export interface InferenceResult {
   /** True when a dynamic route or a fallback answered with something else. */
   substituted: boolean;
   path: 'gateway' | 'workers-ai';
+  /** The model's own stop reason: `length` means the output cap cut it off. */
+  finishReason: string;
 }
 
 /**
@@ -62,16 +65,19 @@ export function buildMetadata(meta: RequestMetadata): Record<string, string> {
   };
 }
 
+export { DEFAULT_MAX_OUTPUT_TOKENS };
+
 async function post(
   url: string,
   headers: Record<string, string>,
   model: string,
   messages: Message[],
+  maxTokens: number,
 ): Promise<Response> {
   return fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: 2048 }),
+    body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: maxTokens }),
   });
 }
 
@@ -94,6 +100,7 @@ export async function viaGateway(
   messages: Message[],
   meta: RequestMetadata,
   skipCache = false,
+  maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
 ): Promise<InferenceResult | null> {
   try {
     // A Secrets Store binding, so the token is read at request time and never
@@ -109,11 +116,22 @@ export async function viaGateway(
       },
       `dynamic/${env.CF_ROUTE_NAME}`,
       messages,
+      Math.min(maxTokens, DEFAULT_MAX_OUTPUT_TOKENS),
     );
     if (res.ok) {
-      return parse(res, target, res.headers.get('cf-aig-cache-status') === 'HIT', 'gateway');
+      const out = await parse(
+        res,
+        target,
+        res.headers.get('cf-aig-cache-status') === 'HIT',
+        'gateway',
+      );
+      // A 200 with no text is not an answer. Treated as a failure so the next
+      // rung engages, and so a blank is never stored as a teacher output.
+      if (out.text.trim()) return out;
+      console.warn('gateway returned no text');
+    } else {
+      console.warn('gateway', res.status);
     }
-    console.warn('gateway', res.status);
   } catch (e) {
     console.warn('gateway threw', String(e));
   }
@@ -131,13 +149,27 @@ export async function viaWorkersAI(
   env: Env,
   target: Target,
   messages: Message[],
+  maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
 ): Promise<InferenceResult> {
-  const fb = (await env.AI.run(WORKERS_AI_FALLBACK_MODEL as never, {
-    messages,
-  } as never)) as { response?: string };
+  const fb = (await env.AI.run(
+    WORKERS_AI_FALLBACK_MODEL as never,
+    {
+      messages,
+      // Only when a reach asks for less. A request with no reach is sent exactly
+      // as it was before, so this fallback step is not exposed to a parameter it
+      // has never been called with.
+      ...(maxTokens < DEFAULT_MAX_OUTPUT_TOKENS ? { max_tokens: maxTokens } : {}),
+    } as never,
+  )) as { response?: string };
+
+  // No text is a failure, not an answer. This used to substitute a canned
+  // apology, which then travelled as the model's output: stored as a
+  // conversation under an open-weight teacher label and flagged trainable.
+  // Throwing lets the extractive rung engage and the probe see the failure.
+  if (!fb.response?.trim()) throw new Error('workers ai returned no text');
 
   return {
-    text: fb.response ?? 'Shamwari cannot answer right now. Please retry.',
+    text: fb.response,
     inputTokens: 0,
     outputTokens: 0,
     cacheHit: false,
@@ -148,6 +180,7 @@ export async function viaWorkersAI(
     licenseClass: resolveLicenseClass('workers-ai', WORKERS_AI_FALLBACK_MODEL),
     substituted: true,
     path: 'workers-ai',
+    finishReason: 'stop',
   };
 }
 
@@ -169,9 +202,11 @@ export async function infer(
   target: Target,
   messages: Message[],
   meta: RequestMetadata,
+  maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
 ): Promise<InferenceResult> {
   return (
-    (await viaGateway(env, target, messages, meta)) ?? (await viaWorkersAI(env, target, messages))
+    (await viaGateway(env, target, messages, meta, false, maxTokens)) ??
+    (await viaWorkersAI(env, target, messages, maxTokens))
   );
 }
 
@@ -182,7 +217,7 @@ async function parse(
   path: InferenceResult['path'],
 ): Promise<InferenceResult> {
   const j = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
 
@@ -193,6 +228,7 @@ async function parse(
 
   return {
     text: j.choices?.[0]?.message?.content ?? '',
+    finishReason: j.choices?.[0]?.finish_reason ?? 'stop',
     inputTokens: j.usage?.prompt_tokens ?? 0,
     outputTokens: j.usage?.completion_tokens ?? 0,
     cacheHit,

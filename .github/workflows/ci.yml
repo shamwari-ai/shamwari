@@ -89,6 +89,11 @@ jobs:
         run: python -c "import main, ingest_ground; print(main.app.title, main.app.version)"
         working-directory: core
 
+      # Spill replay: no loss, no duplicates, nothing but the allowlist leaves.
+      - name: Replay tests
+        run: python -m unittest -v
+        working-directory: core
+
   docs-site:
     name: Docs site (build, links, tokens, size)
     runs-on: ubuntu-latest
