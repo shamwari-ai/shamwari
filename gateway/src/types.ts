@@ -13,6 +13,12 @@ export interface Env {
   CORE_URL: string;
   SHAMWARI_CORE_TOKEN: string;
 
+  /** "true" moves key verification and metering to the Servers API. Off by default. */
+  SERVERS_API_ENABLED?: string;
+  SERVERS_API_URL?: string;
+  /** Secret. */
+  SERVERS_API_TOKEN?: string;
+
   EMBEDDING_MODEL: string;
   GROUND_TOP_K: string;
   AUTH_CACHE_TTL: string;
