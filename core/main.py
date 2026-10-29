@@ -514,6 +514,7 @@ _SPILLED = {
 }
 _replay_lock = asyncio.Lock()
 _last_replay: dict[str, Any] = {}
+_replay_started: dict[str, Any] = {}
 
 
 class MongoReplayStore:
@@ -537,39 +538,67 @@ class MongoReplayStore:
             {"$set": {"replayRejectedAt": datetime.now(timezone.utc), "replayRejectedReason": reason}},
         )
 
+    async def requeue_rejected(self) -> int:
+        res = await self.col.update_many(
+            {"spilled": True, "replayRejectedAt": {"$exists": True}},
+            {"$unset": {"replayRejectedAt": "", "replayRejectedReason": ""}},
+        )
+        return res.modified_count
 
-async def _send_to_servers_api(body: list[dict[str, Any]]) -> replay.SendResult:
-    headers = {"Authorization": f"Bearer {SERVERS_API_TOKEN}"}
-    if SERVERS_API_INTERNAL_KEY:
-        headers["x-nyuchi-internal-key"] = SERVERS_API_INTERNAL_KEY
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as http:
+
+_last_status: dict[str, Any] = {}
+
+
+def _sender(http: httpx.AsyncClient) -> replay.Send:
+    """One shared client per pass, not a new TLS handshake per send."""
+
+    async def send(body: list[dict[str, Any]]) -> replay.SendResult:
+        headers = {"Authorization": f"Bearer {SERVERS_API_TOKEN}"}
+        if SERVERS_API_INTERNAL_KEY:
+            headers["x-nyuchi-internal-key"] = SERVERS_API_INTERNAL_KEY
+        try:
             res = await http.post(
                 f"{SERVERS_API_URL}/v1/shamwari/usage/events", json={"events": body}, headers=headers
             )
-    except httpx.HTTPError:
+        except Exception as e:  # incl. a malformed URL: retry and report, never a 500
+            _last_status["last_error"] = type(e).__name__
+            return "retry"
+        _last_status["last_status"] = res.status_code
+        if 200 <= res.status_code < 300:
+            return "ok"
+        # Only a definite "this event is bad" dead-letters. A 401/403/404 may be
+        # OUR credential or route, so it is retried, never used to throw events
+        # away; last_status in the report says which one it is.
+        if res.status_code in (400, 422):
+            return "rejected"
         return "retry"
-    if 200 <= res.status_code < 300:
-        return "ok"
-    # Only a definite "this event is bad" dead-letters. A 401/403 may be OUR
-    # credential, so it is retried, never used to throw events away.
-    if res.status_code in (400, 422):
-        return "rejected"
-    return "retry"
+
+    return send
 
 
 @app.post("/replay/usage", dependencies=[Depends(require_token)])
 async def replay_usage() -> dict[str, Any]:
-    """Run one bounded replay pass. Call it on a schedule (every minute or so)."""
+    """Run one bounded pass. Call it on a schedule (every minute or so)."""
     if not (SERVERS_API_URL and SERVERS_API_TOKEN):
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "servers api not configured")
     if _replay_lock.locked():
-        return {"skipped": "a replay is already running"}
+        return {"skipped": "a replay is already running", "running_since": _replay_started.get("at")}
     async with _replay_lock:
-        report = await replay.replay_once(MongoReplayStore(), _send_to_servers_api)
+        _replay_started["at"] = datetime.now(timezone.utc).isoformat()
+        _last_status.clear()
+        async with httpx.AsyncClient(timeout=5.0) as http:
+            report = await replay.replay_once(MongoReplayStore(), _sender(http))
+        _replay_started.pop("at", None)
+    out = {**vars(report), **_last_status}
     _last_replay.clear()
-    _last_replay.update(vars(report))
-    return vars(report)
+    _last_replay.update(out)
+    return out
+
+
+@app.post("/replay/requeue", dependencies=[Depends(require_token)])
+async def replay_requeue() -> dict[str, Any]:
+    """Put dead-lettered events back in the queue, after the cause is fixed."""
+    return {"requeued": await MongoReplayStore().requeue_rejected()}
 
 
 @app.get("/replay/stats", dependencies=[Depends(require_token)])
@@ -591,6 +620,7 @@ async def replay_stats() -> dict[str, Any]:
         "pending": pending,
         "oldest_pending_age_seconds": age,
         "rejected": rejected,
+        "running_since": _replay_started.get("at"),
         "last_run": dict(_last_replay) or None,
     }
 

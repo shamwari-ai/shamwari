@@ -16,11 +16,21 @@ Guarantees, each pinned by test_replay.py:
   - Never loses: an event is marked sent only after the Servers API answered
     2xx for it. A crash between the send and the mark leaves it pending, and
     the next run sends it again.
-  - Never double counts: the Servers API deduplicates on `requestId`, which is
-    what makes that resend safe. A resend is the only way an event is sent
-    twice, and never after it is marked.
+  - Never double counts, PROVIDED the Servers API deduplicates on `requestId`.
+    That is a requirement on the Servers API, not something this module can
+    provide: with it, a resend is harmless; without it, every crash between
+    send and mark, and every second machine running a pass, double counts. The
+    tests use a fake remote that deduplicates, so they cannot detect its absence.
+    Verify it before turning the flag on. A resend is the only way an event is
+    sent twice, and never after it is marked.
   - Never wedges: an event the Servers API rejects (400/422) is isolated and
-    dead-lettered with its reason, not retried forever, and not deleted.
+    dead-lettered with its reason, not retried forever, and not deleted. But a
+    rejection is only believed when the Servers API has accepted something in the
+    same run. If it rejects everything, that is a mismatch on its side (a stricter
+    schema, a wrong route), so nothing is dead-lettered and the run stops. Rows
+    that were dead-lettered can be put back with requeue_rejected().
+  - Bounded in time: a pass stops at a wall-clock deadline, so a caller's HTTP
+    timeout never cuts it off between a send and its mark.
   - Rule 1: only the allowlisted fields leave, and `scope` only as one of its
     three names. The allowlist is usage_event_fields.json, which a gateway test
     holds equal to the gateway's own.
@@ -33,6 +43,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,6 +56,7 @@ SCOPE_LABELS = frozenset({"personal", "community", "platform"})
 
 BATCH = 100
 MAX_BATCHES = 10
+DEADLINE_SECONDS = 25.0
 MAX_ATTEMPTS = 4
 BASE_DELAY = 0.5
 MAX_DELAY = 8.0
@@ -69,11 +81,14 @@ def payload(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 def unreplayable(doc: dict[str, Any]) -> str | None:
-    """Why an event cannot be replayed safely, or None. No requestId means no idempotency."""
-    p = payload(doc)
-    for k in ("requestId", "ownerEntityId", "apiKeyId", "createdAt"):
-        if not p.get(k):
-            return f"missing {k}"
+    """
+    Why an event cannot be replayed safely, or None. Only a missing requestId
+    qualifies: without it the Servers API cannot deduplicate, so a resend could
+    double count. Anything else the Servers API finds wrong, it will say (422),
+    and that goes through the guarded path below, not a silent local verdict.
+    """
+    if not payload(doc).get("requestId"):
+        return "missing requestId"
     return None
 
 
@@ -81,6 +96,7 @@ class Store(Protocol):
     async def pending(self, limit: int) -> list[dict[str, Any]]: ...
     async def mark_sent(self, ids: list[Any]) -> None: ...
     async def mark_rejected(self, id: Any, reason: str) -> None: ...
+    async def requeue_rejected(self) -> int: ...
 
 
 Send = Callable[[list[dict[str, Any]]], Awaitable[SendResult]]
@@ -104,9 +120,15 @@ async def replay_once(
     max_attempts: int = MAX_ATTEMPTS,
     sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     jitter: Callable[[], float] = random.random,
+    deadline: float = DEADLINE_SECONDS,
+    clock: Callable[[], float] = time.monotonic,
 ) -> RunReport:
     report = RunReport()
+    end = clock() + deadline
     for _ in range(max_batches):
+        if clock() >= end:
+            report.stopped = "deadline"
+            return report
         docs = await store.pending(batch)
         if not docs:
             return report
@@ -128,18 +150,34 @@ async def replay_once(
             await store.mark_sent([d["_id"] for d in ok_docs])
             report.sent += len(ok_docs)
         elif result == "rejected":
-            # One bad event must not hold up the rest: isolate it.
+            # One bad event must not hold up the rest: isolate it. A rejection
+            # is only believed once the Servers API has accepted something in
+            # this run; until then it is held, not recorded.
+            held: list[dict[str, Any]] = []
             for d in ok_docs:
+                if clock() >= end:
+                    report.stopped = "deadline"
+                    return report
                 r = await _send_with_retry([d], send, report, max_attempts, sleep, jitter)
                 if r == "ok":
                     await store.mark_sent([d["_id"]])
                     report.sent += 1
+                    for h in held:
+                        await store.mark_rejected(h["_id"], "rejected by servers api")
+                        report.rejected += 1
+                    held.clear()
                 elif r == "rejected":
-                    await store.mark_rejected(d["_id"], "rejected by servers api")
-                    report.rejected += 1
+                    if report.sent > 0:
+                        await store.mark_rejected(d["_id"], "rejected by servers api")
+                        report.rejected += 1
+                    else:
+                        held.append(d)
                 else:
                     report.stopped = "servers api unavailable"
                     return report
+            if held:
+                report.stopped = "servers api rejected events with none accepted; not dead-lettering"
+                return report
         else:
             report.stopped = "servers api unavailable"
             return report

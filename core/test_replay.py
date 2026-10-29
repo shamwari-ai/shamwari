@@ -59,6 +59,11 @@ class FakeStore:
     async def mark_rejected(self, id, reason):
         self.rejected[id] = reason
 
+    async def requeue_rejected(self):
+        n = len(self.rejected)
+        self.rejected.clear()
+        return n
+
 
 class FakeRemote:
     """The Servers API: deduplicates on requestId, like the real one."""
@@ -189,6 +194,46 @@ class Replay(unittest.TestCase):
         self.assertEqual(list(store.rejected), [2])  # dead-lettered, not deleted
         self.assertIn(2, store.docs)
         self.assertEqual(report.rejected, 1)
+
+    def test_a_server_that_rejects_everything_dead_letters_nothing(self):
+        """A mismatch on the Servers API side must not turn into permanent loss."""
+        store = FakeStore([event(i) for i in range(6)])
+        remote = FakeRemote(poison={f"r{i}" for i in range(6)})
+        report = self.go(store, remote)
+        self.assertEqual(store.rejected, {})
+        self.assertEqual(store.sent, set())
+        self.assertIn("not dead-lettering", report.stopped)
+
+    def test_rejected_events_can_be_put_back(self):
+        store = FakeStore([event(i) for i in range(4)])
+        remote = FakeRemote(poison={"r1"})
+        self.go(store, remote)
+        self.assertEqual(list(store.rejected), [1])
+        remote.poison.clear()
+        self.assertEqual(run(store.requeue_rejected()), 1)
+        self.go(store, remote)
+        self.assertEqual(store.sent, {0, 1, 2, 3})
+
+    def test_a_pass_stops_at_its_deadline_and_loses_nothing(self):
+        ticks = iter(range(0, 1000, 10))  # each clock() call advances 10s
+        store, remote = FakeStore([event(i) for i in range(300)]), FakeRemote()
+        report = run(
+            replay.replay_once(
+                store, remote.send, batch=100, sleep=no_sleep, deadline=25, clock=lambda: next(ticks)
+            )
+        )
+        self.assertEqual(report.stopped, "deadline")
+        self.assertLess(len(store.sent), 300)
+        self.assertTrue(all(f"r{i}" in remote.received for i in store.sent))
+
+    def test_only_a_missing_request_id_is_dead_lettered_locally(self):
+        for k in ("apiKeyId", "createdAt", "ownerEntityId"):
+            d = event(1)
+            del d[k]
+            self.assertIsNone(replay.unreplayable(d), k)  # the server decides these
+        d = event(1)
+        del d["requestId"]
+        self.assertEqual(replay.unreplayable(d), "missing requestId")
 
     def test_an_event_with_no_request_id_is_dead_lettered_not_sent(self):
         bad = event(1)
