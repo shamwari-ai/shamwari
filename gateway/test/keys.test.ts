@@ -223,6 +223,27 @@ describe('Servers API key verification', () => {
     expect(seen).toHaveLength(0);
   });
 
+  it('sends the internal-key second factor on every route when configured, and not otherwise', async () => {
+    const seen: { url: string; key: string | null }[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      seen.push({ url, key: new Headers(init.headers).get('x-nyuchi-internal-key') });
+      return url.includes('/keys/verify')
+        ? Response.json(GOOD)
+        : url.includes('/rollup')
+          ? Response.json({ total_tokens: 1 })
+          : Response.json({});
+    });
+    const withKey = makeEnv({ ...SERVERS, SERVERS_API_INTERNAL_KEY: 'nyk_a.nys_b' }).env;
+    await new ServersApiKeyService(withKey).verify('sk_shamwari_', 'h');
+    await new ServersApiKeyService(withKey).usageTotal('e1', '2026-10');
+    await new ServersApiUsageMeter(withKey).record({ requestId: 'r' });
+    expect(seen.map((c) => c.key)).toEqual(['nyk_a.nys_b', 'nyk_a.nys_b', 'nyk_a.nys_b']);
+
+    seen.length = 0;
+    await new ServersApiKeyService(makeEnv(SERVERS).env).verify('sk_shamwari_', 'h');
+    expect(seen[0]!.key).toBeNull();
+  });
+
   it('a recovered service is believed at once (no outage verdict was cached)', async () => {
     let up = false;
     fakeServers({

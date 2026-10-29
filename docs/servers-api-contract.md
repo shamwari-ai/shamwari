@@ -11,7 +11,9 @@ Core and the sink queue remain the live path until the owner turns it on.
 Keys belong in the ledger's `platform.api_keys`, not Mongo. Nyuchi-Doris is
 search and analytics and is never on this read path.
 
-All calls: `Authorization: Bearer <SERVERS_API_TOKEN>`, JSON, namespace
+All calls: `Authorization: Bearer <SERVERS_API_TOKEN>` (scope `shamwari`) and,
+because these are internal routes, `x-nyuchi-internal-key: nyk_<clientId>.nys_<secret>`
+(`SERVERS_API_INTERNAL_KEY`, sent whenever it is set), JSON, namespace
 `/v1/shamwari/*`. The token is a service credential for the gateway only.
 
 ## 1. Verify a key — `POST /v1/shamwari/keys/verify`
@@ -50,7 +52,8 @@ in constant time, honouring `isActive`/revocation and expiry.
 
 A 200 that is not JSON, lacks a required field, has an empty id or tier, or has
 a `monthly_token_cap` that is not a positive integer is treated as unavailable.
-"This key is bad" must carry `{"error":"invalid_key"}`; the gateway will not cache
+"This key is bad" must carry `{"error":"invalid_key"}` (as an extension member of an
+RFC 9457 problem+json body is fine); the gateway will not cache
 a verdict on a good key because its own credential or route is wrong.
 
 **Latency budget:** p95 ≤ 150 ms, hard client timeout 800 ms. KV absorbs

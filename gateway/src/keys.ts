@@ -147,13 +147,29 @@ export function usageEventPayload(doc: Record<string, unknown>): Record<string, 
   return out;
 }
 
-function serversApi(env: Env): { url: string; token: string } | null {
+interface ServersApiConn {
+  url: string;
+  token: string;
+  /** Second factor the internal routes require, when the owner has set one. */
+  internalKey: string | undefined;
+}
+
+function serversApi(env: Env): ServersApiConn | null {
   return env.SERVERS_API_URL && env.SERVERS_API_TOKEN
     ? {
         url: env.SERVERS_API_URL.replace(/\/$/, ''),
         token: env.SERVERS_API_TOKEN,
+        internalKey: env.SERVERS_API_INTERNAL_KEY || undefined,
       }
     : null;
+}
+
+/** Bearer token plus, when configured, the internal key the Servers API requires. */
+function authHeaders(api: ServersApiConn): Record<string, string> {
+  return {
+    Authorization: `Bearer ${api.token}`,
+    ...(api.internalKey ? { 'x-nyuchi-internal-key': api.internalKey } : {}),
+  };
 }
 
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
@@ -193,7 +209,7 @@ export class ServersApiKeyService implements KeyService {
       const res = await fetch(`${api.url}/v1/shamwari/keys/verify`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${api.token}`,
+          ...authHeaders(api),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ key_prefix: keyPrefix, key_hash: keyHash }),
@@ -232,7 +248,7 @@ export class ServersApiKeyService implements KeyService {
       billing_period: billingPeriod,
     });
     const res = await fetch(`${api.url}/v1/shamwari/usage/rollup?${q}`, {
-      headers: { Authorization: `Bearer ${api.token}` },
+      headers: authHeaders(api),
       signal: AbortSignal.timeout(ROLLUP_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`servers api rollup ${res.status}`);
@@ -269,7 +285,7 @@ export class ServersApiUsageMeter implements UsageMeter {
       const res = await fetch(`${api.url}/v1/shamwari/usage/events`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${api.token}`,
+          ...authHeaders(api),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ events: [usageEventPayload(doc)] }),
