@@ -85,4 +85,5 @@
   // wrangler secret put:
   //   SHAMWARI_CORE_TOKEN shared with Core
   //   SERVERS_API_TOKEN   only when SERVERS_API_ENABLED is true
+  //   SERVERS_API_INTERNAL_KEY  likewise (x-nyuchi-internal-key second factor)
 }
