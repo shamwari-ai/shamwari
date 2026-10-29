@@ -26,11 +26,14 @@ The gateway sends the first 12 characters and the SHA-256 hash. The raw key
 never leaves the Worker. The Servers API finds by prefix and compares the hash
 in constant time, honouring `isActive`/revocation and expiry.
 
-| Status          | Meaning                                  | Gateway does                                   |
-| --------------- | ---------------------------------------- | ---------------------------------------------- |
-| 200 + body      | key valid                                | caches the context for `AUTH_CACHE_TTL`, admits |
-| 401, 403 or 404 **with body `{"error":"invalid_key"}`** | key unknown, revoked, expired, wrong hash | caches "invalid" for `AUTH_CACHE_TTL`, answers 401 |
-| anything else, **including a bare 401/403/404** | Servers API cannot say (a rotated gateway token or wrong route looks like a bare 401/404) | **denies with 503 `auth_unavailable`, caches nothing** |
+- **200 with a body:** the key is valid. The gateway caches the context for
+  `AUTH_CACHE_TTL` and admits the request.
+- **401, 403 or 404 with body `{"error":"invalid_key"}`:** the key is unknown,
+  revoked, expired or has the wrong hash. The gateway caches "invalid" for
+  `AUTH_CACHE_TTL` and answers 401.
+- **Anything else, including a bare 401/403/404:** the Servers API cannot say (a
+  rotated gateway token or a wrong route looks like a bare 401/404). The gateway
+  denies with 503 `auth_unavailable` and caches nothing.
 
 200 body (all required except `owner_person_id` and `key_type`):
 
@@ -92,11 +95,11 @@ system-prompt content is ever sent** (Rule 1); the Servers API must not ask for 
 
 ## What the gateway does when the Servers API is down
 
-| Call     | Behaviour                                                                  |
-| -------- | -------------------------------------------------------------------------- |
-| verify   | cached good keys keep working for ≤ `AUTH_CACHE_TTL`; uncached keys get 503, never admitted, no negative cache entry |
-| rollup   | fail open (existing billing behaviour)                                      |
-| usage    | spill to the sink; counted only once replayed to the Servers API (deduped by `requestId`) |
+- **verify:** cached good keys keep working for up to `AUTH_CACHE_TTL`;
+  uncached keys get 503, are never admitted, and leave no negative cache entry.
+- **rollup:** fails open (existing billing behaviour).
+- **usage:** spills to the sink; counted only once replayed to the Servers API
+  (deduped by `requestId`).
 
 Not done, on purpose: serving stale cached keys past their TTL (it would
 lengthen the revocation window), and falling back from the Servers API to Core
