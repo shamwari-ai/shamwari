@@ -35,6 +35,37 @@ determines the keys type". Shamwari customer keys move from MongoDB
    `"error":"invalid_key"`: `"reason": "unknown" | "revoked" | "expired"`.
    This is what makes the dual-accept window safe (see below).
 
+## Lookup: a digest, and why
+
+Chosen as the best-practice, most secure option, per the owner's instruction
+(2026-10-29).
+
+**Authoritative lookup is by an indexed SHA-256 digest of the full key** (the
+`key_hash` column, unique), compared in constant time, never by prefix. Reasons:
+
+- A customer API key is a long random secret, not a password. A fast hash is
+  right for that: it is safe because the key has too much entropy to guess, and
+  it allows an indexed O(1) lookup. A slow salted hash (bcrypt, argon2) exists to
+  protect low-entropy passwords and would make every request pay for it, with
+  nothing to look the row up by.
+- The prefix is useless as an identifier: every Shamwari key starts
+  `sk_shamwari_`. It stays only as a human-readable hint and a cheap pre-filter.
+- Existing keys are already stored as this digest, so they migrate without any
+  plaintext.
+
+**New keys** carry a non-secret per-key id so a person or log can name a key
+without touching the secret: `sk_shamwari_<key_id>_<secret>`. The `key_id` is for
+display, revocation requests and audit logs; it never authenticates. The secret is
+at least 256 bits from a cryptographically secure generator, shown once, and
+stored only as its digest. Lookup stays by digest.
+
+**Entropy of existing keys cannot be seen from their hash.** Before cutover the
+owner should confirm they were generated from a CSPRNG at 128 bits or more; any
+that were not are rotated rather than migrated.
+
+**Always:** constant-time compare, an expiry and an active flag checked on every
+verify, and no key, digest or prefix in logs beyond a short fingerprint.
+
 ## Phases
 
 Each phase ends in a check, and phases 2, 4 and 6 need the owner's yes.
