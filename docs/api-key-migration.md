@@ -70,6 +70,25 @@ Each phase ends in a check, and phases 2, 4 and 6 need the owner's yes.
    billing period, turn the fallback off. Mongo `platform.apiKeys` becomes a
    read-only archive; it is not deleted until the owner says so.
 
+**The fallback is not safe to enable until it is built on a distinct outcome.**
+Today the gateway reads only `error: "invalid_key"` and does not parse `reason`.
+The fallback must be implemented on a separate `unknown` outcome, with tests that
+fail if a revoked, expired, wrong-type or unavailable result ever calls Core.
+
+## Known gaps in the Core path
+
+Core's `/auth/verify` (not touched here; the Core auth change is #81 and is the
+owner's) has two gaps that this plan has to account for before phase 5:
+
+- It looks keys up by `keyPrefix` and `isActive` only. Every key shares
+  `sk_shamwari_`, so with more than one active key it can fetch the wrong document
+  and reject a valid key. The shared-table lookup by `key_hash` does not have this
+  problem, so phase 5's fallback inherits it only for keys missing from the ledger.
+- It does no key-type check and defaults a missing `keyType` to `standard`.
+  Whether `platform.apiKeys` holds only Shamwari keys is unconfirmed. If it holds
+  other products' keys, the fallback would admit them. Confirm this in phase 1
+  (the dry run reports counts by `keyType`) before phase 5.
+
 ## During the window
 
 - **New keys:** freeze issuance in Mongo from phase 2; issue only in the shared

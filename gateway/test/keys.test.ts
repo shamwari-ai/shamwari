@@ -231,6 +231,15 @@ describe('Servers API key verification', () => {
     expect([...store.values()]).toEqual(['"invalid"']);
   });
 
+  it.each([['Shamwari'], [' shamwari'], ['shamwari '], [['shamwari']], [123]])(
+    'key_type must match exactly: %j is not shamwari',
+    async (key_type) => {
+      fakeServers({ verify: () => Response.json({ ...GOOD, key_type }) });
+      const { env } = makeEnv(SERVERS);
+      expect((await authenticate(req(), env)).ok).toBe(false);
+    },
+  );
+
   it('ignores a returned scope label: key data never decides the request scope', async () => {
     fakeServers({ verify: () => Response.json({ ...GOOD, scope_label: 'personal' }) });
     const { env } = makeEnv(SERVERS);
