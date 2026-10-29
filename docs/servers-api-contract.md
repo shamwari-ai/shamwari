@@ -76,10 +76,26 @@ fails open.
 { "events": [ { "requestId": "…", "ownerEntityId": "…", "apiKeyId": "…", "…": "…" } ] }
 ```
 
-Fields are an allowlist (`USAGE_EVENT_FIELDS` in `keys.ts`): identifiers,
-period, tier/model/provider, `licenseClass`, token counts, cache/ground flags,
-`inferencePath`, `latencyMs`, `createdAt`. **No prompt, answer, message, scope or
-system-prompt content is ever sent** (Rule 1); the Servers API must not ask for any.
+Fields are an allowlist (`USAGE_EVENT_FIELDS` in `keys.ts`). Per request the
+gateway sends:
+
+- **who:** `ownerEntityId`, `apiKeyId`, `requestId`, `billingPeriod`
+- **scope and route:** `scope` (`personal`, `community` or `platform`; a label
+  only), `tier`, `routedTier`, `reach`, `reachClamped`
+- **what served it:** `provider`, `model` (the model that actually served),
+  `requestedProvider`, `requestedModel`, `modelSubstituted`, `licenseClass`,
+  `inferencePath`
+- **cost:** `inputTokens`, `outputTokens`, `cacheHit`, `groundHit`,
+  `edgeEmbedding`, `latencyMs`
+- **outcome:** derived, not a field: `inferencePath` (`gateway`, `workers-ai`,
+  `extractive`, `mind`) plus `degraded` say whether it was answered, degraded or
+  extractive. A refused request (401, 409, 429) is not metered.
+- **when:** `createdAt` (ISO 8601)
+
+**No prompt, completion, message, citation, embedding or system-prompt content is
+ever sent** (Rule 1). `test/keys.test.ts` fails if any key outside the allowlist
+reaches the wire, so a new body field needs a deliberate allowlist change and a
+review. The Servers API must not ask for any.
 
 - **Idempotent on `requestId`.** The gateway may send an event twice (fallback,
   queue retry). A repeat must be accepted and not double-counted.
@@ -90,6 +106,12 @@ system-prompt content is ever sent** (Rule 1); the Servers API must not ask for 
   replay of spilled Core `usageEvents` rows into `POST /usage/events`, safe
   because of the `requestId` dedup. A timeout after acceptance can spill a
   duplicate; the dedup makes that harmless.
+- **Batching:** today one event per call (`events` has length 1). Accept 1 to 100
+  per call so the gateway can batch later without a contract change.
+- **Buffering and retry:** the gateway does not retry in-process. A failed or
+  timed-out call spills to the existing sink queue (durable, retried by the queue
+  five times, then its dead-letter queue). Replay from there into this route is
+  the Servers API's job (see below).
 - Fire-and-forget from the request path (`waitUntil`); metering never delays
   or fails a user answer.
 

@@ -111,6 +111,7 @@ export const USAGE_EVENT_FIELDS = [
   'apiKeyId',
   'requestId',
   'billingPeriod',
+  'scope',
   'tier',
   'routedTier',
   'reach',

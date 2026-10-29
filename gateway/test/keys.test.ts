@@ -12,6 +12,7 @@ import {
   keyService,
   usageMeter,
   usageEventPayload,
+  USAGE_EVENT_FIELDS,
   CoreKeyService,
   QueueUsageMeter,
   ServersApiKeyService,
@@ -346,6 +347,29 @@ describe('Servers API usage metering', () => {
     await expect(meter.record(doc)).rejects.toThrow('queue down');
   });
 
+  it('RULE 1: every key on the wire is on the allowlist, so a new body field fails here', async () => {
+    const seen = fakeServers();
+    const { env } = makeEnv(SERVERS);
+    const junk = Object.fromEntries(
+      [
+        'messages',
+        'content',
+        'prompt',
+        'completion',
+        'answer',
+        'text',
+        'citations',
+        'systemPrompt',
+        'embedding',
+        'newField',
+      ].map((k) => [k, 'x']),
+    );
+    await new ServersApiUsageMeter(env).record({ ...doc, ...junk });
+    const sent = Object.keys((seen[0]!.body as { events: object[] }).events[0]!);
+    for (const k of sent) expect(USAGE_EVENT_FIELDS as readonly string[]).toContain(k);
+    for (const k of Object.keys(junk)) expect(sent).not.toContain(k);
+  });
+
   it('RULE 1: carries no prompt, answer or scope content, whatever the event holds', async () => {
     const seen = fakeServers();
     const { env } = makeEnv(SERVERS);
@@ -361,7 +385,8 @@ describe('Servers API usage metering', () => {
     const sent = JSON.stringify(seen[0]!.body);
     expect(sent).not.toContain('secret');
     expect(sent).not.toContain('clinic');
-    expect(sent).not.toContain('personal');
+    // `scope` is an allowed label, so the *content* stays out, not the word.
+    expect(Object.keys(JSON.parse(sent).events[0])).not.toContain('messages');
     expect(Object.keys(usageEventPayload({ messages: 1, content: 1, requestId: 'r' }))).toEqual([
       'requestId',
     ]);
