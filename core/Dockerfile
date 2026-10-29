@@ -12,7 +12,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --require-hashes -r requirements.txt
 
-COPY main.py ingest_ground.py ./
+COPY main.py replay.py usage_event_fields.json ingest_ground.py ./
 
 # Not root: Core holds database credentials and enforces rule 1.
 RUN useradd --system --uid 10001 --no-create-home core
