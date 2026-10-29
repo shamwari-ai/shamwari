@@ -16,6 +16,8 @@
   "licenseClass",
   "inputTokens",
   "outputTokens",
+  "costUsdEstimate",
+  "priceTableVersion",
   "cacheHit",
   "groundHit",
   "inferencePath",

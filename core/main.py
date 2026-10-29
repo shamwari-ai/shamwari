@@ -47,6 +47,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 
 import replay
+import telemetry
 
 MONGODB_URI = os.environ["MONGODB_URI"]
 CORE_TOKEN = os.environ["SHAMWARI_CORE_TOKEN"]
@@ -623,6 +624,18 @@ async def replay_stats() -> dict[str, Any]:
         "running_since": _replay_started.get("at"),
         "last_run": dict(_last_replay) or None,
     }
+
+
+@app.get("/rollup/by-tier", dependencies=[Depends(require_token)])
+async def rollup_by_tier(billing_period: str, owner_entity_id: str | None = None) -> dict[str, Any]:
+    """
+    Tokens by reach, routed tier and inference path, with a labelled cost
+    estimate. Tokens are the fact; the cost is derived (see telemetry.py).
+    """
+    cursor = client[DB_PLATFORM].usageEvents.aggregate(
+        telemetry.by_tier_pipeline(billing_period, owner_entity_id)
+    )
+    return telemetry.shape(await cursor.to_list(length=500))
 
 
 @app.get("/health")

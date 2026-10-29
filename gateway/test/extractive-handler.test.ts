@@ -196,9 +196,12 @@ describe('a normal answer is unchanged', () => {
     await Promise.resolve();
     expect(calls.sink.map((m) => m.collection).sort()).toEqual(['conversations', 'usageEvents']);
     // Every usage event carries the scope label, on every path.
-    expect(calls.sink.find((m) => m.collection === 'usageEvents')?.doc).toMatchObject({
-      scope: 'platform',
-    });
+    const usage = calls.sink.find((m) => m.collection === 'usageEvents')?.doc as any;
+    expect(usage).toMatchObject({ scope: 'platform' });
+    // The cost is an estimate from a versioned table; null when the model is unpriced.
+    expect(usage.priceTableVersion).toBeTruthy();
+    expect(usage).toHaveProperty('costUsdEstimate');
+    expect(usage.costUsdEstimate === null || typeof usage.costUsdEstimate === 'number').toBe(true);
   });
 });
 
