@@ -6,6 +6,7 @@
 // outage being cached as a verdict on a good key, content leaving the
 // gateway in a usage event (rule 1), and metering being dropped on outage.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import coreFields from '../../core/usage_event_fields.json';
 import worker from '../src/index';
 import { authenticate } from '../src/auth';
 import {
@@ -321,6 +322,18 @@ describe('Servers API quota rollup', () => {
   });
 });
 
+describe('spill replay contract with Core', () => {
+  it('the allowlist is identical to core/usage_event_fields.json, which Core replays with', () => {
+    expect([...USAGE_EVENT_FIELDS].sort()).toEqual([...(coreFields as string[])].sort());
+  });
+
+  it('the default meter does not mark events spilled; only the fallback does', async () => {
+    const { env, sink } = makeEnv({});
+    await new QueueUsageMeter(env).record({ requestId: 'r' });
+    expect(sink[0]!.doc).not.toHaveProperty('spilled');
+  });
+});
+
 describe('Servers API usage metering', () => {
   const doc = {
     requestId: 'r1',
@@ -350,7 +363,10 @@ describe('Servers API usage metering', () => {
       fakeServers({ usage });
       const { env, sink } = makeEnv(SERVERS);
       await new ServersApiUsageMeter(env).record(doc);
-      expect(sink).toEqual([{ database: 'platform', collection: 'usageEvents', doc }]);
+      // `spilled` is what Core's replay job selects on; without it the event is never delivered.
+      expect(sink).toEqual([
+        { database: 'platform', collection: 'usageEvents', doc: { ...doc, spilled: true } },
+      ]);
     },
   );
 

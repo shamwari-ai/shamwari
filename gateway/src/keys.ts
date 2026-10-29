@@ -88,13 +88,20 @@ export class CoreKeyService implements KeyService {
 
 /** The current implementation: the sink queue, drained into Core. */
 export class QueueUsageMeter implements UsageMeter {
-  constructor(private readonly env: Env) {}
+  /**
+   * `spilled` marks an event the Servers API did not take. Core's replay job
+   * (core/replay.py) delivers exactly the rows carrying it, and nothing else.
+   */
+  constructor(
+    private readonly env: Env,
+    private readonly spilled = false,
+  ) {}
 
   async record(doc: Record<string, unknown>): Promise<void> {
     const msg: SinkMessage = {
       database: 'platform',
       collection: 'usageEvents',
-      doc,
+      doc: this.spilled ? { ...doc, spilled: true } : doc,
     };
     await this.env.SINK.send(msg).catch((e) => console.error('sink enqueue failed', String(e)));
   }
@@ -275,7 +282,7 @@ export class ServersApiUsageMeter implements UsageMeter {
     private readonly env: Env,
     fallback?: UsageMeter,
   ) {
-    this.fallback = fallback ?? new QueueUsageMeter(env);
+    this.fallback = fallback ?? new QueueUsageMeter(env, true);
   }
 
   async record(doc: Record<string, unknown>): Promise<void> {
