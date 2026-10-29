@@ -641,10 +641,11 @@ async def replay_stats() -> dict[str, Any]:
 
 
 @app.get("/rollup/by-tier", dependencies=[Depends(require_ops_token)])
-async def rollup_by_tier(billing_period: str, owner_entity_id: str | None = None) -> dict[str, Any]:
+async def rollup_by_tier(billing_period: str, owner_entity_id: str) -> dict[str, Any]:
     """
-    Tokens by reach, routed tier and inference path, with a labelled cost
-    estimate. Tokens are the fact; the cost is derived (see telemetry.py).
+    Tokens by reach, routed tier and inference path for one owner, with a
+    labelled cost estimate. The owner is required so the query uses the
+    ownerEntityId + billingPeriod index instead of scanning the collection. Tokens are the fact; the cost is derived (see telemetry.py).
     """
     cursor = client[DB_PLATFORM].usageEvents.aggregate(
         telemetry.by_tier_pipeline(billing_period, owner_entity_id)

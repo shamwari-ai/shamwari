@@ -42,7 +42,7 @@ export function permittedScopes(auth: AuthContext): readonly Scope[] {
  * outside the three are dropped, so a response can narrow but never invent a scope.
  */
 function parseKeyScopes(v: unknown): Scope[] | undefined | null {
-  if (v === undefined) return undefined;
+  if (v === undefined || v === null) return undefined;
   if (!Array.isArray(v) || !v.every((x) => typeof x === 'string')) return null;
   return ALL_SCOPES.filter((s) => v.includes(s));
 }

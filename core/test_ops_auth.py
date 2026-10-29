@@ -9,7 +9,7 @@ import os
 import unittest
 
 os.environ.setdefault("MONGODB_URI", "mongodb://placeholder")
-os.environ.setdefault("SHAMWARI_CORE_TOKEN", "worker-token")
+os.environ["SHAMWARI_CORE_TOKEN"] = "worker-token"  # forced: CI sets its own placeholder
 os.environ["SHAMWARI_OPS_TOKEN"] = "ops-token"
 
 try:
@@ -21,6 +21,8 @@ try:
 except Exception as e:  # noqa: BLE001 - any import problem means "deps not installed"
     client = None
     SKIP = f"core dependencies not installed: {e}"
+
+WORKER = "worker-token"
 
 OPS_ROUTES = [
     ("POST", "/replay/usage"),
@@ -37,8 +39,13 @@ class OpsAuth(unittest.TestCase):
         return client.request(method, path, headers=headers)
 
     def test_the_worker_token_cannot_reach_any_operator_route(self):
+        # Not vacuous: the token used here must be the one Core really holds.
+        self.assertEqual(main.CORE_TOKEN, WORKER)
+        import asyncio
+
+        self.assertIsNone(asyncio.run(main.require_token(f"Bearer {WORKER}")))  # it IS the worker secret
         for method, path in OPS_ROUTES:
-            r = self.call(method, path, "worker-token")
+            r = self.call(method, path, main.CORE_TOKEN)
             self.assertEqual(r.status_code, 401, f"{method} {path}")
 
     def test_no_token_and_a_wrong_token_are_refused(self):
@@ -51,7 +58,7 @@ class OpsAuth(unittest.TestCase):
         try:
             for method, path in OPS_ROUTES:
                 self.assertEqual(self.call(method, path, "ops-token").status_code, 503, path)
-                self.assertEqual(self.call(method, path, "worker-token").status_code, 503, path)
+                self.assertEqual(self.call(method, path, main.CORE_TOKEN).status_code, 503, path)
         finally:
             main.OPS_TOKEN = "ops-token"
 

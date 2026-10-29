@@ -11,6 +11,11 @@ import table from '../pricing.json';
  * A model with no entry returns null, never 0: "unpriced" and "free" must not
  * look alike in a report. Extractive and Mind-retrieval answers make no model
  * call, so they have no model and no cost.
+ *
+ * Zero tokens in and out also returns null. A model call that cost nothing does
+ * not exist; zero means the count was not measured (the Workers AI fallback
+ * reports none, and a provider may omit usage), and an unmeasured answer must
+ * not read as a free one.
  */
 export const PRICE_TABLE_VERSION: string = table.version;
 
@@ -24,7 +29,9 @@ export function estimateCostUsd(
   outputTokens: number,
 ): number | null {
   if (!servedKey) return null;
-  const p = PRICES[servedKey];
+  if (!(inputTokens > 0) && !(outputTokens > 0)) return null;
+  // Same normalisation provenance.ts applies, so what it accepts is what is priced.
+  const p = PRICES[servedKey.trim().toLowerCase()];
   if (!p) return null;
   const usd = (inputTokens * p.input + outputTokens * p.output) / 1_000_000;
   // Fixed precision keeps the number stable across sums and out of float noise.
@@ -45,6 +52,7 @@ export function validatePricing(t: unknown): string[] {
     if (!(Number.isFinite(p?.input) && p.input >= 0)) errs.push(`${k}: input`);
     if (!(Number.isFinite(p?.output) && p.output >= 0)) errs.push(`${k}: output`);
     if (!k.includes('/')) errs.push(`${k}: key must be provider/model`);
+    if (k !== k.trim().toLowerCase()) errs.push(`${k}: key must be lowercase and trimmed`);
   }
   return errs;
 }

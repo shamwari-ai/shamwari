@@ -493,6 +493,14 @@ describe('key scopes', () => {
     expect(store.size).toBe(0);
   });
 
+  it('a null scopes (an unset column) means the default, not an outage', async () => {
+    fakeServers({ verify: () => Response.json({ ...GOOD, scopes: null }) });
+    const { env } = makeEnv(SERVERS);
+    const r = await authenticate(req(), env);
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.auth.scopes).toBeUndefined();
+  });
+
   it('an explicit empty list stays empty: that key may ask for nothing', async () => {
     fakeServers({ verify: () => Response.json({ ...GOOD, scopes: [] }) });
     const { env } = makeEnv(SERVERS);
