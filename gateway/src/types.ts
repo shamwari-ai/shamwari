@@ -18,6 +18,8 @@ export interface Env {
   SERVERS_API_URL?: string;
   /** Secret. */
   SERVERS_API_TOKEN?: string;
+  /** Secret. Second factor the Servers API's internal routes require. */
+  SERVERS_API_INTERNAL_KEY?: string;
 
   EMBEDDING_MODEL: string;
   GROUND_TOP_K: string;

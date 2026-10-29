@@ -176,6 +176,8 @@ async function groundContext(req: Request, env: Env, ctx: ExecutionContext): Pro
         apiKeyId: auth.apiKeyId,
         requestId,
         billingPeriod: billingPeriod(),
+        // A label, not content: lets the metering side report spend by scope.
+        scope: decision.scope,
         tier: 'retrieval',
         provider: null,
         model: null,
@@ -252,6 +254,8 @@ function extractiveResponse(
         apiKeyId: auth.apiKeyId,
         requestId,
         billingPeriod: billingPeriod(),
+        // A label, not content: lets the metering side report spend by scope.
+        scope: decision.scope,
         tier: 'extractive',
         provider: null,
         model: null,
@@ -473,6 +477,8 @@ const worker = {
             apiKeyId: auth.apiKeyId,
             requestId,
             billingPeriod: billingPeriod(),
+            // A label, not content: lets the metering side report spend by scope.
+            scope: decision.scope,
             tier: target.tier,
             reach: reach ?? null,
             reachClamped: routed.clamped,

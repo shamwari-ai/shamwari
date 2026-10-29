@@ -18,7 +18,10 @@ import { core } from './core';
  *     exception: it reports every Core error as 'invalid', as it always did.
  *     Tightening that is a live-path behaviour change, tracked separately.)
  *   - Nothing here carries prompt, answer or scope-gated content. Key checks
- *     send a hash; metering sends counts and identifiers (Rule 1).
+ *     send a hash; metering sends counts and identifiers (Rule 1). The one
+ *     exception is the scope *label* (personal, community or platform), which
+ *     usageEventPayload enforces as exactly one of those three values and
+ *     drops otherwise.
  */
 export type VerifyOutcome =
   | { status: 'ok'; ctx: AuthContext }
@@ -111,6 +114,7 @@ export const USAGE_EVENT_FIELDS = [
   'apiKeyId',
   'requestId',
   'billingPeriod',
+  'scope',
   'tier',
   'routedTier',
   'reach',
@@ -132,19 +136,40 @@ export const USAGE_EVENT_FIELDS = [
   'createdAt',
 ] as const;
 
+const SCOPE_LABELS = new Set(['personal', 'community', 'platform']);
+
 export function usageEventPayload(doc: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const k of USAGE_EVENT_FIELDS) if (k in doc) out[k] = doc[k];
+  // A label, never a value: anything but the three scope names is dropped, so a
+  // scope-gated identifier or payload put here by mistake cannot leave.
+  if ('scope' in out && !SCOPE_LABELS.has(out.scope as string)) delete out.scope;
   return out;
 }
 
-function serversApi(env: Env): { url: string; token: string } | null {
+interface ServersApiConn {
+  url: string;
+  token: string;
+  /** Second factor the internal routes require, when the owner has set one. */
+  internalKey: string | undefined;
+}
+
+function serversApi(env: Env): ServersApiConn | null {
   return env.SERVERS_API_URL && env.SERVERS_API_TOKEN
     ? {
         url: env.SERVERS_API_URL.replace(/\/$/, ''),
         token: env.SERVERS_API_TOKEN,
+        internalKey: env.SERVERS_API_INTERNAL_KEY || undefined,
       }
     : null;
+}
+
+/** Bearer token plus, when configured, the internal key the Servers API requires. */
+function authHeaders(api: ServersApiConn): Record<string, string> {
+  return {
+    Authorization: `Bearer ${api.token}`,
+    ...(api.internalKey ? { 'x-nyuchi-internal-key': api.internalKey } : {}),
+  };
 }
 
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
@@ -184,7 +209,7 @@ export class ServersApiKeyService implements KeyService {
       const res = await fetch(`${api.url}/v1/shamwari/keys/verify`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${api.token}`,
+          ...authHeaders(api),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ key_prefix: keyPrefix, key_hash: keyHash }),
@@ -223,7 +248,7 @@ export class ServersApiKeyService implements KeyService {
       billing_period: billingPeriod,
     });
     const res = await fetch(`${api.url}/v1/shamwari/usage/rollup?${q}`, {
-      headers: { Authorization: `Bearer ${api.token}` },
+      headers: authHeaders(api),
       signal: AbortSignal.timeout(ROLLUP_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`servers api rollup ${res.status}`);
@@ -260,7 +285,7 @@ export class ServersApiUsageMeter implements UsageMeter {
       const res = await fetch(`${api.url}/v1/shamwari/usage/events`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${api.token}`,
+          ...authHeaders(api),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ events: [usageEventPayload(doc)] }),
