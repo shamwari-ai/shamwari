@@ -79,17 +79,21 @@ fails open.
 Fields are an allowlist (`USAGE_EVENT_FIELDS` in `keys.ts`). Per request the
 gateway sends:
 
+Not every event carries every field: absent means not applicable (for example a
+retrieval-only `mind` event has no `provider` or `model`). Treat unknown or
+missing fields as ordinary, not as errors.
+
 - **who:** `ownerEntityId`, `apiKeyId`, `requestId`, `billingPeriod`
-- **scope and route:** `scope` (`personal`, `community` or `platform`; a label
-  only), `tier`, `routedTier`, `reach`, `reachClamped`
+- **scope and route:** `scope` (exactly `personal`, `community` or `platform`; a label only, any other value is dropped by the gateway), `tier`, `routedTier`, `reach`, `reachClamped`
 - **what served it:** `provider`, `model` (the model that actually served),
   `requestedProvider`, `requestedModel`, `modelSubstituted`, `licenseClass`,
   `inferencePath`
 - **cost:** `inputTokens`, `outputTokens`, `cacheHit`, `groundHit`,
   `edgeEmbedding`, `latencyMs`
-- **outcome:** derived, not a field: `inferencePath` (`gateway`, `workers-ai`,
-  `extractive`, `mind`) plus `degraded` say whether it was answered, degraded or
-  extractive. A refused request (401, 409, 429) is not metered.
+- **outcome:** derived, not a field. `inferencePath` (`gateway`, `workers-ai`,
+  `extractive`, `mind`) says how it was answered, and `degraded: true` (sent on
+  extractive events; absent elsewhere, meaning not degraded) marks a fallback
+  answer. A refused request (401, 409, 429) is not metered.
 - **when:** `createdAt` (ISO 8601)
 
 **No prompt, completion, message, citation, embedding or system-prompt content is

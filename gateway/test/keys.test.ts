@@ -347,6 +347,17 @@ describe('Servers API usage metering', () => {
     await expect(meter.record(doc)).rejects.toThrow('queue down');
   });
 
+  it.each([
+    ['an object', { pod: 'x', data: 'my clinic results' }],
+    ['a pod identifier', 'pod:abc123'],
+    ['free text', 'my clinic results'],
+    ['an empty string', ''],
+  ])('RULE 1: scope is a label only; %s is dropped, not forwarded', (_n, scope) => {
+    const out = usageEventPayload({ requestId: 'r1', scope });
+    expect(out).toEqual({ requestId: 'r1' });
+    expect(JSON.stringify(out)).not.toContain('clinic');
+  });
+
   it('RULE 1: every key on the wire is on the allowlist, so a new body field fails here', async () => {
     const seen = fakeServers();
     const { env } = makeEnv(SERVERS);
@@ -370,7 +381,7 @@ describe('Servers API usage metering', () => {
     for (const k of Object.keys(junk)) expect(sent).not.toContain(k);
   });
 
-  it('RULE 1: carries no prompt, answer or scope content, whatever the event holds', async () => {
+  it('RULE 1: carries no prompt, answer or scope-gated content, whatever the event holds', async () => {
     const seen = fakeServers();
     const { env } = makeEnv(SERVERS);
     await new ServersApiUsageMeter(env).record({
@@ -385,8 +396,9 @@ describe('Servers API usage metering', () => {
     const sent = JSON.stringify(seen[0]!.body);
     expect(sent).not.toContain('secret');
     expect(sent).not.toContain('clinic');
-    // `scope` is an allowed label, so the *content* stays out, not the word.
     expect(Object.keys(JSON.parse(sent).events[0])).not.toContain('messages');
+    // The scope *label* is allowed; the scope word is not what must stay out.
+    expect(JSON.parse(sent).events[0].scope).toBe('personal');
     expect(Object.keys(usageEventPayload({ messages: 1, content: 1, requestId: 'r' }))).toEqual([
       'requestId',
     ]);
