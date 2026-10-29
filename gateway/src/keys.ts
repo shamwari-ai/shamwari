@@ -1,4 +1,4 @@
-import type { AuthContext, Env, SinkMessage } from './types';
+import type { AuthContext, Env, Scope, SinkMessage } from './types';
 import { core } from './core';
 
 /**
@@ -27,6 +27,25 @@ export type VerifyOutcome =
   | { status: 'ok'; ctx: AuthContext }
   | { status: 'invalid' }
   | { status: 'unavailable' };
+
+const ALL_SCOPES: readonly Scope[] = ['personal', 'community', 'platform'];
+const DEFAULT_SCOPES: readonly Scope[] = ['community', 'platform'];
+
+/** The scopes a key may ask for. Personal is never a default. */
+export function permittedScopes(auth: AuthContext): readonly Scope[] {
+  return auth.scopes ?? DEFAULT_SCOPES;
+}
+
+/**
+ * Reads `scopes` from a verify response. Absent means the default. Present but
+ * not an array of strings is a malformed response (null here means that). Names
+ * outside the three are dropped, so a response can narrow but never invent a scope.
+ */
+function parseKeyScopes(v: unknown): Scope[] | undefined | null {
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v) || !v.every((x) => typeof x === 'string')) return null;
+  return ALL_SCOPES.filter((s) => v.includes(s));
+}
 
 export interface KeyService {
   verify(keyPrefix: string, keyHash: string): Promise<VerifyOutcome>;
@@ -240,6 +259,8 @@ export class ServersApiKeyService implements KeyService {
       // The shared key table holds every Nyuchi product's keys. A key issued
       // for something else is a valid key that is not valid here.
       if (r.key_type !== SHAMWARI_KEY_TYPE) return { status: 'invalid' };
+      const scopes = parseKeyScopes(r.scopes);
+      if (scopes === null) return { status: 'unavailable' };
       return {
         status: 'ok',
         ctx: {
@@ -249,6 +270,7 @@ export class ServersApiKeyService implements KeyService {
           keyType: r.key_type as string,
           tier: r.tier as string,
           monthlyTokenCap: r.monthly_token_cap as number,
+          ...(scopes ? { scopes } : {}),
         },
       };
     } catch {

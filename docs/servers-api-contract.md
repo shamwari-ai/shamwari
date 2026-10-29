@@ -46,9 +46,18 @@ in constant time, honouring `isActive`/revocation and expiry.
   "owner_person_id": "string | null",
   "key_type": "shamwari",
   "tier": "community",
-  "monthly_token_cap": 100000
+  "monthly_token_cap": 100000,
+  "scopes": ["community", "platform"]
 }
 ```
+
+**Scopes.** `scopes` is optional. When present it is a list of the scope names the
+key may ask for (`personal`, `community`, `platform`). Absent means community and
+platform: personal is never a default. The gateway refuses (403) a request whose
+scope the key does not hold, and names outside the three are dropped. A value that
+is not a list of strings is malformed (unavailable). Scopes only narrow what the
+scope gate allows; a key holding `personal` still cannot send personal data to
+Cloud (that stays a 409).
 
 **Key type.** Shamwari customer keys live in the shared `platform.api_keys`
 table with `key_type = "shamwari"`; what a key was issued for decides its type,
@@ -57,11 +66,11 @@ a key only if `key_type` is exactly `shamwari`. A valid key of any other type is
 answered like a bad key (401, cached as invalid), because it is not valid for
 Shamwari. A 200 with no `key_type` is unavailable.
 
-**Scope label.** The response may carry a key-level scope label (for example
-`scope_label`). The gateway ignores it. The scope of a request is decided per
-request by the scope gate (`scope.ts`, `core/main.py::resolve_scope`), and no
-value held on a key can widen it (Rule 1). It is not copied into the auth
-context.
+**Other fields are ignored.** Anything else on the response (for example a
+`scope_label`) is ignored and not copied into the auth context. The scope of a
+request is decided per request by the scope gate (`scope.ts`,
+`core/main.py::resolve_scope`); a key can narrow it through `scopes`, never widen
+it (Rule 1).
 
 **Lookup.** Every Shamwari key shares the 12-character prefix `sk_shamwari_`, so
 the prefix is only a bucket. The authoritative lookup is by `key_hash` (SHA-256,

@@ -40,6 +40,8 @@ function setup(
     embedFails?: boolean;
     coreDown?: boolean;
     mind?: boolean;
+    /** What the key is allowed to ask for; absent means the default (no personal). */
+    scopes?: string[];
   } = {},
 ) {
   const calls: Calls = { embed: 0, ground: 0, inference: 0, sink: [] };
@@ -53,7 +55,10 @@ function setup(
         return { data: [Array.from({ length: 1024 }, () => 0.1)], response: 'generated' };
       }),
     },
-    AUTH_CACHE: { get: async () => AUTH, put: async () => {} },
+    AUTH_CACHE: {
+      get: async () => (opts.scopes ? { ...AUTH, scopes: opts.scopes } : AUTH),
+      put: async () => {},
+    },
     SINK: {
       send: async (m: SinkMessage) => void calls.sink.push(m),
       sendBatch: async (ms: { body: SinkMessage }[]) =>
@@ -238,7 +243,7 @@ describe('what the review found', () => {
   });
 
   it('does not make the mind endpoint start refusing a field it has always ignored', async () => {
-    const { env } = setup({ mind: true });
+    const { env } = setup({ mind: true, scopes: ['personal', 'community', 'platform'] });
     const req = new Request('https://gw.example/v1/ground/context', {
       method: 'POST',
       headers: { Authorization: 'Bearer sk_shamwari_test', 'Content-Type': 'application/json' },
@@ -258,5 +263,50 @@ describe('what the review found', () => {
       scope: 'personal',
       inferencePath: 'mind',
     });
+  });
+});
+
+describe('a key may only ask for the scopes it holds', () => {
+  const mindAsk = (scope: string) =>
+    new Request('https://gw.example/v1/ground/context', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer sk_shamwari_test', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'my payslip' }], scope }),
+    });
+
+  it('RULE 1: a key without personal cannot make a personal request, and nothing is called', async () => {
+    const { env, calls } = setup({ mind: true }); // default scopes: community and platform
+    const res = await worker.fetch(mindAsk('personal'), env, ctx);
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as any).error).toBe('scope_not_permitted_for_key');
+    expect(calls.embed).toBe(0);
+    expect(calls.ground).toBe(0);
+    expect(calls.inference).toBe(0);
+    expect(calls.sink).toEqual([]);
+  });
+
+  it('a key that holds personal may use it on the retrieval-only endpoint', async () => {
+    const { env, calls } = setup({ mind: true, scopes: ['personal', 'platform'] });
+    const res = await worker.fetch(mindAsk('personal'), env, ctx);
+    expect(res.status).toBe(200);
+    expect(calls.inference).toBe(0);
+  });
+
+  it('holding personal never lets personal reach Cloud: chat still answers 409', async () => {
+    const { env, calls } = setup({ scopes: ['personal', 'community', 'platform'] });
+    const res = await worker.fetch(ask({ scope: 'personal' }), env, ctx);
+    expect(res.status).toBe(409);
+    expect(calls.embed + calls.ground + calls.inference).toBe(0);
+  });
+
+  it('a key limited to platform cannot ask for community', async () => {
+    const { env } = setup({ scopes: ['platform'] });
+    const res = await worker.fetch(ask({ scope: 'community' }), env, ctx);
+    expect(res.status).toBe(403);
+  });
+
+  it('the default allows community and platform, so existing keys keep working', async () => {
+    const { env } = setup();
+    expect((await worker.fetch(ask({ scope: 'platform' }), env, ctx)).status).toBe(200);
   });
 });

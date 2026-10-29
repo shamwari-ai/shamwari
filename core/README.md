@@ -54,7 +54,19 @@ uvicorn main:app --host 0.0.0.0 --port 8000
 | POST   | `/sink/bulk`     | batched writes from the Worker's queue, allow-listed                 |
 | GET    | `/rollup`        | billing aggregate on the `ownerEntityId + billingPeriod` index       |
 
-All except `/health` require `Authorization: Bearer $SHAMWARI_CORE_TOKEN`.
+All except `/health` require `Authorization: Bearer $SHAMWARI_CORE_TOKEN`, except the
+operator routes below, which need a different secret.
+
+| Method | Path              | What it does                                                        |
+| ------ | ----------------- | ------------------------------------------------------------------- |
+| POST   | `/replay/usage`   | one bounded pass delivering spilled usage events to the Servers API |
+| POST   | `/replay/requeue` | put dead-lettered events back in the queue                          |
+| GET    | `/replay/stats`   | spill depth, oldest age, rejected count, last run                   |
+| GET    | `/rollup/by-tier` | tokens and estimated cost by reach, tier and path, for one owner    |
+
+These four need `Authorization: Bearer $SHAMWARI_OPS_TOKEN`, not the Worker's
+token, and answer 503 if it is unset. See `docs/usage-replay.md` and
+`docs/security-roles.md`.
 
 `/sink/bulk` is an allow-list, not a write proxy — a compromised edge worker
 cannot write to arbitrary collections. It also rejects any `conversations` or

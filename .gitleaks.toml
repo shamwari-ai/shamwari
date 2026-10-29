@@ -20,6 +20,11 @@ gateway generator's smoke-test output. The curl-auth-header rule flags
 
 Matched on the whole line and on the literal three-dot placeholder, so a
 real key — which is random and has no ellipsis — is still reported.
+
+Also the obviously fake credentials the "no secret reaches a log, error or usage
+event" tests search for (gateway/test/keys.test.ts, core/test_image.py). They are
+spelled `...SECRET-1`, `...SECRET-2`, `...SECRET-3`; a real credential is random
+and never contains that.
 """
 regexTarget = "line"
-regexes = ['''Bearer sk_shamwari_\.\.\.''']
+regexes = ['''Bearer sk_shamwari_\.\.\.''', '''SECRET-\d''']

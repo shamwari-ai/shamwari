@@ -173,7 +173,7 @@ async def replay_once(
                     else:
                         held.append(d)
                 else:
-                    report.stopped = "servers api unavailable"
+                    report.stopped = "deadline" if clock() >= end else "servers api unavailable"
                     return report
             if held:
                 report.stopped = "servers api rejected events with none accepted; not dead-lettering"

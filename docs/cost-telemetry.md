@@ -37,8 +37,7 @@ What the estimate is **not**:
 
 ## Reading it
 
-`GET /rollup/by-tier?billing_period=YYYY-MM[&owner_entity_id=...]` on Core (Core
-token) returns, per `reach`, `routed_tier` and `inference_path`: requests, input and
+`GET /rollup/by-tier?billing_period=YYYY-MM&owner_entity_id=...` on Core (operator token) returns, per `reach`, `routed_tier` and `inference_path`: requests, input and
 output tokens, `cost_usd_estimate` (priced requests only) and `unpriced_requests`.
 The response carries the estimate label. This is the per-tier view the $0.20 per
 active user per month target needs; dividing by active users is a separate, unbuilt
