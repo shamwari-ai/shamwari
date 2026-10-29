@@ -172,6 +172,9 @@ function authHeaders(api: ServersApiConn): Record<string, string> {
   };
 }
 
+/** What a key is issued for decides its type; Shamwari customer keys are this type. */
+export const SHAMWARI_KEY_TYPE = 'shamwari';
+
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 
 /** A 200 that does not satisfy this is 'unavailable', never a context we cache. */
@@ -179,6 +182,7 @@ function isAuthContext(r: Record<string, unknown>): boolean {
   return (
     nonEmpty(r.api_key_id) &&
     nonEmpty(r.owner_entity_id) &&
+    nonEmpty(r.key_type) &&
     nonEmpty(r.tier) &&
     typeof r.monthly_token_cap === 'number' &&
     Number.isInteger(r.monthly_token_cap) &&
@@ -224,13 +228,16 @@ export class ServersApiKeyService implements KeyService {
       if (res.status !== 200) return { status: 'unavailable' };
       const r = (await res.json()) as Record<string, unknown>;
       if (!isAuthContext(r)) return { status: 'unavailable' };
+      // The shared key table holds every Nyuchi product's keys. A key issued
+      // for something else is a valid key that is not valid here.
+      if (r.key_type !== SHAMWARI_KEY_TYPE) return { status: 'invalid' };
       return {
         status: 'ok',
         ctx: {
           apiKeyId: r.api_key_id as string,
           ownerEntityId: r.owner_entity_id as string,
           ownerPersonId: typeof r.owner_person_id === 'string' ? r.owner_person_id : null,
-          keyType: typeof r.key_type === 'string' ? r.key_type : 'standard',
+          keyType: r.key_type as string,
           tier: r.tier as string,
           monthlyTokenCap: r.monthly_token_cap as number,
         },

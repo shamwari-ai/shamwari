@@ -37,20 +37,37 @@ in constant time, honouring `isActive`/revocation and expiry.
   rotated gateway token or a wrong route looks like a bare 401/404). The gateway
   denies with 503 `auth_unavailable` and caches nothing.
 
-200 body (all required except `owner_person_id` and `key_type`):
+200 body (all required except `owner_person_id`):
 
 ```json
 {
   "api_key_id": "string",
   "owner_entity_id": "string",
   "owner_person_id": "string | null",
-  "key_type": "standard",
+  "key_type": "shamwari",
   "tier": "community",
   "monthly_token_cap": 100000
 }
 ```
 
-A 200 that is not JSON, lacks a required field, has an empty id or tier, or has
+**Key type.** Shamwari customer keys live in the shared `platform.api_keys`
+table with `key_type = "shamwari"`; what a key was issued for decides its type,
+and tier and monthly token cap are attributes of that type. The gateway admits
+a key only if `key_type` is exactly `shamwari`. A valid key of any other type is
+answered like a bad key (401, cached as invalid), because it is not valid for
+Shamwari. A 200 with no `key_type` is unavailable.
+
+**Scope label.** The response may carry a key-level scope label (for example
+`scope_label`). The gateway ignores it. The scope of a request is decided per
+request by the scope gate (`scope.ts`, `core/main.py::resolve_scope`), and no
+value held on a key can widen it (Rule 1). It is not copied into the auth
+context.
+
+**Lookup.** Every Shamwari key shares the 12-character prefix `sk_shamwari_`, so
+the prefix is only a bucket. The authoritative lookup is by `key_hash` (SHA-256,
+lowercase hex of the full key), which must be unique in the table.
+
+A 200 that is not JSON, lacks a required field, has an empty id, type or tier, or has
 a `monthly_token_cap` that is not a positive integer is treated as unavailable.
 "This key is bad" must carry `{"error":"invalid_key"}` (as an extension member of an
 RFC 9457 problem+json body is fine); the gateway will not cache

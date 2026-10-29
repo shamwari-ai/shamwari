@@ -25,7 +25,7 @@ const GOOD = {
   api_key_id: 'k1',
   owner_entity_id: 'e1',
   owner_person_id: null,
-  key_type: 'standard',
+  key_type: 'shamwari',
   tier: 'community',
   monthly_token_cap: 100_000,
 };
@@ -196,6 +196,7 @@ describe('Servers API key verification', () => {
     ['a timeout', () => Promise.reject(new DOMException('t', 'TimeoutError'))],
     ['a 200 that is not JSON', () => new Response('<html>', { status: 200 })],
     ['a 200 missing required fields', () => Response.json({ api_key_id: 'k1' })],
+    ['a 200 with no key_type', () => Response.json({ ...GOOD, key_type: undefined })],
     ['a 200 with a zero cap', () => Response.json({ ...GOOD, monthly_token_cap: 0 })],
     ['a 200 with an empty owner', () => Response.json({ ...GOOD, owner_entity_id: '' })],
     ['a 200 with a string cap', () => Response.json({ ...GOOD, monthly_token_cap: '100000' })],
@@ -221,6 +222,29 @@ describe('Servers API key verification', () => {
       reason: 'unavailable',
     });
     expect(seen).toHaveLength(0);
+  });
+
+  it('a valid key of another type is invalid here, and is cached as invalid', async () => {
+    fakeServers({ verify: () => Response.json({ ...GOOD, key_type: 'nyuchi-api' }) });
+    const { env, store } = makeEnv(SERVERS);
+    expect(await authenticate(req(), env)).toEqual({ ok: false, reason: 'invalid' });
+    expect([...store.values()]).toEqual(['"invalid"']);
+  });
+
+  it.each([['Shamwari'], [' shamwari'], ['shamwari '], [['shamwari']], [123]])(
+    'key_type must match exactly: %j is not shamwari',
+    async (key_type) => {
+      fakeServers({ verify: () => Response.json({ ...GOOD, key_type }) });
+      const { env } = makeEnv(SERVERS);
+      expect((await authenticate(req(), env)).ok).toBe(false);
+    },
+  );
+
+  it('ignores a returned scope label: key data never decides the request scope', async () => {
+    fakeServers({ verify: () => Response.json({ ...GOOD, scope_label: 'personal' }) });
+    const { env } = makeEnv(SERVERS);
+    const r = await authenticate(req(), env);
+    expect(r.ok && Object.keys(r.auth)).not.toContain('scope_label');
   });
 
   it('sends the internal-key second factor on every route when configured, and not otherwise', async () => {
