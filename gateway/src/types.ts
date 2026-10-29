@@ -77,6 +77,13 @@ export interface AuthContext {
   keyType: string;
   tier: string;
   monthlyTokenCap: number;
+  /**
+   * What this key may ask for. Absent (an older cached context, or the Core
+   * path, which carries none) means community and platform only: personal is
+   * never implied. It can only narrow a request, never widen what the scope
+   * gate allows.
+   */
+  scopes?: Scope[];
 }
 
 export type SinkMessage = {

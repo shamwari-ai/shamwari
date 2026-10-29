@@ -1,6 +1,6 @@
 import type { Env, Message, SinkMessage, AuthContext, GroundChunk } from './types';
 import { authenticate } from './auth';
-import { keyService, usageMeter } from './keys';
+import { keyService, permittedScopes, usageMeter } from './keys';
 import { estimateCostUsd, PRICE_TABLE_VERSION } from './pricing';
 import { parseScope, decideDestination, ScopeRefusal } from './scope';
 import type { Capability, ScopeDecision } from './scope';
@@ -126,14 +126,24 @@ async function admit(
   // Scope gate, before anything expensive happens.
   const scope = parseScope(body.scope);
   try {
-    return {
-      ok: true,
-      auth,
-      body,
-      messages,
-      decision: decideDestination(scope, env, capability),
-      quota,
-    };
+    // The sovereignty gate first, so personal scope bound for Cloud is still the
+    // 409 that says why. Then the key: a key may only ask for the scopes it holds.
+    const decision = decideDestination(scope, env, capability);
+    if (!permittedScopes(auth).includes(decision.scope)) {
+      return {
+        ok: false,
+        response: json(
+          {
+            error: 'scope_not_permitted_for_key',
+            scope: decision.scope,
+            permitted_scopes: permittedScopes(auth),
+            hint: 'send an explicit "scope" this key holds',
+          },
+          403,
+        ),
+      };
+    }
+    return { ok: true, auth, body, messages, decision, quota };
   } catch (e) {
     if (e instanceof ScopeRefusal) return { ok: false, response: json(e.toPayload(), 409) };
     throw e;
@@ -173,25 +183,25 @@ async function groundContext(req: Request, env: Env, ctx: ExecutionContext): Pro
   // data — see the trainingEligible note on the completion path.
   ctx.waitUntil(
     usageMeter(env).record({
-        ownerEntityId: auth.ownerEntityId,
-        apiKeyId: auth.apiKeyId,
-        requestId,
-        billingPeriod: billingPeriod(),
-        // A label, not content: lets the metering side report spend by scope.
-        scope: decision.scope,
-        tier: 'retrieval',
-        provider: null,
-        model: null,
-        licenseClass: null,
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheHit: false,
-        groundHit: g.hit,
-        inferencePath: 'mind',
-        edgeEmbedding: decision.destination === 'cloud',
-        latencyMs,
-        createdAt: new Date().toISOString(),
-      }),
+      ownerEntityId: auth.ownerEntityId,
+      apiKeyId: auth.apiKeyId,
+      requestId,
+      billingPeriod: billingPeriod(),
+      // A label, not content: lets the metering side report spend by scope.
+      scope: decision.scope,
+      tier: 'retrieval',
+      provider: null,
+      model: null,
+      licenseClass: null,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheHit: false,
+      groundHit: g.hit,
+      inferencePath: 'mind',
+      edgeEmbedding: decision.destination === 'cloud',
+      latencyMs,
+      createdAt: new Date().toISOString(),
+    }),
   );
 
   return json({
@@ -251,28 +261,28 @@ function extractiveResponse(
 
   ctx.waitUntil(
     usageMeter(env).record({
-        ownerEntityId: auth.ownerEntityId,
-        apiKeyId: auth.apiKeyId,
-        requestId,
-        billingPeriod: billingPeriod(),
-        // A label, not content: lets the metering side report spend by scope.
-        scope: decision.scope,
-        tier: 'extractive',
-        provider: null,
-        model: null,
-        licenseClass: null,
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheHit: false,
-        groundHit: g.hit,
-        inferencePath: 'extractive',
-        reach: reach ?? null,
-        // No model tier is chosen on this rung, so there is nothing to clamp.
-        reachClamped: false,
-        degraded,
-        latencyMs,
-        createdAt: new Date().toISOString(),
-      }),
+      ownerEntityId: auth.ownerEntityId,
+      apiKeyId: auth.apiKeyId,
+      requestId,
+      billingPeriod: billingPeriod(),
+      // A label, not content: lets the metering side report spend by scope.
+      scope: decision.scope,
+      tier: 'extractive',
+      provider: null,
+      model: null,
+      licenseClass: null,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheHit: false,
+      groundHit: g.hit,
+      inferencePath: 'extractive',
+      reach: reach ?? null,
+      // No model tier is chosen on this rung, so there is nothing to clamp.
+      reachClamped: false,
+      degraded,
+      latencyMs,
+      createdAt: new Date().toISOString(),
+    }),
   );
 
   return json({

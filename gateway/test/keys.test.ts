@@ -7,6 +7,7 @@
 // gateway in a usage event (rule 1), and metering being dropped on outage.
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import coreFields from '../../core/usage_event_fields.json';
+import keysSource from '../src/keys.ts?raw';
 import worker from '../src/index';
 import { authenticate } from '../src/auth';
 import {
@@ -15,6 +16,7 @@ import {
   usageEventPayload,
   USAGE_EVENT_FIELDS,
   CoreKeyService,
+  permittedScopes,
   QueueUsageMeter,
   ServersApiKeyService,
   ServersApiUsageMeter,
@@ -463,5 +465,138 @@ describe('Servers API usage metering', () => {
     expect(Object.keys(usageEventPayload({ messages: 1, content: 1, requestId: 'r' }))).toEqual([
       'requestId',
     ]);
+  });
+});
+
+describe('key scopes', () => {
+  it('absent scopes mean community and platform; personal is never a default', () => {
+    expect(permittedScopes({} as never)).toEqual(['community', 'platform']);
+  });
+
+  it('scopes from the Servers API are kept, filtered to the three names, never invented', async () => {
+    fakeServers({
+      verify: () => Response.json({ ...GOOD, scopes: ['personal', 'platform', 'admin', 'ALL'] }),
+    });
+    const { env } = makeEnv(SERVERS);
+    const r = await authenticate(req(), env);
+    expect(r.ok && r.auth.scopes).toEqual(['personal', 'platform']);
+  });
+
+  it.each([
+    ['a string', 'personal'],
+    ['an object', { personal: true }],
+    ['numbers', [1, 2]],
+  ])('scopes that are %s are malformed: unavailable, nothing cached', async (_n, scopes) => {
+    fakeServers({ verify: () => Response.json({ ...GOOD, scopes }) });
+    const { env, store } = makeEnv(SERVERS);
+    expect(await authenticate(req(), env)).toEqual({ ok: false, reason: 'unavailable' });
+    expect(store.size).toBe(0);
+  });
+
+  it('a null scopes (an unset column) means the default, not an outage', async () => {
+    fakeServers({ verify: () => Response.json({ ...GOOD, scopes: null }) });
+    const { env } = makeEnv(SERVERS);
+    const r = await authenticate(req(), env);
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.auth.scopes).toBeUndefined();
+  });
+
+  it('an explicit empty list stays empty: that key may ask for nothing', async () => {
+    fakeServers({ verify: () => Response.json({ ...GOOD, scopes: [] }) });
+    const { env } = makeEnv(SERVERS);
+    const r = await authenticate(req(), env);
+    expect(r.ok && r.auth.scopes).toEqual([]);
+  });
+});
+
+describe('least privilege: the Servers API credential can only do three things', () => {
+  it('every call the gateway can make goes to one of three routes, with the right method', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      calls.push(`${init.method ?? 'GET'} ${new URL(url).pathname}`);
+      return url.includes('/keys/verify')
+        ? Response.json(GOOD)
+        : url.includes('/rollup')
+          ? Response.json({ total_tokens: 1 })
+          : Response.json({});
+    });
+    const { env } = makeEnv({ ...SERVERS, SERVERS_API_INTERNAL_KEY: 'nyk_a.nys_b' });
+    await new ServersApiKeyService(env).verify('sk_shamwari_', 'h');
+    await new ServersApiKeyService(env).usageTotal('e1', '2026-10');
+    await new ServersApiUsageMeter(env).record({ requestId: 'r' });
+    expect(new Set(calls)).toEqual(
+      new Set([
+        'POST /v1/shamwari/keys/verify',
+        'GET /v1/shamwari/usage/rollup',
+        'POST /v1/shamwari/usage/events',
+      ]),
+    );
+  });
+
+  it('the source names no issuing, revoking, listing or deleting route', () => {
+    const paths = [...keysSource.matchAll(/\/v1\/shamwari\/[\w/-]+/g)].map((m) => m[0]);
+    expect(new Set(paths)).toEqual(
+      new Set([
+        '/v1/shamwari/keys/verify',
+        '/v1/shamwari/usage/rollup',
+        '/v1/shamwari/usage/events',
+      ]),
+    );
+  });
+});
+
+describe('no secret in logs, errors or usage events', () => {
+  const secrets = {
+    SERVERS_API_TOKEN: 'tok-SECRET-1',
+    SERVERS_API_INTERNAL_KEY: 'nyk_id.nys_SECRET-2',
+    SHAMWARI_CORE_TOKEN: 'core-SECRET-3',
+  };
+
+  function capture() {
+    const out: string[] = [];
+    for (const m of ['log', 'info', 'warn', 'error', 'debug'] as const) {
+      vi.spyOn(console, m).mockImplementation(
+        (...a: unknown[]) => void out.push(a.map(String).join(' ')),
+      );
+    }
+    return out;
+  }
+
+  it('failures of every kind never print a credential, the raw key or its hash', async () => {
+    const out = capture();
+    const { env } = makeEnv({ ...SERVERS, ...secrets });
+    for (const verify of [
+      () => new Response('x', { status: 500 }),
+      () => Promise.reject(new Error('boom')),
+      () => new Response('<html>', { status: 200 }),
+    ]) {
+      fakeServers({ verify, usage: () => new Response('x', { status: 500 }) });
+      await authenticate(req(), env);
+      await new ServersApiUsageMeter(env).record({ requestId: 'r1' });
+    }
+    const all = out.join('\n');
+    for (const v of [...Object.values(secrets), RAW]) expect(all).not.toContain(v);
+    expect(all).not.toMatch(/[0-9a-f]{64}/); // no full digest either
+  });
+
+  it('a usage event carries none of the credentials', async () => {
+    const seen = fakeServers();
+    const { env } = makeEnv({ ...SERVERS, ...secrets });
+    await new ServersApiUsageMeter(env).record({ requestId: 'r', apiKeyId: 'k1' });
+    const body = JSON.stringify(seen[0]!.body);
+    for (const v of Object.values(secrets)) expect(body).not.toContain(v);
+  });
+
+  it('the credentials are only ever sent as headers, never in a URL or a body', async () => {
+    const seen = fakeServers();
+    const { env } = makeEnv({ ...SERVERS, ...secrets });
+    await new ServersApiKeyService(env).verify('sk_shamwari_', 'h');
+    await new ServersApiKeyService(env).usageTotal('e1', '2026-10');
+    for (const c of seen) {
+      for (const v of Object.values(secrets)) {
+        expect(c.url).not.toContain(v);
+        expect(JSON.stringify(c.body)).not.toContain(v);
+      }
+    }
   });
 });
