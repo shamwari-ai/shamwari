@@ -22,6 +22,27 @@ export interface Env {
   SERVERS_API_INTERNAL_KEY?: string;
 
   /**
+   * WorkOS sign-in for people (docs/chat-signin.md). Off unless WORKOS_CLIENT_ID is
+   * set; once it is, a missing or malformed value denies (503), it never relaxes a check.
+   * None of these is a secret: they identify the app and the token's issuer.
+   */
+  WORKOS_CLIENT_ID?: string;
+  /** The `iss` WorkOS puts in access tokens for this app. Exact match. */
+  WORKOS_ISSUER?: string;
+  /**
+   * The `aud` the JWT template sets. Optional: when set it is required and must match exactly
+   * (a token without it is refused); when unset the `aud` claim is not checked. Set to nothing
+   * (blank) is a configuration error, not "unset".
+   */
+  WORKOS_AUDIENCE?: string;
+  /** Defaults to https://api.workos.com/sso/jwks/{WORKOS_CLIENT_ID}. HTTPS only. */
+  WORKOS_JWKS_URL?: string;
+  /** Monthly token cap per person. A positive integer; the owner sets it. */
+  WORKOS_MONTHLY_TOKEN_CAP?: string;
+  /** Longest a token may have been valid, in seconds, whatever its `exp`. Default 3600. */
+  WORKOS_MAX_TOKEN_AGE_SECONDS?: string;
+
+  /**
    * Browser origins allowed to call the chat endpoint, comma separated, exact
    * match (src/cors.ts). Absent means https://shamwari.ai and https://www.shamwari.ai.
    */
