@@ -261,10 +261,16 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
         slow = setTimeout(() => pending?.append(h('p', { class: 'note' }, s.slow)), SLOW_AFTER_MS);
       }
 
-      const res = await client.ask(
+      let res = await client.ask(
         { messages: contextFor(th, m), scope: m.scope ?? 'platform' },
         { idempotencyKey: m.id },
       );
+      // No credential could be obtained (the renewal failed on the network, say) for
+      // someone who IS signed in: that is "the answer did not arrive", and the
+      // question waits. It is not "signed out", and must not end their session.
+      if (!res.ok && res.error.kind === 'unauthorized' && res.error.status === null && auth.signedIn()) {
+        res = { ok: false, error: { ...res.error, kind: 'offline' } };
+      }
       pending?.remove();
       nodes.delete(`${m.id}:pending`);
       // Delete history ran while this was in flight: the thread it belongs to is
@@ -316,7 +322,9 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
         m.error = { kind, retryAfterSec, upgradeUrl };
         if (shown()) mount(m);
         if (kind === 'unauthorized') {
-          auth.invalidate(); // refused even after one silent renewal: sign in again, no loop
+          // Only the gateway's own 401, repeated after one silent renewal, ends a
+          // session. A missing credential on its own does not.
+          if (res.error.status === 401) auth.invalidate();
           showAuth();
         }
       }
@@ -424,6 +432,12 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   });
   $('#signout').addEventListener('click', async () => {
     await auth.signOut();
+    // A Mukoko account belongs to a person, and the phone may not. Signing out takes
+    // their chats off this device so the next person to open it does not read them.
+    if (auth.kind === 'mukoko') {
+      await wipeHistory();
+      $('#toast').textContent = strings().signedOutCleared;
+    }
     syncAuth();
     showAuth();
   });
@@ -431,6 +445,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   if (auth.kind === 'mukoko') {
     mukokoBtn.disabled = false;
     $('#mukoko-soon').hidden = true;
+    mukokoBtn.removeAttribute('aria-describedby'); // it pointed at the "coming soon" text
     $('#signout').dataset.i18n = 'signOut';
     mukokoBtn.addEventListener('click', () => location.assign('/chat/auth/login'));
   }
@@ -470,9 +485,8 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     input.focus();
   });
 
-  $('#delete-history').addEventListener('click', async () => {
-    if (!confirm(strings().deleteConfirm)) return;
-    // Anything still in flight or armed for retry belongs to what is being deleted.
+  /** Remove every chat from this device. Anything in flight belongs to what is being removed. */
+  async function wipeHistory() {
     epoch += 1;
     clearTimeout(retryTimer);
     try {
@@ -484,6 +498,11 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     thread = fresh();
     rebuild();
     void renderHistory();
+  }
+
+  $('#delete-history').addEventListener('click', async () => {
+    if (!confirm(strings().deleteConfirm)) return;
+    await wipeHistory();
     $('#toast').textContent = strings().deleted;
     input.focus();
   });
@@ -512,14 +531,26 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   });
 
   // ---- go ------------------------------------------------------------------
-  // One silent renewal at start: the session cookie, if there is one, becomes a token in memory.
-  if (auth.kind === 'mukoko') await auth.refresh();
   applyStrings(document, lang);
   rebuild();
   online();
   syncAuth();
   void renderHistory();
-  if (!auth.signedIn()) authPanel.hidden = false;
-  if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
   document.documentElement.dataset.ready = 'true';
+  if (auth.kind === 'mukoko') {
+    // One silent renewal at start (the session cookie, if there is one, becomes a
+    // token in memory), alongside the UI instead of in front of it: a slow link
+    // must not hold up showing and writing questions. Until it answers, the
+    // sign-in panel stays down so a signed-in person never sees it flash.
+    void auth.refresh().then(() => {
+      authPanel.hidden = auth.signedIn();
+      syncAuth();
+      document.documentElement.dataset.authReady = 'true';
+      if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
+    });
+  } else {
+    if (!auth.signedIn()) authPanel.hidden = false;
+    document.documentElement.dataset.authReady = 'true';
+    if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
+  }
 }

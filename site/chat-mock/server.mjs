@@ -80,7 +80,7 @@ export function createMock() {
       return res.end();
     }
     if (req.method === 'GET' && req.url === '/health') return send(res, 200, { ok: true });
-    if (req.url === '/__seen') {
+    if (req.url === '/__seen' && process.env.MOCK_RECORD) {
       if (req.method === 'DELETE') seen.length = 0;
       return send(res, 200, { seen });
     }

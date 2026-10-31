@@ -33,7 +33,7 @@ export default defineConfig({
   ],
   webServer: [
     { command: 'node chat-mock/server.mjs 8788', url: `${MOCK}/health`, reuseExistingServer: !process.env.CI },
-    { command: 'node chat-mock/server.mjs 8789', url: `${MOCK_MUKOKO}/health`, reuseExistingServer: !process.env.CI },
+    { command: 'node chat-mock/server.mjs 8789', env: { MOCK_RECORD: '1' }, url: `${MOCK_MUKOKO}/health`, reuseExistingServer: !process.env.CI },
     {
       // Both builds happen one after the other (they share Astro's cache), then both servers start.
       command:

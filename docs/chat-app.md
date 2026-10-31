@@ -129,6 +129,15 @@ the second replaces the first without touching the chat:
    for it (`e2e/serve.mjs --stub-auth`). A found-and-fixed detail: the service
    worker passes `/chat/auth/*` and `/chat/callback` straight to the network, or
    it would answer the sign-in redirect from the cached shell.
+   **Rollout note:** that pass-through is in the service worker, and a worker
+   update waits until every tab is closed. A returning installed-app user who
+   keeps the app open would still be served the cached shell for the sign-in
+   redirect until they close it. Turn the flag on only after a release has been
+   live long enough for workers to have updated (or add a "reload to update"
+   prompt first). Also: sign-out removes the chats from the device (a Mukoko
+   account belongs to a person, the phone may not), and a sign-out the session
+   Worker did not acknowledge is retried before anything else on the next visit,
+   so a surviving cookie cannot sign the previous person back in.
 
 ## Gateway changes this needs (not made here)
 

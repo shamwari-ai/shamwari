@@ -145,4 +145,87 @@ describe('mukoko auth', () => {
     expect(parseExpiry('2030-01-01T00:00:00Z')).toBe(Date.parse('2030-01-01T00:00:00Z'));
     expect(parseExpiry('nonsense')).toBeNull();
   });
+
+  it('only a 401 ends a session: a 403 (a firewall, a challenge) or a 5xx does not', async () => {
+    for (const status of [403, 500, 502]) {
+      const hint = spyStorage();
+      hint.data.set('shamwari.mukoko.hint', '1');
+      const auth = mukokoAuth({ fetch: (async () => new Response('{}', { status })) as typeof fetch, hintStorage: hint });
+      expect(await auth.refresh()).toBe(false);
+      expect(auth.signedIn(), `status ${status}`).toBe(true);
+      expect(hint.data.get('shamwari.mukoko.hint')).toBe('1');
+    }
+  });
+
+  it('a renewal that was in flight cannot bring the token back after sign-out', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const auth = mukokoAuth({
+      fetch: (async (u: string) => {
+        if (u.includes('logout')) return new Response(null, { status: 204 });
+        await gate;
+        return tokenResponse();
+      }) as typeof fetch,
+      hintStorage: spyStorage(),
+    });
+    const renewing = auth.refresh();
+    await auth.signOut(); // while the renewal is still waiting
+    release();
+    expect(await renewing).toBe(false);
+    expect(auth.getKey()).toBeNull();
+    expect(auth.signedIn()).toBe(false);
+  });
+
+  it('a sign-out the Worker never heard is retried first, and nothing renews until it has', async () => {
+    const hint = spyStorage();
+    let online = false;
+    const calls: string[] = [];
+    const auth = () =>
+      mukokoAuth({
+        hintStorage: hint,
+        fetch: (async (u: string) => {
+          calls.push(u);
+          if (u.includes('logout')) {
+            if (!online) throw new Error('offline');
+            return new Response(null, { status: 204 });
+          }
+          return tokenResponse(); // the cookie is still good: this is the danger
+        }) as typeof fetch,
+      });
+
+    const first = auth();
+    await first.refresh();
+    online = false;
+    await first.signOut(); // the logout call fails
+    expect(hint.data.get('shamwari.mukoko.logout')).toBe('1');
+
+    // Next visit, still offline: it must not renew from the surviving cookie.
+    const second = auth();
+    expect(second.signedIn()).toBe(false);
+    calls.length = 0;
+    expect(await second.refresh()).toBe(false);
+    expect(calls).toEqual(['/chat/auth/logout']); // tried to finish signing out, did NOT ask for a token
+    expect(second.signedIn()).toBe(false);
+
+    // Online again: the sign-out completes, and only then could anything renew.
+    online = true;
+    const third = auth();
+    calls.length = 0;
+    await third.refresh();
+    expect(calls[0]).toBe('/chat/auth/logout');
+    expect(hint.data.has('shamwari.mukoko.logout')).toBe(false);
+  });
+
+  it('refresh is true only for a fresh token, so a 401 retry never resends a rejected one', async () => {
+    let n = 0;
+    const auth = mukokoAuth({
+      fetch: (async () => {
+        n += 1;
+        return n === 1 ? tokenResponse() : new Response('{"access_token":"x"}', { status: 200 });
+      }) as typeof fetch,
+      hintStorage: spyStorage(),
+    });
+    expect(await auth.refresh()).toBe(true);
+    expect(await auth.refresh()).toBe(false); // the Worker answered without a usable token
+  });
 });
