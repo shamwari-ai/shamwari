@@ -118,3 +118,6 @@ h2.small { margin: 16px 0 8px; font-weight: 600; }
 .cite-meta { font-size: 0.8125rem; color: var(--muted-foreground); }
 .cite-link { justify-self: start; min-height: var(--tap); display: inline-flex; align-items: center; color: var(--info, var(--ring)); text-underline-offset: 3px; }
 footer .small { margin: 2px 0; }
+
+/* Developer-key panel belongs to the developer-key provider only. */
+[data-auth="mukoko"] .devkey { display: none; }

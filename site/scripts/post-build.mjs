@@ -76,6 +76,10 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET' || url.origin !== self.location.origin) return;
   if (!url.pathname.startsWith(SCOPE) && !url.pathname.startsWith('/_astro/')) return;
   if (url.pathname === '/chat/sw.js') return;
+  // Sign-in is a server round trip: the login redirect, the OAuth callback and the
+  // token/logout calls must always reach the network. Serving the cached shell for
+  // a navigation to them would make signing in impossible.
+  if (url.pathname.startsWith('/chat/auth/') || url.pathname === '/chat/callback') return;
 
   if (req.mode === 'navigate') {
     // Shell from cache, at once. It is NOT refreshed from here: fresh HTML would

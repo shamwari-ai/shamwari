@@ -103,41 +103,32 @@ scope_requires_local_inference`, and the app explains it kindly: personal
 
 ## Sign-in
 
-Two modes behind one `AuthProvider` interface, so the second can replace the
-first without touching the chat:
+Two providers behind one `AuthProvider` interface (`site/src/chat/auth.ts`), so
+the second replaces the first without touching the chat:
 
 1. **Developer key (now, isolated).** The person pastes a `sk_shamwari_…` key.
    It is kept in `localStorage` on the device, sent only to the Shamwari API,
-   and the screen says it is for testing. Nothing else in the app reads it
-   except through the provider.
-2. **Mukoko Account (WorkOS AuthKit), not built.** The Console's own sign-in
-   code (`nyuchi/nyuchi-platform`, `console/backend`) could not be read from the
-   session that built this (access to that repository was denied by the
-   session's classifier), so this is a proposal to check against the Console,
-   not a description of it.
-
-### Proposal: how a signed-in person gets a metered per-person key
-
-1. The chat redirects to AuthKit (Mukoko Account) and returns to
-   `https://shamwari.ai/chat/callback` with an authorization code.
-2. A Servers API route (new, internal, namespace `/v1/shamwari`) exchanges the
-   code, finds the person, and **issues or returns that person's key** in
-   `platform.api_keys`: `key_type = "shamwari"`, `owner_person_id` set, tier
-   `community`, scopes `["community","platform"]` (never `personal`), a small
-   `monthly_token_cap`. This is exactly the shape `docs/servers-api-contract.md`
-   already verifies, so the gateway needs no change to meter it per person.
-3. The key is returned once to the browser and stored on the device. Signing out
-   removes it; the Console can revoke it, and the gateway stops honouring it
-   within `AUTH_CACHE_TTL` (60 s).
-4. Risk to accept or reject: a key in `localStorage` is readable by script on the
-   origin. Mitigations are a strict CSP on `/chat/` (no third-party script), a
-   low cap, no `personal` scope, and revocation. The stronger alternative is a
-   session cookie plus a same-origin Worker that attaches the key, which adds a
-   server component this repo deliberately does not have yet.
-
-**Needs the owner:** the Servers API issuing route, a WorkOS redirect URI for
-`https://shamwari.ai/chat/callback`, and a decision between the two storage
-options above.
+   and the screen says it is for testing.
+2. **Mukoko Account (built, OFF).** Owner direction, 2026-10-31: a person signs
+   in with WorkOS AuthKit and the gateway verifies their **WorkOS access token**
+   (shamwari-ai/shamwari#130). **Nothing here mints or stores a per-user key.**
+   The page holds the short-lived access token **in memory only** (never
+   localStorage, sessionStorage, IndexedDB, a cookie or the Cache API), gets it
+   from the session Worker's cookie-authenticated `GET /chat/auth/token`, and
+   sends it as `Authorization: Bearer`. Renewals are serialised, because the
+   session behind it rotates single-use refresh tokens. A `401` from the gateway
+   triggers **one** silent renewal and one repeat of the ask under the same
+   `Idempotency-Key`; a second `401` goes to sign-in, never a loop. Sign-out
+   clears the token, asks the Worker to end the session, and does not sign back
+   in from the cookie. Being offline is not being signed out: a non-secret
+   "signed in before" yes/no (`shamwari.mukoko.hint`) is the only thing kept, so
+   an offline reload does not throw a signed-in person at the sign-in screen.
+   **The flag is a build setting, `PUBLIC_CHAT_AUTH=mukoko`, and is off.** The
+   session Worker itself (login, callback, cookie, refresh) is a design in
+   `docs/chat-signin.md` on #130, not code; the e2e tests run against a stand-in
+   for it (`e2e/serve.mjs --stub-auth`). A found-and-fixed detail: the service
+   worker passes `/chat/auth/*` and `/chat/callback` straight to the network, or
+   it would answer the sign-in redirect from the cached shell.
 
 ## Gateway changes this needs (not made here)
 

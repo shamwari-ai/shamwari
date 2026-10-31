@@ -59,7 +59,7 @@ export const FIXTURES = [
 const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, content-type, idempotency-key, x-shamwari-channel',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, GET, DELETE, OPTIONS',
   // Without this a browser hides Retry-After from the page, and the app cannot say how long to wait.
   'Access-Control-Expose-Headers': 'Retry-After',
 };
@@ -70,6 +70,8 @@ const send = (res, status, body, headers = {}) => {
 };
 
 const replays = new Map();
+/** Every Authorization credential the gateway has seen, for tests (GET /__seen, DELETE to reset). */
+const seen = [];
 
 export function createMock() {
   return createServer(async (req, res) => {
@@ -78,11 +80,20 @@ export function createMock() {
       return res.end();
     }
     if (req.method === 'GET' && req.url === '/health') return send(res, 200, { ok: true });
+    if (req.url === '/__seen') {
+      if (req.method === 'DELETE') seen.length = 0;
+      return send(res, 200, { seen });
+    }
     if (req.method !== 'POST' || req.url !== '/v1/chat/completions') {
       return send(res, 404, { error: 'not_found' });
     }
     const key = (req.headers.authorization ?? '').replace(/^Bearer\s+/, '');
-    if (!key.startsWith('sk_shamwari_')) return send(res, 401, { error: 'invalid_key' });
+    seen.push(key);
+    // A WorkOS access token (three-segment JWT, shamwari-ai/shamwari#130). A token
+    // whose payload part says "expired" stands in for one the gateway has refused.
+    if (key.startsWith('eyJ')) {
+      if (key.includes('.expired.')) return send(res, 401, { error: 'invalid_token' });
+    } else if (!key.startsWith('sk_shamwari_')) return send(res, 401, { error: 'invalid_key' });
     if (key.endsWith('_402')) return send(res, 402, { error: 'payment_required' });
     if (key.endsWith('_403')) return send(res, 403, { error: 'scope_not_permitted_for_key' });
     if (key.endsWith('_429'))

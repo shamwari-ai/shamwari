@@ -1,4 +1,5 @@
 import { developerKey } from './auth';
+import { mukokoAuth } from './auth-mukoko';
 import { createClient } from './client';
 import { applyStrings, currentLanguage, saveLanguage } from './i18n';
 import {
@@ -36,10 +37,17 @@ const $ = <T extends HTMLElement>(sel: string): T => {
 const saveData = (): boolean =>
   (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
 
-export async function startApp(opts: { apiBase: string }): Promise<void> {
+export async function startApp(opts: { apiBase: string; authMode?: 'developer-key' | 'mukoko' }): Promise<void> {
   const store = await openStore();
-  const auth = developerKey();
-  const client = createClient({ baseUrl: opts.apiBase, getKey: auth.getKey });
+  // The Mukoko provider is behind a build flag and off by default; the developer
+  // key stays exactly as it was until the session Worker ships.
+  const auth = opts.authMode === 'mukoko' ? mukokoAuth() : developerKey();
+  const client = createClient({
+    baseUrl: opts.apiBase,
+    getKey: () => auth.ensureKey(),
+    onUnauthorized: () => auth.refresh(),
+  });
+  document.documentElement.dataset.auth = auth.kind;
 
   let lang = currentLanguage();
   let scope: Scope = 'platform';
@@ -218,7 +226,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
    */
   async function deliver(th: Thread, m: StoredMessage): Promise<void> {
     if (inflight.has(m.id)) return;
-    if (!auth.getKey()) {
+    if (!auth.signedIn()) {
       showAuth();
       return;
     }
@@ -307,7 +315,10 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
         m.status = 'failed';
         m.error = { kind, retryAfterSec, upgradeUrl };
         if (shown()) mount(m);
-        if (kind === 'unauthorized') showAuth();
+        if (kind === 'unauthorized') {
+          auth.invalidate(); // refused even after one silent renewal: sign in again, no loop
+          showAuth();
+        }
       }
       await save(th);
     } finally {
@@ -326,7 +337,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
    */
   async function flush(): Promise<void> {
     // Offline, a timer-driven try can only fail; the `online` event runs this again.
-    if (!auth.getKey() || !navigator.onLine) return;
+    if (!auth.signedIn() || !navigator.onLine) return;
     if (flushing) {
       flushAgain = true;
       return;
@@ -360,7 +371,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     const clean = text.trim();
     if (!clean) return;
     // No key yet: ask for one and keep what was typed, rather than eating the question.
-    if (!auth.getKey()) {
+    if (!auth.signedIn()) {
       showAuth();
       return;
     }
@@ -387,18 +398,18 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   // ---- auth ----------------------------------------------------------------
   const authPanel = $('#auth');
   const syncAuth = () => {
-    $('#signout').hidden = !auth.getKey();
+    $('#signout').hidden = !auth.signedIn();
   };
   function showAuth() {
     authPanel.hidden = false;
-    $<HTMLInputElement>('#key').focus();
+    (auth.kind === 'mukoko' ? $('#mukoko-signin') : $<HTMLInputElement>('#key')).focus();
   }
 
   $('#auth-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const field = $<HTMLInputElement>('#key');
     const bad = $('#key-error');
-    if (!auth.setKey(field.value)) {
+    if (!auth.setKey?.(field.value)) {
       bad.hidden = false;
       field.setAttribute('aria-invalid', 'true');
       field.focus();
@@ -411,11 +422,18 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     syncAuth();
     input.focus();
   });
-  $('#signout').addEventListener('click', () => {
-    auth.signOut();
+  $('#signout').addEventListener('click', async () => {
+    await auth.signOut();
     syncAuth();
     showAuth();
   });
+  const mukokoBtn = $<HTMLButtonElement>('#mukoko-signin');
+  if (auth.kind === 'mukoko') {
+    mukokoBtn.disabled = false;
+    $('#mukoko-soon').hidden = true;
+    $('#signout').dataset.i18n = 'signOut';
+    mukokoBtn.addEventListener('click', () => location.assign('/chat/auth/login'));
+  }
 
   // ---- controls ------------------------------------------------------------
   const autosize = () => {
@@ -494,12 +512,14 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   });
 
   // ---- go ------------------------------------------------------------------
+  // One silent renewal at start: the session cookie, if there is one, becomes a token in memory.
+  if (auth.kind === 'mukoko') await auth.refresh();
   applyStrings(document, lang);
   rebuild();
   online();
   syncAuth();
   void renderHistory();
-  if (!auth.getKey()) authPanel.hidden = false;
+  if (!auth.signedIn()) authPanel.hidden = false;
   if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
   document.documentElement.dataset.ready = 'true';
 }
