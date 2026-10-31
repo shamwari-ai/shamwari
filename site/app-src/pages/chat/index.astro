@@ -113,6 +113,7 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
         <summary data-i18n="settings">Settings</summary>
         <p class="small" data-i18n="privacyDetail">{en.privacyDetail}</p>
         <p class="row">
+          <button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button>
           <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
           <button type="button" id="signout" class="btn" hidden data-i18n="authDevClear">Remove key</button>
         </p>
