@@ -19,6 +19,7 @@ import * as idem from './idempotency';
 import { drain } from './sink';
 import { detectLanguage } from './lang';
 import { probe, healthDoc } from './probe';
+import { preflight, withCors } from './cors';
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body, null, 2), {
@@ -687,4 +688,13 @@ const worker = {
   },
 } satisfies ExportedHandler<Env, SinkMessage>;
 
-export default worker;
+/**
+ * CORS wraps the router from outside, so every response a browser can see (a
+ * 401, a 409, a 429) carries it, and the router itself is unchanged.
+ */
+export default {
+  ...worker,
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    return preflight(req, env) ?? withCors(req, env, await worker.fetch(req, env, ctx));
+  },
+} satisfies ExportedHandler<Env, SinkMessage>;
