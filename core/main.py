@@ -198,6 +198,10 @@ class GroundChunk(BaseModel):
     resource_type: str
     source_url: str | None = None
     effective_from: str | None = None
+    #: What an answer cites: the section number and a display string such as
+    #: "Constitution of Zimbabwe ..., s 56(1)–(3)". Absent on older chunks.
+    section: str | None = None
+    citation: str | None = None
     scope: str
 
 
@@ -332,6 +336,8 @@ async def ground_search(body: GroundQuery) -> dict[str, Any]:
                 "resourceType": 1,
                 "sourceUrl": 1,
                 "effectiveFrom": 1,
+                "section": 1,
+                "citation": 1,
             }
         },
     ]
@@ -350,6 +356,8 @@ async def ground_search(body: GroundQuery) -> dict[str, Any]:
             effective_from=(
                 r["effectiveFrom"].date().isoformat() if r.get("effectiveFrom") else None
             ),
+            section=r.get("section"),
+            citation=r.get("citation"),
             scope=scope.value,
         )
         for r in rows
