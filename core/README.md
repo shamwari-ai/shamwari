@@ -1,14 +1,19 @@
 # Shamwari Core
 
-The service that owns MongoDB. Runs on Nyuchi infrastructure, not at the
-Cloudflare edge.
+The service that enforces Shamwari's two rules in front of its data. Runs on Nyuchi
+infrastructure (Fly), not at the Cloudflare edge.
 
 ## Why this exists
 
-MongoDB's Atlas Data API was removed in September 2025, and the native driver
-is not production-hardened in Workers. So something has to sit in front of
-Mongo. Given that, this service is also the right place to enforce the scope
-rule — because it needs to live somewhere Cloudflare cannot see.
+Personal-layer data must never reach a third-party inference provider, and only
+`open_weight` output may train Shamwari Mind. Something has to decide that before
+any data is read or written, somewhere Cloudflare cannot see. That is Core.
+
+**Core holds no database login.** Owner decision, 2026-10-27: only the Nyuchi API
+talks to databases. Core calls the API's `/v1/shamwari` routes over Fly's private
+network with one internal key (`nyuchi_api.py`), decides scope and provenance
+_before_ each call, and checks what comes back. What exists, what is missing and the
+route specs for the gaps: `docs/data-api-routes.md`.
 
 ## The scope rule
 
@@ -33,36 +38,39 @@ the product and Cloud is the general-knowledge fallback.
 ## Setup
 
 ```bash
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.txt
 
-export MONGODB_URI="mongodb+srv://..."
-export SUPABASE_DB_URL="postgresql://...@db.hxjblxsheosjbjqgmlhx.supabase.co:5432/postgres"
 export SHAMWARI_CORE_TOKEN="$(openssl rand -hex 32)"
-export CF_ACCOUNT_ID="..."
-export CF_API_TOKEN="..."      # Workers AI read for embeddings
+export NYUCHI_API_INTERNAL_KEY="nyk_<id>.nys_<secret>"   # internal key: shamwari, shamwari:service, ai
+export NYUCHI_API_URL="http://nyuchi-api.internal:8080"  # default; a Fly private address
+export NYUCHI_API_HOST="api.nyuchi.com"                   # default; the API trusts this host name
 
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
+The ingest script has its own lock, `requirements-ingest.txt`, and its own credentials, set
+in your own shell and never on the Fly app (see Ground ingestion below).
+
 ## Endpoints
 
-| Method | Path             | Purpose                                                              |
-| ------ | ---------------- | -------------------------------------------------------------------- |
-| POST   | `/auth/verify`   | `platform.apiKeys` lookup by `keyPrefix`, constant-time hash compare |
-| POST   | `/ground/search` | `$rankFusion` hybrid retrieval, scope-enforced                       |
-| GET    | `/guardrails`    | active rules for a surface                                           |
-| POST   | `/sink/bulk`     | batched writes from the Worker's queue, allow-listed                 |
-| GET    | `/rollup`        | billing aggregate on the `ownerEntityId + billingPeriod` index       |
+| Method | Path             | Purpose                                                                                |
+| ------ | ---------------- | -------------------------------------------------------------------------------------- |
+| POST   | `/ground/search` | scope-enforced hybrid retrieval, through `POST /v1/shamwari/ground/search`             |
+| GET    | `/guardrails`    | active rules for a surface, from `GET /v1/ai/guardrails`                               |
+| POST   | `/sink/bulk`     | batched writes from the Worker's queue, allow-listed, through `POST /v1/shamwari/sink` |
+| GET    | `/rollup`        | billing aggregate, through `GET /v1/shamwari/usage/rollup`                             |
+| POST   | `/auth/verify`   | **501** `key_verification_moved`: Core cannot look keys up (G1)                        |
+| GET    | `/health`        | readiness: Core is up and the API answers Core's key                                   |
 
 All except `/health` require `Authorization: Bearer $SHAMWARI_CORE_TOKEN`, except the
 operator routes below, which need a different secret.
 
-| Method | Path              | What it does                                                        |
-| ------ | ----------------- | ------------------------------------------------------------------- |
-| POST   | `/replay/usage`   | one bounded pass delivering spilled usage events to the Servers API |
-| POST   | `/replay/requeue` | put dead-lettered events back in the queue                          |
-| GET    | `/replay/stats`   | spill depth, oldest age, rejected count, last run                   |
-| GET    | `/rollup/by-tier` | tokens and estimated cost by reach, tier and path, for one owner    |
+| Method | Path              | What it does                              |
+| ------ | ----------------- | ----------------------------------------- |
+| POST   | `/replay/usage`   | **501** until the API has the routes (G4) |
+| POST   | `/replay/requeue` | **501** (G4)                              |
+| GET    | `/replay/stats`   | **501** (G4)                              |
+| GET    | `/rollup/by-tier` | **501** until the API has the route (G3)  |
 
 These four need `Authorization: Bearer $SHAMWARI_OPS_TOKEN`, not the Worker's
 token, and answer 503 if it is unset. See `docs/usage-replay.md` and
