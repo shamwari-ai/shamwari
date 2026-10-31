@@ -206,6 +206,8 @@ describe('a real sign-in that is not provisioned is a 403, not a 401', () => {
   it.each([
     ['no canonical person id (never falls back to sub)', { personId: null }],
     ['an empty person id', { personId: '' }],
+    ['a null person id (an unset externalId may render as null)', { extra: { person_id: null } }],
+    ['a whitespace-only person id', { personId: '   ' }],
     ['a non-string person id', { personId: 42 }],
     ['a person id that is not inert in a URL', { personId: 'p1&owner_entity_id=other' }],
     ['a person id with a path in it', { personId: '../admin' }],

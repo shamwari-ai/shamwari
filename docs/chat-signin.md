@@ -107,13 +107,13 @@ with `gateway/pricing.json`).
 
 ### Configuration (none of it secret)
 
-| Variable                   | Meaning                                                                |
-| -------------------------- | ---------------------------------------------------------------------- |
-| `WORKOS_CLIENT_ID`         | Turns WorkOS sign-in on. Unset means JWTs are refused with no call.    |
-| `WORKOS_ISSUER`            | The exact `iss` of the app's access tokens. **Unverified, see below.** |
-| `WORKOS_AUDIENCE`          | The `aud` the JWT template sets: our API's URI. Required.              |
-| `WORKOS_JWKS_URL`          | Optional. Defaults to the WorkOS JWKS URL for the client id.           |
-| `WORKOS_MONTHLY_TOKEN_CAP` | Per-person monthly cap, positive integer.                              |
+| Variable                   | Meaning                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------ |
+| `WORKOS_CLIENT_ID`         | Turns WorkOS sign-in on. Unset means JWTs are refused with no call.                  |
+| `WORKOS_ISSUER`            | The exact `iss` of the app's access tokens. **Unverified, see below.**               |
+| `WORKOS_AUDIENCE`          | The `aud` the JWT template sets: `https://api.shamwari.ai`, byte for byte. Required. |
+| `WORKOS_JWKS_URL`          | Optional. Defaults to the WorkOS JWKS URL for the client id.                         |
+| `WORKOS_MONTHLY_TOKEN_CAP` | Per-person monthly cap, positive integer.                                            |
 
 Enabled but incomplete (any of issuer, audience or cap missing or malformed) is
 **503, never permissive**.
@@ -219,6 +219,7 @@ owning-entity key.
   **Nothing else**: no permission and no role is added for Shamwari. (The rendered template is
   capped at 3072 bytes; reserved claims are `iss`, `sub`, `exp`, `iat`, `nbf`, `jti`.)
 - **Register** `https://shamwari.ai/chat/callback` on the WorkOS app (never a wildcard).
+- **Production template:** the JWT template is applied in the Mukoko Account **staging** environment only (`{"aud": "https://api.shamwari.ai", "person_id": "{{ user.external_id }}"}`; staging client `client_01KQBBSM2FRWYND51VY92NSCG3`). Production (client `client_01KQBBSMQTSMTBN7HEC9KQBJC0`) is untouched and its template already carries `urn:nyuchi:roles`: **the edit must add to it, not replace it.** An unset `externalId` may render as an empty string or null rather than a missing claim; the gateway refuses both (403 `not_provisioned`).
 - **Read `iss` off a real access token** and set `WORKOS_ISSUER`; set `WORKOS_AUDIENCE`,
   `WORKOS_CLIENT_ID` and `WORKOS_MONTHLY_TOKEN_CAP`; choose the **access-token lifetime**.
 - **Approve the gateway auth change at merge time** (this PR adds the `jose` dependency, MIT,
