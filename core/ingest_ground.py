@@ -80,7 +80,8 @@ _ORDINALS = (
 #: Case-sensitive CHAPTER: a wrapped body line that begins "Chapter 4 applies" must not open one.
 _CHAPTER = re.compile(r"^CHAPTER\s+(\d+|[IVXLC]+)\b[\s:.\-–—]*(.*)$")
 _PART = re.compile(r"^(?:PART|Part)\s+(\d+|[IVXLC]+)\b[\s:.\-–—]*(.*)$")
-_SCHEDULE = re.compile(rf"^(?:({_ORDINALS})\s+SCHEDULE|SCHEDULE\s+(\d+))\b(.*)$", re.IGNORECASE)
+#: Whole-line, upper-case: a wrapped "Second schedule of the Act sets out..." is body text.
+_SCHEDULE = re.compile(rf"^(?:({_ORDINALS})\s+SCHEDULE|SCHEDULE\s+(\d+))(\s*\(.*\))?\s*$")
 #: "56 Equality and non-discrimination", "56. Equality", "Section 56 Equality".
 _SECTION = re.compile(r"^(?:Section\s+)?(\d{1,3}[A-Z]?)\.?\s+([A-Z][^\n]{2,110})$")
 _SUBSECTION = re.compile(r"^\((\d{1,3}[A-Z]?)\)\s")
@@ -120,7 +121,15 @@ def clean_text(text: str) -> list[str]:
         s = _TOC_LEADER.sub("", ln.strip())
         if _PAGE_NUMBER.match(s):
             continue
-        if s and counts.get(ln.strip(), 0) >= 8 and not _SECTION.match(s) and not _CHAPTER.match(s):
+        # A running header is a phrase, not a legal connective: "and" / "or" between the
+        # items of a list repeat dozens of times and are part of the text.
+        if (
+            counts.get(ln.strip(), 0) >= 8
+            and len(s) >= 15
+            and " " in s
+            and not _SECTION.match(s)
+            and not _CHAPTER.match(s)
+        ):
             continue
         out.append(s)
     return out
@@ -193,7 +202,7 @@ def parse_structure(text: str) -> list[dict[str, Any]]:
             continue
 
         m = _SCHEDULE.match(s)
-        if m and len(s) < 120:
+        if m:
             if cur:
                 sections.append(cur)
                 cur = None
@@ -241,10 +250,18 @@ def parse_structure(text: str) -> list[dict[str, Any]]:
             number, title = m.group(1), m.group(2)
             digits = int(re.match(r"\d+", number).group())  # type: ignore[union-attr]
             in_schedule = schedule is not None
-            plausible = (
-                (digits == 1 and last_number == 0)
-                or (last_number <= digits <= last_number + _MAX_JUMP and digits >= last_number)
-            )
+            if last_number == 0:
+                # The first heading: inside a chapter or schedule, or section 1, or spelled
+                # "Section N". A cover line such as "22 May 2013 ..." is none of these and must
+                # not open section 22 and swallow sections 1 to 21.
+                plausible = (
+                    chapter is not None
+                    or in_schedule
+                    or digits == 1
+                    or s.startswith("Section ")
+                ) and digits <= _MAX_JUMP * 40
+            else:
+                plausible = last_number <= digits <= last_number + _MAX_JUMP
             if plausible:
                 if cur:
                     sections.append(cur)
@@ -326,10 +343,13 @@ def _split_long(text: str) -> list[str]:
     paras = [p.strip() for p in re.split(r"\n\s*\n|\n(?=\([a-z]{1,3}\)\s)", text) if p.strip()]
     pieces: list[str] = []
     buf: list[str] = []
+    fresh = False  # paragraphs added since the last cut, beyond the carried overlap
     for para in paras:
         buf.append(para)
+        fresh = True
         if approx_tokens("\n\n".join(buf)) >= TARGET_TOKENS:
             pieces.append("\n\n".join(buf))
+            fresh = False
             tail: list[str] = []
             kept = 0
             for p in reversed(buf):
@@ -338,7 +358,7 @@ def _split_long(text: str) -> list[str]:
                 tail.insert(0, p)
                 kept += approx_tokens(p)
             buf = tail
-    if buf and (not pieces or "\n\n".join(buf) != pieces[-1]):
+    if buf and (fresh or not pieces):
         pieces.append("\n\n".join(buf))
     return pieces or [text]
 
@@ -374,7 +394,11 @@ def chunk_document(text: str, cite_as: str | None = None) -> list[dict[str, Any]
                 "part": sec["part"],
                 "partTitle": sec["part_title"],
                 "schedule": sec["schedule"],
-                "section": sec["number"],
+                # A schedule paragraph's number is not a section's: namespaced so "3" is only ever
+                # section 3, in the store and in every consumer.
+                "section": sec["number"] if sec["kind"] == "section" else (
+                    f"{sec['schedule']}:{sec['number']}" if sec["kind"] == "paragraph" else None
+                ),
                 "sectionTitle": title,
                 "subsections": subs,
                 "citation": (f"{cite_as}, {ref}" if ref else cite_as) if cite_as else ref,
@@ -452,19 +476,37 @@ async def embed_batch(http: Any, texts: list[str], account_id: str, api_token: s
 # ---------------------------------------------------------------------------
 
 
+def _like_escape(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 async def load_source(pg: Any, slug_or_name: str) -> Any:
-    row = await pg.fetchrow(
+    """
+    Resolve the source the licence gate applies to. An exact name wins; otherwise the
+    fragment must match exactly one source. An ambiguous fragment is an error, never an
+    arbitrary row: the approval and the licence class come from this row.
+    """
+    rows = await pg.fetch(
         """
         select id, name, url, authority, jurisdiction, resource_type, license,
                is_approved, ground_eligible, mind_eligible, language
         from corpus_sources
-        where name ilike $1 or name ilike '%' || $1 || '%'
-        limit 1
+        where name ilike '%' || $1 || '%' escape '\\'
+        order by name
         """,
-        slug_or_name,
+        _like_escape(slug_or_name),
     )
-    if not row:
+    exact = [r for r in rows if r["name"].lower() == slug_or_name.lower()]
+    candidates = exact or list(rows)
+    if not candidates:
         sys.exit(f"no corpus_source matching '{slug_or_name}'. Run --list.")
+    if len(candidates) > 1:
+        sys.exit(
+            f"'{slug_or_name}' matches {len(candidates)} sources: "
+            + ", ".join(r["name"] for r in candidates)
+            + ".\nUse the full name, so the licence gate applies to the source you mean."
+        )
+    row = candidates[0]
 
     if not row["is_approved"]:
         sys.exit(
@@ -533,74 +575,106 @@ async def run_ingest(
         vectors.extend(got)
         log(f"  embedded {len(vectors)}/{len(chunks)}")
 
-    # 1. Postgres audit record.
-    doc_id = await pg.fetchval(
-        """
-        insert into documents
-          (dataset_id, title, content, language, domain, source_url, source_name,
-           quality, token_count, char_count, content_hash, authority,
-           effective_from, license_class, source_license, metadata)
-        values ($1,$2,$3,$4::language_code,$5::domain_tag,$6,$7,
-                'raw'::data_quality,$8,$9,$10,$11,$12,$13::license_class,$14,$15)
-        returning id
-        """,
-        ds["id"], title, text, src["language"] or "en", "legal",
-        src["url"], src["name"],
-        sum(c["tokenCount"] for c in chunks), len(text),
-        hashlib.sha256(text.encode()).hexdigest(),
-        src["authority"], effective_from, license_class, src["license"],
-        {"slug": slug, "chunker": CHUNKER},
-    )
-    log(f"  postgres document {doc_id}")
-
-    # 2. Mongo.
     now = datetime.now(timezone.utc)
-    docs = [
-        {
-            "sourceSlug": slug,
-            "documentId": str(doc_id),
-            "ordinal": c["ordinal"],
-            "heading": c["heading"],
-            "content": c["content"],
-            "contentHash": c["contentHash"],
-            "tokenCount": c["tokenCount"],
-            # Citation fields: what an answer needs to say "section 56(1)-(3)".
-            "section": c["section"],
-            "sectionTitle": c["sectionTitle"],
-            "subsections": c["subsections"],
-            "chapter": c["chapter"],
-            "chapterTitle": c["chapterTitle"],
-            "part": c["part"],
-            "partTitle": c["partTitle"],
-            "kind": c["kind"],
-            "citation": c["citation"],
-            "embedding": vec,
-            "embeddingModel": EMBED_MODEL,
-            "title": title,
-            "authority": src["authority"],
-            "resourceType": src["resource_type"],
-            "jurisdiction": src["jurisdiction"],
-            "language": src["language"] or "en",
-            "sourceUrl": src["url"],
-            "effectiveFrom": (
-                datetime.combine(effective_from, datetime.min.time(), timezone.utc)
-                if effective_from
-                else None
-            ),
-            # null = shared platform corpus, per the three-layer model.
-            # A tenant-private document would carry the entity id here.
-            "ownerEntityId": None,
-            "supersededBy": None,
-            "licenseClass": license_class,
-            "isActive": True,
-            "lastCheckedAt": now,
-            "createdAt": now,
-        }
-        for c, vec in zip(chunks, vectors)
-    ]
-    # Insert first, retire second: if the insert fails, the old text keeps serving.
-    await kb.insert_many(docs, ordered=False)
+    doc_id: Any = None
     retired = 0
+    try:
+        # One transaction for the audit record: it commits only if the chunks reached Mongo
+        # and the bookkeeping succeeded. A failure anywhere rolls the Postgres row back, and
+        # whatever did reach Mongo is switched off below, so a half ingest never serves and
+        # never leaves an audit row for text that is not there.
+        async with pg.transaction():
+            doc_id = await pg.fetchval(
+                """
+                insert into documents
+                  (dataset_id, title, content, language, domain, source_url, source_name,
+                   quality, token_count, char_count, content_hash, authority,
+                   effective_from, license_class, source_license, metadata)
+                values ($1,$2,$3,$4::language_code,$5::domain_tag,$6,$7,
+                        'raw'::data_quality,$8,$9,$10,$11,$12,$13::license_class,$14,$15)
+                returning id
+                """,
+                ds["id"], title, text, src["language"] or "en", "legal",
+                src["url"], src["name"],
+                sum(c["tokenCount"] for c in chunks), len(text),
+                hashlib.sha256(text.encode()).hexdigest(),
+                src["authority"], effective_from, license_class, src["license"],
+                {"slug": slug, "chunker": CHUNKER},
+            )
+            log(f"  postgres document {doc_id}")
+
+            docs = [
+                {
+                    "sourceSlug": slug,
+                    "documentId": str(doc_id),
+                    "ordinal": c["ordinal"],
+                    "heading": c["heading"],
+                    "content": c["content"],
+                    "contentHash": c["contentHash"],
+                    "tokenCount": c["tokenCount"],
+                    # Citation fields: what an answer needs to say "section 56(1)-(3)".
+                    "section": c["section"],
+                    "sectionTitle": c["sectionTitle"],
+                    "subsections": c["subsections"],
+                    "chapter": c["chapter"],
+                    "chapterTitle": c["chapterTitle"],
+                    "part": c["part"],
+                    "partTitle": c["partTitle"],
+                    "kind": c["kind"],
+                    "citation": c["citation"],
+                    "embedding": vec,
+                    "embeddingModel": EMBED_MODEL,
+                    "title": title,
+                    "authority": src["authority"],
+                    "resourceType": src["resource_type"],
+                    "jurisdiction": src["jurisdiction"],
+                    "language": src["language"] or "en",
+                    "sourceUrl": src["url"],
+                    "effectiveFrom": (
+                        datetime.combine(effective_from, datetime.min.time(), timezone.utc)
+                        if effective_from
+                        else None
+                    ),
+                    # null = shared platform corpus, per the three-layer model.
+                    # A tenant-private document would carry the entity id here.
+                    "ownerEntityId": None,
+                    "supersededBy": None,
+                    "licenseClass": license_class,
+                    "isActive": True,
+                    "lastCheckedAt": now,
+                    "createdAt": now,
+                }
+                for c, vec in zip(chunks, vectors)
+            ]
+            await kb.insert_many(docs, ordered=False)
+            await pg.execute(
+                "update documents set mongodb_ground_id = $1, quality = 'cleaned'::data_quality "
+                "where id = $2",
+                slug, doc_id,
+            )
+            if existing and replace:
+                # The audit trail says which document is current.
+                await pg.execute(
+                    "update documents set superseded_by = $1 "
+                    "where mongodb_ground_id = $2 and id <> $1 and superseded_by is null",
+                    doc_id, slug,
+                )
+            await pg.execute(
+                "update corpus_sources set last_checked_at = now(), "
+                "doc_count = coalesce(doc_count,0) + $2 where id = $1",
+                src["id"], 0 if (existing and replace) else 1,
+            )
+    except BaseException:
+        if doc_id is not None:
+            try:
+                await kb.update_many({"documentId": str(doc_id)}, {"$set": {"isActive": False}})
+            except Exception:  # noqa: BLE001 - the original error is the one to report
+                pass
+        raise
+
+    # Retire the old text only after the new text is in and the audit record committed: a
+    # failure above leaves the old text serving. If this step fails, old and new are both
+    # active (duplicated, nothing lost): re-run with --replace.
     if existing and replace:
         res = await kb.update_many(
             {"sourceSlug": slug, "isActive": True, "documentId": {"$ne": str(doc_id)}},
@@ -608,17 +682,6 @@ async def run_ingest(
         )
         retired = res.modified_count
 
-    # 3. Close the loop.
-    await pg.execute(
-        "update documents set mongodb_ground_id = $1, quality = 'cleaned'::data_quality "
-        "where id = $2",
-        slug, doc_id,
-    )
-    await pg.execute(
-        "update corpus_sources set last_checked_at = now(), "
-        "doc_count = coalesce(doc_count,0) + 1 where id = $1",
-        src["id"],
-    )
     log(f"\n  done. {len(docs)} chunks live in shamwari.knowledgeBase")
     if retired:
         log(f"  retired {retired} chunks from the previous ingest of '{slug}'")

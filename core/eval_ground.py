@@ -99,7 +99,7 @@ class LexicalRetriever:
 
     async def search(self, question: str, k: int) -> list[Hit]:
         q = terms(question)
-        named = set(re.findall(r"\b(?:section|sections|s)\s*(\d{1,3}[A-Za-z]?)\b", question, re.I))
+        named = {n.upper() for n in re.findall(r"\b(?:section|sections|s)\s*(\d{1,3}[A-Za-z]?)\b", question, re.I)}
         scored: list[tuple[float, int]] = []
         for i, d in enumerate(self.docs):
             score = 0.0
@@ -108,7 +108,7 @@ class LexicalRetriever:
                 if f:
                     norm = f * (self.k1 + 1) / (f + self.k1 * (1 - self.b + self.b * self.lens[i] / self.avg))
                     score += self.idf.get(t, 0.0) * norm
-            if self.chunks[i].get("section") in {n.upper() for n in named} | named:
+            if self.chunks[i].get("kind") == "section" and self.chunks[i].get("section") in named:
                 score += 100.0
             scored.append((score, i))
         scored.sort(key=lambda x: (-x[0], x[1]))

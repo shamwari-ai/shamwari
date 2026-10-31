@@ -235,6 +235,23 @@ class Row(dict):
     """asyncpg's Record: item access."""
 
 
+class _Tx:
+    """asyncpg's transaction: writes made inside are kept only if the block exits cleanly."""
+
+    def __init__(self, pg: "FakePg") -> None:
+        self.pg = pg
+
+    async def __aenter__(self) -> "_Tx":
+        self.saved = (list(self.pg.inserted), list(self.pg.executed))
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+        if exc_type is not None:
+            self.pg.inserted, self.pg.executed = self.saved
+            self.pg.rolled_back += 1
+        return False
+
+
 class FakePg:
     """Answers the handful of statements ingest_ground issues, and records every write."""
 
@@ -245,27 +262,41 @@ class FakePg:
         ground_eligible: bool = True,
         mind_eligible: bool = True,
         datasets: tuple[str, ...] = ("zw-law-v1",),
+        extra_sources: tuple[str, ...] = (),
     ) -> None:
-        self.source = Row(
-            id=1,
-            name="Constitution of Zimbabwe",
-            url="https://www.parlzim.gov.zw/constitution-of-zimbabwe/",
-            authority="Parliament of Zimbabwe",
-            jurisdiction="ZW",
-            resource_type="legislation",
-            license="Public document (operator-confirmed)",
-            is_approved=is_approved,
-            ground_eligible=ground_eligible,
-            mind_eligible=mind_eligible,
-            language="en",
-        )
+        def source(i: int, name: str, approved: bool) -> Row:
+            return Row(
+                id=i,
+                name=name,
+                url="https://www.parlzim.gov.zw/constitution-of-zimbabwe/",
+                authority="Parliament of Zimbabwe",
+                jurisdiction="ZW",
+                resource_type="legislation",
+                license="Public document (operator-confirmed)",
+                is_approved=approved,
+                ground_eligible=ground_eligible,
+                mind_eligible=mind_eligible,
+                language="en",
+            )
+
+        self.source = source(1, "Constitution of Zimbabwe", is_approved)
+        self.sources = [self.source] + [source(i + 2, n, False) for i, n in enumerate(extra_sources)]
         self.datasets = datasets
         self.inserted: list[tuple[Any, ...]] = []
         self.executed: list[tuple[str, tuple[Any, ...]]] = []
+        self.rolled_back = 0
+
+    def transaction(self) -> _Tx:
+        return _Tx(self)
+
+    async def fetch(self, sql: str, *args: Any) -> list[Row]:
+        if "from corpus_sources" in sql:
+            # `ilike '%' || $1 || '%' escape '\\'`: a substring match with LIKE escapes undone.
+            frag = re.sub(r"\\(.)", r"\1", args[0]).lower()
+            return sorted((r for r in self.sources if frag in r["name"].lower()), key=lambda r: r["name"])
+        raise NotImplementedError(sql)
 
     async def fetchrow(self, sql: str, *args: Any) -> Row | None:
-        if "from corpus_sources" in sql:
-            return self.source if re.search(args[0].lower(), self.source["name"].lower()) else None
         if "from datasets" in sql:
             return Row(id=7) if args[0] in self.datasets else None
         raise NotImplementedError(sql)

@@ -136,10 +136,59 @@ class Chunking(unittest.TestCase):
         self.assertIn("(2) It is sovereign.", body)
 
     def test_older_heading_styles_still_chunk(self):
-        for text in ("56. Equality\nAll are equal.\n57. Privacy\nHome is private.\n",
-                     "Section 56 Equality\nAll are equal.\nSection 57 Privacy\nHome is private.\n"):
+        # Without a chapter heading the first numbered heading is accepted only as section 1
+        # ("N." style) or when it says "Section" ("Section N" style).
+        for text, want in (
+            ("1. Equality\nAll are equal.\n2. Privacy\nHome is private.\n", ["1", "2"]),
+            ("Section 56 Equality\nAll are equal.\nSection 57 Privacy\nHome is private.\n", ["56", "57"]),
+        ):
             cs = ig.chunk_document(text, "X")
-            self.assertEqual([c["section"] for c in cs], ["56", "57"], text)
+            self.assertEqual([c["section"] for c in cs], want, text)
+
+    def test_a_cover_line_that_starts_with_a_number_does_not_open_a_section(self):
+        text = (
+            "22 May 2013 Commencement Notice\n2013 Amendment Act\n"
+            "CHAPTER 1\nFOUNDING\n1 First\nOne.\n2 Second\nTwo.\n3 Third\nThree.\n"
+        )
+        cs = ig.chunk_document(text, "X")
+        self.assertEqual([c["section"] for c in cs if c["kind"] == "section"], ["1", "2", "3"])
+        pre = [c for c in cs if c["kind"] == "preamble"]
+        self.assertIn("22 May 2013", pre[0]["content"])
+
+    def test_a_wrapped_line_about_a_schedule_does_not_open_one(self):
+        text = (
+            "CHAPTER 1\nFOUNDING\n1 Fees\nThe amounts are set out below.\n"
+            "Second schedule of the Act sets out the fees\nand SCHEDULE 2 applies too.\n"
+            "2 Next\nText.\n"
+        )
+        cs = ig.chunk_document(text, "X")
+        self.assertEqual([(c["kind"], c["section"], c["chapter"]) for c in cs], [("section", "1", "1"), ("section", "2", "1")])
+        self.assertIn("Second schedule of the Act", cs[0]["content"])
+
+    def test_a_real_schedule_heading_with_a_reference_is_recognised(self):
+        text = "CHAPTER 1\nF\n1 Only\nText.\nSIXTH SCHEDULE (Sections 329 and 332)\n1 Definitions\nMeanings.\n"
+        cs = ig.chunk_document(text, "X")
+        para = cs[-1]
+        self.assertEqual((para["kind"], para["schedule"], para["section"]), ("paragraph", "Sixth", "Sixth:1"))
+
+    def test_a_schedule_paragraph_never_shares_a_section_id_with_a_section(self):
+        text = "CHAPTER 1\nF\n1 One\nA.\n2 Two\nB.\n3 Three\nC.\nFIRST SCHEDULE\n3 Para\nD.\n"
+        ids = [c["section"] for c in ig.chunk_document(text, "X")]
+        self.assertEqual(ids, ["1", "2", "3", "First:3"])
+
+    def test_legal_connectives_on_their_own_line_are_kept(self):
+        body = "".join(f"({i}) the first\nand\n(a) the second\nor\n" for i in range(1, 21))
+        text = f"CHAPTER 1\nF\n1 Lists\n{body}"
+        cs = ig.chunk_document(text, "X")
+        lines = "\n".join(c["content"] for c in cs).splitlines()
+        self.assertEqual(lines.count("and"), 20)
+        self.assertEqual(lines.count("or"), 20)
+
+    def test_a_split_does_not_emit_a_chunk_made_only_of_the_overlap_tail(self):
+        paras = "\n\n".join(f"P{i} " + ("lorem " * 110).strip() for i in range(5))
+        cs = ig.chunk_document(f"CHAPTER 1\nF\n1 Long\n(1) {paras}\n", "X")
+        for a, b in zip(cs, cs[1:]):
+            self.assertNotIn(b["content"], a["content"], "a chunk is wholly contained in the one before")
 
     def test_text_with_no_structure_is_a_document_not_a_preamble(self):
         cs = ig.chunk_document("Just some notes\nwith no sections at all.", "Notes")
@@ -263,6 +312,79 @@ class Gates(unittest.TestCase):
         ig.check_dims([[0.0] * 1024])
         with self.assertRaisesRegex(RuntimeError, "expects 1024"):
             ig.check_dims([[0.0] * 1023])
+
+
+class SourceResolution(unittest.TestCase):
+    def test_an_exact_name_wins_over_a_fragment_that_also_matches_others(self):
+        pg = fakes.FakePg(extra_sources=("Constitution of Zimbabwe Veritas copy",))
+        pg2, kb, embed, out = ingest(pg=pg, source_name="Constitution of Zimbabwe")
+        self.assertGreater(out["chunks"], 0)
+
+    def test_an_ambiguous_fragment_is_an_error_naming_the_candidates(self):
+        pg = fakes.FakePg(extra_sources=("ZimLII Constitution",))
+        with self.assertRaises(SystemExit) as cm:
+            ingest(pg=pg, source_name="Constitution")
+        self.assertIn("matches 2 sources", str(cm.exception))
+        self.assertIn("ZimLII Constitution", str(cm.exception))
+        self.assertEqual((pg.inserted, pg.executed), ([], []))
+
+    def test_like_metacharacters_match_literally(self):
+        for frag in ("%", "_", "Constitution%", "C_nstitution"):
+            with self.assertRaises(SystemExit) as cm:
+                ingest(source_name=frag)
+            self.assertIn("no corpus_source", str(cm.exception), frag)
+
+
+class Atomicity(unittest.TestCase):
+    def test_a_mongo_failure_rolls_back_the_audit_row_and_switches_off_what_reached_mongo(self):
+        class PartialThenFail(fakes.Collection):
+            async def insert_many(self, docs, ordered=True):
+                await super().insert_many(docs[:5], ordered)
+                raise RuntimeError("bulk write error after 5")
+
+        pg, kb = fakes.FakePg(), PartialThenFail()
+        with self.assertRaisesRegex(RuntimeError, "bulk write error"):
+            ingest(pg=pg, kb=kb)
+        self.assertEqual((pg.inserted, pg.executed), ([], []), "audit row must not survive")
+        self.assertEqual(pg.rolled_back, 1)
+        self.assertEqual(len(kb.docs), 5)
+        self.assertFalse(any(d["isActive"] for d in kb.docs), "partial chunks must not serve")
+
+    def test_a_postgres_failure_after_mongo_switches_the_new_chunks_off(self):
+        class FailsOnClose(fakes.FakePg):
+            async def execute(self, sql, *args):
+                if "mongodb_ground_id" in sql:
+                    raise RuntimeError("postgres went away")
+                await super().execute(sql, *args)
+
+        kb = fakes.Collection()
+        with self.assertRaisesRegex(RuntimeError, "postgres went away"):
+            ingest(pg=FailsOnClose(), kb=kb)
+        self.assertTrue(kb.docs)
+        self.assertFalse(any(d["isActive"] for d in kb.docs))
+
+    def test_a_failed_replacement_leaves_the_old_text_active_and_the_new_off(self):
+        pg, kb, embed, out = ingest()
+        old = {d["_id"] for d in kb.docs}
+
+        class FailsOnClose(fakes.FakePg):
+            async def execute(self, sql, *args):
+                if "mongodb_ground_id" in sql:
+                    raise RuntimeError("boom")
+                await super().execute(sql, *args)
+
+        with self.assertRaisesRegex(RuntimeError, "boom"):
+            ingest(pg=FailsOnClose(), kb=kb, replace=True)
+        active = {d["_id"] for d in kb.docs if d["isActive"]}
+        self.assertEqual(active, old)
+
+    def test_replace_marks_the_previous_audit_document_superseded_and_does_not_double_count(self):
+        pg, kb, embed, out = ingest()
+        ingest(pg=pg, kb=kb, replace=True)
+        sqls = [(s, a) for s, a in pg.executed]
+        self.assertTrue(any("superseded_by" in s for s, _ in sqls))
+        counts = [a[1] for s, a in sqls if "doc_count" in s]
+        self.assertEqual(counts, [1, 0])
 
 
 class Rerun(unittest.TestCase):
