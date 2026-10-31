@@ -59,6 +59,9 @@
     "EMBEDDING_MODEL": "@cf/baai/bge-m3",
     "GROUND_TOP_K": "6",
     "AUTH_CACHE_TTL": "60",
+    // Browser origins that may call the chat endpoint (src/cors.ts): the Shamwari
+    // Chat web app. Exact match, never "*".
+    "CORS_ORIGINS": "https://shamwari.ai,https://www.shamwari.ai",
     // Workers AI model ids, billed through Cloudflare; there is no Z.ai API
     // and no provider key. See docs/workers-ai-models.md. These are the
     // intended models; dynamic-route.json decides what actually answers.

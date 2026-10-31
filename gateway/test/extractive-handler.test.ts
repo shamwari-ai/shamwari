@@ -187,7 +187,10 @@ describe('when every inference path fails', () => {
 
   it('has nothing honest to say without a Ground hit, so the failure stands', async () => {
     const { env } = setup({ inferenceFails: true, chunks: [] });
-    await expect(worker.fetch(ask({}), env, ctx)).rejects.toThrow();
+    // The failure stands: a 500, not an invented answer. (It was an unhandled
+    // exception before the CORS wrapper turned it into a readable 500.)
+    const res = await worker.fetch(ask({}), env, ctx);
+    expect(res.status).toBe(500);
   });
 });
 
