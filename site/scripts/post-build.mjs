@@ -29,14 +29,25 @@ const SCOPE = '/chat/';
 
 self.addEventListener('install', (e) => {
   // Precache is all-or-nothing: a half-cached shell is worse than none.
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE).then((c) => c.addAll(PRECACHE)).then(() => {
+      // First install: take over at once, so the very first visit works offline.
+      // An UPDATE waits until every open tab is closed instead: a page that is
+      // already running keeps the files (and cache) it started with, and is never
+      // switched to a worker whose cache no longer holds them.
+      if (!self.registration.active) return self.skipWaiting();
+    }),
+  );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('shamwari-chat-') && k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim()),
+    caches.keys().then((keys) => {
+      const old = keys.filter((k) => k.startsWith('shamwari-chat-') && k !== CACHE);
+      return Promise.all(old.map((k) => caches.delete(k))).then(() => {
+        if (!old.length) return self.clients.claim();
+      });
+    }),
   );
 });
 
@@ -54,7 +65,7 @@ self.addEventListener('fetch', (e) => {
     // Shell from cache, at once. It is NOT refreshed from here: fresh HTML would
     // name hashed assets that this worker's precache does not hold. A new build
     // ships a new worker (its file changes), which precaches the new shell and
-    // assets together and then takes over.
+    // assets together and takes over once the old tabs are closed.
     e.respondWith(caches.match('/chat/').then((hit) => hit || fetch(req)));
     return;
   }

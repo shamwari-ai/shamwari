@@ -47,16 +47,6 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
   const fresh = (): Thread => ({ id: newId(), title: '', updatedAt: Date.now(), messages: [] });
-  const saved = await store.list().catch(() => [] as Thread[]);
-  // A question marked `sent` with nothing after it was interrupted (tab closed,
-  // phone died mid-request). It goes back in the queue under the same key, so
-  // the gateway replays the answer if it was already given.
-  for (const t of saved) {
-    t.messages.forEach((m, i) => {
-      if (m.role === 'user' && m.status === 'sent' && t.messages[i + 1]?.role !== 'assistant') m.status = 'queued';
-    });
-  }
-  let thread: Thread = saved.find((t) => t.messages.length) ?? fresh();
 
   const log = $('#log');
   const input = $<HTMLTextAreaElement>('#q');
@@ -68,8 +58,10 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   /**
    * The one place a thread is written. An empty thread is deleted, not skipped,
    * or a discarded question would come back from the store on reload. A failed
-   * write (quota, a closed connection) must never leave the app stuck, so it is
-   * swallowed: the thread stays correct in memory for this tab.
+   * write (quota, a closed connection) must never leave the app stuck, so it does
+   * not throw: the thread stays correct in memory for this tab, and the person is
+   * told it will not survive closing it, because "your question is not lost" is
+   * only true while the write works.
    */
   const save = async (th: Thread) => {
     th.updatedAt = Date.now();
@@ -77,9 +69,39 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
       if (th.messages.length) await store.put(th);
       else await store.remove(th.id);
     } catch {
-      /* in-memory copy stays authoritative until the next write */
+      $('#toast').textContent = strings().storageFailed;
     }
   };
+
+  /**
+   * A question marked `sent` with nothing after it was interrupted (tab closed,
+   * phone died mid-request). It goes back in the queue under the same key, so the
+   * gateway replays the answer if it was already given. Applied to every thread
+   * read from the store, and written back, so it holds for threads that are not
+   * the one on screen.
+   */
+  const recover = (t: Thread): boolean => {
+    let changed = false;
+    t.messages.forEach((m, i) => {
+      if (m.role === 'user' && m.status === 'sent' && t.messages[i + 1]?.role !== 'assistant') {
+        m.status = 'queued';
+        changed = true;
+      }
+    });
+    return changed;
+  };
+
+  /** Every stored thread, newest first; a failing store reads as empty, never as a crash. */
+  const listThreads = async (): Promise<Thread[]> => {
+    const all = await store.list().catch(() => [] as Thread[]);
+    for (const t of all) if (recover(t)) void save(t);
+    return all;
+  };
+
+  const saved = await listThreads();
+  let thread: Thread = saved.find((t) => t.messages.length) ?? fresh();
+  /** Bumped by Delete history, so a request still in flight cannot write its thread back. */
+  let epoch = 0;
 
   // ---- rendering -----------------------------------------------------------
   const actionsFor = (m: StoredMessage): ErrorActions => ({
@@ -136,7 +158,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   };
 
   const renderHistory = async () => {
-    const list = (await store.list()).filter((t) => t.id !== thread.id && t.messages.length);
+    const list = (await listThreads()).filter((t) => t.id !== thread.id && t.messages.length);
     const ul = $('#history-list');
     ul.replaceChildren(
       ...list.map((t) => {
@@ -144,7 +166,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
         b.addEventListener('click', async () => {
           // Read it again: a question queued in that chat may have been
           // answered in the background since this list was drawn.
-          thread = (await store.list()).find((x) => x.id === t.id) ?? t;
+          thread = (await listThreads()).find((x) => x.id === t.id) ?? t;
           rebuild();
           void renderHistory();
           $('#thread').focus();
@@ -187,6 +209,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
       return;
     }
     const shown = () => th === thread;
+    const startedIn = epoch;
     setBusy(true);
     let pending: HTMLElement | null = null;
     let slow: ReturnType<typeof setTimeout> | undefined;
@@ -196,6 +219,10 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
       // Written down BEFORE the request. A reload or a killed tab mid-flight
       // would otherwise lose the question; on load a `sent` question with no
       // answer is treated as queued and sent again under the same key.
+      // Pressing "Send now" or "Try again" removes the very button that has focus
+      // (its message changes state). Remember it, and move focus to the progress
+      // note instead of dropping it to the page.
+      const held = [nodes.get(m.id), nodes.get(`${m.id}:error`)].some((n) => n?.contains(document.activeElement));
       await save(th);
       if (shown()) {
         mount(m);
@@ -204,6 +231,10 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
         const s = strings();
         pending = place(`${m.id}:pending`, renderPending(m.id, s), m.id);
         pending.scrollIntoView({ block: 'end' });
+        if (held) {
+          pending.tabIndex = -1;
+          pending.focus({ preventScroll: true });
+        }
         slow = setTimeout(() => pending?.append(h('p', { class: 'note' }, s.slow)), SLOW_AFTER_MS);
       }
 
@@ -211,9 +242,11 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
         { messages: contextFor(th, m), scope: m.scope ?? 'platform' },
         { idempotencyKey: m.id },
       );
-      clearTimeout(slow);
       pending?.remove();
       nodes.delete(`${m.id}:pending`);
+      // Delete history ran while this was in flight: the thread it belongs to is
+      // gone, and writing it back would bring the deleted conversation back.
+      if (startedIn !== epoch) return;
 
       if (res.ok) {
         const reply: StoredMessage = {
@@ -234,8 +267,10 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
         }
         retryMs = RETRY_FIRST_MS;
       } else if (res.error.kind === 'offline') {
-        m.attempts = (m.attempts ?? 0) + 1;
-        if (navigator.onLine && m.attempts >= MAX_SILENT_ATTEMPTS) {
+        // Only a try made while the browser says it is online counts. Tries made
+        // while truly offline are expected to fail and must not use up the allowance.
+        if (navigator.onLine) m.attempts = (m.attempts ?? 0) + 1;
+        if (navigator.onLine && (m.attempts ?? 0) >= MAX_SILENT_ATTEMPTS) {
           // The browser says it is online and the answer still never comes,
           // again and again. That is not a dead network but something between
           // here and the API (a blocked request, a misconfigured origin), so
@@ -268,10 +303,11 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
 
   /** Send every queued question, oldest thread first, one at a time, stopping at the first that cannot go. */
   async function flush(): Promise<void> {
-    if (flushing || busy || !auth.getKey()) return;
+    // Offline, a timer-driven try can only fail; the `online` event runs this again.
+    if (flushing || busy || !auth.getKey() || !navigator.onLine) return;
     flushing = true;
     try {
-      const others = (await store.list().catch(() => [] as Thread[])).filter((t) => t.id !== thread.id);
+      const others = (await listThreads()).filter((t) => t.id !== thread.id);
       for (const th of [...others.reverse(), thread]) {
         for (const m of th.messages.filter((x) => x.status === 'queued')) {
           await deliver(th, m);
@@ -385,12 +421,18 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
 
   $('#delete-history').addEventListener('click', async () => {
     if (!confirm(strings().deleteConfirm)) return;
-    await store.clear();
+    // Anything still in flight or armed for retry belongs to what is being deleted.
+    epoch += 1;
+    clearTimeout(retryTimer);
+    try {
+      await store.clear();
+    } catch {
+      /* the in-memory thread is replaced below either way */
+    }
     thread = fresh();
     rebuild();
     void renderHistory();
-    const toast = $('#toast');
-    toast.textContent = strings().deleted;
+    $('#toast').textContent = strings().deleted;
     input.focus();
   });
 

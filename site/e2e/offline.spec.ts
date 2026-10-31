@@ -172,3 +172,71 @@ test('the question stays the same element while it is answered, so a screen read
   await expect(page.locator('.cite').first()).toBeVisible();
   expect(await mine!.evaluate((el) => el.isConnected)).toBe(true);
 });
+
+test('deleting history while a question is in flight does not bring it back', async ({ page }) => {
+  await openChat(page);
+  await ask(page, 'slow answer please'); // held for 3 s by the mock
+  await expect(page.locator('.pending')).toBeVisible();
+  await page.getByText('Settings').click();
+  page.once('dialog', (d) => d.accept());
+  await page.getByRole('button', { name: 'Delete history' }).click();
+  await expect(page.locator('#toast')).toContainText('History deleted');
+  await page.waitForTimeout(4000); // longer than the held request
+  await page.reload();
+  await page.waitForSelector('html[data-ready="true"]');
+  await expect(page.locator('#log article')).toHaveCount(0);
+  await expect(page.locator('#history')).toBeHidden();
+});
+
+test('an interrupted question in an older chat is recovered and answered, not just the one on screen', async ({ page }) => {
+  await openChat(page);
+  // Seed two chats: an older one whose question was cut off mid-request, and a newer finished one.
+  await page.evaluate(
+    () =>
+      new Promise<void>((done, fail) => {
+        const open = indexedDB.open('shamwari-chat', 1);
+        open.onerror = () => fail(open.error);
+        open.onsuccess = () => {
+          const tx = open.result.transaction('threads', 'readwrite');
+          const t = tx.objectStore('threads');
+          const now = Date.now();
+          t.put({ id: 'older', title: 'Cut off', updatedAt: now - 5000, messages: [{ id: 'cut-1', role: 'user', text: 'Is everyone equal under the law?', at: now - 5000, scope: 'platform', status: 'sent' }] });
+          t.put({ id: 'newer', title: 'Done', updatedAt: now, messages: [{ id: 'd-1', role: 'user', text: 'hello', at: now, scope: 'platform', status: 'sent' }, { id: 'd-2', role: 'assistant', text: 'hi', at: now }] });
+          tx.oncomplete = () => done();
+        };
+      }),
+  );
+  await page.reload();
+  await page.waitForSelector('html[data-ready="true"]');
+  // The newer chat is on screen; the older one is delivered in the background.
+  await page.locator('#history summary').click();
+  await page.locator('#history-list button').first().click();
+  await expect(page.locator('article.msg.bot .cite').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('article.queued')).toHaveCount(0);
+});
+
+test('while truly offline nothing is attempted, so the retry allowance is not spent', async ({ page, context }) => {
+  await page.clock.install();
+  await openChat(page);
+  let tries = 0;
+  await page.route('**/v1/chat/completions', (r) => {
+    tries += 1;
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+  await context.setOffline(true);
+  await ask(page, 'hello');
+  await expect(page.locator('article.queued')).toBeVisible();
+  await page.clock.runFor(10 * 60_000);
+  expect(tries).toBe(0);
+});
+
+test('pressing Send now on a queued question keeps focus in the log, on the progress note', async ({ page }) => {
+  await openChat(page);
+  await page.route('**/v1/chat/completions', (r) => r.abort(), { times: 1 });
+  await ask(page, 'slow answer please');
+  await expect(page.locator('article.queued')).toBeVisible();
+  await page.getByRole('button', { name: 'Send now' }).click();
+  await expect(page.locator('.pending')).toBeVisible();
+  const inside = await page.evaluate(() => !!document.activeElement?.closest('.pending'));
+  expect(inside).toBe(true);
+});

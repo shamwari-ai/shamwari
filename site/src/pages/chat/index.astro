@@ -5,6 +5,7 @@
 // and the only client JS on the site. The page is complete English HTML
 // without JavaScript; the script translates it and runs the chat.
 import '../../chat/chat.css';
+import { en } from '../../chat/strings';
 
 // Fixed at build time and never read from the URL (see chat/main.ts).
 const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
@@ -96,7 +97,7 @@ const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
     </section>
 
     <footer>
-      <p data-i18n="footer">Answered by Shamwari Cloud (a routed model). This is not legal advice.</p>
+      <p data-i18n="footer">{en.footer}</p>
       <p data-i18n="storedHere">Your chat history is saved on this device only. Shamwari keeps a record of each question it answers, to run the service. Questions are not used to train Shamwari Mind.</p>
       <details class="more">
         <summary data-i18n="settings">Settings</summary>

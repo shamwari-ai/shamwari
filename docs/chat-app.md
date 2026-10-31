@@ -82,15 +82,17 @@ mode follows the device). Mzizi has no chat or citation component today.
   the gateway **does** keep a record of every answered request: it writes a
   `conversations` document (messages, response, citations) to the sink and a
   `usageEvents` row (`gateway/src/index.ts`), and holds the response in KV for
-  10 minutes for idempotent replay. So the footer says what is true: history is
-  saved on this device only, Shamwari keeps a record of each question it
-  answers to run the service, and questions are not used to train Mind.
-  **This conflicts with the owner's "no server-side conversation storage in v1"
+  10 minutes for idempotent replay. So the footer says only what is true:
+  history is saved on this device only, and Shamwari keeps a record of each
+  question it answers to run the service. It makes **no promise about
+  training**: that is the owner's to make, once decided and once the deployed
+  gateway is confirmed to honour it. **This conflicts with the owner's "no server-side conversation storage in v1"
   if that meant none at all.** Meeting it needs a gateway change (skip the
   conversation sink for this surface); it is not made here. Until the owner
   decides, the app sends `X-Shamwari-Channel: pwa`, the existing marker that
-  makes the gateway set `trainingEligible: false`, because nobody using the chat
-  has been asked whether their questions may train a model.
+  makes the gateway set `trainingEligible: false` (in the gateway code on
+  `staging`; confirm the deployed version does too), because nobody using the
+  chat has been asked whether their questions may train a model.
 - **Offline queue.** A question written offline is stored on the device and sent
   when the network returns, with one `Idempotency-Key` per message so a retry
   after a dropped connection is replayed by the gateway instead of answered and
