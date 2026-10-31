@@ -19,6 +19,7 @@ import * as idem from './idempotency';
 import { drain } from './sink';
 import { detectLanguage } from './lang';
 import { probe, healthDoc } from './probe';
+import { preflight, withCors } from './cors';
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body, null, 2), {
@@ -687,4 +688,24 @@ const worker = {
   },
 } satisfies ExportedHandler<Env, SinkMessage>;
 
-export default worker;
+/**
+ * CORS wraps the router from outside, so every response a browser can see from
+ * the chat endpoint (a 401, a 409, a 429, and an unexpected 500) carries it. An
+ * exception that escaped without it would reach the page as an opaque network
+ * failure, which the chat app would show as "offline" and hide the real fault.
+ */
+export default {
+  ...worker,
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const early = preflight(req, env);
+    if (early) return early;
+    let res: Response;
+    try {
+      res = await worker.fetch(req, env, ctx);
+    } catch (e) {
+      console.error('unhandled error', String(e));
+      res = json({ error: 'internal_error' }, 500);
+    }
+    return withCors(req, env, res);
+  },
+} satisfies ExportedHandler<Env, SinkMessage>;
