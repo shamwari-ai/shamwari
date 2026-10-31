@@ -45,9 +45,10 @@ export const STATUS: StatusItem[] = [
     issues: [19],
   },
   {
-    state: 'planned',
+    state: 'building',
     title: 'Shamwari Chat',
-    body: 'Ask in Shona, Ndebele or English and get the answer with the section it came from. Not built yet.',
+    body: 'Ask in Shona, Ndebele or English and get the answer with the section it came from. A lightweight app that installs from the browser and is built for slow connections. It is being built and tested against a stand-in for the API; it does not answer real questions yet.',
+    issues: [83],
   },
   {
     state: 'planned',
