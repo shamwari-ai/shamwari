@@ -32,16 +32,16 @@ workspace app.
 No framework. Plain TypeScript, bundled by Astro, with DOM built through
 `textContent` (never `innerHTML`, so a Ground passage cannot inject markup).
 `@bundu/ui` React components are not used: they render fine statically, but
-shipping React to the browser would take most of the budget. Mzizi's *tokens*
+shipping React to the browser would take most of the budget. Mzizi's _tokens_
 are used directly through `tokens.css` and `color-scheme.css` (plain CSS, dark
 mode follows the device). Mzizi has no chat or citation component today.
 
-| Budget | Limit | Check |
-| --- | --- | --- |
-| First-load JS, gzipped | 100 KB | `site/check.mjs` (prints the measured number) |
-| Chat CSS, gzipped | 30 KB | `site/check.mjs` |
-| Web fonts | none, system stack | `site/check.mjs` |
-| Touch targets | 48 px (Mzizi) | e2e test |
+| Budget                 | Limit              | Check                                         |
+| ---------------------- | ------------------ | --------------------------------------------- |
+| First-load JS, gzipped | 100 KB             | `site/check.mjs` (prints the measured number) |
+| Chat CSS, gzipped      | 30 KB              | `site/check.mjs`                              |
+| Web fonts              | none, system stack | `site/check.mjs`                              |
+| Touch targets          | 48 px (Mzizi)      | e2e test                                      |
 
 ## Data decisions
 
