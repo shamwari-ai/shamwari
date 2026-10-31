@@ -20,6 +20,17 @@ gateway generator's smoke-test output. The curl-auth-header rule flags
 
 Matched on the whole line and on the literal three-dot placeholder, so a
 real key — which is random and has no ellipsis — is still reported.
+
+Also the obviously fake credentials the "no secret reaches a log, error or usage
+event" tests search for (gateway/test/keys.test.ts, core/test_image.py). They are
+spelled `...SECRET-1`, `...SECRET-2`, `...SECRET-3`; a real credential is random
+and never contains that.
 """
 regexTarget = "line"
-regexes = ['''Bearer sk_shamwari_\.\.\.''']
+regexes = ['''Bearer sk_shamwari_\.\.\.''', '''SECRET-\d''']
+
+# The one historical commit that still trips the history scan. It introduced the
+# obviously fake end-to-end key `sk_shamwari_e2e_0123...` in core/e2e_app.py; #128
+# builds that value at runtime, so no current file carries it. The entry covers only that
+# commit; every other commit is still scanned.
+commits = ["e85168eeac54ca8918143b45b910766d7776e37c"]

@@ -4,13 +4,49 @@ export interface Env {
   SINK: Queue<SinkMessage>;
 
   CF_ACCOUNT_ID: string;
-  CF_AIG_TOKEN: string;
+  /** Secrets Store binding: the AI Gateway authentication token. Read with `.get()`. */
+  CF_AIG_TOKEN: SecretsStoreSecret;
   CF_GATEWAY_ID: string;
+  /** The dynamic route on that gateway, called as `dynamic/<name>`. */
+  CF_ROUTE_NAME: string;
 
   CORE_URL: string;
   SHAMWARI_CORE_TOKEN: string;
 
-  ZAI_API_KEY: string;
+  /** "true" moves key verification and metering to the Servers API. Off by default. */
+  SERVERS_API_ENABLED?: string;
+  SERVERS_API_URL?: string;
+  /** Secret. */
+  SERVERS_API_TOKEN?: string;
+  /** Secret. Second factor the Servers API's internal routes require. */
+  SERVERS_API_INTERNAL_KEY?: string;
+
+  /**
+   * WorkOS sign-in for people (docs/chat-signin.md). Off unless WORKOS_CLIENT_ID is
+   * set; once it is, a missing or malformed value denies (503), it never relaxes a check.
+   * None of these is a secret: they identify the app and the token's issuer.
+   */
+  WORKOS_CLIENT_ID?: string;
+  /** The `iss` WorkOS puts in access tokens for this app. Exact match. */
+  WORKOS_ISSUER?: string;
+  /**
+   * The `aud` the JWT template sets. Optional: when set it is required and must match exactly
+   * (a token without it is refused); when unset the `aud` claim is not checked. Set to nothing
+   * (blank) is a configuration error, not "unset".
+   */
+  WORKOS_AUDIENCE?: string;
+  /** Defaults to https://api.workos.com/sso/jwks/{WORKOS_CLIENT_ID}. HTTPS only. */
+  WORKOS_JWKS_URL?: string;
+  /** Monthly token cap per person. A positive integer; the owner sets it. */
+  WORKOS_MONTHLY_TOKEN_CAP?: string;
+  /** Longest a token may have been valid, in seconds, whatever its `exp`. Default 3600. */
+  WORKOS_MAX_TOKEN_AGE_SECONDS?: string;
+
+  /**
+   * Browser origins allowed to call the chat endpoint, comma separated, exact
+   * match (src/cors.ts). Absent means https://shamwari.ai and https://www.shamwari.ai.
+   */
+  CORS_ORIGINS?: string;
 
   EMBEDDING_MODEL: string;
   GROUND_TOP_K: string;
@@ -19,6 +55,15 @@ export interface Env {
   STANDARD_MODEL: string;
   SURFACE: string;
   MIND_AVAILABLE: string;
+
+  /**
+   * Channels (SMS, USSD). Both are secrets set by the owner; a channel with
+   * either missing answers 503 and nothing else. The key is an ordinary
+   * customer-style API key for the channel's owning entity, so the channel
+   * is metered and gated like any other caller.
+   */
+  CHANNEL_WEBHOOK_SECRET?: string;
+  CHANNEL_API_KEY?: string;
 }
 
 export type Tier = 'economy' | 'standard' | 'premium';
@@ -59,6 +104,13 @@ export interface AuthContext {
   keyType: string;
   tier: string;
   monthlyTokenCap: number;
+  /**
+   * What this key may ask for. Absent (an older cached context, or the Core
+   * path, which carries none) means community and platform only: personal is
+   * never implied. It can only narrow a request, never widen what the scope
+   * gate allows.
+   */
+  scopes?: Scope[];
 }
 
 export type SinkMessage = {

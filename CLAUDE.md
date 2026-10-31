@@ -98,8 +98,10 @@ fine-tune and create derivative works.
 - `core/main.py::sink_bulk` — rejects any conversation missing a valid
   `licenseClass` rather than defaulting it, and rejects
   `licenseClass: restricted` together with `trainingEligible: true`
-- Postgres `training_examples.license_class` has `CHECK (= 'open_weight')` — a
-  restricted row physically cannot enter the table
+- Postgres `synthetic_jobs` carries the `license_class` CHECK, and the
+  `mind_training_chunks` view admits only `open_weight` — a restricted row
+  cannot reach training. (There is no `training_examples` table; this line used
+  to say there was.)
 - `mind_training_chunks` view is the only thing the training pipeline reads
 
 **Why the tier alone was not enough — the rule-1 lesson again.** The tier
@@ -142,27 +144,41 @@ this summary.
 Client
   │
   ▼
-gateway/          Cloudflare Workers, TypeScript
+edge Worker       Cloudflare Workers. Rust target (workers-rs); TypeScript in
+                  gateway/ until the rebuild lands.
                   routing · KV auth cache · AI Gateway · scope gate · queue producer
-                  holds NO database credentials, never talks to Mongo
+                  holds NO database credentials. Service bindings where needed.
   │
-  ├──► Cloudflare AI Gateway ──► GLM-5.3-Flash (economy) / GLM-5.3 (standard), via Z.ai
-  │         └─ degradation: gateway → direct provider → Workers AI
+  ├──► Cloudflare AI Gateway ──► GLM-5.3-Flash (economy) / GLM-5.3 (standard),
+  │         served by Workers AI, billed by Cloudflare. No Z.ai key, no BYOK.
+  │         └─ degradation: gateway → Workers AI
   │
-  └──► core/      FastAPI on Nyuchi infrastructure
-                  owns MongoDB · Ground retrieval · auth · scope enforcement
-                    │
-                    ├──► MongoDB Atlas    conversations, usageEvents, knowledgeBase
-                    └──► Supabase Postgres  training corpus, audit trail
+  └──► private tunnel ──► core/   the workhorse on Fly, no public IP
+                          Rust target; FastAPI in core/ until the rebuild lands.
+                          auth · Ground retrieval · scope enforcement · sink
+                          holds NO database login (#127): reaches data only through
+                          the Nyuchi API, over interim public HTTPS until the tunnel
+                            │
+                            └──► Nyuchi API ──► MongoDB Atlas      conversations, usageEvents,
+                                            │                      knowledgeBase
+                                            └──► Supabase Postgres training corpus, audit trail
+                                 (Ground lives in Mongo or Postgres by need,
+                                  following the rest of the platform)
 ```
 
-### Why TypeScript at the edge, not Rust
+Shamwari is a namespace (`/v1/shamwari/*`) on both the B2B Nyuchi API and the
+internal Nyuchi Servers API. Core stays in this monorepo.
 
-A gateway is I/O-bound — HTTP routing, header rewriting, `fetch`. Zero
-CPU-bound work. workers-rs compiles to WASM, costing bundle size and cold-start
-time, and the bindings this depends on (AI Gateway, Queues, KV) are
-TypeScript-first. Rust earns its place in the future `deno_core` sandbox host
-and in queue consumers doing real computation. **Not in the gateway.**
+### Why Rust, replacing "why TypeScript at the edge"
+
+This section used to argue for TypeScript at the edge. The owner decided on
+2026-10-22 that Core and the gateway are rebuilt in Rust, and that the data
+infrastructure gateways in `nyuchi-api` and the Servers API follow the same
+pattern: the edge sits on Workers, the workhorse sits behind it on Fly, joined
+by a tunnel, with service bindings at the edge. The reference scaffold is
+`nyuchi-api` branch `claude/rust-data-gateway` (`rust/`, three crates: `core`,
+`origin`, `edge`). Tracking: issue #66. Until the rebuild lands, `gateway/`
+(TypeScript) and `core/` (Python) are what is deployed or deployable.
 
 ### Why Core exists
 
@@ -172,6 +188,10 @@ production-hardened — cold starts and Atlas connection limits are live
 concerns. So something must front Mongo. Given that, Core is also the right
 place for scope enforcement, because it needs to live where Cloudflare cannot
 see it.
+
+**Update (PR #127): Core no longer holds a database login.** It reaches data
+only through the Nyuchi API (`/v1/shamwari/*`); only the API talks to Mongo and
+Postgres. See `docs/data-api-routes.md`.
 
 Because Core is where rule 1 is enforced authoritatively, its dependencies are
 **pinned with hashes**. `core/requirements.in` is the hand-edited spec;
@@ -183,25 +203,27 @@ Linux, matching CI and the deploy target; on macOS or Windows the
 platform-specific `uvicorn[standard]` wheels will not satisfy the hashes, so
 develop against `requirements.in` there.
 
-### Cloudflare is an enhancement, never a dependency
+### Degradation, and what Cloudflare now is
 
-Three-step degradation in `gateway/src/gateway.ts`. Every response carries
-`inference_path` (`gateway` | `direct` | `workers-ai`). The fallback paths are
-what make the claim true, and **on a healthy day nothing reaches them** —
-step 2 runs only when step 1 fails, step 3 only when both do — so they rot
-silently and the rot is invisible until the outage that needs them.
+Inference runs on Workers AI through the AI Gateway dynamic route, so
+Cloudflare is a dependency for Cloud inference, not an enhancement. The claim
+that survives is narrower: if the AI Gateway fails, the Worker falls back to
+Workers AI directly. The direct-provider step was removed with the Z.ai key.
+Every response carries `inference_path` (`gateway` | `workers-ai`).
 
-This used to say "break the Gateway credential deliberately once a month".
-That was a manual chore, and skipping it looks exactly like passing it. It is
-now a weekly cron: `probe()` exercises all three paths **independently** and
-writes one row to `platform.serviceHealth`. `gateway.ts` therefore exposes
-`viaGateway` / `viaDirect` / `viaWorkersAI` separately and `infer()` composes
-them — a probe built on `infer()` would only ever report on the gateway,
-because `infer()` stops at the first success.
+The fallback path is what makes the narrower claim true, and **on a healthy day
+nothing reaches it** — it runs only when the gateway fails — so it rots
+silently and the rot is invisible until the outage that needs it.
+
+A weekly cron, `probe()`, exercises both paths **independently** and writes one
+row to `platform.serviceHealth`. `gateway.ts` therefore exposes `viaGateway` and
+`viaWorkersAI` separately and `infer()` composes them — a probe built on
+`infer()` would only ever report on the gateway, because `infer()` stops at the
+first success.
 
 `docs/degradation-probe.md` has what to alert on. The short version:
-`serviceable: false` pages someone; `directOk`/`workersAiOk` false for two
-consecutive weeks means a fallback has rotted while users noticed nothing.
+`serviceable: false` pages someone; `workersAiOk` false for two consecutive
+weeks means the fallback has rotted while users noticed nothing.
 
 ---
 
@@ -282,46 +304,67 @@ unqueryable vectors. Keep that behaviour.
 
 ## Current state
 
-| Piece                                     | Status                                                                 |
-| ----------------------------------------- | ---------------------------------------------------------------------- |
-| Supabase schema + provenance gates        | live, advisors clean                                                   |
-| Mongo indexes, Ground vector + text       | live, READY                                                            |
-| 22 corpus sources seeded                  | 5 blocked pending licence review                                       |
-| `core/`                                   | written, syntax-verified, **not deployed**                             |
-| `gateway/`                                | written, typecheck clean, structural assertions pass, **not deployed** |
-| rule-1 enforcement downstream of the gate | fixed 2026-08-27, 3 defects, tests added                               |
-| `shamwari.knowledgeBase` content          | **EMPTY — this is the only blocker to a demo**                         |
+As of 2026-10-31. "Live" means running and reachable today; "merged" means on
+`staging` and **not deployed**. Rows marked _owner statement_ are facts about other
+repositories that the owner relayed and this repo's session could not read.
+
+| Piece                                     | Status                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Supabase schema + provenance gates        | live, advisors clean                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| Mongo indexes, Ground vector + text       | live, READY                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| Corpus sources                            | 22 seeded: 15 approved, 7 not (checked live 2026-10-31); see the blocked list below                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `shamwari.knowledgeBase` content          | **EMPTY (count 0, checked 2026-10-31).** No citation demo exists yet                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `www.shamwari.ai`, `docs.shamwari.ai`     | live: `www.shamwari.ai` is the marketing site (its own Worker once #134 lands); the app belongs at `shamwari.ai/chat`                                                                                                                                                                                                                                                                                                                                                                      |
+| `gateway/`                                | **deployed** (Worker answers `/health`, `mind: false`), but **no customer key is accepted**: key verification is not wired to anything that is running                                                                                                                                                                                                                                                                                                                                     |
+| `core/`                                   | merged, **not deployed**: image never built, no Fly app, `core.shamwari.ai` does not resolve. Holds **no database login**: it reaches data only through the Nyuchi API (#127, `docs/data-api-routes.md`)                                                                                                                                                                                                                                                                                   |
+| Chat (`site/src/chat`, `/chat/`)          | merged to `staging` (shell #116, thread and citations #119, with gateway support #124 and #125), **not released**: the app is to live at `shamwari.ai/chat` (owner, 2026-10-31; split in draft #134) and today `/chat/` is a 404. Runs against a stand-in; does not answer real questions                                                                                                                                                                                                  |
+| Chat sign-in                              | **partly built:** Mukoko Account (WorkOS) tokens verified at the gateway, no per-user keys (owner, 2026-10-31). The gateway verifier (#130) is merged to `staging`, **not deployed** and off until its variables are set. The app's session Worker is design only. Spec `docs/chat-signin.md`                                                                                                                                                                                              |
+| Machine and developer keys                | **undecided.** Seam to the Servers API is merged and off (`SERVERS_API_ENABLED=false`); the ledger that would hold the keys is not deployed (`nyuchi-ledger` pending, checked 2026-10-31)                                                                                                                                                                                                                                                                                                  |
+| Servers API, ledger, Nyuchi API, Console  | _owner statement:_ the Servers API's ledger stores are being built now; ledger code, bring-up and restore-drill scripts released to `data-infra` main, nothing deployed; the Nyuchi API (v0.48.0) is live with its citation fields and the locked Ground-ingest route; sessions API and Console work merged to their staging, not deployed; the identity-sync cron Worker (`nyuchi-identity-sync`) is deployed and runs every minute, while the WorkOS-to-platform webhook is not yet live |
+| rule-1 enforcement downstream of the gate | fixed 2026-08-27, 3 defects, tests added; rule 1 and rule 2 are counted in the end-to-end contract test (#122)                                                                                                                                                                                                                                                                                                                                                                             |
+| Billing                                   | off. Meter usage, invoice the first ten customers by hand                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ### The single next step
 
-Deploy Core, then ingest the Constitution:
+Everything in the way is an owner step; nothing in the repo does it. In order:
 
-```bash
-cd core
-python ingest_ground.py --source "Constitution of Zimbabwe" \
-  --file ./constitution-2013.txt \
-  --title "Constitution of Zimbabwe Amendment (No. 20) Act 2013" \
-  --slug constitution-2013 --effective-from 2013-05-22 --dataset zw-law-v1
-```
-
-It is the only legal source currently approved, ground-eligible **and**
-mind-eligible. Public domain, foundational, and it makes the citation demo real.
+1. **Create the Core Fly app and set its secrets** (`docs/core-fly-runbook.md`), then
+   deploy Core. Until then the gateway cannot answer a real question.
+2. **Ingest the Constitution** (`docs/ground-ingest.md`). It needs the official PDF
+   downloaded in a browser (the publisher's page blocks scripts) and clean text from it.
+   `core/ingest_ground.py` still writes with its own four credentials. _Owner
+   statement, not verifiable here:_ the Nyuchi API's locked ingest route is live (v0.48.0,
+   nyuchi-api #423, #424 and #426); the corpus login, the Fly secret
+   `SHAMWARI_CORPUS_DATABASE_URL` and the `nyuchi-ai` Worker redeploy are done; there is
+   no ingest key, because the route uses the existing WorkOS `data:admin` permission with
+   no new scopes. What is left is the first ingest itself, which waits on the owner
+   choosing Option A or B for the caller path (`docs/architecture/shamwari.md` in
+   nyuchi-api). This is what makes the citation demo real. The Constitution is public
+   domain, foundational, approved, ground-eligible and mind-eligible; other sources are
+   approved too, but it does not answer tax questions.
+3. **Finish WorkOS for Chat sign-in.** The Shamwari Chat app, its JWT claim and the
+   redirect `https://shamwari.ai/chat/callback` exist (owner statement; `docs/chat-signin.md`).
+   Left: read `iss` off a real access token, set the gateway variables
+   (`WORKOS_ISSUER`, `WORKOS_CLIENT_ID`, `WORKOS_MONTHLY_TOKEN_CAP`) and deploy the gateway.
+4. **Decide the machine and developer key path**, and when the ledger is deployed
+   (the owner runs its `bring-up.sh`).
 
 ---
 
 ## Blocked on human decisions — do not resolve these in code
 
-Five corpus sources are `is_approved = false` because their terms have not been
-read. `ingest_ground.py` **refuses** them rather than warning and continuing.
-Keep that behaviour.
+Seven corpus sources are `is_approved = false` (checked live 2026-10-31): the five
+below, plus Zimbabwe Government Publications and Shamwari Community Contributions.
+`ingest_ground.py` **refuses** them rather than warning and continuing. Keep that
+behaviour.
 
-| Source           | Why blocked                                                                                                                       |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| ZimLII           | Likely CC-BY via AfricanLII/Laws.Africa. **Highest-value unblock, probably a 5-minute read.**                                     |
-| Veritas Zimbabwe | Best SI coverage in Zimbabwe. Partnership candidate — approach before scraping.                                                   |
-| AGRITEX          | Ministry terms unconfirmed                                                                                                        |
-| MoHCC / EDLIZ    | Clinical accuracy — human review mandatory before Ground eligibility                                                              |
-| ZIMSEC           | **DO NOT SCRAPE.** Copyrighted, needs a licence agreement. Probably the most commercially valuable education asset once licensed. |
+| Source           | Why blocked                                                                                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ZimLII           | **Terms read 2026-10-31:** default licence is CC BY-NC 4.0 (no commercial use), which conflicts with selling Shamwari. Some collections may carry other licences (check each); otherwise needs a written agreement. |
+| Veritas Zimbabwe | Best SI coverage in Zimbabwe. Partnership candidate — approach before scraping.                                                                                                                                     |
+| AGRITEX          | Ministry terms unconfirmed                                                                                                                                                                                          |
+| MoHCC / EDLIZ    | Clinical accuracy — human review mandatory before Ground eligibility                                                                                                                                                |
+| ZIMSEC           | **DO NOT SCRAPE.** Copyrighted, needs a licence agreement. Probably the most commercially valuable education asset once licensed.                                                                                   |
 
 Scraped news (`news.articles`, 23,231 docs) is Ground-eligible with citation
 and link-out. **Not** Mind training data without a redistribution licence.
@@ -341,8 +384,9 @@ upstream; not something to paper over here.
 ## Deliberately not in this phase
 
 Streaming responses · semantic caching · premium tier (Claude/GPT) ·
-self-serve billing · Shamwari Mind · `code.shamwari.ai` sandboxes ·
-voice and image.
+self-serve billing · `code.shamwari.ai` sandboxes · image. Shamwari Mind and
+voice are in the first release by the owner's decision of 2026-10-28 (see
+`docs/tiered-access-design.md`); the voice findings below still apply.
 
 On voice and image, when that phase starts — three findings from the
 catalogue check on 2026-08-27, so they are not rediscovered:
@@ -426,3 +470,22 @@ agent or person can pick it up.
 - Work spanning repos gets a tracking issue that links the per-repo issues.
 - Never put secrets, credential status or exploitable detail in issues on public
   repos.
+
+## Dev skills, progress reports and the merge gate
+
+Load the Mzizi **dev skills** before starting work:
+`mzizi_get_skills category=dev` on the Mzizi MCP (`mcp.mzizi.dev`), or
+`@nyuchi/mzizi-skills` from npm. They are `digital-hygiene` and
+`progress-report`.
+
+- **Digital hygiene.** Check free disk before starting, clone only under
+  `$TMPDIR`, share build caches, and audit, then delete, your clones once the
+  work merges (`digital-hygiene` skill).
+- **Clone isolation.** Clone only into a directory unique to you; never touch
+  another agent's.
+- **Progress reports.** All dev work runs on a 10-minute progress-report loop
+  (`progress-report` skill): measured bars, what changed, and a final "Needs
+  you:" line. Report ticks never publish, release, merge or deploy without the
+  owner's approval.
+- **Merge gate.** Merge only when the work is complete, CI is green, it's
+  verified at runtime, and `/code-review` has run with findings resolved.

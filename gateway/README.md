@@ -34,13 +34,19 @@ wrangler kv namespace create AUTH_CACHE     # paste id into wrangler.jsonc
 wrangler queues create shamwari-sink
 wrangler queues create shamwari-sink-dlq
 
-wrangler secret put CF_ACCOUNT_ID
-wrangler secret put CF_AIG_TOKEN
-wrangler secret put SHAMWARI_CORE_TOKEN
-wrangler secret put ZAI_API_KEY
+wrangler secret put SHAMWARI_CORE_TOKEN     # shared with Core
 
 npm run dev
 ```
+
+`CF_ACCOUNT_ID`, `CF_GATEWAY_ID` and `CF_ROUTE_NAME` are plain vars in
+`wrangler.jsonc` (an id and a name authorise nothing). There is no provider
+key: inference runs on Workers AI and is billed through Cloudflare.
+
+The AI Gateway authentication token is `SHAMWARI_AI_TOKEN` in the account's
+Secrets Store, bound to the Worker as `CF_AIG_TOKEN` in `wrangler.jsonc`. It is
+read at request time with `env.CF_AIG_TOKEN.get()`; there is no `wrangler secret
+put` for it.
 
 Shamwari Core must be reachable at `CORE_URL` first.
 
@@ -131,16 +137,12 @@ JSON view and copy what the dashboard wrote for `properties.conditions` and
 `rate.key` into `dynamic-route.json`. That is the moment the spec stops
 being a guess.
 
-**Pass 3, only for the target route.** `dynamic-route.json` sends both
-economy and standard to `zai`. That is not a Cloudflare provider slug — it
-needs a custom provider created first, pointed at `api.z.ai`
-(`https://api.z.ai/api/paas/v4/chat/completions`). That is the configuration
-the drop intended, and it is what keeps step 2 of the degradation
-meaningful: `workersai` is Cloudflare, so a route built only on it makes
-Cloudflare a dependency rather than an enhancement. Even though Workers AI
-now hosts GLM-5.3 natively (unlike Kimi K3 before it), routing the primary
-path through Workers AI instead of Z.ai's own API would collapse steps 1
-and 3 of the degradation into the same Cloudflare dependency.
+**Pass 3 is not needed.** `dynamic-route.json` runs every node on
+`workers-ai`: both GLM tiers are natively on Workers AI and billed through
+Cloudflare, so there is no custom `zai` provider and no gateway-side key to
+manage (owner decision, 2026-10-21, tracked on #53). There is also no direct
+third-party step any more: the Worker calls the route, and falls back to the
+Workers AI binding.
 
 ### One command, if you have an API token
 
@@ -178,8 +180,8 @@ exists when you wire its output:
 | --- | -------------- | ------------ | --------------------------------------------------------------------- | ------------------------------------------------ |
 | 1   | `done`         | End          | —                                                                     | —                                                |
 | 2   | `workers_ai`   | Model        | Workers AI · `@cf/zai-org/glm-5.3-flash` · timeout 15000 · retries 0  | success → `done`, fallback → `done`              |
-| 3   | `economy_glm`  | Model        | Z.ai · `glm-5.3-flash` · timeout 20000 · retries 1                    | success → `done`, fallback → `workers_ai`        |
-| 4   | `standard_glm` | Model        | Z.ai · `glm-5.3` · timeout 30000 · retries 1                          | success → `done`, fallback → `economy_glm`       |
+| 3   | `economy_glm`  | Model        | Workers AI · `@cf/zai-org/glm-5.3-flash` · timeout 20000 · retries 1  | success → `done`, fallback → `workers_ai`        |
+| 4   | `standard_glm` | Model        | Workers AI · `@cf/zai-org/glm-5.3` · timeout 30000 · retries 1        | success → `done`, fallback → `economy_glm`       |
 | 5   | `tier_check`   | Conditional  | `metadata.tier` equals `standard`                                     | true → `standard_glm`, false → `economy_glm`     |
 | 6   | `budget_month` | Budget Limit | cost · key `metadata.ownerEntityId` · limit 50 · window 2592000 (30d) | success → `tier_check`, fallback → `economy_glm` |
 
@@ -212,14 +214,13 @@ accurate rather than approximate.
 
 Then call it with `model: "dynamic/shamwari"` on `/compat/chat/completions`.
 
-### It replaces step 1 of the degradation, not all three
+### It is step 1 of two
 
-`src/gateway.ts` degrades AI Gateway → direct provider → Workers AI. The
-second step exists precisely because it has no Cloudflare in the path. A
-dynamic route lives _inside_ AI Gateway, so it cannot provide that: if the
-Gateway is down, the route is down with it. Keep steps 2 and 3 in
-`gateway.ts`. The route makes step 1 smarter; it does not make the rest
-redundant.
+`src/gateway.ts` degrades AI Gateway route → Workers AI binding. A dynamic
+route lives _inside_ AI Gateway, so if the Gateway is down the route is down
+with it; the binding is called directly, with no Gateway in the path. Keep
+the second step in `gateway.ts`. The route makes step 1 smarter; it does not
+make the binding redundant.
 
 ### Every node must stay open-weight — this is rule 2
 
@@ -275,9 +276,130 @@ to economy.
 
 ## Degradation
 
-AI Gateway → direct provider → Workers AI. Cloudflare is an enhancement, not
-a dependency. `inference_path` in every response tells you which was used —
-watch it, because steps 2 and 3 rot silently if never exercised.
+AI Gateway route → Workers AI binding. Both are Cloudflare, so Cloudflare is
+the dependency; the second step only takes the AI Gateway out of the path.
+`inference_path` in every response tells you which was used — watch it,
+because step 2 rots silently if never exercised.
+
+A third rung sits beneath both: **extractive**. Ground's cited passage is
+returned with no generation, either because the caller sent
+`"mode": "extractive"` or because every inference path failed and Ground had a
+hit (`shamwari.degraded: true`). It makes no inference call, cannot invent a
+citation, and is metered as a usage event only: no conversation row is
+written, because it has no teacher model to stamp a `licenseClass` from and the
+quoted chunks carry their own `mind_eligible` terms. The scope gate runs
+first, so personal scope is still a 409. It does not judge relevance: Ground
+returns the nearest passage whether or not it answers the question, so the
+citation reads "Closest source", and `shamwari.truncated` says when a passage
+was cut. If Core cannot be reached, `mode: "extractive"` returns 503
+`ground_unavailable` rather than claiming the corpus has nothing. A model
+reply with no text counts as a failure at both inference steps, so the next
+rung engages. See `docs/tiered-access-design.md`.
+
+## Reach
+
+How the caller reaches Shamwari, sent as `"reach": "r0" | "r1" | "r2"` on
+`/v1/chat/completions` (r0 SMS/USSD, r1 chat app, r2 Lite PWA; see
+`docs/tiered-access-design.md`). An unknown value is a 400 `invalid_reach`, and
+a request with no reach behaves exactly as before. For the model tier and the
+generation length, reach is a **ceiling, never a floor**, set in
+`routing-policy.json`:
+
+- `max_tier` clamps the routed model tier down (r0 cannot reach `standard`).
+  `premium` is never a reach ceiling: the policy validator rejects it, so a
+  channel alone cannot choose a model with different terms and cost. The tier
+  it was routed to before the clamp is recorded as `routedTier`.
+- `max_output_tokens` caps generation. It can only lower the 2048 default (the
+  validator rejects more), and `finish_reason: "length"` and
+  `shamwari.truncated` say when the cap cut an answer off.
+- `extractive_max_chars` is different: it is the **length budget of that
+  channel** for an extractive answer, not a ceiling over a default (a request
+  with no reach keeps the 450-character default, so r1 and r2 may return
+  more). On r0 the text is also plain: typographic quotes, dashes and the
+  ellipsis become ASCII, because one such character forces an SMS into UCS-2.
+
+The response carries `shamwari.reach` and `shamwari.reach_clamped`, and the
+usage event and conversation record the reach, so per-tier cost can be read
+from `usageEvents`. Reach changes nothing about scope: r0 to r2 all hand text to
+a provider, so personal scope is still a 409 on every one of them. The clamped
+tier's `licenseClass` still comes from `router.ts`, never from the policy file.
+
+## Idempotent requests and the compact envelope
+
+Two opt-ins on `/v1/chat/completions` for callers on weak networks, where a
+request is often retried and every byte is paid for.
+
+**`Idempotency-Key`** (1 to 64 of `A-Za-z0-9_.:-`; otherwise 400
+`invalid_idempotency_key`). A retry with the same key and the same request
+returns the stored answer with `Idempotent-Replayed: true` and runs no Ground,
+no inference and no usage event. The same key with a different request
+(messages, model, scope, mode, reach or format) is a 422
+`idempotency_key_reuse`. A request still running is a 409 `request_in_progress`
+with `Retry-After`. Only a 200 is stored; a failure is released so the retry
+runs. Keys are scoped to the calling entity. A replay skips the quota check (the
+caller already earned that answer), and a degraded answer (every inference path
+failed, Ground answered) is not stored, so the retry can get a proper one.
+
+- It fails open: a KV error is logged and the request runs unprotected. It is
+  best-effort, not exactly-once. It uses the existing KV namespace, which
+  is eventually consistent, so two simultaneous first attempts in different
+  locations can both run. It stops the common retry; it does not make billing
+  exact. For that the sink must also dedupe on the request id.
+- What is stored is the response body for ten minutes, under a hash of the key.
+  **Personal scope stores nothing**: it is refused before this code runs, and a
+  stored answer would be a second copy of the user's data outside their pod.
+
+**`"format": "compact"`** (minified; on r0 the labels are plain ASCII) returns
+`{id, answer, cites: [{n, label, url?}], scope, via, truncated, degraded}`
+instead of the OpenAI-shaped body. Every channel adapter reads this one shape.
+An unknown format is a 400 `invalid_format`. It is applied last, so the
+extractive rung and a replay agree with the inference rung.
+
+## Channels: SMS and USSD
+
+`POST /v1/channels/sms` and `POST /v1/channels/ussd` take a message from an
+operator and answer in that channel's own limit (459 characters for SMS, three
+GSM-7 segments; 182 for a USSD screen), as plain ASCII, with one source line.
+They are clients of the gateway, like Mind: the adapter calls
+`/v1/chat/completions` in-process with the channel's own key, so quota,
+scope, provenance and idempotency are the ones every API caller gets.
+
+- **The operator is verified first.** The body is signed with HMAC-SHA256 in
+  `X-Signature`. A bad or missing signature is a 401, and a channel missing
+  either secret below is a 503. Nothing is called in either case.
+- **Rule 1.** The scope belongs to the adapter (`platform`), never to the
+  message, so a person cannot declare `personal`. An adapter that carried it
+  would be refused at the adapter, before the chat path, with a short message
+  that points to the app. The chat path checks again.
+- **The sender is never forwarded.** A phone number is not in the chat
+  request, the idempotency key, the stored conversation or a log line; the
+  tests scan every outbound call for it. The operator's message id and the text
+  are hashed into the idempotency key, so an operator retry is the same answer.
+- **Replies are GSM-7 clean.** Accents, the euro sign, emoji and the
+  extension characters (`[ ] { } ^ ~ | \\`) are folded or removed, because one of
+  them puts the whole message in UCS-2. An answer with no source says so
+  ("No source found") rather than going out unsourced, and an extractive answer
+  keeps its hedged "Closest source" line.
+- **Channel traffic is never training material.** The adapter marks its calls
+  with `X-Shamwari-Channel`, and the chat path stores those conversations with
+  `trainingEligible: false`. These are people who have not been asked, in the
+  channel where they are most likely to type something personal. Whether to
+  seek consent is the owner's call.
+- **Refusals are logged**, with the status and error code and never the
+  sender, so a rotated `CHANNEL_API_KEY` shows up in the log instead of looking
+  like a polite "busy" to every user.
+- **Known limit:** the placeholder signature covers the body only, so a
+  captured signed request can be replayed after the idempotency entry expires.
+  A real operator's scheme (usually a timestamp or nonce in the signature)
+  replaces `hmacOk` when one is chosen.
+- **The wire formats are placeholders** (`{id, from, text}` to `{reply}`;
+  `{sessionId, msisdn, input}` to `{message, end}`) until an operator or
+  aggregator is chosen. A real one changes `parse` and `render` in
+  `src/channels/sms.ts` or `ussd.ts` and nothing else.
+
+Secrets, set by the owner (not in `wrangler.toml`): `CHANNEL_WEBHOOK_SECRET`
+(shared with the operator) and `CHANNEL_API_KEY` (a customer-style key for the
+entity that pays for the channel).
 
 ## Provenance
 

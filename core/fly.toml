@@ -1,0 +1,47 @@
+# Shamwari Core: interim Python deploy. Replaced by the Rust origin behind a
+# tunnel (issue #66); this is public HTTPS until then, and every route except
+# /health requires the bearer token (SHAMWARI_CORE_TOKEN).
+#
+# Core holds NO database login. It reaches Ground, the sink and usage through the Nyuchi API
+# (/v1/shamwari) over Fly's private network, with one internal key (owner, 2026-10-27).
+#
+# Secrets are never in this file. Set them with `fly secrets import` (stdin, so
+# no value reaches argv or shell history); the full procedure is
+# docs/core-fly-runbook.md. What the RUNNING service reads, and only this:
+#   required   SHAMWARI_CORE_TOKEN   NYUCHI_API_INTERNAL_KEY
+#   optional   SHAMWARI_OPS_TOKEN    (unset = the operator routes answer 503)
+#   plain      NYUCHI_API_URL  NYUCHI_API_HOST   (defaults: http://nyuchi-api.internal:8080, api.nyuchi.com)
+# SUPABASE_DB_URL, CF_ACCOUNT_ID and CF_API_TOKEN are read by ingest_ground.py ONLY.
+# MONGODB_URI is read by ingest_ground.py ONLY, from the operator's own shell, until the API has
+# a ground-write route (docs/data-api-routes.md, G5). No database driver is in the image, the
+# ingest script is not in the image, and a test (test_deploy_config.py) fails if main.py starts
+# reading any of these.
+app = "shamwari-core"
+primary_region = "jnb"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+
+[env]
+  # Not secrets. Fly's private network reaches the API; it trusts a list of hosts, so Core
+  # presents the public name.
+  NYUCHI_API_URL = "http://nyuchi-api.internal:8080"
+  NYUCHI_API_HOST = "api.nyuchi.com"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

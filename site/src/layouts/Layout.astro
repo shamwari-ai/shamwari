@@ -1,11 +1,11 @@
 ---
 import '../styles/global.css';
-import MineralStrip from '@bundu/ui/MineralStrip.astro';
+import DiscoverShell from '@bundu/ui/discover/DiscoverShell.astro';
 import Breadcrumb from '@bundu/ui/Breadcrumb.astro';
+import SocialIcon from '@bundu/ui/SocialIcon.astro';
+import { Button } from '@bundu/ui/ui/button';
 import { deriveBreadcrumbs } from '@bundu/ui';
-import Header from '../components/Header.astro';
-import Footer from '../components/Footer.astro';
-import { BREADCRUMB_LABELS } from '../lib/site';
+import { BREADCRUMB_LABELS, PAGES, REPO, CONTACT_EMAIL } from '../lib/site';
 
 interface Props {
   title: string;
@@ -14,6 +14,18 @@ interface Props {
 const { title, description } = Astro.props;
 
 const crumbs = deriveBreadcrumbs(Astro.url.pathname, BREADCRUMB_LABELS, 'Shamwari');
+
+// Home is the brand link and Contact is the header action, so neither is
+// repeated in the nav; Contact has its own column in the footer.
+const path = Astro.url.pathname;
+const current = (href: string) => !href.startsWith('http') && href !== '/' && path.startsWith(href);
+const nav = PAGES.filter((p) => p.path !== '/' && p.path !== '/contact/').map((p) => ({
+  label: p.label,
+  href: p.path,
+  current: current(p.path),
+}));
+const footerLinks = nav;
+const year = new Date().getFullYear();
 
 // One social-preview image per page, generated at design time (see
 // "Brand assets" in README.md) rather than at request time — this is a
@@ -54,16 +66,43 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
   />
 </head>
 <body class="bg-canvas text-foreground">
-  <MineralStrip />
-  <Header />
-  <main>
+  <DiscoverShell
+    homeLabel="Shamwari AI, home"
+    nav={nav}
+    footerLinks={footerLinks}
+    footerNote={`© ${year} Bundu Foundation. All rights reserved. Shamwari is Shona for friend. Bundu Foundation intellectual property, sold commercially under Nyuchi Africa. Platform code is Apache-2.0. Third-party model and corpus terms are recorded separately.`}
+  >
+    <span slot="brand" class="flex items-baseline gap-2 font-serif text-h4 font-semibold text-primary">
+      Shamwari
+      <span class="font-sans text-caption font-semibold uppercase tracking-widest text-muted-foreground">AI</span>
+    </span>
+    <Button slot="action" href="/contact/" size="sm">Get in touch</Button>
+
     {crumbs.length >= 2 && (
       <div class="container-custom pt-6">
         <Breadcrumb items={crumbs} origin={Astro.site?.toString()} />
       </div>
     )}
     <slot />
-  </main>
-  <Footer />
+
+    <div slot="footer">
+      <p class="max-w-xs text-body-sm text-muted-foreground">
+        An AI companion built in Zimbabwe. Community pillar of the Bundu Ecosystem.
+      </p>
+      <div class="mt-4 flex gap-1">
+        <SocialIcon url={REPO} label="Shamwari on GitHub" />
+      </div>
+    </div>
+    <div slot="footer" class="text-body-sm">
+      <p class="eyebrow mb-2 block">Ecosystem</p>
+      <ul class="space-y-1 text-muted-foreground">
+        <li><a href="https://bundu.org" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-11 items-center no-underline hover:text-foreground">Bundu Foundation</a></li>
+        <li><a href="https://nyuchi.com" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-11 items-center no-underline hover:text-foreground">Nyuchi Africa</a></li>
+        <li class="flex min-h-11 items-center">Mukoko</li>
+      </ul>
+      <p class="eyebrow mb-2 mt-6 block">Get in touch</p>
+      <a href={`mailto:${CONTACT_EMAIL}`} class="inline-flex min-h-11 items-center text-muted-foreground no-underline hover:text-foreground">{CONTACT_EMAIL}</a>
+    </div>
+  </DiscoverShell>
 </body>
 </html>

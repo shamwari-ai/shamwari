@@ -1,5 +1,6 @@
 import type { Env, Message, LicenseClass, Scope, Tier } from './types';
 import type { Target } from './router';
+import { DEFAULT_MAX_OUTPUT_TOKENS } from './router';
 import { resolveLicenseClass, WORKERS_AI_FALLBACK_MODEL } from './provenance';
 
 export interface InferenceResult {
@@ -17,7 +18,9 @@ export interface InferenceResult {
   licenseClass: LicenseClass;
   /** True when a dynamic route or a fallback answered with something else. */
   substituted: boolean;
-  path: 'gateway' | 'direct' | 'workers-ai';
+  path: 'gateway' | 'workers-ai';
+  /** The model's own stop reason: `length` means the output cap cut it off. */
+  finishReason: string;
 }
 
 /**
@@ -62,27 +65,34 @@ export function buildMetadata(meta: RequestMetadata): Record<string, string> {
   };
 }
 
+export { DEFAULT_MAX_OUTPUT_TOKENS };
+
 async function post(
   url: string,
   headers: Record<string, string>,
   model: string,
   messages: Message[],
+  maxTokens: number,
 ): Promise<Response> {
   return fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: 2048 }),
+    body: JSON.stringify({ model, messages, temperature: 0.3, max_tokens: maxTokens }),
   });
 }
 
 /**
- * Step 1 of the degradation chain. Caching, spend limits, observability and
- * dynamic routing.
+ * Step 1 of the degradation chain: the AI Gateway's dynamic route.
+ *
+ * The route (`dynamic/<CF_ROUTE_NAME>`) holds the spend cap, the tier branch
+ * and its own fallbacks, all on Workers AI and billed through Cloudflare, so
+ * no provider key is sent: `cf-aig-authorization` is the only credential.
+ * Caching, spend limits and observability come with it.
  *
  * Returns null rather than throwing when the step is unavailable, so the
  * caller decides whether to degrade or to report. `skipCache` exists for the
  * probe: its prompt is constant, so a cached HIT would report a healthy
- * gateway while the provider behind it was unreachable.
+ * gateway while the route behind it was failing.
  */
 export async function viaGateway(
   env: Env,
@@ -90,53 +100,47 @@ export async function viaGateway(
   messages: Message[],
   meta: RequestMetadata,
   skipCache = false,
+  maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
 ): Promise<InferenceResult | null> {
   try {
+    // A Secrets Store binding, so the token is read at request time and never
+    // sits in the Worker's own secrets. If the read fails the step is
+    // unavailable and the caller degrades, like any other gateway failure.
+    const aigToken = await env.CF_AIG_TOKEN.get();
     const res = await post(
       `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/compat/chat/completions`,
       {
-        'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-        Authorization: `Bearer ${target.apiKey(env)}`,
+        'cf-aig-authorization': `Bearer ${aigToken}`,
         'cf-aig-metadata': JSON.stringify(buildMetadata(meta)),
         ...(skipCache ? { 'cf-aig-skip-cache': 'true' } : {}),
       },
-      `${target.provider}/${target.model}`,
+      `dynamic/${env.CF_ROUTE_NAME}`,
       messages,
+      Math.min(maxTokens, DEFAULT_MAX_OUTPUT_TOKENS),
     );
     if (res.ok) {
-      return parse(res, target, res.headers.get('cf-aig-cache-status') === 'HIT', 'gateway');
+      const out = await parse(
+        res,
+        target,
+        res.headers.get('cf-aig-cache-status') === 'HIT',
+        'gateway',
+      );
+      // A 200 with no text is not an answer. Treated as a failure so the next
+      // rung engages, and so a blank is never stored as a teacher output.
+      if (out.text.trim()) return out;
+      console.warn('gateway returned no text');
+    } else {
+      console.warn('gateway', res.status);
     }
-    console.warn('gateway', res.status);
   } catch (e) {
     console.warn('gateway threw', String(e));
   }
   return null;
 }
 
-/** Step 2. The same provider with no Cloudflare in the path. */
-export async function viaDirect(
-  env: Env,
-  target: Target,
-  messages: Message[],
-): Promise<InferenceResult | null> {
-  if (!target.directUrl) return null;
-  try {
-    const res = await post(
-      target.directUrl,
-      { Authorization: `Bearer ${target.apiKey(env)}` },
-      target.model,
-      messages,
-    );
-    if (res.ok) return parse(res, target, false, 'direct');
-    console.warn('direct', res.status);
-  } catch (e) {
-    console.warn('direct threw', String(e));
-  }
-  return null;
-}
-
 /**
- * Step 3. Last resort, lower quality, still answers.
+ * Step 2. Last resort: the Workers AI binding with no AI Gateway in the path.
+ * Lower quality, still answers.
  *
  * A general model, not the coder variant: this answers Shona and Ndebele
  * questions about law and tax when both providers are unreachable.
@@ -145,13 +149,27 @@ export async function viaWorkersAI(
   env: Env,
   target: Target,
   messages: Message[],
+  maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
 ): Promise<InferenceResult> {
-  const fb = (await env.AI.run(WORKERS_AI_FALLBACK_MODEL as never, {
-    messages,
-  } as never)) as { response?: string };
+  const fb = (await env.AI.run(
+    WORKERS_AI_FALLBACK_MODEL as never,
+    {
+      messages,
+      // Only when a reach asks for less. A request with no reach is sent exactly
+      // as it was before, so this fallback step is not exposed to a parameter it
+      // has never been called with.
+      ...(maxTokens < DEFAULT_MAX_OUTPUT_TOKENS ? { max_tokens: maxTokens } : {}),
+    } as never,
+  )) as { response?: string };
+
+  // No text is a failure, not an answer. This used to substitute a canned
+  // apology, which then travelled as the model's output: stored as a
+  // conversation under an open-weight teacher label and flagged trainable.
+  // Throwing lets the extractive rung engage and the probe see the failure.
+  if (!fb.response?.trim()) throw new Error('workers ai returned no text');
 
   return {
-    text: fb.response ?? 'Shamwari cannot answer right now. Please retry.',
+    text: fb.response,
     inputTokens: 0,
     outputTokens: 0,
     cacheHit: false,
@@ -162,32 +180,33 @@ export async function viaWorkersAI(
     licenseClass: resolveLicenseClass('workers-ai', WORKERS_AI_FALLBACK_MODEL),
     substituted: true,
     path: 'workers-ai',
+    finishReason: 'stop',
   };
 }
 
 /**
- * Three-step degradation, so Cloudflare is an enhancement and not a
- * dependency:
- *   1. AI Gateway   caching, spend limits, observability, dynamic routing
- *   2. Direct       same provider, no Cloudflare in the path
- *   3. Workers AI   last resort, lower quality, still answers
+ * Two-step degradation:
+ *   1. AI Gateway   dynamic route: caching, spend limits, observability,
+ *                   tier branch and its own fallbacks
+ *   2. Workers AI   the binding directly, no AI Gateway in the path
  *
- * The steps are separate exported functions rather than inline blocks so
- * that `probe.ts` can exercise each one **on its own**. In one composed
- * function the later steps are only reachable when the earlier ones fail,
- * which is exactly why they rotted: nothing ever ran step 2 or 3 on a
- * healthy day. See docs/degradation-probe.md.
+ * Everything runs on Cloudflare (no third-party provider, no provider key),
+ * so Cloudflare is the dependency; the second step only removes the AI
+ * Gateway from the path. The steps are separate exported functions so that
+ * `probe.ts` can exercise each one **on its own**: in one composed function
+ * the second step is only reachable when the first fails, which is exactly
+ * why fallbacks rot. See docs/degradation-probe.md.
  */
 export async function infer(
   env: Env,
   target: Target,
   messages: Message[],
   meta: RequestMetadata,
+  maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
 ): Promise<InferenceResult> {
   return (
-    (await viaGateway(env, target, messages, meta)) ??
-    (await viaDirect(env, target, messages)) ??
-    (await viaWorkersAI(env, target, messages))
+    (await viaGateway(env, target, messages, meta, false, maxTokens)) ??
+    (await viaWorkersAI(env, target, messages, maxTokens))
   );
 }
 
@@ -198,18 +217,18 @@ async function parse(
   path: InferenceResult['path'],
 ): Promise<InferenceResult> {
   const j = (await res.json()) as {
-    choices?: { message?: { content?: string } }[];
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
     usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
 
-  // A dynamic route reports what it chose in these headers. They are absent
-  // on the direct path and on a plain single-model gateway request, in which
-  // case what was asked for is what served.
+  // A dynamic route reports what it chose in these headers. When they are
+  // absent, what was asked for is taken to be what served.
   const provider = res.headers.get('cf-aig-provider')?.trim() || target.provider;
   const model = res.headers.get('cf-aig-model')?.trim() || target.model;
 
   return {
     text: j.choices?.[0]?.message?.content ?? '',
+    finishReason: j.choices?.[0]?.finish_reason ?? 'stop',
     inputTokens: j.usage?.prompt_tokens ?? 0,
     outputTokens: j.usage?.completion_tokens ?? 0,
     cacheHit,

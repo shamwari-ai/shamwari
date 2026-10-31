@@ -1,14 +1,19 @@
 # Shamwari Core
 
-The service that owns MongoDB. Runs on Nyuchi infrastructure, not at the
-Cloudflare edge.
+The service that enforces Shamwari's two rules in front of its data. Runs on Nyuchi
+infrastructure (Fly), not at the Cloudflare edge.
 
 ## Why this exists
 
-MongoDB's Atlas Data API was removed in September 2025, and the native driver
-is not production-hardened in Workers. So something has to sit in front of
-Mongo. Given that, this service is also the right place to enforce the scope
-rule — because it needs to live somewhere Cloudflare cannot see.
+Personal-layer data must never reach a third-party inference provider, and only
+`open_weight` output may train Shamwari Mind. Something has to decide that before
+any data is read or written, somewhere Cloudflare cannot see. That is Core.
+
+**Core holds no database login.** Owner decision, 2026-10-27: only the Nyuchi API
+talks to databases. Core calls the API's `/v1/shamwari` routes over Fly's private
+network with one internal key (`nyuchi_api.py`), decides scope and provenance
+_before_ each call, and checks what comes back. What exists, what is missing and the
+route specs for the gaps: `docs/data-api-routes.md`.
 
 ## The scope rule
 
@@ -33,28 +38,43 @@ the product and Cloud is the general-knowledge fallback.
 ## Setup
 
 ```bash
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.txt
 
-export MONGODB_URI="mongodb+srv://..."
-export SUPABASE_DB_URL="postgresql://...@db.hxjblxsheosjbjqgmlhx.supabase.co:5432/postgres"
 export SHAMWARI_CORE_TOKEN="$(openssl rand -hex 32)"
-export CF_ACCOUNT_ID="..."
-export CF_API_TOKEN="..."      # Workers AI read for embeddings
+export NYUCHI_API_INTERNAL_KEY="nyk_<id>.nys_<secret>"   # internal key: shamwari, shamwari:service, ai
+export NYUCHI_API_URL="http://nyuchi-api.internal:8080"  # default; a Fly private address
+export NYUCHI_API_HOST="api.nyuchi.com"                   # default; the API trusts this host name
 
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
+The ingest script has its own lock, `requirements-ingest.txt`, and its own credentials, set
+in your own shell and never on the Fly app (see Ground ingestion below).
+
 ## Endpoints
 
-| Method | Path             | Purpose                                                              |
-| ------ | ---------------- | -------------------------------------------------------------------- |
-| POST   | `/auth/verify`   | `platform.apiKeys` lookup by `keyPrefix`, constant-time hash compare |
-| POST   | `/ground/search` | `$rankFusion` hybrid retrieval, scope-enforced                       |
-| GET    | `/guardrails`    | active rules for a surface                                           |
-| POST   | `/sink/bulk`     | batched writes from the Worker's queue, allow-listed                 |
-| GET    | `/rollup`        | billing aggregate on the `ownerEntityId + billingPeriod` index       |
+| Method | Path             | Purpose                                                                                |
+| ------ | ---------------- | -------------------------------------------------------------------------------------- |
+| POST   | `/ground/search` | scope-enforced hybrid retrieval, through `POST /v1/shamwari/ground/search`             |
+| GET    | `/guardrails`    | active rules for a surface, from `GET /v1/ai/guardrails`                               |
+| POST   | `/sink/bulk`     | batched writes from the Worker's queue, allow-listed, through `POST /v1/shamwari/sink` |
+| GET    | `/rollup`        | billing aggregate, through `GET /v1/shamwari/usage/rollup`                             |
+| POST   | `/auth/verify`   | **501** `key_verification_moved`: Core cannot look keys up (G1)                        |
+| GET    | `/health`        | readiness: Core is up and the API answers Core's key                                   |
 
-All except `/health` require `Authorization: Bearer $SHAMWARI_CORE_TOKEN`.
+All except `/health` require `Authorization: Bearer $SHAMWARI_CORE_TOKEN`, except the
+operator routes below, which need a different secret.
+
+| Method | Path              | What it does                              |
+| ------ | ----------------- | ----------------------------------------- |
+| POST   | `/replay/usage`   | **501** until the API has the routes (G4) |
+| POST   | `/replay/requeue` | **501** (G4)                              |
+| GET    | `/replay/stats`   | **501** (G4)                              |
+| GET    | `/rollup/by-tier` | **501** until the API has the route (G3)  |
+
+These four need `Authorization: Bearer $SHAMWARI_OPS_TOKEN`, not the Worker's
+token, and answer 503 if it is unset. See `docs/usage-replay.md` and
+`docs/security-roles.md`.
 
 `/sink/bulk` is an allow-list, not a write proxy — a compromised edge worker
 cannot write to arbitrary collections. It also rejects any `conversations` or
@@ -66,6 +86,7 @@ to something permissive.
 ```bash
 python ingest_ground.py --list     # sources and licence status
 python ingest_ground.py --due      # what needs a refresh
+python ingest_ground.py --dry-run --file ./constitution-2013.txt   # show the citations; no network
 
 python ingest_ground.py \
   --source "Constitution of Zimbabwe" \
@@ -76,24 +97,33 @@ python ingest_ground.py \
   --dataset zw-law-v1
 ```
 
-Writes to both stores. Postgres `documents` gets the audit record — source,
+Writes to both stores. Postgres `documents` gets the audit record: source,
 licence, authority, effective date. Mongo `shamwari.knowledgeBase` gets the
-embedded chunks. `documents.mongodb_ground_id` bridges them.
+embedded chunks. `documents.mongodb_ground_id` bridges them. The credentials
+(`SUPABASE_DB_URL`, `MONGODB_URI`, `CF_ACCOUNT_ID`, `CF_API_TOKEN`) are for this
+script in your own shell; the running service never reads them.
 
 **The script refuses unapproved sources.** It exits rather than warning and
 continuing. Of the 22 seeded corpus sources, five are marked `VERIFY` or
 `COPYRIGHT` and will be rejected until you read their terms and flip
-`is_approved` yourself. ZIMSEC is flagged DO NOT SCRAPE.
+`is_approved` yourself. ZIMSEC is flagged DO NOT SCRAPE. It fetches nothing: you
+supply the text file, so you have read the source's terms.
 
-Chunking is heading-aware: it splits on `PART`, `CHAPTER`, `SCHEDULE`,
-`Section`, `Article`, `Clause`. This matters because a citation should read
-"Section 56" and not "chunk 47" — the whole product claim is that Shamwari
-cites the actual provision.
+Chunking is section-aware: a chunk is a section, or a run of subsections of a long
+one, and carries its chapter, section number, title and subsection range, so an
+answer cites "s 56(1)-(3)" and not "chunk 47". It reads the Constitution's layout
+(`56 Equality and non-discrimination`, `(1)`, `(2)`, schedules) as well as the older
+`Section 56` and `56.` styles, drops the table of contents and PDF furniture, and
+refuses to treat a wrapped line such as `22 May 2013` as a heading.
 
 Embeddings use `@cf/baai/bge-m3` at 1024 dimensions, matching both the
 `ground_vector_search` index and the existing `news.articles` embeddings. The
-script hard-fails on a dimension mismatch rather than writing unqueryable
-vectors.
+script hard-fails on a dimension mismatch, before writing anything, rather than
+writing unqueryable vectors.
+
+Where the text comes from, what to check, and how to score retrieval:
+`docs/ground-ingest.md`. The citation evaluation (`eval_ground.py`) is the
+regression gate for every change to the corpus.
 
 ## Start here
 
