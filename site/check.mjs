@@ -66,7 +66,7 @@ for (const page of pages) {
   // Internal page links resolve to a route that was actually built. Asset
   // paths are checked against the file list instead.
   for (const [, href] of html.matchAll(/href="(\/[^"#]*)"/g)) {
-    if (/\.[a-z0-9]{2,5}$/i.test(href)) {
+    if (/\.[a-z0-9]{2,12}$/i.test(href)) {
       if (!assets.has(href)) fail.push(`${where}: missing asset ${href}`);
       continue;
     }
@@ -189,6 +189,41 @@ const chatHtml = pages.find((p) => p.endsWith('chat/index.html'));
 if (chatHtml) {
   for (const [, href] of readFileSync(chatHtml, 'utf8').matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)) chatCss += gz('dist' + href);
   if (chatCss > CHAT_CSS_BUDGET) fail.push(`chat CSS is ${chatCss} B gzipped, over the ${CHAT_CSS_BUDGET} B budget`);
+}
+
+// The installable shell: manifest, icons, service worker and headers have to
+// agree with each other and with what the build produced. A service worker that
+// precaches a file the build no longer emits fails to install, silently, and the
+// app then has no offline mode: so every precache entry is checked here.
+if (chatHtml) {
+  const html = readFileSync(chatHtml, 'utf8');
+  if (!/<link rel="manifest" href="\/chat\/manifest\.webmanifest"/.test(html)) fail.push('chat: no <link rel="manifest">');
+  if (!assets.has('/chat/manifest.webmanifest')) fail.push('chat: manifest missing from the build');
+  else {
+    const m = JSON.parse(readFileSync('dist/chat/manifest.webmanifest', 'utf8'));
+    if (m.start_url !== '/chat/' || m.scope !== '/chat/') fail.push('chat manifest: start_url and scope must both be /chat/');
+    if (m.display !== 'standalone') fail.push('chat manifest: display must be standalone');
+    const sizes = new Set((m.icons ?? []).map((i) => `${i.sizes}/${i.purpose}`));
+    for (const want of ['192x192/any', '512x512/any', '512x512/maskable']) if (!sizes.has(want)) fail.push(`chat manifest: missing icon ${want}`);
+    for (const i of m.icons ?? []) if (!assets.has(i.src)) fail.push(`chat manifest: missing icon file ${i.src}`);
+  }
+  if (!assets.has('/chat/sw.js')) fail.push('chat: sw.js missing (post-build did not run?)');
+  else {
+    const sw = readFileSync('dist/chat/sw.js', 'utf8');
+    const list = JSON.parse(sw.match(/const PRECACHE = (\[.*?\]);/)?.[1] ?? '[]');
+    if (!list.includes('/chat/')) fail.push('chat sw: the shell (/chat/) is not precached');
+    for (const f of list) if (!assets.has(f) && !routes.has(f)) fail.push(`chat sw: precaches ${f}, which the build did not produce`);
+    if (/caches\.put\([^)]*v1\/chat/.test(sw) || /completions/.test(sw)) fail.push('chat sw: must never cache API traffic');
+  }
+  if (!assets.has('/_headers')) fail.push('chat: _headers missing');
+  else {
+    const headers = readFileSync('dist/_headers', 'utf8');
+    const csp = headers.match(/Content-Security-Policy:\s*(.+)/)?.[1] ?? '';
+    if (!csp) fail.push('chat: no Content-Security-Policy on /chat/*');
+    if (/unsafe-(inline|eval)/.test(csp)) fail.push('chat CSP: unsafe-inline / unsafe-eval are not allowed');
+    if (!/script-src 'self'(;|$)/.test(csp)) fail.push("chat CSP: script-src must be exactly 'self'");
+    if (!/frame-ancestors 'none'/.test(csp)) fail.push("chat CSP: frame-ancestors 'none' missing");
+  }
 }
 
 // The audience is assumed to be on a slow connection.

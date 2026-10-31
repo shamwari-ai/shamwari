@@ -25,7 +25,7 @@ export default defineConfig({
   webServer: [
     { command: 'node chat-mock/server.mjs 8788', url: `${MOCK}/health`, reuseExistingServer: !process.env.CI },
     {
-      command: `PUBLIC_SHAMWARI_API=${MOCK} npx astro build --outDir dist-e2e && node e2e/serve.mjs 4322`,
+      command: `export PUBLIC_SHAMWARI_API=${MOCK} && npx astro build --outDir dist-e2e && node scripts/post-build.mjs dist-e2e && node e2e/serve.mjs 4322`,
       url: `${SITE}/chat/`,
       timeout: 120_000,
       reuseExistingServer: !process.env.CI,

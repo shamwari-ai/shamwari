@@ -8,10 +8,14 @@ import {
   renderPending,
   renderUser,
   type ErrorActions,
+  type QueueActions,
 } from './render';
 import { newId, openStore, titleOf, type StoredMessage, type Thread } from './store';
 import { LANGUAGES, isLanguage } from './strings';
 import type { ChatMessage, Scope } from './types';
+
+const RETRY_FIRST_MS = 15_000;
+const RETRY_MAX_MS = 5 * 60_000;
 
 /** How many earlier messages travel with a question. Fewer on Data Saver. */
 const CONTEXT = 6;
@@ -35,6 +39,9 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   let lang = currentLanguage();
   let scope: Scope = 'platform';
   let busy = false;
+  let flushing = false;
+  let retryMs = RETRY_FIRST_MS;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
   const fresh = (): Thread => ({ id: newId(), title: '', updatedAt: Date.now(), messages: [] });
   const saved = await store.list();
@@ -54,9 +61,20 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
 
   // ---- rendering -----------------------------------------------------------
   const actionsFor = (m: StoredMessage): ErrorActions => ({
-    retry: () => void send(m),
+    retry: () => void deliver(thread, m),
     askGeneral: () => void ask(m.text, 'platform'),
     signIn: () => showAuth(),
+  });
+
+  const queueActionsFor = (m: StoredMessage): QueueActions => ({
+    sendNow: () => void deliver(thread, m),
+    discard: () => {
+      thread.messages = thread.messages.filter((x) => x !== m);
+      nodes.get(m.id)?.remove();
+      nodes.delete(m.id);
+      syncEmpty();
+      void persist();
+    },
   });
 
   /** Put (or replace) one node under a stable key, so the live region only announces what changed. */
@@ -75,7 +93,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
       place(m.id, renderAnswer(m, m.answer, s, lang));
       return;
     }
-    place(m.id, renderUser(m, s));
+    place(m.id, renderUser(m, s, queueActionsFor(m)));
     if (m.error) place(`${m.id}:error`, renderError(m.id, m.error, s, actionsFor(m)), m.id);
   };
 
@@ -99,8 +117,10 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     ul.replaceChildren(
       ...list.map((t) => {
         const b = h('button', { type: 'button', class: 'btn link' }, t.title || '…');
-        b.addEventListener('click', () => {
-          thread = t;
+        b.addEventListener('click', async () => {
+          // Read it again: a question queued in that chat may have been
+          // answered in the background since this list was drawn.
+          thread = (await store.list()).find((x) => x.id === t.id) ?? t;
           rebuild();
           void renderHistory();
           $('#thread').focus();
@@ -118,9 +138,9 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   };
 
   // ---- asking --------------------------------------------------------------
-  const contextFor = (target: StoredMessage): ChatMessage[] => {
+  const contextFor = (th: Thread, target: StoredMessage): ChatMessage[] => {
     const out: ChatMessage[] = [];
-    for (const m of thread.messages) {
+    for (const m of th.messages) {
       if (m === target) break;
       if (m.role === 'assistant') out.push({ role: 'assistant', content: m.text });
       else if (!m.error && m.status !== 'queued') out.push({ role: 'user', content: m.text });
@@ -129,30 +149,46 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     return out.slice(-(saveData() ? CONTEXT_SAVER : CONTEXT));
   };
 
-  async function send(m: StoredMessage): Promise<void> {
+  const save = async (th: Thread) => {
+    th.updatedAt = Date.now();
+    if (th.messages.length) await store.put(th);
+  };
+
+  /**
+   * Send one question and record what came back. Works on any thread, because a
+   * question queued offline is delivered even if the person has since started a
+   * new chat; it only draws on screen when its thread is the one being shown.
+   * The message id is the Idempotency-Key, so a retry after a dropped
+   * connection is replayed by the gateway instead of answered and metered twice.
+   */
+  async function deliver(th: Thread, m: StoredMessage): Promise<void> {
     if (busy) return;
     if (!auth.getKey()) {
       showAuth();
       return;
     }
+    const shown = () => th === thread;
     setBusy(true);
     delete m.error;
     m.status = 'sent';
-    mount(m);
-    nodes.get(`${m.id}:error`)?.remove();
-    nodes.delete(`${m.id}:error`);
-
-    const s = strings();
-    const pending = place(`${m.id}:pending`, renderPending(m.id, s), m.id);
-    pending.scrollIntoView({ block: 'end' });
-    const slow = setTimeout(() => pending.append(h('p', { class: 'note' }, s.slow)), SLOW_AFTER_MS);
+    let pending: HTMLElement | null = null;
+    let slow: ReturnType<typeof setTimeout> | undefined;
+    if (shown()) {
+      mount(m);
+      nodes.get(`${m.id}:error`)?.remove();
+      nodes.delete(`${m.id}:error`);
+      const s = strings();
+      pending = place(`${m.id}:pending`, renderPending(m.id, s), m.id);
+      pending.scrollIntoView({ block: 'end' });
+      slow = setTimeout(() => pending?.append(h('p', { class: 'note' }, s.slow)), SLOW_AFTER_MS);
+    }
 
     const res = await client.ask(
-      { messages: contextFor(m), scope: m.scope ?? 'platform' },
+      { messages: contextFor(th, m), scope: m.scope ?? 'platform' },
       { idempotencyKey: m.id },
     );
     clearTimeout(slow);
-    pending.remove();
+    pending?.remove();
     nodes.delete(`${m.id}:pending`);
 
     if (res.ok) {
@@ -163,18 +199,55 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
         at: Date.now(),
         answer: res.value,
       };
-      thread.messages.push(reply);
-      mount(reply);
-      nodes.get(reply.id)!.scrollIntoView({ block: 'start' });
+      // Right after its own question, which is not the end of the thread if
+      // later questions were written while this one waited.
+      th.messages.splice(th.messages.indexOf(m) + 1, 0, reply);
+      if (shown()) {
+        mount(m);
+        place(reply.id, renderAnswer(reply, res.value, strings(), lang), m.id);
+        nodes.get(reply.id)!.scrollIntoView({ block: 'start' });
+      }
+      retryMs = RETRY_FIRST_MS;
+    } else if (res.error.kind === 'offline') {
+      // Not an error: the answer did not arrive, so the question waits and is
+      // sent again by itself. Nothing is lost and the person is told so.
+      m.status = 'queued';
+      if (shown()) mount(m);
+      scheduleRetry();
     } else {
       const { kind, retryAfterSec, upgradeUrl } = res.error;
       m.status = 'failed';
       m.error = { kind, retryAfterSec, upgradeUrl };
-      mount(m);
+      if (shown()) mount(m);
       if (kind === 'unauthorized') showAuth();
     }
-    await persist();
+    await save(th);
     setBusy(false);
+  }
+
+  const hasQueued = (ths: Thread[]) => ths.some((t) => t.messages.some((m) => m.status === 'queued'));
+
+  /** Send every queued question, oldest thread first, one at a time, stopping at the first that cannot go. */
+  async function flush(): Promise<void> {
+    if (flushing || busy || !auth.getKey()) return;
+    flushing = true;
+    try {
+      const others = (await store.list()).filter((t) => t.id !== thread.id);
+      for (const th of [...others.reverse(), thread]) {
+        for (const m of th.messages.filter((x) => x.status === 'queued')) {
+          await deliver(th, m);
+          if (m.status === 'queued') return; // still no network: scheduleRetry already armed
+        }
+      }
+    } finally {
+      flushing = false;
+    }
+  }
+
+  function scheduleRetry() {
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => void flush(), retryMs);
+    retryMs = Math.min(retryMs * 2, RETRY_MAX_MS);
   }
 
   async function ask(text: string, withScope: Scope = scope): Promise<void> {
@@ -189,10 +262,17 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     if (!thread.messages.length) thread.title = titleOf(clean);
     thread.messages.push(m);
     syncEmpty();
-    mount(m);
     input.value = '';
     autosize();
-    await send(m);
+    if (!navigator.onLine) {
+      // Offline: do not even try. Save it, say so, send it when the network is back.
+      m.status = 'queued';
+      mount(m);
+      await save(thread);
+      scheduleRetry();
+    } else {
+      await deliver(thread, m);
+    }
     void renderHistory();
   }
 
@@ -288,8 +368,15 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   const online = () => {
     $('#offline').hidden = navigator.onLine;
   };
-  addEventListener('online', online);
+  addEventListener('online', () => {
+    online();
+    retryMs = RETRY_FIRST_MS;
+    void flush();
+  });
   addEventListener('offline', online);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && navigator.onLine) void flush();
+  });
 
   // ---- go ------------------------------------------------------------------
   applyStrings(document, lang);
@@ -298,5 +385,6 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   syncAuth();
   void renderHistory();
   if (!auth.getKey()) authPanel.hidden = false;
+  if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
   document.documentElement.dataset.ready = 'true';
 }
