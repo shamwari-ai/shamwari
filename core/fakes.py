@@ -159,12 +159,38 @@ class Collection:
                 rows = [d for d in rows if matches(d, arg)]
             elif op == "$limit":
                 rows = rows[:arg]
+            elif op == "$group":
+                rows = self._group(rows, arg)
             elif op == "$project":
                 keep = [k for k, v in arg.items() if v == 1]
                 rows = [{k: d[k] for k in keep if k in d} for d in rows]
             else:
                 raise NotImplementedError(op)
         return rows
+
+    @staticmethod
+    def _group(rows: list[dict[str, Any]], arg: dict[str, Any]) -> list[dict[str, Any]]:
+        """`$group` with `_id: None` and `$sum` of a field, of 1, or of an `$add`: the billing rollup."""
+        if arg.get("_id") is not None:
+            raise NotImplementedError("$group by key")
+        if not rows:
+            return []
+
+        def value(d: dict[str, Any], expr: Any) -> float:
+            if isinstance(expr, (int, float)):
+                return expr
+            if isinstance(expr, str):
+                return d.get(expr.lstrip("$")) or 0
+            (op, args), = expr.items()
+            if op == "$add":
+                return sum(value(d, a) for a in args)
+            raise NotImplementedError(op)
+
+        out: dict[str, Any] = {"_id": None}
+        for name, spec in arg.items():
+            if name != "_id":
+                out[name] = sum(value(d, spec["$sum"]) for d in rows)
+        return [out]
 
     def _search(self, rows: list[dict[str, Any]], arg: dict[str, Any]) -> list[dict[str, Any]]:
         compound = arg["compound"]

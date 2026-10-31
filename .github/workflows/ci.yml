@@ -120,6 +120,16 @@ jobs:
           python eval_ground.py --fixture --min-hit-at-k 1.0 --min-hit-at-1 0.85
         working-directory: core
 
+      # The real Worker code against a real Core process (Core's own app over an
+      # in-memory store holding the fixture corpus), with a fake model. Proves a
+      # question comes back cited, that a personal-scope request reaches no provider,
+      # embedder or store, and that provenance is stamped from the model that served.
+      # Uses the Node the runner image ships; no new action.
+      - name: End-to-end contract (Worker, Core, Ground)
+        run: |
+          (cd gateway && npm ci)
+          PYTHON=python bash scripts/e2e.sh
+
   docs-site:
     name: Docs site (build, links, tokens, size)
     runs-on: ubuntu-latest
