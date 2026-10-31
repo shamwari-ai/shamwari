@@ -16,11 +16,12 @@ token="$("$python" -c 'import secrets; print(secrets.token_hex(16))')"
 log="$(mktemp)"
 
 cd "$root/core"
-E2E_CORE_TOKEN="$token" "$python" -m uvicorn e2e_app:app --host 127.0.0.1 --port "$port" --log-level warning >"$log" 2>&1 &
+E2E_APP=1 E2E_CORE_TOKEN="$token" "$python" -m uvicorn e2e_app:app --host 127.0.0.1 --port "$port" --log-level warning >"$log" 2>&1 &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true; rm -f "$log"' EXIT
 
-for _ in $(seq 1 60); do
+# Ingesting the fixture and a cold import of the dependencies can take a while on a runner.
+for _ in $(seq 1 120); do
   if curl -fsS "http://127.0.0.1:$port/__e2e/ready" >/dev/null 2>&1; then break; fi
   if ! kill -0 "$pid" 2>/dev/null; then echo "Core e2e app exited:" >&2; cat "$log" >&2; exit 1; fi
   sleep 0.5

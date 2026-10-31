@@ -134,6 +134,8 @@ class Machine(unittest.TestCase):
         )
         for name in ("ingest_ground", "eval_ground", "fakes", "e2e_app"):
             self.assertNotIn(name, copies)
+        # A wildcard would ship e2e_app (unauthenticated /__e2e/* routes) the day it is added.
+        self.assertNotRegex(copies, r"\*|COPY \. ")
 
     def test_health_check_is_the_unauthenticated_route(self):
         toml = (HERE / "fly.toml").read_text()

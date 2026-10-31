@@ -188,8 +188,11 @@ class Collection:
 
         out: dict[str, Any] = {"_id": None}
         for name, spec in arg.items():
-            if name != "_id":
-                out[name] = sum(value(d, spec["$sum"]) for d in rows)
+            if name == "_id":
+                continue
+            if set(spec) != {"$sum"}:
+                raise NotImplementedError(f"accumulator {sorted(spec)}")
+            out[name] = sum(value(d, spec["$sum"]) for d in rows)
         return [out]
 
     def _search(self, rows: list[dict[str, Any]], arg: dict[str, Any]) -> list[dict[str, Any]]:

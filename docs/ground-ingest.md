@@ -132,7 +132,7 @@ credentials. It proves:
   prompt the model saw.
 - Another entity's chunk that matches the question exactly is never served.
 - A personal-scope request is a 409 `scope_requires_local_inference` with **zero**
-  provider calls, **zero** embedding calls, zero store reads and zero queue messages,
+  provider calls, **zero** embedding calls, zero reads of the Ground store and zero queue messages,
   including when `MIND_AVAILABLE` is `true`. `/v1/ground/context` with Mind available
   retrieves without embedding the question at the edge.
 - Core refuses the same requests on its own, without the Worker's help.
