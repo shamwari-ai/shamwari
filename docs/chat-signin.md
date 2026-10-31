@@ -54,27 +54,35 @@ Verification, every step failing closed:
 5. Nothing is cached per token. The signature check is the whole cost, and a cached verdict
    would only lengthen the revocation window.
 
-### Scope: from `permissions`, default deny
+### Scope: one fixed grant, from no claim at all
 
-Authorize on the `permissions` claim, never on `role` strings.
+**Owner decision, 2026-10-31: no new WorkOS permissions, and no permission or role in the chat
+path.** The Mukoko Account production environment already carries many (`data:read`,
+`data:admin`, `console:*`, `mongodb:access`, `github:access`, `fundi:admin`,
+`mukoko:news-moderator`, `manage-production-app`); Shamwari reuses none of them and adds none.
 
-| Permission (owner defines in the JWT template) | Grants      |
-| ---------------------------------------------- | ----------- |
-| `shamwari:community`                           | `community` |
-| `shamwari:platform`                            | `platform`  |
-
-- A valid token with **neither** is refused with **403 `not_provisioned`**
-  (`reason: no_shamwari_permission`), not 401: the person is signed in and the template is the
-  gap, and a 401 would send the chat client round the sign-in loop with the same token. The same
-  403 (`reason: no_person_id`) covers an account with no usable `person_id`. There is no default
-  scope. (The chat client maps any 403 to its "not permitted" state; a distinct message for
-  `not_provisioned` is a small site change not made here.)
-- **`personal` cannot be granted by this file to anyone.** A `shamwari:personal` permission,
-  or any other string, is ignored. A person who needs `personal` uses Shamwari Mind on their
-  device; Cloud never serves it (rule 1). The gate that enforces this is unchanged and
-  independent of this code: `gateway/src/scope.ts` (409 `scope_requires_local_inference`) and
-  `core/main.py::resolve_scope`. `test/workos.test.ts` proves a token carrying a personal
-  permission still gets a 409 on a personal-scope request, with no provider or embedding call.
+- Any **valid** access token (signature, `iss`, required `aud`, the Mukoko Account `client_id`,
+  `exp`, `sub`, `sid`) from a signed-in person gets exactly one grant, decided in gateway code
+  (`FIXED_GRANT` in `gateway/src/workos.ts`): **`community` and `platform`, the free tier,
+  metered per person.** The default does not depend on any permission being present: a token
+  with an empty or absent `permissions` claim works.
+- **Nothing in the token can raise it.** `permissions`, `role`, `roles`, `org_id`, `act` and any
+  scope-looking claim are never read to decide the grant. A token carrying `data:admin` or
+  `console:admin` gets what a token carrying nothing gets. `test/workos.test.ts` asserts that
+  byte for byte.
+- **`personal` is never grantable.** A person who needs `personal` uses Shamwari Mind on their
+  device; Cloud never serves it (rule 1). The gate is unchanged and independent of this code:
+  `gateway/src/scope.ts` (409 `scope_requires_local_inference`) and `core/main.py::resolve_scope`.
+  The tests prove an admin token carrying a personal-looking permission still gets a 409 on a
+  personal-scope request, with no provider or embedding call.
+- **Paid tiers later** come from the existing UCP subscription / ledger entitlement (the pattern
+  already noted on `fundi:admin`: public tiers use a UCP subscription, not a permission), not
+  from new permissions.
+- An account with no usable canonical person id (below) gets **403 `not_provisioned`**
+  (`reason: no_person_id`), not 401: the person is signed in and the account is the gap, and a
+  401 would send the chat client round the sign-in loop with the same token. (The chat client
+  maps any 403 to its "not permitted" state; a distinct message for `not_provisioned` is a small
+  site change not made here.)
 
 ### Who is metered
 
@@ -120,7 +128,10 @@ through the custom domain `auth.mukoko.com` (app **Mukoko Account**), and whethe
   claim per the WorkOS documentation as relayed, but no real token was inspected. **If a real
   token has no `client_id`, every sign-in is refused and the failure looks like a bad credential:**
   read a real token before enabling `WORKOS_CLIENT_ID`.
-- `sid` and `permissions` are present, and `person_id` is present once the template adds it.
+- `sid` is present, and `person_id` is present once the template exposes the WorkOS `externalId`.
+  If the template cannot expose it under that name, the claim name is one constant
+  (`PERSON_ID_CLAIM`); what to do for accounts without one is the owner's call, and today they
+  are refused rather than metered under `sub`.
 
 ### Two behaviours the owner should know about
 
@@ -193,20 +204,20 @@ owning-entity key.
 
 ## What is built, what is not
 
-| Piece                                               | State                                    |
-| --------------------------------------------------- | ---------------------------------------- |
-| Gateway accepts and verifies a WorkOS token         | built, 36 tests, guards mutation-checked |
-| `permissions` → scopes, default deny, no `personal` | built, tested                            |
-| Per-person metering identity                        | built; API acceptance is open (G6)       |
-| `chat-auth` session Worker, `mukoko` AuthProvider   | **design only**                          |
-| Revocation by `sid` deny list                       | not built, not asked for                 |
+| Piece                                             | State                                              |
+| ------------------------------------------------- | -------------------------------------------------- |
+| Gateway accepts and verifies a WorkOS token       | built, 59 tests, guards mutation-checked           |
+| One fixed grant, no permissions, no `personal`    | built, tested                                      |
+| Per-person metering on the canonical person id    | built; person ids must never equal entity ids (G6) |
+| `chat-auth` session Worker, `mukoko` AuthProvider | **design only**                                    |
+| Revocation by `sid` deny list                     | not built, not asked for                           |
 
 ## Needs the owner
 
-- **JWT template in the WorkOS dashboard:** set `aud` to our API's URI and issue the
-  `shamwari:community` / `shamwari:platform` permissions and a `person_id` claim carrying the
-  platform person id (WorkOS `externalId`) (the rendered template is capped at
-  3072 bytes; reserved claims are `iss`, `sub`, `exp`, `iat`, `nbf`, `jti`).
+- **JWT template in the WorkOS dashboard:** set `aud` to the gateway's URI, and expose the
+  canonical person id (WorkOS `externalId`) as a `person_id` claim if the template allows it.
+  **Nothing else**: no permission and no role is added for Shamwari. (The rendered template is
+  capped at 3072 bytes; reserved claims are `iss`, `sub`, `exp`, `iat`, `nbf`, `jti`.)
 - **Register** `https://shamwari.ai/chat/callback` on the WorkOS app (never a wildcard).
 - **Read `iss` off a real access token** and set `WORKOS_ISSUER`; set `WORKOS_AUDIENCE`,
   `WORKOS_CLIENT_ID` and `WORKOS_MONTHLY_TOKEN_CAP`; choose the **access-token lifetime**.

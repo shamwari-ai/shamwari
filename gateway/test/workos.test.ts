@@ -1,6 +1,6 @@
 // WorkOS sign-in: a token is believed only after its signature, issuer, audience,
-// client and expiry check out, and what it may ask for comes from its permissions,
-// never from the token's say-so about itself.
+// client and expiry check out, and what it may ask for is one fixed grant decided in code:
+// no permission, role or claim in the token can raise it.
 //
 // What these fail on: an unsigned or HS256-forged token being accepted, a token for
 // another audience, issuer or app being accepted, a missing `aud` being waved through,
@@ -15,7 +15,7 @@ import { authenticate } from '../src/auth';
 import { permittedScopes } from '../src/keys';
 import { conversationTrainable } from '../src/index';
 import coreMain from '../../core/main.py?raw';
-import { PERSON_ID_PATTERN, resetJwksCache, scopesFromPermissions, verifyWorkosToken } from '../src/workos';
+import { FIXED_GRANT, PERSON_ID_PATTERN, resetJwksCache, verifyWorkosToken } from '../src/workos';
 import type { Env } from '../src/types';
 
 const CLIENT = 'client_test';
@@ -62,16 +62,17 @@ interface TokenOpts {
   exp?: string | number | null;
   iat?: boolean;
   iatAgo?: number;
-  permissions?: unknown;
+  /** Extra claims, merged last: permissions, roles, org_id, whatever a real token might carry. */
+  extra?: Record<string, unknown>;
 }
 
 async function token(o: TokenOpts = {}): Promise<string> {
-  const claims: Record<string, unknown> = {
-    permissions: o.permissions === undefined ? ['shamwari:community', 'shamwari:platform'] : o.permissions,
-  };
+  // No permissions claim by default: a token with none must work.
+  const claims: Record<string, unknown> = {};
   if (o.personId !== null) claims.person_id = o.personId === undefined ? 'person_abc123' : o.personId;
   if (o.sid !== null) claims.sid = o.sid ?? 'session_1';
   if (o.clientId !== null) claims.client_id = o.clientId ?? CLIENT;
+  Object.assign(claims, o.extra);
   const jwt = new SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid: o.kid ?? 'k1' });
   if (o.iatAgo) jwt.setIssuedAt(Math.floor(Date.now() / 1000) - o.iatAgo);
   else if (o.iat !== false) jwt.setIssuedAt();
@@ -107,7 +108,7 @@ afterEach(() => vi.unstubAllGlobals());
 const verify = async (t: string, env = makeEnv()) => (await verifyWorkosToken(t, env)).status;
 
 describe('a good token', () => {
-  it('becomes a per-person context with the scopes its permissions grant', async () => {
+  it('becomes a per-person context with the fixed grant, from a token that carries no permissions', async () => {
     const r = await verifyWorkosToken(await token(), makeEnv());
     expect(r).toEqual({
       status: 'ok',
@@ -147,7 +148,7 @@ describe('a token that is not what it says', () => {
       client_id: CLIENT,
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 300,
-      permissions: ['shamwari:community'],
+      person_id: 'person_abc123',
     })}.`;
     expect(await verify(t)).toBe('invalid');
   });
@@ -156,7 +157,7 @@ describe('a token that is not what it says', () => {
     // The classic confusion: a verifier that trusts the header's alg and has only
     // the public key to hand would accept this.
     const secret = new TextEncoder().encode(JSON.stringify(publicJwk));
-    const t = await new SignJWT({ sid: 's', client_id: CLIENT, permissions: ['shamwari:community'] })
+    const t = await new SignJWT({ sid: 's', client_id: CLIENT, person_id: 'person_abc123' })
       .setProtectedHeader({ alg: 'HS256', kid: 'k1' })
       .setIssuer(ISSUER)
       .setAudience(AUDIENCE)
@@ -225,14 +226,14 @@ describe('a real sign-in that is not provisioned is a 403, not a 401', () => {
     const res = await worker.fetch(
       new Request('https://x/v1/chat/completions', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${await token({ permissions: ['billing:read'] })}` },
+        headers: { Authorization: `Bearer ${await token({ personId: null })}` },
         body: '{}',
       }),
       makeEnv(),
       { waitUntil() {} } as unknown as ExecutionContext,
     );
     expect(res.status).toBe(403);
-    expect(await res.json()).toEqual({ error: 'not_provisioned', reason: 'no_shamwari_permission' });
+    expect(await res.json()).toEqual({ error: 'not_provisioned', reason: 'no_person_id' });
   });
 });
 
@@ -274,34 +275,40 @@ describe('who is metered', () => {
   });
 });
 
-describe('scope comes from permissions and defaults to nothing', () => {
-  it('refuses a valid token with no shamwari permission', async () => {
-    expect(await verify(await token({ permissions: ['billing:read'] }))).toBe('forbidden');
-    expect(await verify(await token({ permissions: [] }))).toBe('forbidden');
-    expect(await verify(await token({ permissions: 'shamwari:community' }))).toBe('forbidden');
+describe('every signed-in person gets one fixed grant, and nothing in the token can change it', () => {
+  const grant = async (extra?: Record<string, unknown>) => {
+    const r = await verifyWorkosToken(await token({ extra }), makeEnv());
+    if (r.status !== 'ok') throw new Error(`expected ok, got ${r.status}`);
+    return r.ctx;
+  };
+
+  it('a token with no permissions, roles or org at all still gets community and platform', async () => {
+    const ctx = await grant();
+    expect(ctx.scopes).toEqual(['community', 'platform']);
+    expect(permittedScopes(ctx)).toEqual(['community', 'platform']);
+    expect(ctx.tier).toBe('community');
   });
 
-  it('grants exactly the scopes held, and ignores a personal permission', async () => {
-    expect(scopesFromPermissions(['shamwari:community'])).toEqual(['community']);
-    expect(scopesFromPermissions(['shamwari:personal', 'shamwari:community', 'personal'])).toEqual(['community']);
-    expect(scopesFromPermissions([1, null, { a: 1 }, 'shamwari:platform'])).toEqual(['platform']);
+  it.each([
+    ['console and data admin permissions', { permissions: ['data:admin', 'data:read', 'console:admin', 'mongodb:access', 'github:access', 'fundi:admin', 'manage-production-app'] }],
+    ['a role and roles', { role: 'admin', roles: ['admin', 'owner'] }],
+    ['an organisation', { org_id: 'org_01', org: 'nyuchi' }],
+    ['every personal-looking permission and scope claim', { permissions: ['shamwari:personal', 'personal', 'scope:personal'], scope: 'personal', scopes: ['personal'] }],
+    ['an impersonation actor', { act: { sub: 'someone-else' } }],
+    ['the old shamwari permissions', { permissions: ['shamwari:community'] }],
+  ])('%s gains nothing: same grant, same tier, same cap, never personal', async (_label, extra) => {
+    const plain = await grant();
+    const loaded = await grant(extra);
+    expect(loaded).toEqual(plain);
+    expect(permittedScopes(loaded)).not.toContain('personal');
   });
 
-  it('refuses a token whose only shamwari permission is personal', async () => {
-    expect(await verify(await token({ permissions: ['shamwari:personal'] }))).toBe('forbidden');
+  it('FIXED_GRANT is exactly community and platform', () => {
+    expect([...FIXED_GRANT]).toEqual(['community', 'platform']);
   });
 
-  it('never lets personal into the permitted scopes, whatever the token carries', async () => {
-    const r = await verifyWorkosToken(
-      await token({ permissions: ['shamwari:personal', 'shamwari:community', 'scope:personal'] }),
-      makeEnv(),
-    );
-    expect(r.status).toBe('ok');
-    if (r.status === 'ok') expect(permittedScopes(r.ctx)).toEqual(['community']);
-  });
-
-  it('answers a personal-scope request 409 and makes no provider or embedding call (rule 1)', async () => {
-    const t = await token({ permissions: ['shamwari:personal', 'shamwari:community'] });
+  it('answers a personal-scope request 409 and makes no provider or embedding call (rule 1), even for an admin', async () => {
+    const t = await token({ extra: { permissions: ['data:admin', 'shamwari:personal'], role: 'admin' } });
     const res = await worker.fetch(
       new Request('https://x/v1/chat/completions', {
         method: 'POST',

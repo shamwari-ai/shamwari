@@ -13,22 +13,20 @@ import type { AuthContext, Env, Scope } from './types';
  *     as a shared secret are both refused.
  *   - `iss`, `aud` and `client_id` must all match configuration, `exp` and `sub`
  *     must be present. A token without an `aud` is refused, not waved through.
- *   - Scope comes from the `permissions` claim and defaults to nothing. Personal
- *     is not a scope this file can grant to anyone (rule 1): a token that carries
- *     a personal permission gets no more than one that does not.
+ *   - Every valid token gets one fixed grant, decided here in code: community and
+ *     platform, the free tier. No claim, permission or role is read to decide it, so
+ *     none can raise it, and `personal` is not a scope this file can grant to anyone
+ *     (rule 1). A token carrying `data:admin` gets exactly what one carrying nothing gets.
  *   - Fails closed. A verdict on the token ('invalid') and a failure to reach a
  *     verdict ('unavailable') are different outcomes, so a JWKS outage is a 503
  *     and not a sign-out.
  */
 
-/** Permissions the WorkOS JWT template must issue. Owner-defined; see the doc. */
-export const PERMISSION_COMMUNITY = 'shamwari:community';
-export const PERMISSION_PLATFORM = 'shamwari:platform';
-
-const GRANTABLE: ReadonlyArray<readonly [string, Scope]> = [
-  [PERMISSION_COMMUNITY, 'community'],
-  [PERMISSION_PLATFORM, 'platform'],
-];
+/**
+ * What a signed-in person may ask for, whoever they are. Not read from the token. A paid
+ * tier later comes from the UCP subscription / ledger entitlement, not from a permission.
+ */
+export const FIXED_GRANT: readonly Scope[] = ['community', 'platform'];
 
 export const WORKOS_KEY_TYPE = 'workos';
 
@@ -50,12 +48,11 @@ export type WorkosOutcome =
   | { status: 'ok'; ctx: AuthContext }
   | { status: 'invalid' }
   /**
-   * A genuine token for someone who cannot use Shamwari yet: the template issues no shamwari
-   * permission, or the account has no canonical person id. That is provisioning, not a bad
-   * credential, so it is a 403 that says so and not a 401 that sends the person round the
-   * sign-in loop for a token with the same defect.
+   * A genuine token for an account with no usable canonical person id. That is provisioning,
+   * not a bad credential, so it is a 403 that says so and not a 401 that sends the person
+   * round the sign-in loop for a token with the same defect.
    */
-  | { status: 'forbidden'; reason: 'no_shamwari_permission' | 'no_person_id' }
+  | { status: 'forbidden'; reason: 'no_person_id' }
   | { status: 'unavailable' };
 
 /** Three dot-separated base64url segments: shaped like a JWT, not yet believed. */
@@ -140,13 +137,6 @@ function isVerdict(e: unknown): boolean {
 
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
 
-/** Scopes this token may ask for. Empty means no access: there is no default. */
-export function scopesFromPermissions(permissions: unknown): Scope[] {
-  if (!Array.isArray(permissions)) return [];
-  const held = new Set(permissions.filter((p): p is string => typeof p === 'string'));
-  return GRANTABLE.filter(([perm]) => held.has(perm)).map(([, scope]) => scope);
-}
-
 export async function verifyWorkosToken(token: string, env: Env): Promise<WorkosOutcome> {
   if (!workosEnabled(env)) return { status: 'invalid' };
   const cfg = config(env);
@@ -183,9 +173,6 @@ export async function verifyWorkosToken(token: string, env: Env): Promise<Workos
     return { status: 'forbidden', reason: 'no_person_id' };
   }
 
-  const scopes = scopesFromPermissions(payload.permissions);
-  if (scopes.length === 0) return { status: 'forbidden', reason: 'no_shamwari_permission' };
-
   return {
     status: 'ok',
     ctx: {
@@ -197,7 +184,7 @@ export async function verifyWorkosToken(token: string, env: Env): Promise<Workos
       keyType: WORKOS_KEY_TYPE,
       tier: 'community',
       monthlyTokenCap: cfg.monthlyTokenCap,
-      scopes,
+      scopes: [...FIXED_GRANT],
     },
   };
 }
