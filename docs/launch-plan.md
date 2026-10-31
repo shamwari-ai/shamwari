@@ -115,7 +115,7 @@ owner: Core path + secrets ──► Core on Fly (#81) ──► gateway CORE_UR
    │                 │                │                  │
    └─────────────────┴────────────────┴────────► baseline ► threshold ► invite-only pilots
                                                                             │
- ZimLII/ZIMRA ingest after owner licence read (#108) ───────────────► "law and tax" label
+ ZIMRA ingest after owner licence read (#108); ZimLII needs permission ───────────────► "law and tax" label
                                                                             │
                                          #110 Console keys + #109 status ► public
 ```
@@ -285,9 +285,9 @@ repo or issues. All assume `fly` and `wrangler` are logged in to the right accou
 
 ```bash
 fly apps create shamwari-core --org nyuchi-web-services
-# Path B (nyuchi-api): names set by the Core PR; one internal key from the Console
-#   (scopes shamwari, shamwari:service, ai), plus the bearer token below.
-# Path A (direct, interim): MONGODB_URI SUPABASE_DB_URL CF_ACCOUNT_ID CF_API_TOKEN
+# Core holds no database login (#127). It needs one internal key from the Console
+#   (scopes shamwari, shamwari:service, ai) and the Nyuchi API base URL; exact secret
+#   names are in docs/core-fly-runbook.md. Plus the bearer token below.
 TOKEN="$(openssl rand -hex 32)"
 fly secrets set -a shamwari-core SHAMWARI_CORE_TOKEN="$TOKEN"   # + path secrets
 fly deploy -a shamwari-core --remote-only
@@ -338,7 +338,7 @@ Core usage replay: `SHAMWARI_OPS_TOKEN`, `SERVERS_API_URL`, `SERVERS_API_TOKEN`,
 `SERVERS_API_INTERNAL_KEY` on Fly, the Mongo replay index (`docs/usage-replay.md`),
 and a schedule for `/replay/usage`.
 **E. Decisions only the owner can make**: Core path (A or B); Chat auth option (#105);
-what the ZIMRA approval covers; ZimLII terms; free-tier cap; extractive-turn metering;
+what the ZIMRA approval covers; ZimLII permission (default licence is non-commercial); free-tier cap; extractive-turn metering;
 WorkOS app; Shona/Ndebele reviewers and a practitioner reviewer; operator for
 USSD/SMS; tagline; who the first ten are.
 

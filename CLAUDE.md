@@ -156,9 +156,12 @@ edge Worker       Cloudflare Workers. Rust target (workers-rs); TypeScript in
   └──► private tunnel ──► core/   the workhorse on Fly, no public IP
                           Rust target; FastAPI in core/ until the rebuild lands.
                           auth · Ground retrieval · scope enforcement · sink
+                          holds NO database login (#127): reaches data only through
+                          the Nyuchi API, over interim public HTTPS until the tunnel
                             │
-                            ├──► MongoDB Atlas    conversations, usageEvents, knowledgeBase
-                            └──► Supabase Postgres  training corpus, audit trail
+                            └──► Nyuchi API ──► MongoDB Atlas      conversations, usageEvents,
+                                            │                      knowledgeBase
+                                            └──► Supabase Postgres training corpus, audit trail
                                  (Ground lives in Mongo or Postgres by need,
                                   following the rest of the platform)
 ```
@@ -316,9 +319,6 @@ repositories that the owner relayed and this repo's session could not read.
 | Servers API, ledger, Nyuchi API, Console  | _owner statement:_ the Servers API's ledger stores are being built now; ledger code, bring-up and restore-drill scripts released to `data-infra` main, nothing deployed; Nyuchi API citation fields and a locked Ground-ingest route, identity sync, sessions API and Console work merged to their staging, not deployed |
 | rule-1 enforcement downstream of the gate | fixed 2026-08-27, 3 defects, tests added; rule 1 and rule 2 are counted in the end-to-end contract test (#122)                                                                                                                                                                                                           |
 | Billing                                   | off. Meter usage, invoice the first ten customers by hand                                                                                                                                                                                                                                                                |
-
-Open drafts: #130 (WorkOS-first gateway auth), #120 and #123 (chat offline shell and
-accessibility tests), #129 (a note that Core holds no database login).
 
 ### The single next step
 

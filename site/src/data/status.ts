@@ -34,7 +34,7 @@ export const STATUS: StatusItem[] = [
   {
     state: 'building',
     title: 'The Zimbabwean legal and tax corpus',
-    body: 'Sources are being reviewed and approved one at a time: we ingest what we have the rights to, nothing scraped first and asked about later. Nothing is loaded yet, so Shamwari cannot cite a real source today. The Constitution of Zimbabwe goes in first. ZimLII, a free library of Zimbabwean law, licenses its legislation for non-commercial use by default, which does not fit a commercial service, so it stays out until we have its permission.',
+    body: 'Sources are being reviewed and approved one at a time: we ingest what we have the rights to, nothing scraped first and asked about later. As of 31 October 2026 nothing is loaded, so Shamwari cannot cite a real source yet. The Constitution of Zimbabwe goes in first. ZimLII, a free library of Zimbabwean law, licenses its legislation for non-commercial use by default, though some collections differ, which does not fit a commercial service, so it stays out until we have its permission.',
     issues: [17, 18],
     highlight: true,
   },
