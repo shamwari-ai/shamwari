@@ -33,8 +33,8 @@ Verification, every step failing closed:
 
 1. **Signature**, RS256 only (`algorithms: ['RS256']`), key chosen from the JWKS by `kid`,
    never from the token. `alg: none` and HS256-with-the-public-key-as-secret are refused.
-2. **`iss`** equals `WORKOS_ISSUER`; **`aud`** equals `WORKOS_AUDIENCE` and is _required_ (a
-   token with no `aud` is refused); **`client_id`** equals `WORKOS_CLIENT_ID`; `exp`, `iat`
+2. **`iss`** equals `WORKOS_ISSUER`; **`aud`** is checked, and _required_, **only when
+   `WORKOS_AUDIENCE` is set** (see below); **`client_id`** equals `WORKOS_CLIENT_ID`; `exp`, `iat`
    and `sub` must be present (a token with no `exp` would otherwise never expire).
 3. **`sid`** must be present: it is what revocation is keyed on.
    `maxTokenAge` caps how long any token may have been valid, whatever its `exp`
@@ -61,7 +61,7 @@ path.** The Mukoko Account production environment already carries many (`data:re
 `data:admin`, `console:*`, `mongodb:access`, `github:access`, `fundi:admin`,
 `mukoko:news-moderator`, `manage-production-app`); Shamwari reuses none of them and adds none.
 
-- Any **valid** access token (signature, `iss`, required `aud`, the Mukoko Account `client_id`,
+- Any **valid** access token (signature, `iss`, `aud` when configured, the Shamwari Chat `client_id`,
   `exp`, `sub`, `sid`) from a signed-in person gets exactly one grant, decided in gateway code
   (`FIXED_GRANT` in `gateway/src/workos.ts`): **`community` and `platform`, the free tier,
   metered per person.** The default does not depend on any permission being present: a token
@@ -107,15 +107,23 @@ with `gateway/pricing.json`).
 
 ### Configuration (none of it secret)
 
-| Variable                   | Meaning                                                                              |
-| -------------------------- | ------------------------------------------------------------------------------------ |
-| `WORKOS_CLIENT_ID`         | Turns WorkOS sign-in on. Unset means JWTs are refused with no call.                  |
-| `WORKOS_ISSUER`            | The exact `iss` of the app's access tokens. **Unverified, see below.**               |
-| `WORKOS_AUDIENCE`          | The `aud` the JWT template sets: `https://api.shamwari.ai`, byte for byte. Required. |
-| `WORKOS_JWKS_URL`          | Optional. Defaults to the WorkOS JWKS URL for the client id.                         |
-| `WORKOS_MONTHLY_TOKEN_CAP` | Per-person monthly cap, positive integer.                                            |
+| Variable                   | Meaning                                                                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `WORKOS_CLIENT_ID`         | Turns WorkOS sign-in on. Unset means JWTs are refused with no call.                                                                                    |
+| `WORKOS_ISSUER`            | The exact `iss` of the app's access tokens. **Unverified, see below.**                                                                                 |
+| `WORKOS_AUDIENCE`          | Optional. When set, `aud` must equal it exactly and a token without one is refused. Unset: `aud` is not checked. Blank is a configuration error (503). |
+| `WORKOS_JWKS_URL`          | Optional. Defaults to the WorkOS JWKS URL for the client id.                                                                                           |
+| `WORKOS_MONTHLY_TOKEN_CAP` | Per-person monthly cap, positive integer.                                                                                                              |
 
-Enabled but incomplete (any of issuer, audience or cap missing or malformed) is
+**Why `aud` is optional.** The chat is its own AuthKit application, so the `client_id` check
+already isolates it: a token minted for any other app in the environment (Console, weather, news)
+is refused. `aud` lives in the JWT template, which is shared by every app in the production
+environment, and a verifier elsewhere that is given a token with an `aud` and no expected
+audience may reject it (unverified), so production's template does not carry one. The staging
+template does (`https://api.shamwari.ai`); set `WORKOS_AUDIENCE` to that there and the check is
+enforced. Production runs on `iss` + `client_id` + `exp` unless the owner later adds `aud`.
+
+Enabled but incomplete (any of issuer or cap missing or malformed, or a blank audience) is
 **503, never permissive**.
 
 `WORKOS_ISSUER` is a value to read off a real token before setting. The Console signs in
@@ -214,17 +222,24 @@ owning-entity key.
 
 ## Needs the owner
 
-- **JWT template in the WorkOS dashboard:** set `aud` to the gateway's URI, and expose the
-  canonical person id (WorkOS `externalId`) as a `person_id` claim if the template allows it.
-  **Nothing else**: no permission and no role is added for Shamwari. (The rendered template is
-  capped at 3072 bytes; reserved claims are `iss`, `sub`, `exp`, `iat`, `nbf`, `jti`.)
-- **Register** `https://shamwari.ai/chat/callback` on the WorkOS app (never a wildcard).
-- **Production template:** the JWT template is applied in the Mukoko Account **staging** environment only (`{"aud": "https://api.shamwari.ai", "person_id": "{{ user.external_id }}"}`; staging client `client_01KQBBSM2FRWYND51VY92NSCG3`). Production (client `client_01KQBBSMQTSMTBN7HEC9KQBJC0`) is untouched and its template already carries `urn:nyuchi:roles`: **the edit must add to it, not replace it.** An unset `externalId` may render as an empty string or null rather than a missing claim; the gateway refuses both (403 `not_provisioned`).
-- **Read `iss` off a real access token** and set `WORKOS_ISSUER`; set `WORKOS_AUDIENCE`,
-  `WORKOS_CLIENT_ID` and `WORKOS_MONTHLY_TOKEN_CAP`; choose the **access-token lifetime**.
+- **Done in WorkOS production (2026-10-31, relayed by the orchestrating session):** a dedicated
+  AuthKit application **Shamwari Chat**, client `client_01M68PCT0T5ECHKDYH45ECT0GV` (not a
+  secret), **access-token lifetime 300 s**, redirect URI `https://shamwari.ai/chat/callback` only,
+  logout `https://shamwari.ai/chat/`, web origin `https://shamwari.ai`. So
+  `WORKOS_CLIENT_ID=client_01M68PCT0T5ECHKDYH45ECT0GV`, and the revocation window is about five
+  minutes. The shared "Mukoko Account" app was not used because it has about forty redirect URIs
+  and a five-hour access-token lifetime.
+- **Done: the JWT template.** Production now carries `urn:nyuchi:roles` (unchanged) plus
+  `person_id` (`{{ user.external_id }}`). **No permission and no role is added for Shamwari, and
+  no `aud`** (see above). Staging still has `{"aud": "https://api.shamwari.ai", ...}`. An unset
+  `externalId` may render as an empty string or null rather than a missing claim; the gateway
+  refuses both (403 `not_provisioned`).
+- **Done: WorkOS `externalId` is set** for the 11 linked people (reconcile applied, in sync).
+  Anyone without one is refused until they are linked.
+- **Still to do: read `iss` off a real access token** from the Shamwari Chat app and set
+  `WORKOS_ISSUER`; set `WORKOS_CLIENT_ID`, `WORKOS_MONTHLY_TOKEN_CAP` (and `WORKOS_AUDIENCE` only
+  if `aud` is added to the template). Not verified here: no real token has been inspected.
 - **Approve the gateway auth change at merge time** (this PR adds the `jose` dependency, MIT,
   the verifier for the token; nothing else new).
 - **A yes to the `chat-auth` Worker** (a new deployment) and where its cookie-sealing secret
   and WorkOS client secret live.
-- **Set the WorkOS `externalId`** of every user to the platform person id, or the `person_id`
-  claim has nothing to carry and those users are refused.

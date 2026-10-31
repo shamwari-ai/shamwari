@@ -327,6 +327,41 @@ describe('every signed-in person gets one fixed grant, and nothing in the token 
   });
 });
 
+describe('audience is optional by config, required when configured', () => {
+  const noAud = () => makeEnv({ WORKOS_AUDIENCE: undefined });
+
+  it.each([
+    ['a token with no aud', { aud: null }],
+    ['a token with some other aud', { aud: 'https://anything.example' }],
+    ['a token with the usual aud', {}],
+  ] as [string, TokenOpts][])('unset: accepts %s', async (_label, opts) => {
+    expect(await verify(await token(opts), noAud())).toBe('ok');
+  });
+
+  it.each([
+    ['another WorkOS app (the real isolation, client_id)', { clientId: 'client_other' }],
+    ['no client id', { clientId: null }],
+    ['a wrong issuer', { iss: 'https://evil.example' }],
+    ['no issuer', { iss: null }],
+    ['an expired token', { exp: Math.floor(Date.now() / 1000) - 60 }],
+    ['no expiry', { exp: null }],
+    ['an over-age token', { iatAgo: 7200, exp: '1h' }],
+    ['no sid', { sid: null }],
+  ] as [string, TokenOpts][])('unset: still refuses %s', async (_label, opts) => {
+    expect(await verify(await token(opts), noAud())).toBe('invalid');
+  });
+
+  it('unset: still refuses alg none and a foreign signature', async () => {
+    expect(await verify(await token({ key: otherSigning }), noAud())).toBe('invalid');
+  });
+
+  it('set: still requires it, exactly', async () => {
+    expect(await verify(await token({ aud: null }))).toBe('invalid');
+    expect(await verify(await token({ aud: 'https://other.example' }))).toBe('invalid');
+    expect(await verify(await token())).toBe('ok');
+  });
+});
+
 describe('failing closed', () => {
   it('is unavailable, not invalid and not ok, when the JWKS endpoint is down', async () => {
     jwksBehaviour = () => new Response('boom', { status: 500 });
@@ -370,7 +405,8 @@ describe('failing closed', () => {
 
   it.each([
     ['no issuer', { WORKOS_ISSUER: undefined }],
-    ['no audience', { WORKOS_AUDIENCE: undefined }],
+    ['a blank audience (set to nothing is a mistake, not unset)', { WORKOS_AUDIENCE: '' }],
+    ['a whitespace audience', { WORKOS_AUDIENCE: '   ' }],
     ['no cap', { WORKOS_MONTHLY_TOKEN_CAP: undefined }],
     ['a non-numeric cap', { WORKOS_MONTHLY_TOKEN_CAP: 'lots' }],
     ['a zero cap', { WORKOS_MONTHLY_TOKEN_CAP: '0' }],

@@ -29,7 +29,11 @@ export interface Env {
   WORKOS_CLIENT_ID?: string;
   /** The `iss` WorkOS puts in access tokens for this app. Exact match. */
   WORKOS_ISSUER?: string;
-  /** The `aud` the JWT template sets, our API's URI. Required: a token without it is refused. */
+  /**
+   * The `aud` the JWT template sets. Optional: when set it is required and must match exactly
+   * (a token without it is refused); when unset the `aud` claim is not checked. Set to nothing
+   * (blank) is a configuration error, not "unset".
+   */
   WORKOS_AUDIENCE?: string;
   /** Defaults to https://api.workos.com/sso/jwks/{WORKOS_CLIENT_ID}. HTTPS only. */
   WORKOS_JWKS_URL?: string;

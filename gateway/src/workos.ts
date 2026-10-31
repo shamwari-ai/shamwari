@@ -11,8 +11,9 @@ import type { AuthContext, Env, Scope } from './types';
  *   - The algorithm is pinned to RS256 and the key comes from the JWKS, never
  *     from the token. `alg: none` and an HS256 token signed with the public key
  *     as a shared secret are both refused.
- *   - `iss`, `aud` and `client_id` must all match configuration, `exp` and `sub`
- *     must be present. A token without an `aud` is refused, not waved through.
+ *   - `iss` and `client_id` must match configuration, `exp` and `sub` must be present.
+ *     `aud` is checked, and required, whenever `WORKOS_AUDIENCE` is set; when it is not
+ *     set the check is off by owner decision and `client_id` is the isolation.
  *   - Every valid token gets one fixed grant, decided here in code: community and
  *     platform, the free tier. No claim, permission or role is read to decide it, so
  *     none can raise it, and `personal` is not a scope this file can grant to anyone
@@ -68,7 +69,8 @@ export function workosEnabled(env: Env): boolean {
 interface Config {
   clientId: string;
   issuer: string;
-  audience: string;
+  /** Absent means the `aud` claim is not checked: `iss`, `client_id` and `exp` carry the isolation. */
+  audience: string | undefined;
   jwksUrl: URL;
   monthlyTokenCap: number;
   maxTokenAgeSeconds: number;
@@ -78,7 +80,12 @@ interface Config {
 function config(env: Env): Config | null {
   const { WORKOS_CLIENT_ID: clientId, WORKOS_ISSUER: issuer, WORKOS_AUDIENCE: audience } = env;
   const cap = Number(env.WORKOS_MONTHLY_TOKEN_CAP);
-  if (!clientId || !issuer || !audience) return null;
+  if (!clientId || !issuer) return null;
+  // Optional by owner decision: the Shamwari Chat app is its own AuthKit application, so the
+  // `client_id` check already isolates it, and `aud` sits in a JWT template shared by every
+  // app in the environment. But when it IS configured it is required, and a variable that is
+  // set to nothing is a mistake to refuse, not a request to stop checking.
+  if (audience !== undefined && audience.trim() === '') return null;
   if (!Number.isInteger(cap) || cap <= 0) return null;
   // A ceiling on how long any token may have been valid, whatever `exp` it carries: a
   // template left at a long lifetime then costs a refusal and not a long revocation window.
@@ -150,7 +157,7 @@ export async function verifyWorkosToken(token: string, env: Env): Promise<Workos
     ({ payload } = await jwtVerify(token, jwksFor(cfg.jwksUrl), {
       algorithms: ['RS256'],
       issuer: cfg.issuer,
-      audience: cfg.audience,
+      ...(cfg.audience === undefined ? {} : { audience: cfg.audience }),
       requiredClaims: ['exp', 'iat', 'sub'],
       maxTokenAge: cfg.maxTokenAgeSeconds,
     }));
