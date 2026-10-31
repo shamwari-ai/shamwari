@@ -76,23 +76,18 @@ mode follows the device). Mzizi has no chat or citation component today.
 
 ## Data decisions
 
-- **History is local only, and that is all this app can promise.** Conversations
-  are kept in IndexedDB on the device and the app never syncs them anywhere.
-  "New chat" starts an empty thread; "Delete history" wipes the database. But
-  the gateway **does** keep a record of every answered request: it writes a
-  `conversations` document (messages, response, citations) to the sink and a
-  `usageEvents` row (`gateway/src/index.ts`), and holds the response in KV for
-  10 minutes for idempotent replay. So the footer says only what is true:
-  history is saved on this device only, and Shamwari keeps a record of each
-  question it answers to run the service. It makes **no promise about
-  training**: that is the owner's to make, once decided and once the deployed
-  gateway is confirmed to honour it. **This conflicts with the owner's "no server-side conversation storage in v1"
-  if that meant none at all.** Meeting it needs a gateway change (skip the
-  conversation sink for this surface); it is not made here. Until the owner
-  decides, the app sends `X-Shamwari-Channel: pwa`, the existing marker that
-  makes the gateway set `trainingEligible: false` (in the gateway code on
-  `staging`; confirm the deployed version does too), because nobody using the
-  chat has been asked whether their questions may train a model.
+- **History is local only; the server keeps a service record, not content.**
+  Conversations are kept in IndexedDB on the device and the app never syncs them
+  anywhere. "New chat" starts an empty thread; "Delete history" wipes the
+  database. Owner decision (2026-10-31): for the `pwa` channel the gateway keeps
+  **no message or answer text**; the app sends `X-Shamwari-Channel: pwa` and the
+  gateway then writes no `conversations` document (so nothing is trainable),
+  only the usage event (request id, scope, model, token counts, path, time).
+  Built in #125. One exception is disclosed in the app's Settings: so a retry is
+  never charged twice, the idempotent-replay path holds the answer in KV for up to
+  10 minutes and then deletes it. The footer says exactly this and nothing more.
+  Until #125 is deployed the older gateway still stores the conversation, so
+  **this wording is only true once that change is deployed**.
 - **Offline queue.** A question written offline is stored on the device and sent
   when the network returns, with one `Idempotency-Key` per message so a retry
   after a dropped connection is replayed by the gateway instead of answered and
