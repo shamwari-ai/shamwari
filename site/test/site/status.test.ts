@@ -1,13 +1,13 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { STATUS } from '../src/data/status';
+import { STATUS } from '../../src/data/status';
 
 // Shamwari Chat may only be called "Live" once it answers real questions with
 // citations. Until then the site says "Building". Flipping it takes a written
 // record of that check in docs/chat-live-evidence.md (who ran it, against
 // which deployment, the question asked and the citation returned). The file
 // does not exist yet; creating it is a deliberate act the owner reviews.
-const EVIDENCE = new URL('../../docs/chat-live-evidence.md', import.meta.url);
+const EVIDENCE = new URL('../../../docs/chat-live-evidence.md', import.meta.url);
 
 describe('Shamwari Chat status', () => {
   const chat = STATUS.find((s) => s.title === 'Shamwari Chat');

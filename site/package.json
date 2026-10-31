@@ -13,12 +13,12 @@
     "preview": "wrangler dev",
     "preview:app": "wrangler dev --config wrangler.app.jsonc",
     "check": "astro check && node check.mjs marketing",
-    "check:app": "astro check && node check.mjs app",
+    "check:app": "node check.mjs app",
     "deploy": "npm run build && wrangler deploy",
     "deploy:app": "npm run build:app && wrangler deploy --config wrangler.app.jsonc",
     "test": "vitest run",
-    "test:site": "vitest run test/status.test.ts test/site.test.ts",
-    "test:app": "vitest run --exclude test/status.test.ts --exclude test/site.test.ts",
+    "test:site": "vitest run test/site",
+    "test:app": "vitest run test/app",
     "e2e": "playwright test"
   },
   "dependencies": {

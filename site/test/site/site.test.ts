@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CHAT_LIVE, CHAT_URL, PAGES } from '../src/lib/site';
+import { CHAT_LIVE, CHAT_URL, PAGES } from '../../src/lib/site';
 
 // The marketing site and the chat app are two Workers on two origins.
 describe('marketing site links', () => {

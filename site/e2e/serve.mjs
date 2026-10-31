@@ -59,6 +59,25 @@ try {
     else if (cur && line.includes(':')) cur.headers[line.slice(0, line.indexOf(':')).trim()] = line.slice(line.indexOf(':') + 1).trim();
   }
 } catch {}
+// Honour dist-e2e/_redirects the way Workers static assets does (exact paths and a
+// trailing /* splat), so the root 302 and the apex-to-www 301s are exercised.
+const redirects = [];
+try {
+  for (const line of readFileSync(join(root, '_redirects'), 'utf8').split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const [from, to, status] = t.split(/\s+/);
+    redirects.push({ from, to, status: Number(status ?? 302) });
+  }
+} catch {}
+const redirectFor = (p) => {
+  for (const r of redirects) {
+    if (r.from.endsWith('/*') ? p.startsWith(r.from.slice(0, -1)) : p === r.from) {
+      return { status: r.status, location: r.to.replace(':splat', r.from.endsWith('/*') ? p.slice(r.from.length - 1) : '') };
+    }
+  }
+  return null;
+};
 const headersFor = (p) => {
   const out = {};
   for (const r of rules) {
@@ -70,6 +89,11 @@ const headersFor = (p) => {
 
 createServer(async (req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '');
+  const redirect = redirectFor(path);
+  if (redirect) {
+    res.writeHead(redirect.status, { Location: redirect.location });
+    return res.end();
+  }
   if (stubAuth && (path.startsWith('/__stub/') || path.startsWith('/chat/auth/'))) {
     if ((await stubRoute(req, res, path)) !== false) return;
   }

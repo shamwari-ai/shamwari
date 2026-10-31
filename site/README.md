@@ -14,9 +14,9 @@ npm run check             # astro check + node check.mjs (run after a build)
 npm run deploy             # astro build && wrangler deploy
 ```
 
-The custom domains have to be attached to the account before the first
-deploy; `wrangler.jsonc` declares `shamwari.ai` and `www.shamwari.ai` as
-custom-domain routes.
+The custom domains are attached in the Cloudflare dashboard, in the order in
+`docs/domains-and-deploy.md`; `wrangler.jsonc` still declares `shamwari.ai` as well as
+`www.shamwari.ai` only until the apex is moved to the app Worker.
 
 ## Two Workers (read this first)
 

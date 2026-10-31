@@ -9,10 +9,14 @@
 // when a precached file does, and the CSP's connect-src names the API origin
 // this build was pointed at (PUBLIC_SHAMWARI_API).
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const out = process.argv[2] ?? 'dist-app';
+
+// The two icons the marketing site and the app share live once, in public/; the app
+// build takes its copy here rather than keeping a second binary that can drift.
+for (const icon of ['favicon.png', 'apple-touch-icon.png']) copyFileSync(join('public', icon), join(out, icon));
 const read = (p) => readFileSync(join(out, p));
 const html = read('chat/index.html').toString('utf8');
 
