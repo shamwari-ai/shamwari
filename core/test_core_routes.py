@@ -49,7 +49,9 @@ class FakeApi:
         return a
 
     async def ground_search(self, body):
-        return self._do("ground_search", body) or {"scope": body["scope"], "hit": True, "chunks": [CHUNK]}
+        return self._do("ground_search", body) or {
+            "scope": body["scope"], "hit": True, "chunks": [{**CHUNK, "scope": body["scope"]}]
+        }
 
     async def sink(self, database, collections):
         return self._do("sink", database, collections) or {"written": {k: len(v) for k, v in collections.items()}}
@@ -140,6 +142,21 @@ class GroundRule1(Base):
         r = self.search()
         self.assertEqual((r.status_code, r.json()["detail"]["error"]), (409, "scope_requires_local_inference"))
 
+    def test_a_malformed_chunk_or_a_mismatched_mind_chunk_fails_closed_not_500(self):
+        for destination, scope, chunks in (
+            ("cloud", "platform", [None]),
+            ("cloud", "platform", ["text"]),
+            ("mind", "personal", [{**CHUNK, "scope": "platform"}]),  # not the caller's own scope
+            ("mind", "personal", [{**CHUNK, "scope": "personal"}, {**CHUNK, "scope": "community"}]),
+        ):
+            self.api.answers["ground_search"] = {"scope": scope, "hit": True, "chunks": chunks}
+            r = self.search(scope=scope, destination=destination)
+            self.assertEqual(r.status_code, 503, (destination, chunks))
+
+    def test_a_mind_answer_of_the_callers_own_scope_passes(self):
+        self.api.answers["ground_search"] = {"scope": "personal", "hit": True, "chunks": [{**CHUNK, "scope": "personal"}]}
+        self.assertEqual(self.search(scope="personal", destination="mind").status_code, 200)
+
     # -- fail closed ------------------------------------------------------------------
 
     def test_an_unreachable_api_is_a_503_that_says_nothing_about_why(self):
@@ -229,17 +246,42 @@ class Rest(Base):
                        {"owner_entity_id": "e 1", "billing_period": "2026-10"}):
             self.assertEqual(self.http.get("/rollup", headers=AUTH, params=params).status_code, 422)
 
+    def test_a_garbled_rollup_is_a_503_not_a_500(self):
+        self.api.answers["usage_rollup"] = {"total_tokens": "lots", "total_cost": {"x": 1}}
+        r = self.http.get("/rollup", headers=AUTH, params={"owner_entity_id": "e1", "billing_period": "2026-10"})
+        self.assertEqual(r.status_code, 503)
+
+    def test_the_upstream_cannot_rename_the_surface(self):
+        self.api.answers["guardrails"] = {"surface": "other", "platform": [], "entity": []}
+        self.assertEqual(self.http.get("/guardrails", headers=AUTH).json()["surface"], "shamwari")
+
     def test_guardrails_come_from_the_api(self):
         r = self.http.get("/guardrails", headers=AUTH)
         self.assertEqual(r.json(), {"surface": "shamwari", "platform": [{"id": "r1"}], "entity": []})
         self.assertEqual(self.http.get("/guardrails", headers=AUTH, params={"surface": "A B"}).status_code, 422)
 
+    def reset_health(self):
+        main._health.update(until=0.0, ok=False)
+
     def test_health_is_readiness_of_the_data_api_and_fails_closed(self):
+        self.reset_health()
         self.assertEqual(self.http.get("/health").json()["ok"], True)
+        self.reset_health()
         self.api.answers["whoami"] = DataApiUnavailable("x")
         r = self.http.get("/health")
         self.assertEqual(r.status_code, 503)
-        self.assertNotIn("x", r.json()["detail"]["error"].replace("data_api_unavailable", ""))
+        self.assertEqual(r.json()["detail"], {"error": "data_api_unavailable"})
+
+    def test_hammering_health_costs_the_api_one_call_per_window(self):
+        self.reset_health()
+        for _ in range(50):
+            self.http.get("/health")
+        self.assertEqual([c for c in self.api.calls if c[0] == "whoami"].__len__(), 1)
+        self.api.answers["whoami"] = DataApiUnavailable("x")
+        self.reset_health()
+        for _ in range(50):
+            self.assertEqual(self.http.get("/health").status_code, 503)
+        self.assertEqual([c for c in self.api.calls if c[0] == "whoami"].__len__(), 2)
 
     def test_key_verification_has_moved_and_says_so_without_admitting_anyone(self):
         r = self.http.post("/auth/verify", headers=AUTH, json={"key_prefix": "sk_shamwari_", "key_hash": "0" * 64})

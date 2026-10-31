@@ -30,12 +30,17 @@ class Image(unittest.TestCase):
         self.assertTrue(local, "found no local imports; the check is broken")
         self.assertLessEqual(local, self.copied(), local - self.copied())
 
-    def test_every_data_file_a_module_reads_is_in_the_image(self):
+    def test_every_data_file_a_shipped_module_reads_is_in_the_image(self):
+        shipped = {n for n in self.copied() if n.endswith(".py")}
+        self.assertIn("main.py", shipped)
         needed = set()
-        for py in ("main.py", "replay.py"):
-            needed |= set(re.findall(r"[\w.]+\.json", (HERE / py).read_text()))
-        self.assertIn("usage_event_fields.json", needed)
+        for py in shipped:
+            needed |= set(re.findall(r"[\"'](\w[\w.-]*\.json)[\"']", (HERE / py).read_text()))
         self.assertLessEqual(needed, self.copied(), needed - self.copied())
+
+    def test_the_image_ships_only_what_serving_needs(self):
+        """No parked or operator-only module: dead code in the image is attack surface."""
+        self.assertEqual({n for n in self.copied() if n.endswith(".py")}, {"main.py", "nyuchi_api.py"})
 
     def test_every_base_image_is_pinned_by_digest(self):
         froms = [

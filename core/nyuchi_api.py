@@ -37,8 +37,10 @@ DEFAULT_URL = "http://nyuchi-api.internal:8080"
 #: public name while connecting over the private address.
 DEFAULT_HOST = "api.nyuchi.com"
 
-#: A status that means "this request broke a rule", not "the service is down".
-_REFUSALS = frozenset({400, 404, 409, 413, 422})
+#: A status that means "this request broke a rule", not "the service is down". 404 is not
+#: here: a missing route (Core deployed before the API has it, or a misrouted path) is an
+#: outage, and must fail closed rather than look like an ordinary client error.
+_REFUSALS = frozenset({400, 409, 413, 422})
 _RETRYABLE = frozenset({502, 503, 504})
 
 
@@ -155,7 +157,9 @@ class DataApi:
         return out
 
     async def sink(self, database: str, collections: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
-        # Safe to retry: the API gives each record a content-derived id.
+        # Safe to retry: the API gives each record a content-derived id, so a repeat is a counted
+        # duplicate and not a second row (nyuchi-api tests/test_shamwari.py:
+        # test_a_retried_batch_is_not_stored_twice). The Worker's queue retries on top of this.
         return _object(
             await self._request(
                 "POST", "/v1/shamwari/sink", json={"database": database, "collections": collections}

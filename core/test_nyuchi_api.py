@@ -119,6 +119,10 @@ class Refusals(unittest.TestCase):
         self.assertEqual(cm.exception.status_code, 409)
         self.assertEqual(cm.exception.detail["error"], "scope_requires_local_inference")
 
+    def test_a_missing_route_is_an_outage_not_a_client_error(self):
+        with self.assertRaises(DataApiUnavailable):
+            run(client(lambda r: httpx.Response(404, json={"detail": "Not Found"})).whoami())
+
     def test_400_413_and_422_are_refusals_not_outages(self):
         for status in (400, 413, 422):
             with self.assertRaises(DataApiRefusal, msg=status):

@@ -39,6 +39,8 @@ import hmac
 import logging
 import os
 import re
+import time
+from contextlib import asynccontextmanager
 from enum import Enum
 from typing import Any, Literal
 
@@ -55,18 +57,21 @@ CORE_TOKEN = os.environ["SHAMWARI_CORE_TOKEN"]
 #: Unset means those routes are shut.
 OPS_TOKEN = os.environ.get("SHAMWARI_OPS_TOKEN", "")
 
-app = FastAPI(title="Shamwari Core", version="0.4.0")
 #: Built from the environment at import, so a missing key stops Core at boot, loudly,
 #: rather than at the first request. Tests replace it.
 api = DataApi.from_env()
 
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    await api.aclose()  # looked up at shutdown, so a replaced client is the one closed
+
+
+app = FastAPI(title="Shamwari Core", version="0.4.0", lifespan=lifespan)
+
 _ID = r"^[A-Za-z0-9_.:-]{1,64}$"
 _PERIOD = r"^\d{4}-(0[1-9]|1[0-2])$"
-
-
-@app.on_event("shutdown")
-async def _close() -> None:
-    await api.aclose()
 
 
 # ---------------------------------------------------------------------------
@@ -224,11 +229,13 @@ async def ground_search(body: GroundQuery) -> dict[str, Any]:
     except DataApiUnavailable:
         raise _unavailable() from None
 
-    # The third check. Whatever the API says, nothing leaves Core for a cloud destination
-    # unless it is cloud-safe by the API's own account of it.
-    if out.get("scope") != scope.value or (
-        body.destination == "cloud"
-        and any(c.get("scope") not in {s.value for s in CLOUD_SAFE} for c in out["chunks"])
+    # The third check. Whatever the API says, every chunk must be a well-formed object that
+    # carries exactly the scope that was asked for. For a cloud destination that means
+    # cloud-safe by the API's own account of it; for Mind it means the caller's own scope and
+    # nothing else's. Anything else fails closed.
+    chunks = out["chunks"]
+    if out.get("scope") != scope.value or any(
+        not isinstance(c, dict) or c.get("scope") != scope.value for c in chunks
     ):
         log.error("data api answered with a scope other than the one asked for")
         raise _unavailable()
@@ -251,7 +258,7 @@ async def guardrails(surface: str = "shamwari") -> dict[str, Any]:
         raise _refusal(e) from None
     except DataApiUnavailable:
         raise _unavailable() from None
-    return {"surface": surface, **rules}
+    return {**rules, "surface": surface}
 
 
 # ---------------------------------------------------------------------------
@@ -359,11 +366,14 @@ async def rollup(owner_entity_id: str, billing_period: str) -> dict[str, Any]:
         raise _refusal(e) from None
     except DataApiUnavailable:
         raise _unavailable() from None
-    return {
-        "total_tokens": int(r.get("total_tokens") or 0),
-        "total_cost": float(r.get("total_cost") or 0.0),
-        "requests": int(r.get("requests") or 0),
-    }
+    try:
+        return {
+            "total_tokens": int(r.get("total_tokens") or 0),
+            "total_cost": float(r.get("total_cost") or 0.0),
+            "requests": int(r.get("requests") or 0),
+        }
+    except (TypeError, ValueError):
+        raise _unavailable() from None
 
 
 # ---------------------------------------------------------------------------
@@ -398,11 +408,24 @@ async def rollup_by_tier(billing_period: str, owner_entity_id: str) -> None:
     raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, _PARKED)
 
 
+#: /health is open (Fly's check, and anyone else) and each real check is an authenticated call
+#: with Core's key, so it is answered from a short cache. The API sees at most one readiness call
+#: per window however often /health is hit, and a hammered /health cannot spend Core's rate limit.
+_HEALTH_OK_SECONDS = 10.0
+_HEALTH_FAIL_SECONDS = 3.0
+_health: dict[str, Any] = {"until": 0.0, "ok": False}
+
+
 @app.get("/health")
 async def health() -> dict[str, Any]:
     """Readiness: Core is up AND the data API answers Core's key. Fails closed otherwise."""
-    try:
-        await api.whoami()
-    except (DataApiUnavailable, DataApiRefusal):
-        raise _unavailable() from None
+    now = time.monotonic()
+    if now >= _health["until"]:
+        try:
+            await api.whoami()
+            _health.update(ok=True, until=now + _HEALTH_OK_SECONDS)
+        except (DataApiUnavailable, DataApiRefusal):
+            _health.update(ok=False, until=now + _HEALTH_FAIL_SECONDS)
+    if not _health["ok"]:
+        raise _unavailable()
     return {"ok": True, "service": "shamwari-core", "version": "0.4.0"}
