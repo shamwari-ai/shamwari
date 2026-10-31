@@ -10,7 +10,7 @@
     "build": "astro build && node scripts/post-build.mjs",
     "preview": "wrangler dev",
     "check": "astro check && node check.mjs",
-    "deploy": "astro build && wrangler deploy",
+    "deploy": "npm run build && wrangler deploy",
     "test": "vitest run",
     "e2e": "playwright test"
   },

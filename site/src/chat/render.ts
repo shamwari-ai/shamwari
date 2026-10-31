@@ -68,7 +68,7 @@ export function renderAnswer(m: StoredMessage, a: Answer, s: Strings, lang: Lang
       ? h(
           'section',
           { class: 'sources', 'aria-label': s.sources },
-          h('h3', {}, s.sources),
+          h('h2', {}, s.sources),
           h('ul', {}, ...a.citations.map((c) => renderCitation(c, s, lang))),
         )
       : h('p', { class: 'note' }, s.noSources),
@@ -88,27 +88,45 @@ export function renderUser(m: StoredMessage, s: Strings, queue?: QueueActions): 
     h('p', { class: 'who' }, s.you),
     h('p', { class: 'text' }, m.text),
   );
-  if (m.status === 'queued') {
-    el.classList.add('queued');
-    // A status, not an alert: waiting to send is the app working as designed.
-    el.append(h('p', { class: 'note', role: 'status' }, s.offlineQueued));
-    if (queue) {
-      const now = h('button', { type: 'button', class: 'btn' }, s.sendNow);
-      const drop = h('button', { type: 'button', class: 'btn' }, s.discard);
-      now.addEventListener('click', queue.sendNow);
-      drop.addEventListener('click', queue.discard);
-      el.append(h('div', { class: 'row' }, now, drop));
-    }
-  }
+  updateUser(el, m, s, queue);
   return el;
+}
+
+/**
+ * Change a question's "waiting to send" state IN PLACE. Replacing the node would
+ * count as a new addition to the aria-live log and the screen reader would read
+ * the person's own question out again, in the middle of the answer.
+ */
+export function updateUser(el: HTMLElement, m: StoredMessage, s: Strings, queue?: QueueActions): void {
+  el.querySelector('.queue-extra')?.remove();
+  el.classList.toggle('queued', m.status === 'queued');
+  if (m.status !== 'queued') return;
+  // A status, not an alert: waiting to send is the app working as designed.
+  // Say the real reason: a brief outage is not "no connection", and the person
+  // should hear that the question is kept and will be tried again.
+  const why = m.hint === 'unavailable' ? s.errors.unavailable : m.hint === 'busy' ? s.errors.busy : s.offlineQueued;
+  const extra = h('div', { class: 'queue-extra' }, h('p', { class: 'note', role: 'status' }, why));
+  if (queue) {
+    const now = h('button', { type: 'button', class: 'btn' }, s.sendNow);
+    const drop = h('button', { type: 'button', class: 'btn' }, s.discard);
+    now.addEventListener('click', queue.sendNow);
+    drop.addEventListener('click', queue.discard);
+    extra.append(h('div', { class: 'row' }, now, drop));
+  }
+  el.append(extra);
 }
 
 export function renderPending(id: string, s: Strings): HTMLElement {
   return h(
     'article',
-    { class: 'msg bot pending', 'data-id': `${id}:pending`, role: 'status', 'aria-label': s.shamwari },
-    h('p', { class: 'who' }, s.shamwari),
-    h('p', { class: 'text' }, s.thinking, h('span', { class: 'dots', 'aria-hidden': 'true' }, ' ●●●')),
+    { class: 'msg bot pending', 'data-id': `${id}:pending`, 'aria-label': s.shamwari },
+    // The role sits on a div, not the article: an article may not carry it.
+    h(
+      'div',
+      { role: 'status' },
+      h('p', { class: 'who' }, s.shamwari),
+      h('p', { class: 'text' }, s.thinking, h('span', { class: 'dots', 'aria-hidden': 'true' }, ' ●●●')),
+    ),
   );
 }
 
@@ -126,10 +144,14 @@ export function renderScopeRefusal(id: string, s: Strings, actions: ErrorActions
   ask.addEventListener('click', actions.askGeneral);
   return h(
     'article',
-    { class: 'msg bot refusal', 'data-id': `${id}:error`, role: 'status', 'aria-label': s.shamwari },
-    h('p', { class: 'who' }, s.shamwari),
-    h('h3', {}, s.scopePersonalTitle),
-    h('p', { class: 'text' }, s.scopePersonalBody),
+    { class: 'msg bot refusal', 'data-id': `${id}:error`, 'aria-label': s.shamwari },
+    h(
+      'div',
+      { role: 'status' },
+      h('p', { class: 'who' }, s.shamwari),
+      h('h2', {}, s.scopePersonalTitle),
+      h('p', { class: 'text' }, s.scopePersonalBody),
+    ),
     ask,
   );
 }
@@ -143,10 +165,14 @@ export function renderError(
   if (e.kind === 'scope_requires_local_inference') return renderScopeRefusal(id, s, actions);
   const el = h(
     'article',
-    { class: 'msg bot error', 'data-id': `${id}:error`, role: 'alert', 'aria-label': s.shamwari },
-    h('p', { class: 'who' }, s.shamwari),
-    h('p', { class: 'text' }, s.errors[e.kind as keyof Strings['errors']] ?? s.errors.unknown),
-    e.retryAfterSec ? h('p', { class: 'note' }, `${s.retryIn} ${e.retryAfterSec} ${s.seconds}.`) : null,
+    { class: 'msg bot error', 'data-id': `${id}:error`, 'aria-label': s.shamwari },
+    h(
+      'div',
+      { role: 'alert' },
+      h('p', { class: 'who' }, s.shamwari),
+      h('p', { class: 'text' }, s.errors[e.kind as keyof Strings['errors']] ?? s.errors.unknown),
+      e.retryAfterSec ? h('p', { class: 'note' }, `${s.retryIn} ${e.retryAfterSec} ${s.seconds}.`) : null,
+    ),
   );
   if (e.upgradeUrl && (e.kind === 'payment_required' || e.kind === 'rate_limited')) {
     el.append(h('a', { class: 'btn', href: e.upgradeUrl, target: '_blank', rel: 'noopener noreferrer' }, s.upgrade));

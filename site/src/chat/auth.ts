@@ -19,13 +19,18 @@ const STORAGE_KEY = 'shamwari.devkey';
 /** The gateway only accepts keys with this prefix (gateway/src/auth.ts). */
 export const isPlausibleKey = (k: string): boolean => /^sk_shamwari_[A-Za-z0-9_-]{4,}$/.test(k.trim());
 
-export function developerKey(storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> = localStorage): AuthProvider {
+type KeyStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+export function developerKey(storage?: KeyStorage): AuthProvider {
   let memory: string | null = null; // survives a blocked localStorage for this tab
+  // Resolved on use, inside each try: merely reading `localStorage` throws a
+  // SecurityError when site data is blocked, and that must not kill the app.
+  const store = (): KeyStorage => storage ?? localStorage;
   return {
     kind: 'developer-key',
     getKey() {
       try {
-        return storage.getItem(STORAGE_KEY) ?? memory;
+        return store().getItem(STORAGE_KEY) ?? memory;
       } catch {
         return memory;
       }
@@ -35,7 +40,7 @@ export function developerKey(storage: Pick<Storage, 'getItem' | 'setItem' | 'rem
       if (!isPlausibleKey(k)) return false;
       memory = k;
       try {
-        storage.setItem(STORAGE_KEY, k);
+        store().setItem(STORAGE_KEY, k);
       } catch {
         /* kept in memory for this tab only */
       }
@@ -44,7 +49,7 @@ export function developerKey(storage: Pick<Storage, 'getItem' | 'setItem' | 'rem
     signOut() {
       memory = null;
       try {
-        storage.removeItem(STORAGE_KEY);
+        store().removeItem(STORAGE_KEY);
       } catch {
         /* nothing stored */
       }

@@ -58,7 +58,7 @@ export const FIXTURES = [
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, content-type, idempotency-key',
+  'Access-Control-Allow-Headers': 'authorization, content-type, idempotency-key, x-shamwari-channel',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
   // Without this a browser hides Retry-After from the page, and the app cannot say how long to wait.
   'Access-Control-Expose-Headers': 'Retry-After',

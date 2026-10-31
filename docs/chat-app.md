@@ -36,12 +36,14 @@ shipping React to the browser would take most of the budget. Mzizi's _tokens_
 are used directly through `tokens.css` and `color-scheme.css` (plain CSS, dark
 mode follows the device). Mzizi has no chat or citation component today.
 
-| Budget                 | Limit              | Check                                         |
-| ---------------------- | ------------------ | --------------------------------------------- |
-| First-load JS, gzipped | 100 KB             | `site/check.mjs` (prints the measured number) |
-| Chat CSS, gzipped      | 30 KB              | `site/check.mjs`                              |
-| Web fonts              | none, system stack | `site/check.mjs`                              |
-| Touch targets          | 48 px (Mzizi)      | e2e test                                      |
+| Budget                         | Limit                 | Measured (this build)        | Check            |
+| ------------------------------ | --------------------- | ---------------------------- | ---------------- |
+| First-load JS, gzipped         | 100 KB                | 9.2 KB                       | `site/check.mjs` |
+| Chat CSS, gzipped              | 30 KB                 | 4.8 KB                       | `site/check.mjs` |
+| Whole first load (HTML+CSS+JS) | 50 KB (R2 design)     | 16.0 KB                      | `site/check.mjs` |
+| Web fonts                      | none, system stack    | none                         | `site/check.mjs` |
+| Touch targets                  | 48 px (Mzizi)         | all 48 px or more            | e2e test         |
+| Accessibility                  | axe wcag2a/aa/21/22aa | 0 violations, light and dark | e2e test         |
 
 ## Installable and offline
 
@@ -74,11 +76,18 @@ mode follows the device). Mzizi has no chat or citation component today.
 
 ## Data decisions
 
-- **History is local only.** Conversations are kept in IndexedDB on the device
-  and never sent to a server by the app. The gateway receives the messages of
-  the current thread to answer, as any chat API does, and stores no
-  conversation for this surface. "New chat" starts an empty thread; "Delete
-  history" wipes the database.
+- **History is local only; the server keeps a service record, not content.**
+  Conversations are kept in IndexedDB on the device and the app never syncs them
+  anywhere. "New chat" starts an empty thread; "Delete history" wipes the
+  database. Owner decision (2026-10-31): for the `pwa` channel the gateway keeps
+  **no message or answer text**; the app sends `X-Shamwari-Channel: pwa` and the
+  gateway then writes no `conversations` document (so nothing is trainable),
+  only the usage event (request id, scope, model, token counts, path, time).
+  Built in #125. One exception is disclosed in the app's Settings: so a retry is
+  never charged twice, the idempotent-replay path holds the answer in KV for up to
+  10 minutes and then deletes it. The footer says exactly this and nothing more.
+  Until #125 is deployed the older gateway still stores the conversation, so
+  **this wording is only true once that change is deployed**.
 - **Offline queue.** A question written offline is stored on the device and sent
   when the network returns, with one `Idempotency-Key` per message so a retry
   after a dropped connection is replayed by the gateway instead of answered and
@@ -119,7 +128,7 @@ in `docs/chat-signin.md`. The `AuthProvider` seam above is where the second mode
 - **CORS.** The gateway sends no CORS headers today, so a browser on
   `shamwari.ai` cannot call `api.shamwari.ai`. It needs an `OPTIONS` answer and
   `Access-Control-Allow-Origin` for `https://shamwari.ai` (not `*`), allowing the
-  `Authorization`, `Content-Type` and `Idempotency-Key` headers, and
+  `Authorization`, `Content-Type`, `Idempotency-Key` and `X-Shamwari-Channel` request headers, and
   `Access-Control-Expose-Headers: Retry-After` (found by the e2e test: without it
   a browser hides `Retry-After` from the page and the app cannot say how long to
   wait). This is a code
