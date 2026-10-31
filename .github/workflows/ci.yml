@@ -111,6 +111,15 @@ jobs:
           --entrypoint python shamwari-core:ci
           -c "import main; print(main.app.title, main.app.version)"
 
+      # Retrieval has to keep putting the right section in front of the model. This
+      # runs on the synthetic fixture, so it gates the harness and the chunker; the
+      # real corpus is scored by hand (docs/ground-ingest.md).
+      - name: Ground citation evaluation (offline)
+        run: |
+          python eval_ground.py --verify-labels --fixture
+          python eval_ground.py --fixture --min-hit-at-k 1.0 --min-hit-at-1 0.85
+        working-directory: core
+
   docs-site:
     name: Docs site (build, links, tokens, size)
     runs-on: ubuntu-latest
