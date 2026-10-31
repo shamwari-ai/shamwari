@@ -1,8 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
-import { createMock } from '../chat-mock/server.mjs';
-import { createClient, parseAnswer, parseCitations, safeUrl } from '../src/chat/client';
+import { createMock } from '../../chat-mock/server.mjs';
+import { createClient, parseAnswer, parseCitations, safeUrl } from '../../src/chat/client';
 
 let server: Server;
 let base = '';

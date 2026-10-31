@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mukokoAuth, parseExpiry } from '../src/chat/auth-mukoko';
+import { mukokoAuth, parseExpiry } from '../../src/chat/auth-mukoko';
 
 const TOKEN = 'eyJhbGciOiJSUzI1NiJ9.payload-secret-part.signature';
 

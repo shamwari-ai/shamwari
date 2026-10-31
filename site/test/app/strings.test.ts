@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LANGUAGES, en, nd, pickLanguage, sn } from '../src/chat/strings';
+import { LANGUAGES, en, nd, pickLanguage, sn } from '../../src/chat/strings';
 
 const keys = (o: object, p = ''): string[] =>
   Object.entries(o).flatMap(([k, v]) => (typeof v === 'object' ? keys(v, `${p}${k}.`) : [`${p}${k}`]));

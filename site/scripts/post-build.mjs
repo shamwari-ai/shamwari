@@ -1,16 +1,22 @@
 // Runs after `astro build`: writes the chat service worker (with a precache
 // list of the exact hashed files this build produced) and the response headers
-// for /chat/. Usage: node scripts/post-build.mjs [outDir]   (default dist)
+// for /chat/. Usage: node scripts/post-build.mjs [outDir]   (default dist-app)
+// It is the build step of the APP Worker only (npm run build:app); the marketing
+// site has no service worker and no chat.
 //
 // Both depend on the build output, which is why they are generated here
 // instead of living in public/: the service worker's cache name changes only
 // when a precached file does, and the CSP's connect-src names the API origin
 // this build was pointed at (PUBLIC_SHAMWARI_API).
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const out = process.argv[2] ?? 'dist';
+const out = process.argv[2] ?? 'dist-app';
+
+// The two icons the marketing site and the app share live once, in public/; the app
+// build takes its copy here rather than keeping a second binary that can drift.
+for (const icon of ['favicon.png', 'apple-touch-icon.png']) copyFileSync(join('public', icon), join(out, icon));
 const read = (p) => readFileSync(join(out, p));
 const html = read('chat/index.html').toString('utf8');
 

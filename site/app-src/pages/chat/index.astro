@@ -1,11 +1,15 @@
 ---
 // Shamwari Chat: the R1 chat app and R2 Lite PWA from shamwari-ai/shamwari#83.
 //
+// This page belongs to the APP Worker (shamwari-app, https://shamwari.ai/chat/),
+// built by astro.app.config.mjs from app-src/. The marketing Worker
+// (shamwari-site, https://www.shamwari.ai) never contains it.
+//
 // Its own tiny layout, not Layout.astro: no web fonts, no marketing header,
 // and the only client JS on the site. The page is complete English HTML
 // without JavaScript; the script translates it and runs the chat.
-import '../../chat/chat.css';
-import { en } from '../../chat/strings';
+import '../../../src/chat/chat.css';
+import { en } from '../../../src/chat/strings';
 
 // Fixed at build time and never read from the URL (see chat/main.ts).
 const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
@@ -117,7 +121,7 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
     </footer>
   </div>
   <script>
-    import '../../chat/main';
+    import '../../../src/chat/main';
   </script>
 </body>
 </html>

@@ -14,9 +14,27 @@ npm run check             # astro check + node check.mjs (run after a build)
 npm run deploy             # astro build && wrangler deploy
 ```
 
-The custom domains have to be attached to the account before the first
-deploy; `wrangler.jsonc` declares `shamwari.ai` and `www.shamwari.ai` as
-custom-domain routes.
+The custom domains are attached in the Cloudflare dashboard, in the order in
+`docs/domains-and-deploy.md`; `wrangler.jsonc` still declares `shamwari.ai` as well as
+`www.shamwari.ai` only until the apex is moved to the app Worker.
+
+## Two Workers (read this first)
+
+This package builds **two** separate Workers, on two hostnames, and neither can carry the
+other's pages (`check.mjs` fails the build if it does). Full map and the Cloudflare steps
+to switch it on: `docs/domains-and-deploy.md`.
+
+```bash
+# The marketing site: https://www.shamwari.ai, Worker `shamwari-site`
+npm run dev | build | check | test:site | deploy
+
+# Shamwari Chat, the app: https://shamwari.ai/chat/, Worker `shamwari-app`
+npm run dev:app | build:app | check:app | test:app | e2e | deploy:app
+```
+
+The app is built from `app-src/` and `app-public/` with `astro.app.config.mjs` and
+`wrangler.app.jsonc`; the marketing site from `src/`, `public/`, `astro.config.mjs` and
+`wrangler.jsonc`. Everything below describes the marketing site.
 
 ## Pages
 

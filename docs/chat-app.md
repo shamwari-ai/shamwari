@@ -12,20 +12,21 @@ answer.
 
 ## Where it lives, and why
 
-**`shamwari.ai/chat/`, a route in `site/`.** Not `chat.shamwari.ai`, not a new
-workspace app.
+**Its own Worker on the apex: `https://shamwari.ai/chat/`.** The marketing site is a
+separate Worker on `https://www.shamwari.ai`. Owner decision, 2026-10-31; the full map,
+the build commands and the Cloudflare steps are in `docs/domains-and-deploy.md`.
 
-- One deploy, one origin, the same Workers static assets the site already uses.
-  `chat.shamwari.ai` would need a DNS record, a second Worker and a second
-  pipeline, all owner-only steps, for no user-visible gain.
-- The Mzizi tokens, brand overlay and CI checks are already here.
-- The service worker is scoped to `/chat/`, so it never touches the marketing
-  pages. Chat JS is loaded only on `/chat/`; `site/check.mjs` fails the build if
-  any other page ships a script.
-- The cost is coupling: a marketing copy edit and a chat change deploy together.
-  The site is already built independently of anything that can deploy inference,
-  so this is acceptable. If the chat grows its own release rhythm, moving it out
-  is cheap because it only shares `chat.css` imports and the tokens.
+- The app is the root product, so it gets the short hostname. The marketing site is
+  `www`. Neither Worker can serve the other's pages: `site/check.mjs` fails the build if
+  one does, and the two build and test independently in CI.
+- Same repository and the same `site/` package, so the Mzizi tokens, the brand overlay
+  and the checks are shared, but two Astro configs (`astro.config.mjs` for marketing,
+  `astro.app.config.mjs` for the app) with separate source (`app-src/`) and public
+  (`app-public/`) folders. Chat JS is built only into the app.
+- The service worker is scoped to `/chat/` on the app origin. The root `/` answers 302
+  to `/chat/` for now.
+- The cost is one more Workers Builds project to create and a hostname to move; both are
+  dashboard steps in the doc above.
 
 ## Built for poor devices
 
@@ -161,7 +162,7 @@ the second replaces the first without touching the chat:
 cd site
 npm ci
 node chat-mock/server.mjs        # gateway stand-in on http://localhost:8788
-npm run dev                      # http://localhost:4321/chat/
+PUBLIC_SHAMWARI_API=http://localhost:8788 npm run dev:app   # http://localhost:4321/chat/
 ```
 
 Developer keys for the mock: `sk_shamwari_mock_ok` answers; `_402`, `_403`,

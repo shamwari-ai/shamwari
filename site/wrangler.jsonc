@@ -7,13 +7,19 @@
   // Astro's static output. No Worker script, no bindings, no secrets.
   "assets": { "directory": "./dist" },
 
-  // shamwari.ai's DNS is still externally managed (not yet on Cloudflare),
-  // so the custom-domain routes below can't attach until that's moved over.
-  // workers_dev gives a working preview URL in the meantime:
+  // The MARKETING site. The chat app is a separate Worker (wrangler.app.jsonc,
+  // `shamwari-app`) that will own the apex https://shamwari.ai; this one is
+  // expected on https://www.shamwari.ai only. workers_dev gives a preview URL:
   // https://shamwari-site.nyuchi.workers.dev
   "workers_dev": true,
 
   "routes": [
+    // TEMPORARY. The apex is still attached to this Worker today and stays declared
+    // here until it is moved to `shamwari-app` in the dashboard
+    // (docs/domains-and-deploy.md, step 5): dropping it from this file first would
+    // let a deploy release the apex while nothing else holds it. Deleting this
+    // line is part of that same step, in the same small change that adds the apex
+    // to wrangler.app.jsonc.
     { "pattern": "shamwari.ai", "custom_domain": true },
     { "pattern": "www.shamwari.ai", "custom_domain": true },
   ],

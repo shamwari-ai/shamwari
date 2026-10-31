@@ -4,7 +4,9 @@ import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  site: 'https://shamwari.ai',
+  // The MARKETING site lives on www; the chat app is its own Worker on the apex
+  // (astro.app.config.mjs). Canonical URLs and the sitemap use this origin.
+  site: 'https://www.shamwari.ai',
   integrations: [react()],
 
   // Static output, served by Workers static assets — same reasoning as

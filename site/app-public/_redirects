@@ -1,0 +1,15 @@
+# The app Worker (shamwari-app) owns the apex https://shamwari.ai.
+# The root goes to the chat for now.
+/ /chat/ 302
+
+# The marketing site now lives on www. Old apex links to it are sent there
+# (a redirect, not a page: this Worker serves no marketing page).
+/blueprint https://www.shamwari.ai/blueprint/ 301
+/blueprint/ https://www.shamwari.ai/blueprint/ 301
+/project https://www.shamwari.ai/project/ 301
+/project/ https://www.shamwari.ai/project/ 301
+/contact https://www.shamwari.ai/contact/ 301
+/contact/ https://www.shamwari.ai/contact/ 301
+/sitemap.xml https://www.shamwari.ai/sitemap.xml 301
+/robots.txt https://www.shamwari.ai/robots.txt 301
+/og/* https://www.shamwari.ai/og/:splat 301
