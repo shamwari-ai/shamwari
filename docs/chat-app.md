@@ -55,8 +55,8 @@ mode follows the device). Mzizi has no chat or citation component today.
   after a dropped connection is replayed by the gateway instead of answered and
   metered twice.
 - **Scope.** The app sends `scope: community` or `platform` and never
-  `personal`. A personal question gets the gateway's `409
-  scope_requires_local_inference`, and the app explains it kindly: personal
+  `personal`. A personal question gets the gateway's 409
+  (`scope_requires_local_inference`), and the app explains it kindly: personal
   questions need Shamwari Mind on the device, which is not shipped yet. It is
   never rendered as a generic error.
 - **Language claims.** The footer says "Answered by Shamwari Cloud (a routed
