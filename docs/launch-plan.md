@@ -26,7 +26,11 @@ Nothing in this plan is deployed, released or paid for by writing it.
 | Model route (GLM-5.3 on Workers AI via AI Gateway), Data MCP | works | owner |
 | Gateway features | extractive rung, reach ceilings, compact envelope, idempotency, SMS/USSD adapter (no operator), cost estimate, scopes, usage replay | #85-#97 |
 
-Read-only check of `corpus_sources` (Supabase `shamwari_ai_db`, 2026-10-31). Approved
+Read-only check of `corpus_sources` (Supabase `shamwari_ai_db`, read live on
+2026-10-31, after the checkout above). It shows 22 rows with 7 unapproved, so
+CLAUDE.md's "5 blocked" and "Constitution is the only legal source approved" are
+stale; the live table is authoritative and CLAUDE.md should be corrected by the owner's
+session. Approved
 **and** ground-eligible: Constitution, Ministry of Finance (budget), Parliament
 (hansard; not mind-eligible), PRAZ (regulation; not mind-eligible), RBZ (policy),
 ZIMRA (typed `tariff`), ZIMSTAT, Shona/Ndebele Wikipedia, VOA Shona/Ndebele, the two
@@ -77,6 +81,12 @@ phones for the cost of a store listing.
 
 ## 3. Critical path
 
+Constitution ingest does **not** depend on Core or on a key: `core/ingest_ground.py`
+reads `SUPABASE_DB_URL`, `MONGODB_URI`, `CF_ACCOUNT_ID` and `CF_API_TOKEN` itself and
+writes to Mongo directly. It can run as soon as someone holds those credentials and the
+source text, which makes Demo 1 possible before Core is deployed (the answer path
+still needs Core).
+
 ```
 owner: Core path + secrets ──► Core on Fly (#81) ──► gateway CORE_URL+token ──► key works
                                       │                                         │
@@ -103,13 +113,23 @@ owner: Core path + secrets ──► Core on Fly (#81) ──► gateway CORE_UR
   `/v1/shamwari/{whoami,ground/search,sink,usage/rollup}` exists on the Nyuchi API
   (owner: live). `core/main.py` still uses `motor`, so the switch is unbuilt.
 
-Recommendation: follow the later decision (B). It removes the Atlas user, the
-Supabase string and one credential class, at the cost of a medium code change that
-the Core-deploy session is already starting. Fallback if B slips more than a few
+Recommendation: follow the later decision (B) for **serving**. It removes the Atlas
+user and the Supabase string from the running Core, at the cost of a medium code
+change that the Core-deploy session is already starting. **It does not remove them
+from ingest**: `ingest_ground.py` still needs direct Mongo, Postgres and Workers AI
+credentials. Either run ingest once from a trusted machine with short-lived
+credentials, or add a task to move ingest onto `/v1/shamwari/sink` (not planned; ask
+the owner). A one-off ingest user needs the Atlas confirmation the earlier attempt
+timed out on. Fallback if B slips more than a few
 days: A, with a scoped Mongo user, accepted as interim and replaced by the Rust
 origin (#66). The Workers-to-Fly path also needs a decision: Workers cannot reach
 `.internal`, so either the Cloudflare Tunnel or the interim public HTTPS with the
-bearer token (#81 accepts the latter).
+bearer token (#81 accepts the latter). Note this departs from CLAUDE.md's "no public
+IP": Core enforces Rule 1 authoritatively, and a leaked `SHAMWARI_CORE_TOKEN` would
+let a caller reach Core without the Worker's gate. Mitigations to carry into #81:
+a token generated once and never logged, rotation on any suspicion and at launch,
+every route but `/health` authenticated (already so), and the tunnel as the first
+thing after launch, not the last.
 
 **Sizes** are estimates in working days of one agent session, not commitments.
 
@@ -188,8 +208,8 @@ reports (Business).
 - Cost per answer, _assumed_ 3,000 input and 400 output tokens, prices from
   `gateway/pricing.json` (Cloudflare list prices retrieved 2026-10-29, an upper bound,
   embedding and retrieval excluded): economy about $0.00065, standard about $0.006.
-- At 30 answers per person per month: economy about $0.02, standard about $0.18. So
-  the owner's $0.20 per active user target holds only if most traffic is economy; an
+- At _assumed_ 30 answers per person per month (no usage data exists yet): economy about $0.02, standard about $0.18. So
+  the owner's $0.20 per active user per month target (#83) holds only if most traffic is economy; an
   all-standard free tier would spend nearly the whole budget on inference alone.
 - Fixed cost known: the ledger at about $49.62 a month (owner). Core on Fly, Atlas,
   Supabase, WorkOS and Cloudflare are not priced here.
@@ -201,7 +221,8 @@ reports (Business).
 **Sequence**: (1) pilots free for 60 days, weekly call, practitioner reviews 20
 answers each; (2) from the notes, write three price shapes (per seat, per question
 bundle, per firm with an SLA) and test them; (3) invoice by hand from
-`scripts/pilot_report.py` (estimate, not billing-grade); (4) only then consider
+the usage report (`scripts/pilot_report.py`, **to be built in #112**; until then Core
+`/rollup/by-tier` by hand; estimate, not billing-grade); (4) only then consider
 self-serve billing. MXT-denominated billing stays an open question
 (`docs/architecture-and-gtm.md` §3).
 
@@ -264,13 +285,19 @@ CNAME/A records `fly certs show` prints, then
 ```bash
 cd gateway && printf %s "$TOKEN" | npx wrangler secret put SHAMWARI_CORE_TOKEN
 npx wrangler deploy
-bash scripts/smoke.sh https://api.shamwari.ai "$SHAMWARI_KEY"   # once #111 merges
+# once #111 merges (scripts/smoke.sh does not exist yet); point it at the
+# workers.dev URL wrangler prints:
+bash scripts/smoke.sh "https://shamwari-gateway.<account>.workers.dev" "$SHAMWARI_KEY"
 ```
-Note: the API hostname `api.shamwari.ai` is the owner's decision of 2026-10-28; its
-route is not in `wrangler.jsonc`.
+Note: `api.shamwari.ai` is the owner's decision of 2026-10-28 but no route or custom
+domain is in `wrangler.jsonc`; binding it is a separate owner step (zone route, then
+re-run the smoke test against it).
 
-**C. First key and the Constitution (#17).** Mint a key in the Console or, for the
-interim Core path, by the manual key script; then
+**C. The Constitution (#17).** Needs the four ingest credentials above, not a key. The
+text file is not in the repo (`constitution-2013.txt`): obtain the official text from
+a source whose terms have been read (the Constitution row is approved), keep it out of
+git unless the licence allows it, and check the section count against the published
+document before ingesting.
 ```bash
 cd core && python ingest_ground.py --source "Constitution of Zimbabwe" \
   --file ./constitution-2013.txt --title "Constitution of Zimbabwe Amendment (No. 20) Act 2013" \
