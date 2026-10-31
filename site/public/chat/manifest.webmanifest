@@ -1,0 +1,17 @@
+{
+  "name": "Shamwari Chat",
+  "short_name": "Shamwari",
+  "description": "Ask in Shona, Ndebele or English and get the answer with the section it came from.",
+  "id": "/chat/",
+  "start_url": "/chat/",
+  "scope": "/chat/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#283593",
+  "icons": [
+    { "src": "/chat/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/chat/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/chat/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

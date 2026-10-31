@@ -21,6 +21,9 @@ const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta name="theme-color" content="#283593" />
   <meta name="shamwari-api" content={api} />
+  <link rel="manifest" href="/chat/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Shamwari" />
 </head>
 <body>
   <a class="skip" href="#q" data-i18n="skipToQuestion">Skip to the question box</a>
@@ -94,6 +97,7 @@ const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
       <details class="more">
         <summary data-i18n="settings">Settings</summary>
         <p class="row">
+          <button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button>
           <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
           <button type="button" id="signout" class="btn" hidden data-i18n="authDevClear">Remove key</button>
         </p>
