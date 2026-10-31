@@ -56,7 +56,8 @@ What is still open:
 - **Machine callers** keep `sk_shamwari_` keys through the gateway's existing `KeyService` seam,
   unchanged, until the machine-key path is decided (WorkOS API keys are organisation-scoped, so
   they fit B2B keys and not per-person ones).
-- **G6** below: the API must accept `workos:<sub>` as an opaque owner id for quota and usage.
+- **G6** below: WorkOS callers are metered on the canonical person id, which is the owner id the API
+  already uses, so no special case is needed.
 - `/auth/verify` stays 501 `key_verification_moved`.
 
 ### G2. Citation fields (small, unblocks nothing but polish)

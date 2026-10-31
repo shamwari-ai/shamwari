@@ -32,6 +32,17 @@ const GRANTABLE: ReadonlyArray<readonly [string, Scope]> = [
 
 export const WORKOS_KEY_TYPE = 'workos';
 
+/**
+ * The JWT-template claim carrying the platform's one canonical person id (WorkOS
+ * `externalId`). Usage and quota key on this, never on WorkOS's own `sub`, so a person
+ * is the same person on every Nyuchi surface. Owner-defined in the template.
+ */
+export const PERSON_ID_CLAIM = 'person_id';
+
+// The id is interpolated into a Core URL on the default quota path, so it must be inert
+// there. A canonical id outside this alphabet is refused, not escaped and passed along.
+const PERSON_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
+
 export type WorkosOutcome =
   | { status: 'ok'; ctx: AuthContext }
   | { status: 'invalid' }
@@ -149,17 +160,24 @@ export async function verifyWorkosToken(token: string, env: Env): Promise<Workos
   // The session id is what revocation is keyed on; a token without one cannot be revoked.
   if (!nonEmpty(payload.sid)) return { status: 'invalid' };
 
+  // No canonical id means no metering identity. Falling back to the raw `sub` would split
+  // one person across two quota identities, so the request is refused instead.
+  const personId = payload[PERSON_ID_CLAIM];
+  if (typeof personId !== 'string' || !PERSON_ID_PATTERN.test(personId)) {
+    return { status: 'invalid' };
+  }
+
   const scopes = scopesFromPermissions(payload.permissions);
   if (scopes.length === 0) return { status: 'invalid' };
 
   return {
     status: 'ok',
     ctx: {
-      // Metered and capped per person. The `workos:` prefix keeps these ids out of
-      // the entity and API-key namespaces they would otherwise be read as.
+      // Metered and capped per person, on the platform's canonical person id. The api key
+      // id is the session, prefixed so it cannot be read as a real key id.
       apiKeyId: `workos:sid:${payload.sid}`,
-      ownerEntityId: `workos:${payload.sub}`,
-      ownerPersonId: payload.sub,
+      ownerEntityId: personId,
+      ownerPersonId: personId,
       keyType: WORKOS_KEY_TYPE,
       tier: 'community',
       monthlyTokenCap: cfg.monthlyTokenCap,

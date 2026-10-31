@@ -56,6 +56,7 @@ interface TokenOpts {
   sub?: string | null;
   sid?: string | null;
   clientId?: string | null;
+  personId?: unknown;
   exp?: string | number | null;
   iat?: boolean;
   permissions?: unknown;
@@ -65,6 +66,7 @@ async function token(o: TokenOpts = {}): Promise<string> {
   const claims: Record<string, unknown> = {
     permissions: o.permissions === undefined ? ['shamwari:community', 'shamwari:platform'] : o.permissions,
   };
+  if (o.personId !== null) claims.person_id = o.personId === undefined ? 'person_abc123' : o.personId;
   if (o.sid !== null) claims.sid = o.sid ?? 'session_1';
   if (o.clientId !== null) claims.client_id = o.clientId ?? CLIENT;
   const jwt = new SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid: o.kid ?? 'k1' });
@@ -107,8 +109,8 @@ describe('a good token', () => {
       status: 'ok',
       ctx: {
         apiKeyId: 'workos:sid:session_1',
-        ownerEntityId: 'workos:user_01',
-        ownerPersonId: 'user_01',
+        ownerEntityId: 'person_abc123',
+        ownerPersonId: 'person_abc123',
         keyType: 'workos',
         tier: 'community',
         monthlyTokenCap: 50000,
@@ -184,12 +186,44 @@ describe('a token that is not what it says', () => {
     ['no client id', { clientId: null }],
     ['no subject', { sub: null }],
     ['no session id (cannot be revoked)', { sid: null }],
+    ['no canonical person id (never falls back to sub)', { personId: null }],
+    ['an empty person id', { personId: '' }],
+    ['a non-string person id', { personId: 42 }],
+    ['a person id that is not inert in a URL', { personId: 'p1&owner_entity_id=other' }],
+    ['a person id with a path in it', { personId: '../admin' }],
+    ['an over-long person id', { personId: 'p'.repeat(129) }],
   ] as [string, TokenOpts][])('refuses a token with %s', async (_label, opts) => {
     expect(await verify(await token(opts))).toBe('invalid');
   });
 
   it('refuses garbage that only looks like a token', async () => {
     expect(await verify('aaa.bbb.ccc')).toBe('invalid');
+  });
+});
+
+describe('who is metered', () => {
+  it('is the canonical person id, not WorkOS sub, and the same person is one identity across sessions', async () => {
+    const a = await verifyWorkosToken(await token({ sub: 'user_A', sid: 's1' }), makeEnv());
+    const b = await verifyWorkosToken(await token({ sub: 'user_B', sid: 's2' }), makeEnv());
+    if (a.status !== 'ok' || b.status !== 'ok') throw new Error('expected ok');
+    expect(a.ctx.ownerEntityId).toBe('person_abc123');
+    expect(b.ctx.ownerEntityId).toBe(a.ctx.ownerEntityId); // same person_id, different sub and session
+    expect(a.ctx.apiKeyId).not.toBe(b.ctx.apiKeyId);
+  });
+
+  it('puts only the validated id into the quota request URL', async () => {
+    const t = await token({ personId: 'person_abc123' });
+    await worker.fetch(
+      new Request('https://x/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${t}` },
+        body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }),
+      }),
+      makeEnv(),
+      { waitUntil() {} } as unknown as ExecutionContext,
+    ).catch(() => {});
+    const rollup = calls.find((c) => c.startsWith('https://core.example/rollup'));
+    expect(rollup).toContain('owner_entity_id=person_abc123&');
   });
 });
 

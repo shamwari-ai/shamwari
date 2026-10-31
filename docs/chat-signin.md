@@ -64,20 +64,23 @@ Authorize on the `permissions` claim, never on `role` strings.
 
 ### Who is metered
 
-Per person. The context is `ownerEntityId = workos:<sub>`, `ownerPersonId = <sub>`,
-`apiKeyId = workos:sid:<sid>`, `tier = community`, cap `WORKOS_MONTHLY_TOKEN_CAP` (positive
-integer; the owner sets it, suggested from the $0.20 per user per month target in
-`docs/tiered-access-design.md` converted with `gateway/pricing.json`). The `workos:` prefix
-keeps these ids out of the entity and API-key namespaces.
+Per person, on the platform's **one canonical person id** (the WorkOS `externalId`, carried in
+the token by a JWT-template claim named `person_id`). The context is
+`ownerEntityId = ownerPersonId = <person_id>`, `apiKeyId = workos:sid:<sid>` (the session),
+`tier = community`, cap `WORKOS_MONTHLY_TOKEN_CAP` (positive integer; the owner sets it,
+suggested from the $0.20 per user per month target in `docs/tiered-access-design.md` converted
+with `gateway/pricing.json`).
 
-`org_id` is deliberately not used for ownership: a chat user's quota is theirs, not their
-organisation's.
-
-> **Open question for the Nyuchi API (G6).** Quota reads `usage/rollup?owner_entity_id=…` and
-> the usage event carries `ownerEntityId`. Both now carry a `workos:<sub>` value that is not an
-> `entity.entities` id. The API has to accept it, or the gateway has to be told a different id
-> to use. Until that is settled, per-person quota depends on the API treating the id as an
-> opaque string.
+- **No `person_id`, no request.** A valid token without the claim, or with one that is not
+  1 to 128 characters of `A-Za-z0-9_.:-`, is refused (401). It does **not** fall back to WorkOS
+  `sub`: that would give one person two quota identities. The alphabet is a guard, not a format
+  claim: the id is interpolated into a Core URL on the default quota path, so it must be inert
+  there. If the platform's person ids use other characters, widen the pattern in
+  `gateway/src/workos.ts` deliberately.
+- `org_id` is deliberately not used for ownership: a chat user's quota is theirs, not their
+  organisation's.
+- This matches the API's G6 owner id (`docs/data-api-routes.md`), so the API needs no special
+  case for WorkOS callers.
 
 ### Configuration (none of it secret)
 
@@ -167,7 +170,8 @@ owning-entity key.
 ## Needs the owner
 
 - **JWT template in the WorkOS dashboard:** set `aud` to our API's URI and issue the
-  `shamwari:community` / `shamwari:platform` permissions (the rendered template is capped at
+  `shamwari:community` / `shamwari:platform` permissions and a `person_id` claim carrying the
+  platform person id (WorkOS `externalId`) (the rendered template is capped at
   3072 bytes; reserved claims are `iss`, `sub`, `exp`, `iat`, `nbf`, `jti`).
 - **Register** `https://shamwari.ai/chat/callback` on the WorkOS app (never a wildcard).
 - **Read `iss` off a real access token** and set `WORKOS_ISSUER`; set `WORKOS_AUDIENCE`,
@@ -176,4 +180,5 @@ owning-entity key.
   the verifier for the token; nothing else new).
 - **A yes to the `chat-auth` Worker** (a new deployment) and where its cookie-sealing secret
   and WorkOS client secret live.
-- **G6:** confirm the Nyuchi API accepts `workos:<sub>` as an owner id.
+- **Set the WorkOS `externalId`** of every user to the platform person id, or the `person_id`
+  claim has nothing to carry and those users are refused.
