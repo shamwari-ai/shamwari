@@ -106,7 +106,10 @@ options above.
 - **CORS.** The gateway sends no CORS headers today, so a browser on
   `shamwari.ai` cannot call `api.shamwari.ai`. It needs an `OPTIONS` answer and
   `Access-Control-Allow-Origin` for `https://shamwari.ai` (not `*`), allowing the
-  `Authorization`, `Content-Type` and `Idempotency-Key` headers. This is a code
+  `Authorization`, `Content-Type` and `Idempotency-Key` headers, and
+  `Access-Control-Expose-Headers: Retry-After` (found by the e2e test: without it
+  a browser hides `Retry-After` from the page and the app cannot say how long to
+  wait). This is a code
   change with tests, and a deploy the owner must approve.
 - **Streaming** (SSE) is deliberately out of this phase. The client's
   `onProgress` hook and the answer component are built so it can be added

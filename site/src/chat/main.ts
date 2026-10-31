@@ -1,10 +1,13 @@
-import { applyStrings, currentLanguage, saveLanguage } from './i18n';
-import { LANGUAGES, isLanguage } from './strings';
+import { startApp } from './app';
+import { LANGUAGES } from './strings';
 
-const lang = currentLanguage();
+// The API origin is fixed at build time (PUBLIC_SHAMWARI_API). It is never read
+// from the URL: a link that could repoint the app would send a person's key to
+// someone else's server.
+const apiBase = document.querySelector<HTMLMetaElement>('meta[name="shamwari-api"]')?.content;
+
 const select = document.querySelector<HTMLSelectElement>('#lang');
 if (select) {
-  select.innerHTML = '';
   for (const [code, { label }] of Object.entries(LANGUAGES)) {
     const o = document.createElement('option');
     o.value = code;
@@ -12,11 +15,7 @@ if (select) {
     o.lang = code;
     select.append(o);
   }
-  select.value = lang;
-  select.addEventListener('change', () => {
-    if (!isLanguage(select.value)) return;
-    saveLanguage(select.value);
-    applyStrings(document, select.value);
-  });
 }
-applyStrings(document, lang);
+if (apiBase) {
+  void startApp({ apiBase });
+}
