@@ -342,8 +342,10 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     if (!navigator.onLine) {
       // Offline: do not even try. Save it, say so, send it when the network is back.
       m.status = 'queued';
-      mount(m);
+      // Stored first, shown second: "waiting to send" must only appear once the
+      // question is actually on the device, or a quick reload could lose it.
       await save(thread);
+      mount(m);
       scheduleRetry();
     } else {
       await deliver(thread, m);
