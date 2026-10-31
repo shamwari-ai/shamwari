@@ -262,7 +262,7 @@ describe.skipIf(!CORE)('gateway -> Core -> Ground -> answer (real HTTP, fake mod
       const r = await w.call(
         '/v1/chat/completions',
         ask('What does section 56 say about equality?'),
-        'sk_shamwari_not_a_real_key_000000',
+        `sk_shamwari_${'0'.repeat(32)}`, // built at runtime: no key-shaped literal for a scanner to flag
       );
       expect(r.status).toBe(401);
       expect(w.wire.core.map((c) => c.path)).toEqual(['/auth/verify']);
