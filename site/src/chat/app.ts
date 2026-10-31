@@ -1,4 +1,5 @@
 import { developerKey } from './auth';
+import { mukokoAuth } from './auth-mukoko';
 import { createClient } from './client';
 import { applyStrings, currentLanguage, saveLanguage } from './i18n';
 import {
@@ -36,10 +37,17 @@ const $ = <T extends HTMLElement>(sel: string): T => {
 const saveData = (): boolean =>
   (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
 
-export async function startApp(opts: { apiBase: string }): Promise<void> {
+export async function startApp(opts: { apiBase: string; authMode?: 'developer-key' | 'mukoko' }): Promise<void> {
   const store = await openStore();
-  const auth = developerKey();
-  const client = createClient({ baseUrl: opts.apiBase, getKey: auth.getKey });
+  // The Mukoko provider is behind a build flag and off by default; the developer
+  // key stays exactly as it was until the session Worker ships.
+  const auth = opts.authMode === 'mukoko' ? mukokoAuth() : developerKey();
+  const client = createClient({
+    baseUrl: opts.apiBase,
+    getKey: () => auth.ensureKey(),
+    onUnauthorized: () => auth.refresh(),
+  });
+  document.documentElement.dataset.auth = auth.kind;
 
   let lang = currentLanguage();
   let scope: Scope = 'platform';
@@ -218,7 +226,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
    */
   async function deliver(th: Thread, m: StoredMessage): Promise<void> {
     if (inflight.has(m.id)) return;
-    if (!auth.getKey()) {
+    if (!auth.signedIn()) {
       showAuth();
       return;
     }
@@ -253,10 +261,16 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
         slow = setTimeout(() => pending?.append(h('p', { class: 'note' }, s.slow)), SLOW_AFTER_MS);
       }
 
-      const res = await client.ask(
+      let res = await client.ask(
         { messages: contextFor(th, m), scope: m.scope ?? 'platform' },
         { idempotencyKey: m.id },
       );
+      // No credential could be obtained (the renewal failed on the network, say) for
+      // someone who IS signed in: that is "the answer did not arrive", and the
+      // question waits. It is not "signed out", and must not end their session.
+      if (!res.ok && res.error.kind === 'unauthorized' && res.error.status === null && auth.signedIn()) {
+        res = { ok: false, error: { ...res.error, kind: 'offline' } };
+      }
       pending?.remove();
       nodes.delete(`${m.id}:pending`);
       // Delete history ran while this was in flight: the thread it belongs to is
@@ -307,7 +321,12 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
         m.status = 'failed';
         m.error = { kind, retryAfterSec, upgradeUrl };
         if (shown()) mount(m);
-        if (kind === 'unauthorized') showAuth();
+        if (kind === 'unauthorized') {
+          // Only the gateway's own 401, repeated after one silent renewal, ends a
+          // session. A missing credential on its own does not.
+          if (res.error.status === 401) auth.invalidate();
+          showAuth();
+        }
       }
       await save(th);
     } finally {
@@ -326,7 +345,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
    */
   async function flush(): Promise<void> {
     // Offline, a timer-driven try can only fail; the `online` event runs this again.
-    if (!auth.getKey() || !navigator.onLine) return;
+    if (!auth.signedIn() || !navigator.onLine) return;
     if (flushing) {
       flushAgain = true;
       return;
@@ -360,7 +379,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     const clean = text.trim();
     if (!clean) return;
     // No key yet: ask for one and keep what was typed, rather than eating the question.
-    if (!auth.getKey()) {
+    if (!auth.signedIn()) {
       showAuth();
       return;
     }
@@ -387,18 +406,18 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   // ---- auth ----------------------------------------------------------------
   const authPanel = $('#auth');
   const syncAuth = () => {
-    $('#signout').hidden = !auth.getKey();
+    $('#signout').hidden = !auth.signedIn();
   };
   function showAuth() {
     authPanel.hidden = false;
-    $<HTMLInputElement>('#key').focus();
+    (auth.kind === 'mukoko' ? $('#mukoko-signin') : $<HTMLInputElement>('#key')).focus();
   }
 
   $('#auth-form').addEventListener('submit', (e) => {
     e.preventDefault();
     const field = $<HTMLInputElement>('#key');
     const bad = $('#key-error');
-    if (!auth.setKey(field.value)) {
+    if (!auth.setKey?.(field.value)) {
       bad.hidden = false;
       field.setAttribute('aria-invalid', 'true');
       field.focus();
@@ -411,11 +430,25 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     syncAuth();
     input.focus();
   });
-  $('#signout').addEventListener('click', () => {
-    auth.signOut();
+  $('#signout').addEventListener('click', async () => {
+    await auth.signOut();
+    // A Mukoko account belongs to a person, and the phone may not. Signing out takes
+    // their chats off this device so the next person to open it does not read them.
+    if (auth.kind === 'mukoko') {
+      await wipeHistory();
+      $('#toast').textContent = strings().signedOutCleared;
+    }
     syncAuth();
     showAuth();
   });
+  const mukokoBtn = $<HTMLButtonElement>('#mukoko-signin');
+  if (auth.kind === 'mukoko') {
+    mukokoBtn.disabled = false;
+    $('#mukoko-soon').hidden = true;
+    mukokoBtn.removeAttribute('aria-describedby'); // it pointed at the "coming soon" text
+    $('#signout').dataset.i18n = 'signOut';
+    mukokoBtn.addEventListener('click', () => location.assign('/chat/auth/login'));
+  }
 
   // ---- controls ------------------------------------------------------------
   const autosize = () => {
@@ -452,9 +485,8 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     input.focus();
   });
 
-  $('#delete-history').addEventListener('click', async () => {
-    if (!confirm(strings().deleteConfirm)) return;
-    // Anything still in flight or armed for retry belongs to what is being deleted.
+  /** Remove every chat from this device. Anything in flight belongs to what is being removed. */
+  async function wipeHistory() {
     epoch += 1;
     clearTimeout(retryTimer);
     try {
@@ -466,6 +498,11 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     thread = fresh();
     rebuild();
     void renderHistory();
+  }
+
+  $('#delete-history').addEventListener('click', async () => {
+    if (!confirm(strings().deleteConfirm)) return;
+    await wipeHistory();
     $('#toast').textContent = strings().deleted;
     input.focus();
   });
@@ -499,7 +536,21 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   online();
   syncAuth();
   void renderHistory();
-  if (!auth.getKey()) authPanel.hidden = false;
-  if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
   document.documentElement.dataset.ready = 'true';
+  if (auth.kind === 'mukoko') {
+    // One silent renewal at start (the session cookie, if there is one, becomes a
+    // token in memory), alongside the UI instead of in front of it: a slow link
+    // must not hold up showing and writing questions. Until it answers, the
+    // sign-in panel stays down so a signed-in person never sees it flash.
+    void auth.refresh().then(() => {
+      authPanel.hidden = auth.signedIn();
+      syncAuth();
+      document.documentElement.dataset.authReady = 'true';
+      if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
+    });
+  } else {
+    if (!auth.signedIn()) authPanel.hidden = false;
+    document.documentElement.dataset.authReady = 'true';
+    if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
+  }
 }

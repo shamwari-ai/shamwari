@@ -1,17 +1,28 @@
 /**
- * Sign-in is one seam so the chat never knows how the key was obtained.
+ * Sign-in is one seam so the chat never knows how the credential was obtained.
  *
- *   developer key  — today. A person pastes an `sk_shamwari_…` key, kept on this
- *                    device and sent only to the Shamwari API. For testing.
- *   Mukoko Account — not built. The proposal for how a signed-in person gets a
- *                    metered per-person key is in docs/chat-app.md. It will be a
- *                    second AuthProvider; nothing in the chat changes.
+ *   developer-key  Today. A person pastes an `sk_shamwari_…` key, kept on this
+ *                  device and sent only to the Shamwari API. For testing.
+ *   mukoko         Behind a build flag, off. A WorkOS access token, held in
+ *                  memory only and fetched from the session Worker's
+ *                  cookie-authenticated GET (docs/chat-signin.md). Never a minted
+ *                  per-person key, and never written to any storage.
  */
 export interface AuthProvider {
-  readonly kind: 'developer-key';
+  readonly kind: 'developer-key' | 'mukoko';
+  /** The credential in memory right now. It may have expired; `ensureKey` is the one that renews. */
   getKey(): string | null;
-  setKey(key: string): boolean;
-  signOut(): void;
+  /** Whether the person is, as far as the app knows, signed in. Cheap, synchronous. */
+  signedIn(): boolean;
+  /** A credential good to send, renewing it silently if it has expired; null if there is none. */
+  ensureKey(): Promise<string | null>;
+  /** One silent renewal. True if a credential is now held. */
+  refresh(): Promise<boolean>;
+  /** The server said the credential is not good, even after a renewal: forget it. */
+  invalidate(): void;
+  /** Developer key only. */
+  setKey?(key: string): boolean;
+  signOut(): void | Promise<void>;
 }
 
 const STORAGE_KEY = 'shamwari.devkey';
@@ -28,6 +39,18 @@ export function developerKey(storage?: KeyStorage): AuthProvider {
   const store = (): KeyStorage => storage ?? localStorage;
   return {
     kind: 'developer-key',
+    signedIn() {
+      return this.getKey() !== null;
+    },
+    async ensureKey() {
+      return this.getKey();
+    },
+    async refresh() {
+      return false; // a pasted key does not renew
+    },
+    invalidate() {
+      /* the person can see the key was refused and replace it */
+    },
     getKey() {
       try {
         return store().getItem(STORAGE_KEY) ?? memory;

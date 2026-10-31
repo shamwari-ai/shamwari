@@ -16,8 +16,10 @@ if (select) {
     select.append(o);
   }
 }
+// Off unless the build says otherwise (PUBLIC_CHAT_AUTH=mukoko).
+const authMode = document.querySelector<HTMLMetaElement>('meta[name="shamwari-auth"]')?.content === 'mukoko' ? 'mukoko' : 'developer-key';
 if (apiBase) {
-  void startApp({ apiBase });
+  void startApp({ apiBase, authMode });
 }
 
 // Offline shell. Registered after load so it never competes with the first paint,

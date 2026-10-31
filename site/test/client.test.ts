@@ -126,3 +126,104 @@ describe('parsing', () => {
     expect(a?.scope).toBe('platform');
   });
 });
+
+describe('a 401 and the silent renewal', () => {
+  const answer = () =>
+    new Response(JSON.stringify({ id: 'a', choices: [{ message: { role: 'assistant', content: 'ok' } }], shamwari: { scope: 'platform' } }), { status: 200 });
+
+  it('renews once, repeats the ask under the same key, and succeeds', async () => {
+    const seen: string[] = [];
+    const idem: string[] = [];
+    let token = 'old';
+    const c = createClient({
+      baseUrl: base,
+      getKey: () => token,
+      onUnauthorized: async () => {
+        token = 'new';
+        return true;
+      },
+      fetch: (async (_u: string, init: RequestInit) => {
+        const h = new Headers(init.headers);
+        seen.push(h.get('authorization')!);
+        idem.push(h.get('idempotency-key')!);
+        return h.get('authorization') === 'Bearer new' ? answer() : new Response('{"error":"invalid_token"}', { status: 401 });
+      }) as typeof fetch,
+    });
+    const r = await c.ask(q('hi'), { idempotencyKey: 'k9' });
+    expect(r.ok).toBe(true);
+    expect(seen).toEqual(['Bearer old', 'Bearer new']);
+    expect(idem).toEqual(['k9', 'k9']);
+  });
+
+  it('never loops: a second 401 is final', async () => {
+    let calls = 0;
+    let renewals = 0;
+    const c = createClient({
+      baseUrl: base,
+      getKey: () => 'tok',
+      onUnauthorized: async () => {
+        renewals += 1;
+        return true;
+      },
+      fetch: (async () => {
+        calls += 1;
+        return new Response('{}', { status: 401 });
+      }) as typeof fetch,
+    });
+    expect(await c.ask(q('hi'))).toMatchObject({ ok: false, error: { kind: 'unauthorized', status: 401 } });
+    expect(calls).toBe(2);
+    expect(renewals).toBe(1);
+  });
+
+  it('does not repeat the ask when the renewal says no', async () => {
+    let calls = 0;
+    const c = createClient({
+      baseUrl: base,
+      getKey: () => 'tok',
+      onUnauthorized: async () => false,
+      fetch: (async () => {
+        calls += 1;
+        return new Response('{}', { status: 401 });
+      }) as typeof fetch,
+    });
+    expect((await c.ask(q('hi'))).ok).toBe(false);
+    expect(calls).toBe(1);
+  });
+
+  it('a missing key is not a 401 and does not call renewal or the network', async () => {
+    let renewals = 0;
+    let calls = 0;
+    const c = createClient({
+      baseUrl: base,
+      getKey: async () => null,
+      onUnauthorized: async () => {
+        renewals += 1;
+        return true;
+      },
+      fetch: (async () => {
+        calls += 1;
+        return new Response();
+      }) as typeof fetch,
+    });
+    expect(await c.ask(q('hi'))).toMatchObject({ ok: false, error: { kind: 'unauthorized', status: null } });
+    expect(renewals + calls).toBe(0);
+  });
+
+  it('only a 401 triggers renewal: 403, 429 and 5xx do not', async () => {
+    for (const status of [403, 429, 503]) {
+      let renewals = 0;
+      const c = createClient({
+        baseUrl: base,
+        getKey: () => 'tok',
+        onUnauthorized: async () => {
+          renewals += 1;
+          return true;
+        },
+        fetch: (async () => new Response('{}', { status })) as typeof fetch,
+      });
+      await c.ask(q('hi'));
+      expect(renewals, `status ${status}`).toBe(0);
+    }
+  });
+});
+
