@@ -6,6 +6,7 @@ keep the three places that describe it (the code, fly.toml, the runbook) from
 drifting apart.
 """
 
+import ast
 import re
 import unittest
 from pathlib import Path
@@ -26,9 +27,56 @@ SERVING = {
 INGEST_ONLY = {"SUPABASE_DB_URL", "CF_ACCOUNT_ID", "CF_API_TOKEN"}
 
 
+def env_names_in(src: str) -> set[str]:
+    """
+    Every environment variable a module reads, found by parsing it: os.environ["X"],
+    os.environ.get("X"), os.getenv("X"), and the same through `from os import environ`
+    or `getenv`. Any quoting, any name. A read through a variable name rather than a
+    literal is invisible to this, which is why serving code keeps its reads literal.
+    """
+    names: set[str] = set()
+
+    def is_environ(node: ast.AST) -> bool:
+        return (isinstance(node, ast.Attribute) and node.attr == "environ") or (
+            isinstance(node, ast.Name) and node.id == "environ"
+        )
+
+    def literal(node: ast.AST | None) -> str | None:
+        return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
+
+    for node in ast.walk(ast.parse(src)):
+        if isinstance(node, ast.Subscript) and is_environ(node.value):
+            if (n := literal(node.slice)) is not None:
+                names.add(n)
+        elif isinstance(node, ast.Call) and node.args:
+            f = node.func
+            reads = (
+                (isinstance(f, ast.Attribute) and f.attr in {"get", "pop", "setdefault"} and is_environ(f.value))
+                or (isinstance(f, ast.Attribute) and f.attr == "getenv")
+                or (isinstance(f, ast.Name) and f.id == "getenv")
+            )
+            if reads and (n := literal(node.args[0])) is not None:
+                names.add(n)
+    return names
+
+
 def env_names(path: Path) -> set[str]:
-    src = path.read_text()
-    return set(re.findall(r'os\.environ(?:\.get)?[\[(]\s*"([A-Z_]+)"', src))
+    return env_names_in(path.read_text())
+
+
+class TheCheckSeesEveryWayToReadAVariable(unittest.TestCase):
+    def test_every_form_is_found(self):
+        src = (
+            "import os\nfrom os import environ, getenv\n"
+            "a = os.environ['CF_API_TOKEN']\nb = os.environ.get(\"S3_KEY_2\")\n"
+            "c = os.getenv('SUPABASE_DB_URL')\nd = environ['X1']\ne = environ.get('Y2', '')\nf = getenv('Z3')\n"
+        )
+        self.assertEqual(
+            env_names_in(src), {"CF_API_TOKEN", "S3_KEY_2", "SUPABASE_DB_URL", "X1", "Y2", "Z3"}
+        )
+
+    def test_a_string_that_is_not_a_read_is_not_found(self):
+        self.assertEqual(env_names_in("x = 'CF_API_TOKEN'\nprint('SUPABASE_DB_URL')"), set())
 
 
 class SecretsMatchTheCode(unittest.TestCase):
@@ -48,8 +96,9 @@ class SecretsMatchTheCode(unittest.TestCase):
         for name in SERVING:
             self.assertIn(name, header)
         for name in INGEST_ONLY:
-            self.assertIn(name, header)
-            self.assertRegex(header, r"(?s)" + name + r".*ONLY")
+            # On the one line that says so: a stray "ONLY" elsewhere must not satisfy it.
+            lines = [ln for ln in header.splitlines() if name in ln]
+            self.assertTrue(any("ONLY" in ln for ln in lines), f"{name} is not marked ONLY")
 
     def test_runbook_names_every_secret(self):
         runbook = (REPO / "docs" / "core-fly-runbook.md").read_text()
@@ -78,6 +127,14 @@ class NoSecretValues(unittest.TestCase):
 
 
 class Machine(unittest.TestCase):
+    def test_image_does_not_ship_the_ingest_script_or_test_helpers(self):
+        """Core's image holds nothing that reads credentials Core must never be given."""
+        copies = " ".join(
+            ln for ln in (HERE / "Dockerfile").read_text().splitlines() if ln.startswith("COPY ")
+        )
+        for name in ("ingest_ground", "eval_ground", "fakes", "e2e_app"):
+            self.assertNotIn(name, copies)
+
     def test_health_check_is_the_unauthenticated_route(self):
         toml = (HERE / "fly.toml").read_text()
         self.assertIn('path = "/health"', toml)

@@ -24,13 +24,15 @@ Set on the **Fly app `shamwari-core`** (the running service reads exactly these;
 | `SERVERS_API_TOKEN`        | no       | Replay credential, should be scoped to writing usage events only             | Minted by the Servers API owner in the Console.                                                                            |
 | `SERVERS_API_INTERNAL_KEY` | no       | `x-nyuchi-internal-key` for the internal route                               | Minted in the Console.                                                                                                     |
 
-**Not set on the Fly app** (`ingest_ground.py` only, run from your own shell):
+**Not set on the Fly app** (`ingest_ground.py` only, run from your own shell; the
+script is not in the image):
 
-| Name              | What it is for                                   | Where the value comes from                                              |
-| ----------------- | ------------------------------------------------ | ----------------------------------------------------------------------- |
-| `SUPABASE_DB_URL` | the audit record (`documents`, `corpus_sources`) | Supabase project `hxjblxsheosjbjqgmlhx`, a direct connection string.    |
-| `CF_ACCOUNT_ID`   | embeds chunks on Workers AI                      | `125a2dfbc21f76a25c980609609e8218` (Nyuchi Web Services).               |
-| `CF_API_TOKEN`    | embeds chunks with `@cf/baai/bge-m3`             | A token scoped to **Workers AI read only**. Do not reuse a broad token. |
+| Name              | What it is for                                   | Where the value comes from                                                                            |
+| ----------------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `SUPABASE_DB_URL` | the audit record (`documents`, `corpus_sources`) | Supabase project `hxjblxsheosjbjqgmlhx`, a direct connection string.                                  |
+| `CF_ACCOUNT_ID`   | embeds chunks on Workers AI                      | `125a2dfbc21f76a25c980609609e8218` (Nyuchi Web Services).                                             |
+| `MONGODB_URI`     | the ingest also writes `shamwari.knowledgeBase`  | A **separate** Mongo user for ingest, `readWrite` on `shamwari.knowledgeBase` only. Not Core's login. |
+| `CF_API_TOKEN`    | embeds chunks with `@cf/baai/bge-m3`             | A token scoped to **Workers AI read only**. Do not reuse a broad token.                               |
 
 Earlier notes in #81 and the old `fly.toml` header listed these three as Core's.
 They are not: Core never reads them while serving, so leaving them off shrinks
@@ -95,31 +97,30 @@ printf 'MONGODB_URI=%s\nSHAMWARI_CORE_TOKEN=%s\nSHAMWARI_OPS_TOKEN=%s\n' \
   "$MONGODB_URI" "$SHAMWARI_CORE_TOKEN" "$SHAMWARI_OPS_TOKEN" \
   | fly secrets import --stage --app shamwari-core
 
-# 3. The same Core token goes to the gateway Worker, from the same variable.
-cd gateway
-printf '%s' "$SHAMWARI_CORE_TOKEN" | npx wrangler secret put SHAMWARI_CORE_TOKEN
-cd ..
-
-# 4. Keep both tokens in your secret manager NOW: Fly never shows a secret's
-#    value again. Then drop them from this shell.
+# 3. Keep both tokens in your secret manager NOW: Fly never shows a secret's
+#    value again. The Worker needs the same Core token (see "Point the Worker at
+#    Core"), so do not lose it. Then drop both from this shell.
 unset SHAMWARI_CORE_TOKEN SHAMWARI_OPS_TOKEN
 
-# 5. Deploy. Remote builder; the image has never been built outside CI, so the
+# 4. Deploy. Remote builder; the image has never been built outside CI, so the
 #    first build is the real test. One machine (fly.toml: min_machines_running = 1).
 cd core
 fly deploy --app shamwari-core --ha=false
 
-# 6. Names only (never values): confirm what is set.
+# 5. Names only (never values): confirm what is set.
 fly secrets list --app shamwari-core
 ```
-
-`CORE_URL` on the gateway is the Worker's own variable (`gateway/wrangler.jsonc`),
-not a secret: set it to `https://shamwari-core.fly.dev` and redeploy the Worker.
 
 ## Verify
 
 ```bash
-# Liveness, no auth. 200 {"ok":true,...} means the machine is up AND Mongo answered a ping.
+# Needs the Core and operator tokens from your secret manager (step 3 dropped them
+# from the shell). Exported here, never printed.
+: "${SHAMWARI_CORE_TOKEN:?export it from your secret manager first}"
+
+# Readiness, no auth. 200 {"ok":true,...} means the machine is up AND Mongo answered a
+# ping. Fly's check is this same route, so a Mongo outage takes the only machine out
+# of rotation (the Worker sees 503) instead of letting it answer 500s. Nothing restarts.
 curl -fsS https://shamwari-core.fly.dev/health
 
 # Auth is on: no header -> 422, wrong token -> 401. Neither reveals anything.
@@ -127,8 +128,9 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://shamwari-core.fly.dev/guardrai
 curl -sS -o /dev/null -w '%{http_code}\n' -H 'Authorization: Bearer wrong' \
   https://shamwari-core.fly.dev/guardrails
 
-# Operator routes are shut to the Worker's token (and 503 if no ops token is set).
-curl -sS -o /dev/null -w '%{http_code}\n' -H 'Authorization: Bearer wrong' \
+# Operator routes are shut to the Worker's token: the REAL Core token must get 401
+# here (503 if no ops token is set), or the two secrets are not separate.
+curl -sS -o /dev/null -w '%{http_code}\n' -H @<(printf 'Authorization: Bearer %s' "$SHAMWARI_CORE_TOKEN") \
   https://shamwari-core.fly.dev/replay/stats
 
 # Rule 1, against the live Core: a personal-scope Cloud search is refused 409
@@ -143,13 +145,28 @@ fly status --app shamwari-core
 fly logs --app shamwari-core --no-tail | tail -50
 ```
 
-(For the last `curl`, export `SHAMWARI_CORE_TOKEN` again from the secret manager;
-step 4 unset it.)
+## Point the Worker at Core
+
+Only after the checks above pass. The Worker is a separate deploy with its own
+bindings (KV, queue, secrets store, AI Gateway); the go-live checklist on #81 has
+the order. Two things that bite:
+
+- `wrangler secret put` on a Worker that is not deployed yet prompts interactively
+  to create a draft one, which breaks a non-interactive script. Deploy the Worker
+  first, then set the secret.
+- `CORE_URL` is a plain variable in `gateway/wrangler.jsonc`, currently
+  `https://core.shamwari.ai`. Change it to `https://shamwari-core.fly.dev` (a PR to
+  `staging`, the owner's merge) and redeploy.
+
+```bash
+cd gateway
+printf '%s' "$SHAMWARI_CORE_TOKEN" | npx wrangler secret put SHAMWARI_CORE_TOKEN
+```
 
 ## Ingest the Constitution
 
-Run **from your own machine**, with the three ingest variables exported in that
-shell only. The Fly app never sees them. See the header of `core/ingest_ground.py`
+Run **from your own machine**, with the four ingest variables (`SUPABASE_DB_URL`,
+`MONGODB_URI`, `CF_ACCOUNT_ID`, `CF_API_TOKEN`) exported in that shell only. The Fly app never sees them. See the header of `core/ingest_ground.py`
 and `core/README.md` for the licence gate.
 
 ## Hardening: take the public address away (before real user data)
@@ -185,12 +202,13 @@ Data: Ground ingest is additive; nothing here deletes a chunk.
 
 ## Failure signs
 
-| You see                                            | Likely cause                                                                                   |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Boot crash `KeyError: 'MONGODB_URI'`               | secret missing: `fly secrets list` shows names                                                 |
-| `/health` 500 / machine restarting                 | Mongo unreachable: Atlas network access list, or a bad URI                                     |
-| Worker answers `401 invalid_api_key` to a real key | `SHAMWARI_CORE_TOKEN` differs between Fly and the Worker, or the `/auth/verify` defect (below) |
-| Worker answers `503 auth_unavailable`              | Core unreachable from the Worker: `CORE_URL`                                                   |
+| You see                                                            | Likely cause                                                                                           |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| Boot crash `KeyError: 'MONGODB_URI'`                               | secret missing: `fly secrets list` shows names                                                         |
+| `/health` 500 / machine restarting                                 | Mongo unreachable: Atlas network access list, or a bad URI                                             |
+| Worker answers `401 invalid_api_key` to a real key                 | `SHAMWARI_CORE_TOKEN` differs between Fly and the Worker, or the `/auth/verify` defect (below)         |
+| Worker answers `503 auth_unavailable`                              | Core unreachable from the Worker: `CORE_URL`                                                           |
+| Real keys rejected for a minute after a Core restart or Mongo blip | The Worker caches any Core error as an invalid key for `AUTH_CACHE_TTL`; fixed in the owner-gated #118 |
 
 **Known defect, owner-gated:** `/auth/verify` finds a key by `keyPrefix` only. Every
 Shamwari key shares `sk_shamwari_`, so with more than one active key it can fetch

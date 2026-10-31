@@ -9,10 +9,12 @@
 #   operators  SHAMWARI_OPS_TOKEN   (unset = /replay/* and /rollup/by-tier answer 503)
 #   replay     SERVERS_API_URL  SERVERS_API_TOKEN  SERVERS_API_INTERNAL_KEY
 #              (only when usage replay is switched on: docs/usage-replay.md)
-# SUPABASE_DB_URL, CF_ACCOUNT_ID and CF_API_TOKEN are for ingest_ground.py ONLY.
-# Core does not read them while serving, so they are not set on this app: a
-# Core that cannot be handed a Supabase login or a Cloudflare token cannot leak
-# one. A test (test_deploy_config.py) fails if main.py starts reading them.
+# SUPABASE_DB_URL, CF_ACCOUNT_ID and CF_API_TOKEN are read by ingest_ground.py ONLY.
+# The ingest also needs a Mongo login (MONGODB_URI) in the operator's own shell; it is
+# not Core's. Core does not read the other three while serving, and the ingest script
+# is not in the image, so a Core that cannot be handed a Supabase login or a Cloudflare
+# token cannot leak one. A test (test_deploy_config.py) fails if main.py starts reading
+# them or the image starts shipping the script.
 app = "shamwari-core"
 primary_region = "jnb"
 
