@@ -122,6 +122,22 @@ test('discarding the only question leaves nothing behind after a reload', async 
   await context.setOffline(true);
   await ask(page, 'Do not send this');
   await page.getByRole('button', { name: 'Discard' }).click();
+  // The delete has to have reached IndexedDB before the page goes away; that is
+  // what "discarded" means, so wait for it rather than racing a reload against it.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          new Promise<number>((done) => {
+            const open = indexedDB.open('shamwari-chat', 1);
+            open.onsuccess = () => {
+              const all = open.result.transaction('threads').objectStore('threads').getAll();
+              all.onsuccess = () => done(all.result.length);
+            };
+          }),
+      ),
+    )
+    .toBe(0);
   await context.setOffline(false);
   await page.reload();
   await page.waitForSelector('html[data-ready="true"]');

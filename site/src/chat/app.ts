@@ -112,12 +112,12 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
 
   const queueActionsFor = (m: StoredMessage): QueueActions => ({
     sendNow: () => void deliver(thread, m),
-    discard: () => {
+    discard: async () => {
       thread.messages = thread.messages.filter((x) => x !== m);
       nodes.get(m.id)?.remove();
       nodes.delete(m.id);
       syncEmpty();
-      void save(thread);
+      await save(thread);
     },
   });
 
