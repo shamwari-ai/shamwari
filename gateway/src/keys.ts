@@ -1,5 +1,5 @@
 import type { AuthContext, Env, Scope, SinkMessage } from './types';
-import { core } from './core';
+import { core, CoreError } from './core';
 
 /**
  * The seam between the gateway and whatever owns API keys and usage.
@@ -14,9 +14,7 @@ import { core } from './core';
  * test/keys.test.ts fail if either breaks:
  *
  *   - Auth fails closed. 'unavailable' is never treated as 'ok', and is never
- *     cached as a verdict either way. (CoreKeyService is the one legacy
- *     exception: it reports every Core error as 'invalid', as it always did.
- *     Tightening that is a live-path behaviour change, tracked separately.)
+ *     cached as a verdict either way.
  *   - Nothing here carries prompt, answer or scope-gated content. Key checks
  *     send a hash; metering sends counts and identifiers (Rule 1). The one
  *     exception is the scope *label* (personal, community or platform), which
@@ -58,7 +56,7 @@ export interface UsageMeter {
   record(doc: Record<string, unknown>): Promise<void>;
 }
 
-/** The current implementation, unchanged in behaviour. */
+/** The current implementation. */
 export class CoreKeyService implements KeyService {
   constructor(private readonly env: Env) {}
 
@@ -88,11 +86,17 @@ export class CoreKeyService implements KeyService {
           monthlyTokenCap: r.monthly_token_cap,
         },
       };
-    } catch {
-      // Legacy behaviour, kept so the seam changes nothing: a Core outage
-      // reads as 'invalid' and is negatively cached for AUTH_CACHE_TTL.
-      // Still fails closed. The Servers API implementation does better.
-      return { status: 'invalid' };
+    } catch (e) {
+      // Core answers a bad key with 401 {"detail":{"error":"invalid_key"}}.
+      // Only that is a verdict on the key, and only that is cached. Anything
+      // else (Core down, a timeout, a 5xx, Core refusing the Worker's own
+      // token) says nothing about the key: it is unavailable, denies the
+      // request, and is not cached, so an outage is not remembered as a
+      // revocation of every customer's key for AUTH_CACHE_TTL.
+      if (e instanceof CoreError && e.status === 401 && e.detail.includes('"invalid_key"')) {
+        return { status: 'invalid' };
+      }
+      return { status: 'unavailable' };
     }
   }
 
