@@ -78,6 +78,7 @@ to something permissive.
 ```bash
 python ingest_ground.py --list     # sources and licence status
 python ingest_ground.py --due      # what needs a refresh
+python ingest_ground.py --dry-run --file ./constitution-2013.txt   # show the citations; no network
 
 python ingest_ground.py \
   --source "Constitution of Zimbabwe" \
@@ -88,24 +89,33 @@ python ingest_ground.py \
   --dataset zw-law-v1
 ```
 
-Writes to both stores. Postgres `documents` gets the audit record — source,
+Writes to both stores. Postgres `documents` gets the audit record: source,
 licence, authority, effective date. Mongo `shamwari.knowledgeBase` gets the
-embedded chunks. `documents.mongodb_ground_id` bridges them.
+embedded chunks. `documents.mongodb_ground_id` bridges them. The credentials
+(`SUPABASE_DB_URL`, `MONGODB_URI`, `CF_ACCOUNT_ID`, `CF_API_TOKEN`) are for this
+script in your own shell; the running service never reads them.
 
 **The script refuses unapproved sources.** It exits rather than warning and
 continuing. Of the 22 seeded corpus sources, five are marked `VERIFY` or
 `COPYRIGHT` and will be rejected until you read their terms and flip
-`is_approved` yourself. ZIMSEC is flagged DO NOT SCRAPE.
+`is_approved` yourself. ZIMSEC is flagged DO NOT SCRAPE. It fetches nothing: you
+supply the text file, so you have read the source's terms.
 
-Chunking is heading-aware: it splits on `PART`, `CHAPTER`, `SCHEDULE`,
-`Section`, `Article`, `Clause`. This matters because a citation should read
-"Section 56" and not "chunk 47" — the whole product claim is that Shamwari
-cites the actual provision.
+Chunking is section-aware: a chunk is a section, or a run of subsections of a long
+one, and carries its chapter, section number, title and subsection range, so an
+answer cites "s 56(1)-(3)" and not "chunk 47". It reads the Constitution's layout
+(`56 Equality and non-discrimination`, `(1)`, `(2)`, schedules) as well as the older
+`Section 56` and `56.` styles, drops the table of contents and PDF furniture, and
+refuses to treat a wrapped line such as `22 May 2013` as a heading.
 
 Embeddings use `@cf/baai/bge-m3` at 1024 dimensions, matching both the
 `ground_vector_search` index and the existing `news.articles` embeddings. The
-script hard-fails on a dimension mismatch rather than writing unqueryable
-vectors.
+script hard-fails on a dimension mismatch, before writing anything, rather than
+writing unqueryable vectors.
+
+Where the text comes from, what to check, and how to score retrieval:
+`docs/ground-ingest.md`. The citation evaluation (`eval_ground.py`) is the
+regression gate for every change to the corpus.
 
 ## Start here
 
