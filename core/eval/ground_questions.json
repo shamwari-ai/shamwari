@@ -3,39 +3,243 @@
   "cite_as": "Constitution of Zimbabwe Amendment (No. 20) Act 2013",
   "note": "Questions are written in plain words, as a person would ask. `expected` lists the section numbers that count as a correct citation (any one is a hit). `evidence` are phrases that must appear in the expected sections' text, so `python eval_ground.py --verify-labels --text <the real text>` fails loudly on a wrong label. Labels were written from the 2013 text and have NOT yet been verified against the real file: run --verify-labels once with the operator-supplied text before trusting a score. Amendments since 2013 (No. 1 of 2017, No. 2 of 2021) and the 2026 Bill are not in the 2013 text; questions avoid the provisions they changed.",
   "questions": [
-    { "id": "q01", "topic": "equality", "question": "What does section 56 say about equality?", "expected": ["56"], "evidence": ["equal before the law"] },
-    { "id": "q02", "topic": "equality", "question": "Is it unlawful to discriminate against someone because of their tribe or sex?", "expected": ["56"], "evidence": ["discriminat"] },
-    { "id": "q03", "topic": "life", "question": "Does everyone in Zimbabwe have a right to life?", "expected": ["48"], "evidence": ["right to life"] },
-    { "id": "q04", "topic": "life", "question": "Can a woman be sentenced to death?", "expected": ["48"], "evidence": ["woman"] },
-    { "id": "q05", "topic": "dignity", "question": "What does the Constitution say about human dignity?", "expected": ["51"], "evidence": ["dignity"] },
-    { "id": "q06", "topic": "security", "question": "Do I have a right to be free from violence and to bodily integrity?", "expected": ["52"], "evidence": ["bodily and psychological integrity"] },
-    { "id": "q07", "topic": "torture", "question": "Is torture or cruel and degrading punishment allowed?", "expected": ["53"], "evidence": ["torture"] },
-    { "id": "q08", "topic": "labour", "question": "Can anyone be forced to work against their will?", "expected": ["55"], "evidence": ["forced or compulsory labour"] },
-    { "id": "q09", "topic": "privacy", "question": "Can the police search my home or seize my belongings without permission?", "expected": ["57"], "evidence": ["without their permission"] },
-    { "id": "q10", "topic": "assembly", "question": "Do I have the right to protest or demonstrate peacefully?", "expected": ["58", "59"], "evidence": ["assembl|demonstrate|petition"] },
-    { "id": "q11", "topic": "conscience", "question": "Is there freedom of religion and belief?", "expected": ["60"], "evidence": ["conscience"] },
-    { "id": "q12", "topic": "expression", "question": "What does the Constitution say about freedom of expression and the media?", "expected": ["61"], "evidence": ["expression"] },
-    { "id": "q13", "topic": "information", "question": "Can I ask the government for information it holds?", "expected": ["62"], "evidence": ["information"] },
-    { "id": "q14", "topic": "labour", "question": "What are my rights at work: a fair wage and joining a trade union?", "expected": ["65"], "evidence": ["fair and safe labour practices"] },
-    { "id": "q15", "topic": "movement", "question": "Am I free to move around and live anywhere in Zimbabwe?", "expected": ["66"], "evidence": ["move freely within Zimbabwe"] },
-    { "id": "q16", "topic": "political", "question": "May I join a political party and take part in its activities?", "expected": ["67"], "evidence": ["political party"] },
-    { "id": "q17", "topic": "fair-trial", "question": "Does a person accused of a crime have a right to a fair public trial?", "expected": ["69", "70"], "evidence": ["fair and public trial|presumed innocent"] },
-    { "id": "q18", "topic": "fair-trial", "question": "Can I choose my own lawyer in court?", "expected": ["69"], "evidence": ["legal practitioner"] },
-    { "id": "q19", "topic": "property", "question": "When can the State take away someone's property?", "expected": ["71"], "evidence": ["property"] },
-    { "id": "q20", "topic": "environment", "question": "Is there a constitutional right to a clean and healthy environment?", "expected": ["73"], "evidence": ["environment"] },
-    { "id": "q21", "topic": "education", "question": "Does a child have a right to basic State-funded education?", "expected": ["75"], "evidence": ["education"] },
-    { "id": "q22", "topic": "health", "question": "Do I have a right to access basic health care?", "expected": ["76"], "evidence": ["health-care services"] },
-    { "id": "q23", "topic": "food-water", "question": "Is access to safe water and enough food a constitutional right?", "expected": ["77"], "evidence": ["potable water"] },
-    { "id": "q24", "topic": "marriage", "question": "Can someone be forced into marriage?", "expected": ["78"], "evidence": ["against their will"] },
-    { "id": "q25", "topic": "children", "question": "Who counts as a child and what are children's rights?", "expected": ["81"], "evidence": ["eighteen years"] },
-    { "id": "q26", "topic": "enforcement", "question": "Who is allowed to go to court when a fundamental right is infringed?", "expected": ["85"], "evidence": ["own interests"] },
-    { "id": "q27", "topic": "citizenship", "question": "How does a person become a Zimbabwean citizen?", "expected": ["35"], "evidence": ["birth, descent or registration"] },
-    { "id": "q28", "topic": "citizenship", "question": "Is a child born in Zimbabwe to a Zimbabwean parent a citizen by birth?", "expected": ["36"], "evidence": ["born in Zimbabwe"] },
-    { "id": "q29", "topic": "citizenship", "question": "What happens to a child found in Zimbabwe whose parents are not known?", "expected": ["36"], "evidence": ["child found in Zimbabwe"] },
-    { "id": "q30", "topic": "president", "question": "What is the minimum age to stand for President?", "expected": ["91"], "evidence": ["forty years"] },
-    { "id": "q31", "topic": "president", "question": "How many terms can a President serve?", "expected": ["91", "95"], "evidence": ["terms?"] },
-    { "id": "q32", "topic": "president", "question": "How does the President resign?", "expected": ["96"], "evidence": ["resign"] },
-    { "id": "q33", "topic": "parliament", "question": "How long is the term of Parliament?", "expected": ["143"], "evidence": ["five-year term"] },
-    { "id": "q34", "topic": "judiciary", "question": "Are the courts independent of the government?", "expected": ["164"], "evidence": ["independent"] }
+    {
+      "id": "q01",
+      "topic": "equality",
+      "question": "What does section 56 say about equality?",
+      "expected": ["56"],
+      "evidence": ["equal before the law"]
+    },
+    {
+      "id": "q02",
+      "topic": "equality",
+      "question": "Is it unlawful to discriminate against someone because of their tribe or sex?",
+      "expected": ["56"],
+      "evidence": ["discriminat"]
+    },
+    {
+      "id": "q03",
+      "topic": "life",
+      "question": "Does everyone in Zimbabwe have a right to life?",
+      "expected": ["48"],
+      "evidence": ["right to life"]
+    },
+    {
+      "id": "q04",
+      "topic": "life",
+      "question": "Can a woman be sentenced to death?",
+      "expected": ["48"],
+      "evidence": ["woman"]
+    },
+    {
+      "id": "q05",
+      "topic": "dignity",
+      "question": "What does the Constitution say about human dignity?",
+      "expected": ["51"],
+      "evidence": ["dignity"]
+    },
+    {
+      "id": "q06",
+      "topic": "security",
+      "question": "Do I have a right to be free from violence and to bodily integrity?",
+      "expected": ["52"],
+      "evidence": ["bodily and psychological integrity"]
+    },
+    {
+      "id": "q07",
+      "topic": "torture",
+      "question": "Is torture or cruel and degrading punishment allowed?",
+      "expected": ["53"],
+      "evidence": ["torture"]
+    },
+    {
+      "id": "q08",
+      "topic": "labour",
+      "question": "Can anyone be forced to work against their will?",
+      "expected": ["55"],
+      "evidence": ["forced or compulsory labour"]
+    },
+    {
+      "id": "q09",
+      "topic": "privacy",
+      "question": "Can the police search my home or seize my belongings without permission?",
+      "expected": ["57"],
+      "evidence": ["without their permission"]
+    },
+    {
+      "id": "q10",
+      "topic": "assembly",
+      "question": "Do I have the right to protest or demonstrate peacefully?",
+      "expected": ["58", "59"],
+      "evidence": ["assembl|demonstrate|petition"]
+    },
+    {
+      "id": "q11",
+      "topic": "conscience",
+      "question": "Is there freedom of religion and belief?",
+      "expected": ["60"],
+      "evidence": ["conscience"]
+    },
+    {
+      "id": "q12",
+      "topic": "expression",
+      "question": "What does the Constitution say about freedom of expression and the media?",
+      "expected": ["61"],
+      "evidence": ["expression"]
+    },
+    {
+      "id": "q13",
+      "topic": "information",
+      "question": "Can I ask the government for information it holds?",
+      "expected": ["62"],
+      "evidence": ["information"]
+    },
+    {
+      "id": "q14",
+      "topic": "labour",
+      "question": "What are my rights at work: a fair wage and joining a trade union?",
+      "expected": ["65"],
+      "evidence": ["fair and safe labour practices"]
+    },
+    {
+      "id": "q15",
+      "topic": "movement",
+      "question": "Am I free to move around and live anywhere in Zimbabwe?",
+      "expected": ["66"],
+      "evidence": ["move freely within Zimbabwe"]
+    },
+    {
+      "id": "q16",
+      "topic": "political",
+      "question": "May I join a political party and take part in its activities?",
+      "expected": ["67"],
+      "evidence": ["political party"]
+    },
+    {
+      "id": "q17",
+      "topic": "fair-trial",
+      "question": "Does a person accused of a crime have a right to a fair public trial?",
+      "expected": ["69", "70"],
+      "evidence": ["fair and public trial|presumed innocent"]
+    },
+    {
+      "id": "q18",
+      "topic": "fair-trial",
+      "question": "Can I choose my own lawyer in court?",
+      "expected": ["69"],
+      "evidence": ["legal practitioner"]
+    },
+    {
+      "id": "q19",
+      "topic": "property",
+      "question": "When can the State take away someone's property?",
+      "expected": ["71"],
+      "evidence": ["property"]
+    },
+    {
+      "id": "q20",
+      "topic": "environment",
+      "question": "Is there a constitutional right to a clean and healthy environment?",
+      "expected": ["73"],
+      "evidence": ["environment"]
+    },
+    {
+      "id": "q21",
+      "topic": "education",
+      "question": "Does a child have a right to basic State-funded education?",
+      "expected": ["75"],
+      "evidence": ["education"]
+    },
+    {
+      "id": "q22",
+      "topic": "health",
+      "question": "Do I have a right to access basic health care?",
+      "expected": ["76"],
+      "evidence": ["health-care services"]
+    },
+    {
+      "id": "q23",
+      "topic": "food-water",
+      "question": "Is access to safe water and enough food a constitutional right?",
+      "expected": ["77"],
+      "evidence": ["potable water"]
+    },
+    {
+      "id": "q24",
+      "topic": "marriage",
+      "question": "Can someone be forced into marriage?",
+      "expected": ["78"],
+      "evidence": ["against their will"]
+    },
+    {
+      "id": "q25",
+      "topic": "children",
+      "question": "Who counts as a child and what are children's rights?",
+      "expected": ["81"],
+      "evidence": ["eighteen years"]
+    },
+    {
+      "id": "q26",
+      "topic": "enforcement",
+      "question": "Who is allowed to go to court when a fundamental right is infringed?",
+      "expected": ["85"],
+      "evidence": ["own interests"]
+    },
+    {
+      "id": "q27",
+      "topic": "citizenship",
+      "question": "How does a person become a Zimbabwean citizen?",
+      "expected": ["35"],
+      "evidence": ["birth, descent or registration"]
+    },
+    {
+      "id": "q28",
+      "topic": "citizenship",
+      "question": "Is a child born in Zimbabwe to a Zimbabwean parent a citizen by birth?",
+      "expected": ["36"],
+      "evidence": ["born in Zimbabwe"]
+    },
+    {
+      "id": "q29",
+      "topic": "citizenship",
+      "question": "What happens to a child found in Zimbabwe whose parents are not known?",
+      "expected": ["36"],
+      "evidence": ["child found in Zimbabwe"]
+    },
+    {
+      "id": "q30",
+      "topic": "president",
+      "question": "What is the minimum age to stand for President?",
+      "expected": ["91"],
+      "evidence": ["forty years"]
+    },
+    {
+      "id": "q31",
+      "topic": "president",
+      "question": "How many terms can a President serve?",
+      "expected": ["91", "95"],
+      "evidence": ["terms?"]
+    },
+    {
+      "id": "q32",
+      "topic": "president",
+      "question": "How does the President resign?",
+      "expected": ["96"],
+      "evidence": ["resign"]
+    },
+    {
+      "id": "q33",
+      "topic": "parliament",
+      "question": "How long is the term of Parliament?",
+      "expected": ["143"],
+      "evidence": ["five-year term"]
+    },
+    {
+      "id": "q34",
+      "topic": "judiciary",
+      "question": "Are the courts independent of the government?",
+      "expected": ["164"],
+      "evidence": ["independent"]
+    }
   ]
 }
