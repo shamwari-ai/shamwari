@@ -35,6 +35,8 @@ export interface Env {
   WORKOS_JWKS_URL?: string;
   /** Monthly token cap per person. A positive integer; the owner sets it. */
   WORKOS_MONTHLY_TOKEN_CAP?: string;
+  /** Longest a token may have been valid, in seconds, whatever its `exp`. Default 3600. */
+  WORKOS_MAX_TOKEN_AGE_SECONDS?: string;
 
   /**
    * Browser origins allowed to call the chat endpoint, comma separated, exact

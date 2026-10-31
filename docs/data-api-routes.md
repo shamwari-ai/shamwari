@@ -117,3 +117,10 @@ Until then `core/ingest_ground.py` runs from a trusted machine with four credent
 The API says the `owner_entity_id` in a search is asserted by the holder of Core's service key,
 not proven per end user. When the Worker authenticates each customer (G1), Core should derive the
 owner from that result and not from the request body. Today Core trusts the Worker's token.
+
+WorkOS callers (`docs/chat-signin.md`) are metered and searched under the **canonical person id**,
+sent as `owner_entity_id` (1 to 64 characters of `A-Za-z0-9_.:-`, the same pattern Core validates).
+The API must therefore accept a person id as an owner id on `usage/rollup`, `usage/events` and
+`ground/search`, and the platform must guarantee that a person id can never equal an entity id
+(or the `__probe__` sentinel), or one account would share another's quota. That disjointness is a
+platform fact the gateway cannot check; it is for the owner to confirm.

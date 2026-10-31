@@ -13,7 +13,9 @@ import type { JWK } from 'jose';
 import worker from '../src/index';
 import { authenticate } from '../src/auth';
 import { permittedScopes } from '../src/keys';
-import { resetJwksCache, scopesFromPermissions, verifyWorkosToken } from '../src/workos';
+import { conversationTrainable } from '../src/index';
+import coreMain from '../../core/main.py?raw';
+import { PERSON_ID_PATTERN, resetJwksCache, scopesFromPermissions, verifyWorkosToken } from '../src/workos';
 import type { Env } from '../src/types';
 
 const CLIENT = 'client_test';
@@ -59,6 +61,7 @@ interface TokenOpts {
   personId?: unknown;
   exp?: string | number | null;
   iat?: boolean;
+  iatAgo?: number;
   permissions?: unknown;
 }
 
@@ -70,7 +73,8 @@ async function token(o: TokenOpts = {}): Promise<string> {
   if (o.sid !== null) claims.sid = o.sid ?? 'session_1';
   if (o.clientId !== null) claims.client_id = o.clientId ?? CLIENT;
   const jwt = new SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid: o.kid ?? 'k1' });
-  if (o.iat !== false) jwt.setIssuedAt();
+  if (o.iatAgo) jwt.setIssuedAt(Math.floor(Date.now() / 1000) - o.iatAgo);
+  else if (o.iat !== false) jwt.setIssuedAt();
   if (o.exp !== null) jwt.setExpirationTime(o.exp ?? '5m');
   if (o.iss !== null) jwt.setIssuer(o.iss ?? ISSUER);
   if (o.aud !== null) jwt.setAudience(o.aud ?? AUDIENCE);
@@ -186,18 +190,61 @@ describe('a token that is not what it says', () => {
     ['no client id', { clientId: null }],
     ['no subject', { sub: null }],
     ['no session id (cannot be revoked)', { sid: null }],
-    ['no canonical person id (never falls back to sub)', { personId: null }],
-    ['an empty person id', { personId: '' }],
-    ['a non-string person id', { personId: 42 }],
-    ['a person id that is not inert in a URL', { personId: 'p1&owner_entity_id=other' }],
-    ['a person id with a path in it', { personId: '../admin' }],
-    ['an over-long person id', { personId: 'p'.repeat(129) }],
+    ['a session id that is not inert', { sid: 'a b/../c' }],
+    ['a lifetime past the ceiling (iat 2h ago, exp still ahead)', { iatAgo: 7200, exp: '1h' }],
   ] as [string, TokenOpts][])('refuses a token with %s', async (_label, opts) => {
     expect(await verify(await token(opts))).toBe('invalid');
   });
 
   it('refuses garbage that only looks like a token', async () => {
     expect(await verify('aaa.bbb.ccc')).toBe('invalid');
+  });
+});
+
+describe('a real sign-in that is not provisioned is a 403, not a 401', () => {
+  it.each([
+    ['no canonical person id (never falls back to sub)', { personId: null }],
+    ['an empty person id', { personId: '' }],
+    ['a non-string person id', { personId: 42 }],
+    ['a person id that is not inert in a URL', { personId: 'p1&owner_entity_id=other' }],
+    ['a person id with a path in it', { personId: '../admin' }],
+    // Core's owner-id pattern stops at 64, so 65 would pass here and 422 there.
+    ['a person id longer than Core accepts', { personId: 'p'.repeat(65) }],
+  ] as [string, TokenOpts][])('%s', async (_label, opts) => {
+    expect(await verifyWorkosToken(await token(opts), makeEnv())).toEqual({
+      status: 'forbidden',
+      reason: 'no_person_id',
+    });
+  });
+
+  it('accepts a person id of exactly Core\'s maximum length', async () => {
+    expect(await verify(await token({ personId: 'p'.repeat(64) }))).toBe('ok');
+  });
+
+  it('says which gap it is, over HTTP, and does not look like a bad credential', async () => {
+    const res = await worker.fetch(
+      new Request('https://x/v1/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${await token({ permissions: ['billing:read'] })}` },
+        body: '{}',
+      }),
+      makeEnv(),
+      { waitUntil() {} } as unknown as ExecutionContext,
+    );
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'not_provisioned', reason: 'no_shamwari_permission' });
+  });
+});
+
+describe('the person id pattern stays in step with Core', () => {
+  it('is exactly the owner-id pattern Core validates', () => {
+    const core = /^_ID = r"(.+)"$/m.exec(coreMain)?.[1];
+    expect(core).toBeDefined();
+    expect(new RegExp(core!).test('p'.repeat(64))).toBe(true);
+    expect(new RegExp(core!).test('p'.repeat(65))).toBe(false);
+    for (const id of ['p'.repeat(64), 'p'.repeat(65), 'a b', 'a&b', '', 'ok_id.1:2-3']) {
+      expect(PERSON_ID_PATTERN.test(id)).toBe(new RegExp(core!).test(id));
+    }
   });
 });
 
@@ -229,9 +276,9 @@ describe('who is metered', () => {
 
 describe('scope comes from permissions and defaults to nothing', () => {
   it('refuses a valid token with no shamwari permission', async () => {
-    expect(await verify(await token({ permissions: ['billing:read'] }))).toBe('invalid');
-    expect(await verify(await token({ permissions: [] }))).toBe('invalid');
-    expect(await verify(await token({ permissions: 'shamwari:community' }))).toBe('invalid');
+    expect(await verify(await token({ permissions: ['billing:read'] }))).toBe('forbidden');
+    expect(await verify(await token({ permissions: [] }))).toBe('forbidden');
+    expect(await verify(await token({ permissions: 'shamwari:community' }))).toBe('forbidden');
   });
 
   it('grants exactly the scopes held, and ignores a personal permission', async () => {
@@ -241,7 +288,7 @@ describe('scope comes from permissions and defaults to nothing', () => {
   });
 
   it('refuses a token whose only shamwari permission is personal', async () => {
-    expect(await verify(await token({ permissions: ['shamwari:personal'] }))).toBe('invalid');
+    expect(await verify(await token({ permissions: ['shamwari:personal'] }))).toBe('forbidden');
   });
 
   it('never lets personal into the permitted scopes, whatever the token carries', async () => {
@@ -284,6 +331,20 @@ describe('failing closed', () => {
     expect(await verify(await token())).toBe('unavailable');
   });
 
+  it('is invalid, not unavailable, for a token jose cannot make sense of (no pointless retries)', async () => {
+    const good = await token();
+    const [h, p, sig] = good.split('.') as [string, string, string];
+    const hdr = JSON.parse(atob(h.replace(/-/g, '+').replace(/_/g, '/')));
+    const crit = `${b64u({ ...hdr, crit: ['exp'], exp: 1 })}.${p}.${sig}`;
+    expect(await verify(crit)).toBe('invalid');
+    expect(await verify(`${b64u({ alg: 'RS256', kid: 'k1' })}.${b64u({})}.AAAA`)).toBe('invalid');
+  });
+
+  it('is unavailable when the JWKS answer is malformed', async () => {
+    jwksBehaviour = () => Response.json({ not: 'a key set' });
+    expect(await verify(await token())).toBe('unavailable');
+  });
+
   it('is a 503 through the handler when the JWKS endpoint is down', async () => {
     jwksBehaviour = () => new Response('boom', { status: 500 });
     const res = await worker.fetch(
@@ -304,6 +365,8 @@ describe('failing closed', () => {
     ['no cap', { WORKOS_MONTHLY_TOKEN_CAP: undefined }],
     ['a non-numeric cap', { WORKOS_MONTHLY_TOKEN_CAP: 'lots' }],
     ['a zero cap', { WORKOS_MONTHLY_TOKEN_CAP: '0' }],
+    ['a non-numeric max token age', { WORKOS_MAX_TOKEN_AGE_SECONDS: 'forever' }],
+    ['a zero max token age', { WORKOS_MAX_TOKEN_AGE_SECONDS: '0' }],
     ['a non-HTTPS JWKS URL', { WORKOS_JWKS_URL: 'http://api.workos.com/sso/jwks/x' }],
   ])('is unavailable, never permissive, with %s configured', async (_label, extra) => {
     expect(await verify(await token(), makeEnv(extra))).toBe('unavailable');
@@ -327,5 +390,19 @@ describe('the two credential shapes stay apart', () => {
     const req = new Request('https://x/', { headers: { Authorization: 'Bearer not-a-credential' } });
     expect(await authenticate(req, makeEnv())).toEqual({ ok: false, reason: 'invalid' });
     expect(calls).toEqual([]);
+  });
+});
+
+describe('signed-in people are not Mind training material (nobody asked them)', () => {
+  it('keeps a WorkOS caller out of training even for an open_weight community answer', () => {
+    expect(conversationTrainable('community', 'open_weight', false, 'shamwari')).toBe(true); // the unchanged baseline
+    expect(conversationTrainable('community', 'open_weight', false, 'workos')).toBe(false);
+    expect(conversationTrainable('platform', 'open_weight', false, 'workos')).toBe(false);
+  });
+
+  it('keeps every earlier way of saying no', () => {
+    expect(conversationTrainable('personal', 'open_weight', false, 'shamwari')).toBe(false);
+    expect(conversationTrainable('community', 'restricted', false, 'shamwari')).toBe(false);
+    expect(conversationTrainable('community', 'open_weight', true, 'shamwari')).toBe(false);
   });
 });

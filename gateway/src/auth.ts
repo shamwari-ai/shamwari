@@ -9,7 +9,8 @@ async function sha256(raw: string): Promise<string> {
 
 export type AuthResult =
   | { ok: true; auth: AuthContext }
-  | { ok: false; reason: 'invalid' | 'unavailable' };
+  | { ok: false; reason: 'invalid' | 'unavailable' }
+  | { ok: false; reason: 'forbidden'; detail: string };
 
 /**
  * KV first, key service on miss. Only the hash is ever transmitted or cached,
@@ -32,9 +33,11 @@ export async function authenticate(req: Request, env: Env): Promise<AuthResult> 
   if (!raw.startsWith('sk_shamwari_')) {
     if (!looksLikeJwt(raw)) return { ok: false, reason: 'invalid' };
     const outcome = await verifyWorkosToken(raw, env);
-    return outcome.status === 'ok'
-      ? { ok: true, auth: outcome.ctx }
-      : { ok: false, reason: outcome.status };
+    if (outcome.status === 'ok') return { ok: true, auth: outcome.ctx };
+    if (outcome.status === 'forbidden') {
+      return { ok: false, reason: 'forbidden', detail: outcome.reason };
+    }
+    return { ok: false, reason: outcome.status };
   }
 
   const hash = await sha256(raw);

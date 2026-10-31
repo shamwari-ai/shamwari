@@ -37,11 +37,20 @@ Verification, every step failing closed:
    token with no `aud` is refused); **`client_id`** equals `WORKOS_CLIENT_ID`; `exp`, `iat`
    and `sub` must be present (a token with no `exp` would otherwise never expire).
 3. **`sid`** must be present: it is what revocation is keyed on.
+   `maxTokenAge` caps how long any token may have been valid, whatever its `exp`
+   (`WORKOS_MAX_TOKEN_AGE_SECONDS`, default 3600): a template left at a long lifetime costs a
+   refusal, not a long revocation window.
 4. **JWKS** is fetched from `https://api.workos.com/sso/jwks/{clientId}` (override with
    `WORKOS_JWKS_URL`, HTTPS only), cached per isolate for 10 minutes, and re-fetched on an
    unknown `kid` at most once per 30 seconds, so a flood of forged `kid`s cannot become a flood
    at WorkOS. A JWKS outage is **503 `auth_unavailable`**, not 401: the person's session may be
-   fine, and a client that drops its session on a 401 would turn our outage into theirs.
+   fine, and a client that drops its session on a 401 would turn our outage into theirs. Anything
+   jose says about the token itself (including an unsupported header) is a 401; only failing to
+   reach or read the JWKS is a 503.
+   Known edge: if WorkOS rotates its signing key and a token with the new `kid` arrives within
+   30 seconds of the last JWKS fetch, it is refused (401) until the cooldown ends. The client then
+   signs in again and succeeds. WorkOS publishes a new key in the JWKS before using it, which is
+   what makes this rare; it was not verified here.
 5. Nothing is cached per token. The signature check is the whole cost, and a cached verdict
    would only lengthen the revocation window.
 
@@ -54,7 +63,12 @@ Authorize on the `permissions` claim, never on `role` strings.
 | `shamwari:community`                           | `community` |
 | `shamwari:platform`                            | `platform`  |
 
-- A valid token with **neither** is refused (401). There is no default scope.
+- A valid token with **neither** is refused with **403 `not_provisioned`**
+  (`reason: no_shamwari_permission`), not 401: the person is signed in and the template is the
+  gap, and a 401 would send the chat client round the sign-in loop with the same token. The same
+  403 (`reason: no_person_id`) covers an account with no usable `person_id`. There is no default
+  scope. (The chat client maps any 403 to its "not permitted" state; a distinct message for
+  `not_provisioned` is a small site change not made here.)
 - **`personal` cannot be granted by this file to anyone.** A `shamwari:personal` permission,
   or any other string, is ignored. A person who needs `personal` uses Shamwari Mind on their
   device; Cloud never serves it (rule 1). The gate that enforces this is unchanged and
@@ -72,7 +86,8 @@ suggested from the $0.20 per user per month target in `docs/tiered-access-design
 with `gateway/pricing.json`).
 
 - **No `person_id`, no request.** A valid token without the claim, or with one that is not
-  1 to 128 characters of `A-Za-z0-9_.:-`, is refused (401). It does **not** fall back to WorkOS
+  1 to 64 characters of `A-Za-z0-9_.:-` (Core's owner-id pattern, pinned by a test that reads
+  `core/main.py`), is refused (403 `not_provisioned`). It does **not** fall back to WorkOS
   `sub`: that would give one person two quota identities. The alphabet is a guard, not a format
   claim: the id is interpolated into a Core URL on the default quota path, so it must be inert
   there. If the platform's person ids use other characters, widen the pattern in
@@ -98,6 +113,25 @@ Enabled but incomplete (any of issuer, audience or cap missing or malformed) is
 `WORKOS_ISSUER` is a value to read off a real token before setting. The Console signs in
 through the custom domain `auth.mukoko.com` (app **Mukoko Account**), and whether that changes
 `iss` from WorkOS's default is not something this session could confirm.
+
+### Things the code assumes about a real token (unverified)
+
+- `client_id` is present and equals the app's client id. It is a standard AuthKit access-token
+  claim per the WorkOS documentation as relayed, but no real token was inspected. **If a real
+  token has no `client_id`, every sign-in is refused and the failure looks like a bad credential:**
+  read a real token before enabling `WORKOS_CLIENT_ID`.
+- `sid` and `permissions` are present, and `person_id` is present once the template adds it.
+
+### Two behaviours the owner should know about
+
+- **Signed-in people are never Mind training material.** `trainingEligible` is false for a WorkOS
+  caller whatever the model, because nobody has asked them (the same rule as SMS and USSD).
+  `conversationTrainable` in `gateway/src/index.ts` is the one place that says so.
+- **The quota check fails open** (existing behaviour, written for paying key holders): if the
+  rollup cannot be read the request is served. For these free people that means the cap is not
+  enforced while the rollup is failing. The gateway now logs `quota rollup failed, cap not
+enforced`. Whether people should instead fail closed is a policy choice that depends on the API
+  accepting person ids (G6); it is not changed here.
 
 ## The chat: a thin session Worker (design, not built)
 
