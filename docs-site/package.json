@@ -2,7 +2,7 @@
   "name": "shamwari-docs",
   "version": "1.0.0",
   "private": true,
-  "description": "docs.shamwari.ai \u2014 how Shamwari is built",
+  "description": "docs.shamwari.ai — how Shamwari is built",
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
@@ -21,13 +21,17 @@
     "typescript": "^5.9.0",
     "wrangler": "^4.147.0"
   },
+  "engines": {
+    "node": ">=22.23.4"
+  },
   "overrides": {
+    "undici@8.11.2": "8.12.3",
+    "vite": "^8.3.5",
+    "sharp": "^0.35.5",
+    "source-map-js": "^1.2.2",
     "fast-uri": "^3.1.9",
-    "sharp": ">=0.35.5",
-    "source-map-js": ">=1.2.2",
-    "undici": ">=7.30.1",
-    "vite": ">=8.3.5",
     "smol-toml": "^1.9.1",
-    "zod": "^4.6.6"
+    "zod": "^4.6.6",
+    "undici@7.29.1": "7.30.1"
   }
 }
