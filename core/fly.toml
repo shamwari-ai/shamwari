@@ -2,10 +2,17 @@
 # tunnel (issue #66); this is public HTTPS until then, and every route except
 # /health requires the bearer token (SHAMWARI_CORE_TOKEN).
 #
-# Secrets are never in this file. Set them with `fly secrets set`:
-#   MONGODB_URI  SUPABASE_DB_URL  SHAMWARI_CORE_TOKEN  CF_ACCOUNT_ID  CF_API_TOKEN
-# Only when usage replay is switched on (docs/usage-replay.md):
-#   SHAMWARI_OPS_TOKEN  SERVERS_API_URL  SERVERS_API_TOKEN  SERVERS_API_INTERNAL_KEY
+# Secrets are never in this file. Set them with `fly secrets import` (stdin, so
+# no value reaches argv or shell history); the full procedure is
+# docs/core-fly-runbook.md. What the RUNNING service reads, and only this:
+#   required   MONGODB_URI  SHAMWARI_CORE_TOKEN
+#   operators  SHAMWARI_OPS_TOKEN   (unset = /replay/* and /rollup/by-tier answer 503)
+#   replay     SERVERS_API_URL  SERVERS_API_TOKEN  SERVERS_API_INTERNAL_KEY
+#              (only when usage replay is switched on: docs/usage-replay.md)
+# SUPABASE_DB_URL, CF_ACCOUNT_ID and CF_API_TOKEN are for ingest_ground.py ONLY.
+# Core does not read them while serving, so they are not set on this app: a
+# Core that cannot be handed a Supabase login or a Cloudflare token cannot leak
+# one. A test (test_deploy_config.py) fails if main.py starts reading them.
 app = "shamwari-core"
 primary_region = "jnb"
 
