@@ -4,10 +4,44 @@
   "compatibility_date": "2026-08-01",
   "observability": { "enabled": true },
 
-  // Shamwari Chat: the PWA, its service worker, manifest and headers. Static
-  // output from `npm run build:app`; no Worker script, no bindings, no secrets.
-  // The root / answers with a 302 to /chat/ from app-public/_redirects.
-  "assets": { "directory": "./dist-app" },
+  // Shamwari Chat: the PWA, its service worker, manifest and headers (static
+  // output of `npm run build:app`), plus the SESSION WORKER (worker/) that does
+  // sign-in. Static assets answer everything except the four routes below, which
+  // run the Worker first. The root / answers with a 302 to /chat/ from
+  // app-public/_redirects.
+  "main": "worker/index.ts",
+  "assets": {
+    "directory": "./dist-app",
+    "run_worker_first": [
+      "/chat/auth/login",
+      "/chat/auth/token",
+      "/chat/auth/logout",
+      "/chat/callback",
+    ],
+  },
+
+  // Public configuration, safe in git. The client id is NOT a secret.
+  "vars": {
+    "WORKOS_CLIENT_ID": "client_01M68PCT0T5ECHKDYH45ECT0GV",
+    "WORKOS_REDIRECT_URI": "https://shamwari.ai/chat/callback",
+  },
+
+  // One instance per WorkOS session id. Refresh tokens are single-use, so every
+  // refresh for a session passes through one place (worker/coordinator.ts).
+  "durable_objects": {
+    "bindings": [{ "name": "SESSION_REFRESH", "class_name": "SessionRefresh" }],
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionRefresh"] }],
+
+  // SECRETS, by name only. Add these when the owner has created the secrets in
+  // the account's Secrets Store; `store_id` and the secret names are theirs to
+  // fill in, and no value ever goes in this file or in git:
+  //   "secrets_store_secrets": [
+  //     { "binding": "WORKOS_API_KEY",  "store_id": "<store id>", "secret_name": "<name>" },
+  //     { "binding": "COOKIE_PASSWORD",  "store_id": "<store id>", "secret_name": "<name>" }
+  //   ]
+  // Until both are bound the auth routes answer 503 and the page stays on its
+  // developer-key mode. For local runs only, put both in .dev.vars (git-ignored).
 
   // Reachable on https://shamwari-app.nyuchi.workers.dev as soon as it is deployed.
   "workers_dev": true,
