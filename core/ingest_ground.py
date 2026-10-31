@@ -717,11 +717,14 @@ async def ingest(
     cite_as: str | None = None,
     replace: bool = False,
 ) -> None:
+    env = require_env("SUPABASE_DB_URL", "MONGODB_URI", "CF_ACCOUNT_ID", "CF_API_TOKEN")
+
+    # Drivers after the credential check: a missing credential is named before a missing
+    # driver is, and neither is needed by --dry-run.
     import asyncpg
     import httpx
     from motor.motor_asyncio import AsyncIOMotorClient
 
-    env = require_env("SUPABASE_DB_URL", "MONGODB_URI", "CF_ACCOUNT_ID", "CF_API_TOKEN")
     pg = await asyncpg.connect(env["SUPABASE_DB_URL"])
     mongo = AsyncIOMotorClient(env["MONGODB_URI"])
     http = httpx.AsyncClient()
@@ -753,9 +756,9 @@ def dry_run(text: str, cite_as: str, limit: int | None = None) -> list[dict[str,
 
 
 async def list_sources() -> None:
+    env = require_env("SUPABASE_DB_URL")
     import asyncpg
 
-    env = require_env("SUPABASE_DB_URL")
     pg = await asyncpg.connect(env["SUPABASE_DB_URL"])
     rows = await pg.fetch(
         """
@@ -772,9 +775,9 @@ async def list_sources() -> None:
 
 
 async def due() -> None:
+    env = require_env("SUPABASE_DB_URL")
     import asyncpg
 
-    env = require_env("SUPABASE_DB_URL")
     pg = await asyncpg.connect(env["SUPABASE_DB_URL"])
     rows = await pg.fetch("select name, authority, refresh_cadence, last_checked_at "
                           "from ground_refresh_due where is_due order by last_checked_at nulls first")

@@ -16,15 +16,14 @@ REPO = HERE.parent
 
 #: Read while serving. Everything else Core is configured with is a bug.
 SERVING = {
-    "MONGODB_URI",
     "SHAMWARI_CORE_TOKEN",
     "SHAMWARI_OPS_TOKEN",
-    "SERVERS_API_URL",
-    "SERVERS_API_TOKEN",
-    "SERVERS_API_INTERNAL_KEY",
+    "NYUCHI_API_INTERNAL_KEY",
+    "NYUCHI_API_URL",
+    "NYUCHI_API_HOST",
 }
-#: Ingest-only: a Supabase login and a Cloudflare token. Never on the Fly app.
-INGEST_ONLY = {"SUPABASE_DB_URL", "CF_ACCOUNT_ID", "CF_API_TOKEN"}
+#: Ingest-only: database and Cloudflare logins. Never on the Fly app, and never read by Core.
+INGEST_ONLY = {"SUPABASE_DB_URL", "MONGODB_URI", "CF_ACCOUNT_ID", "CF_API_TOKEN"}
 
 
 def env_names_in(src: str) -> set[str]:
@@ -82,12 +81,12 @@ class TheCheckSeesEveryWayToReadAVariable(unittest.TestCase):
 class SecretsMatchTheCode(unittest.TestCase):
     def test_serving_code_reads_exactly_the_documented_secrets(self):
         read: set[str] = set()
-        for py in ("main.py", "replay.py", "telemetry.py"):
+        for py in ("main.py", "nyuchi_api.py", "replay.py", "telemetry.py"):
             read |= env_names(HERE / py)
         self.assertEqual(read, SERVING, "serving code reads an undocumented variable")
 
     def test_serving_code_never_reads_ingest_credentials(self):
-        for py in ("main.py", "replay.py", "telemetry.py"):
+        for py in ("main.py", "nyuchi_api.py", "replay.py", "telemetry.py"):
             self.assertFalse(env_names(HERE / py) & INGEST_ONLY, py)
 
     def test_fly_toml_lists_every_serving_secret_and_marks_ingest_ones(self):
@@ -111,7 +110,8 @@ class NoSecretValues(unittest.TestCase):
         for line in (HERE / "fly.toml").read_text().splitlines():
             if line.lstrip().startswith("#"):
                 continue
-            for name in SERVING | INGEST_ONLY:
+            # NYUCHI_API_URL and _HOST are plain settings, not secrets, and live in [env].
+            for name in (SERVING - {"NYUCHI_API_URL", "NYUCHI_API_HOST"}) | INGEST_ONLY:
                 self.assertNotIn(name, line)
 
     def test_runbook_never_prints_a_secret(self):
