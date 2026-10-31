@@ -104,9 +104,10 @@ Core's `replay.py` keeps its logic and its tests; only the store behind it chang
 
 A separate scope, `shamwari:ground:write`, on a key held by the operator and **not** by Core:
 
-- `POST /v1/shamwari/ground/documents`: `{slug, title, source_name, effective_from, dataset,
-  replace: bool, chunks: [{ordinal, heading, content, section, sectionTitle, subsections,
-  chapter, citation, kind}]}`. Server side, in one unit: refuse unless the named `corpus_sources`
+- `POST /v1/shamwari/ground/documents`, body fields: `slug`, `title`, `source_name`,
+  `effective_from`, `dataset`, `replace` (bool) and `chunks`, each chunk carrying `ordinal`,
+  `heading`, `content`, `section`, `sectionTitle`, `subsections`, `chapter`, `citation` and
+  `kind`. Server side, in one unit: refuse unless the named `corpus_sources`
   row is `is_approved` and `ground_eligible`; stamp `licenseClass` from its `mind_eligible`;
   **embed each chunk with bge-m3 itself** (so the operator needs no Workers AI token, and the
   1024-dimension check lives in one place); write the audit row and the chunks atomically; on
