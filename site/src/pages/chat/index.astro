@@ -1,0 +1,59 @@
+---
+// Shamwari Chat: the R1 chat app and R2 Lite PWA from shamwari-ai/shamwari#83.
+//
+// Its own tiny layout, not Layout.astro: no web fonts, no marketing header,
+// and the only client JS on the site. The page is complete English HTML
+// without JavaScript; the script translates it and runs the chat.
+import '../../chat/chat.css';
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Shamwari Chat</title>
+  <meta name="description" content="Ask in Shona, Ndebele or English and get the answer with the section it came from." />
+  <link rel="canonical" href="https://shamwari.ai/chat/" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="theme-color" content="#283593" />
+</head>
+<body>
+  <a class="skip" href="#q" data-i18n="skipToQuestion">Skip to the question box</a>
+  <div class="app">
+    <header class="bar">
+      <h1 data-i18n="appName">Shamwari Chat</h1>
+      <label class="sr-only" for="lang" data-i18n="language">Language</label>
+      <select id="lang" aria-describedby="review"></select>
+      <button type="button" id="new-chat" class="btn" data-i18n="newChat">New chat</button>
+    </header>
+
+    <p id="offline" class="notice" role="status" hidden data-i18n="offlineBanner">
+      You are offline. You can still write questions; they will be sent later.
+    </p>
+    <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
+      This language is a draft and still needs review by a native speaker.
+    </p>
+
+    <main id="thread" tabindex="-1">
+      <p class="lead" data-i18n="tagline">Ask a question. Get the answer with the section it came from.</p>
+      <div id="log" role="log" aria-live="polite" aria-relevant="additions text"></div>
+      <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>
+    </main>
+
+    <form id="composer" class="composer" autocomplete="off">
+      <label class="sr-only" for="q" data-i18n="placeholder">Ask about Zimbabwean law or tax</label>
+      <textarea id="q" rows="1" enterkeyhint="send" data-i18n-attr="placeholder:placeholder" placeholder="Ask about Zimbabwean law or tax"></textarea>
+      <button type="submit" id="send" class="btn primary" data-i18n="send">Send</button>
+    </form>
+
+    <footer>
+      <p data-i18n="footer">Answered by Shamwari Cloud (a routed model). This is not legal advice.</p>
+      <p data-i18n="storedHere">Your chats stay on this device. Nothing is saved on our servers.</p>
+    </footer>
+  </div>
+  <script>
+    import '../../chat/main';
+  </script>
+</body>
+</html>

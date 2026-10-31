@@ -182,6 +182,12 @@ jobs:
         run: npm run check
         working-directory: site
 
+      # Chat client against the gateway mock, the strings, and the guard that
+      # keeps Shamwari Chat from being called Live without evidence.
+      - name: Unit tests
+        run: npm test
+        working-directory: site
+
   gitleaks:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
