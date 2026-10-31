@@ -88,19 +88,29 @@ export function renderUser(m: StoredMessage, s: Strings, queue?: QueueActions): 
     h('p', { class: 'who' }, s.you),
     h('p', { class: 'text' }, m.text),
   );
-  if (m.status === 'queued') {
-    el.classList.add('queued');
-    // A status, not an alert: waiting to send is the app working as designed.
-    el.append(h('p', { class: 'note', role: 'status' }, s.offlineQueued));
-    if (queue) {
-      const now = h('button', { type: 'button', class: 'btn' }, s.sendNow);
-      const drop = h('button', { type: 'button', class: 'btn' }, s.discard);
-      now.addEventListener('click', queue.sendNow);
-      drop.addEventListener('click', queue.discard);
-      el.append(h('div', { class: 'row' }, now, drop));
-    }
-  }
+  updateUser(el, m, s, queue);
   return el;
+}
+
+/**
+ * Change a question's "waiting to send" state IN PLACE. Replacing the node would
+ * count as a new addition to the aria-live log and the screen reader would read
+ * the person's own question out again, in the middle of the answer.
+ */
+export function updateUser(el: HTMLElement, m: StoredMessage, s: Strings, queue?: QueueActions): void {
+  el.querySelector('.queue-extra')?.remove();
+  el.classList.toggle('queued', m.status === 'queued');
+  if (m.status !== 'queued') return;
+  // A status, not an alert: waiting to send is the app working as designed.
+  const extra = h('div', { class: 'queue-extra' }, h('p', { class: 'note', role: 'status' }, s.offlineQueued));
+  if (queue) {
+    const now = h('button', { type: 'button', class: 'btn' }, s.sendNow);
+    const drop = h('button', { type: 'button', class: 'btn' }, s.discard);
+    now.addEventListener('click', queue.sendNow);
+    drop.addEventListener('click', queue.discard);
+    extra.append(h('div', { class: 'row' }, now, drop));
+  }
+  el.append(extra);
 }
 
 export function renderPending(id: string, s: Strings): HTMLElement {

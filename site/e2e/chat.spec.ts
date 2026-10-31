@@ -113,6 +113,15 @@ test('history stays on the device across reloads, new chat starts clean, delete 
   await expect(page.locator('#log article')).toHaveCount(0);
 });
 
+test('the ask is marked as never-trainable channel traffic', async ({ page }) => {
+  const headers: Record<string, string>[] = [];
+  page.on('request', (r) => r.method() === 'POST' && headers.push(r.headers()));
+  await openChat(page);
+  await ask(page, 'hello');
+  await expect(page.locator('article.msg.bot').first()).toBeVisible();
+  expect(headers.at(-1)?.['x-shamwari-channel']).toBe('pwa');
+});
+
 test('nothing is sent to a server except the ask itself', async ({ page }) => {
   const hosts = new Set<string>();
   page.on('request', (r) => hosts.add(new URL(r.url()).host));

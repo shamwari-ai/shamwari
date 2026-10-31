@@ -76,11 +76,21 @@ mode follows the device). Mzizi has no chat or citation component today.
 
 ## Data decisions
 
-- **History is local only.** Conversations are kept in IndexedDB on the device
-  and never sent to a server by the app. The gateway receives the messages of
-  the current thread to answer, as any chat API does, and stores no
-  conversation for this surface. "New chat" starts an empty thread; "Delete
-  history" wipes the database.
+- **History is local only, and that is all this app can promise.** Conversations
+  are kept in IndexedDB on the device and the app never syncs them anywhere.
+  "New chat" starts an empty thread; "Delete history" wipes the database. But
+  the gateway **does** keep a record of every answered request: it writes a
+  `conversations` document (messages, response, citations) to the sink and a
+  `usageEvents` row (`gateway/src/index.ts`), and holds the response in KV for
+  10 minutes for idempotent replay. So the footer says what is true: history is
+  saved on this device only, Shamwari keeps a record of each question it
+  answers to run the service, and questions are not used to train Mind.
+  **This conflicts with the owner's "no server-side conversation storage in v1"
+  if that meant none at all.** Meeting it needs a gateway change (skip the
+  conversation sink for this surface); it is not made here. Until the owner
+  decides, the app sends `X-Shamwari-Channel: pwa`, the existing marker that
+  makes the gateway set `trainingEligible: false`, because nobody using the chat
+  has been asked whether their questions may train a model.
 - **Offline queue.** A question written offline is stored on the device and sent
   when the network returns, with one `Idempotency-Key` per message so a retry
   after a dropped connection is replayed by the gateway instead of answered and
@@ -137,7 +147,7 @@ options above.
 - **CORS.** The gateway sends no CORS headers today, so a browser on
   `shamwari.ai` cannot call `api.shamwari.ai`. It needs an `OPTIONS` answer and
   `Access-Control-Allow-Origin` for `https://shamwari.ai` (not `*`), allowing the
-  `Authorization`, `Content-Type` and `Idempotency-Key` headers, and
+  `Authorization`, `Content-Type`, `Idempotency-Key` and `X-Shamwari-Channel` request headers, and
   `Access-Control-Expose-Headers: Retry-After` (found by the e2e test: without it
   a browser hides `Retry-After` from the page and the app cannot say how long to
   wait). This is a code

@@ -133,6 +133,11 @@ export function createClient(config: ClientConfig) {
         headers: {
           Authorization: `Bearer ${key}`,
           'Content-Type': 'application/json',
+          // The gateway never keeps requests with this header as Mind training
+          // material (gateway/src/index.ts). Nobody using the chat has been asked
+          // whether their questions may train a model, so the answer is no until
+          // the owner decides otherwise.
+          'X-Shamwari-Channel': 'pwa',
           ...(opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {}),
         },
         body: JSON.stringify({ reach: 'r2', ...req }),

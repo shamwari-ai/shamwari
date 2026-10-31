@@ -116,3 +116,59 @@ test('the content security policy holds: no violations while chatting', async ({
   expect(csp).toContain("script-src 'self'");
   expect(csp).not.toMatch(/unsafe-/);
 });
+
+test('discarding the only question leaves nothing behind after a reload', async ({ page, context }) => {
+  await openChat(page);
+  await context.setOffline(true);
+  await ask(page, 'Do not send this');
+  await page.getByRole('button', { name: 'Discard' }).click();
+  await context.setOffline(false);
+  await page.reload();
+  await page.waitForSelector('html[data-ready="true"]');
+  await expect(page.locator('#log article')).toHaveCount(0);
+  await expect(page.locator('#history')).toBeHidden();
+});
+
+test('a question in flight when the tab reloads is not lost', async ({ page }) => {
+  const posts: string[] = [];
+  page.on('request', (r) => r.method() === 'POST' && posts.push(r.postData() ?? ''));
+  await openChat(page);
+  await ask(page, 'slow answer please'); // the mock holds it for 3 s
+  await expect(page.locator('.pending')).toBeVisible();
+  await page.reload(); // killed mid-request
+  await page.waitForSelector('html[data-ready="true"]');
+  await expect(page.locator('article.msg.user')).toHaveCount(1);
+  await expect(page.locator('article.msg.bot .cite').first()).toBeVisible({ timeout: 15_000 });
+});
+
+test('three unanswered tries while online say so instead of retrying quietly forever', async ({ page }) => {
+  await page.clock.install();
+  await openChat(page);
+  let tries = 0;
+  await page.route('**/v1/chat/completions', (r) => {
+    tries += 1;
+    return r.abort();
+  });
+  await ask(page, 'hello');
+  await expect.poll(() => tries).toBe(1);
+  await expect(page.locator('article.queued')).toBeVisible();
+  await page.clock.runFor(16_000); // the first retry, after 15 s
+  await expect.poll(() => tries).toBe(2);
+  await expect(page.locator('article.queued')).toBeVisible();
+  await page.clock.runFor(31_000); // the second, after 30 s
+  await expect.poll(() => tries).toBe(3);
+  const err = page.locator('article.error [role="alert"]');
+  await expect(err).toContainText('did not arrive');
+  await expect(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+  await page.clock.runFor(10 * 60_000); // and it really has stopped
+  expect(tries).toBe(3);
+});
+
+test('the question stays the same element while it is answered, so a screen reader is not re-reading it', async ({ page }) => {
+  await openChat(page);
+  await page.locator('#q').fill('Is everyone equal under the law?');
+  await page.locator('#send').click();
+  const mine = await page.locator('article.msg.user').elementHandle();
+  await expect(page.locator('.cite').first()).toBeVisible();
+  expect(await mine!.evaluate((el) => el.isConnected)).toBe(true);
+});

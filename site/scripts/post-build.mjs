@@ -51,17 +51,11 @@ self.addEventListener('fetch', (e) => {
   if (url.pathname === '/chat/sw.js') return;
 
   if (req.mode === 'navigate') {
-    // Shell first, so it opens at once on a bad connection; refresh it in the background.
-    e.respondWith(
-      caches.match('/chat/').then((hit) => {
-        const refresh = fetch(req).then((res) => {
-          if (res.ok) caches.open(CACHE).then((c) => c.put('/chat/', res.clone()));
-          return res;
-        });
-        if (hit) { e.waitUntil(refresh.catch(() => {})); return hit; }
-        return refresh;
-      }),
-    );
+    // Shell from cache, at once. It is NOT refreshed from here: fresh HTML would
+    // name hashed assets that this worker's precache does not hold. A new build
+    // ships a new worker (its file changes), which precaches the new shell and
+    // assets together and then takes over.
+    e.respondWith(caches.match('/chat/').then((hit) => hit || fetch(req)));
     return;
   }
   e.respondWith(caches.match(req).then((hit) => hit || fetch(req)));

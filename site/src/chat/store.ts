@@ -2,7 +2,7 @@ import type { Answer, AskError, Scope } from './types';
 
 /**
  * Conversation history lives on the device and nowhere else (decision recorded
- * in docs/chat-app.md): IndexedDB here, no sync, no server copy. If IndexedDB
+ * in docs/chat-app.md): IndexedDB here, and the app never syncs it anywhere. If IndexedDB
  * is unavailable (some private modes, very old WebViews) the chat still works
  * for the life of the tab through the in-memory fallback.
  */
@@ -17,6 +17,8 @@ export interface StoredMessage {
   status?: 'sent' | 'queued' | 'failed';
   /** assistant messages */
   answer?: Answer;
+  /** Delivery attempts that got no answer while the browser said it was online. */
+  attempts?: number;
   /** user messages whose ask failed: why, so a reload still shows it. */
   error?: Pick<AskError, 'kind' | 'retryAfterSec' | 'upgradeUrl'>;
 }
@@ -31,6 +33,7 @@ export interface Thread {
 export interface Store {
   list(): Promise<Thread[]>;
   put(thread: Thread): Promise<void>;
+  remove(id: string): Promise<void>;
   clear(): Promise<void>;
 }
 
@@ -49,6 +52,7 @@ export function memoryStore(): Store {
   return {
     list: async () => [...threads.values()].sort((a, b) => b.updatedAt - a.updatedAt),
     put: async (t) => void threads.set(t.id, structuredClone(t)),
+    remove: async (id) => void threads.delete(id),
     clear: async () => threads.clear(),
   };
 }
@@ -77,6 +81,7 @@ export async function openStore(): Promise<Store> {
       list: async () =>
         ((await wrap(tx('readonly').getAll())) as Thread[]).sort((a, b) => b.updatedAt - a.updatedAt),
       put: async (t) => void (await wrap(tx('readwrite').put(t))),
+      remove: async (id) => void (await wrap(tx('readwrite').delete(id))),
       clear: async () => void (await wrap(tx('readwrite').clear())),
     };
   } catch {

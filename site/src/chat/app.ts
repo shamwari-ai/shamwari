@@ -7,6 +7,7 @@ import {
   renderError,
   renderPending,
   renderUser,
+  updateUser,
   type ErrorActions,
   type QueueActions,
 } from './render';
@@ -16,6 +17,8 @@ import type { ChatMessage, Scope } from './types';
 
 const RETRY_FIRST_MS = 15_000;
 const RETRY_MAX_MS = 5 * 60_000;
+/** Unanswered tries, while the browser reports online, before it stops retrying quietly. */
+const MAX_SILENT_ATTEMPTS = 3;
 
 /** How many earlier messages travel with a question. Fewer on Data Saver. */
 const CONTEXT = 6;
@@ -44,7 +47,15 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
   const fresh = (): Thread => ({ id: newId(), title: '', updatedAt: Date.now(), messages: [] });
-  const saved = await store.list();
+  const saved = await store.list().catch(() => [] as Thread[]);
+  // A question marked `sent` with nothing after it was interrupted (tab closed,
+  // phone died mid-request). It goes back in the queue under the same key, so
+  // the gateway replays the answer if it was already given.
+  for (const t of saved) {
+    t.messages.forEach((m, i) => {
+      if (m.role === 'user' && m.status === 'sent' && t.messages[i + 1]?.role !== 'assistant') m.status = 'queued';
+    });
+  }
   let thread: Thread = saved.find((t) => t.messages.length) ?? fresh();
 
   const log = $('#log');
@@ -54,9 +65,20 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   const strings = () => LANGUAGES[lang].strings;
   const nodes = new Map<string, HTMLElement>();
 
-  const persist = async () => {
-    thread.updatedAt = Date.now();
-    if (thread.messages.length) await store.put(thread);
+  /**
+   * The one place a thread is written. An empty thread is deleted, not skipped,
+   * or a discarded question would come back from the store on reload. A failed
+   * write (quota, a closed connection) must never leave the app stuck, so it is
+   * swallowed: the thread stays correct in memory for this tab.
+   */
+  const save = async (th: Thread) => {
+    th.updatedAt = Date.now();
+    try {
+      if (th.messages.length) await store.put(th);
+      else await store.remove(th.id);
+    } catch {
+      /* in-memory copy stays authoritative until the next write */
+    }
   };
 
   // ---- rendering -----------------------------------------------------------
@@ -73,7 +95,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
       nodes.get(m.id)?.remove();
       nodes.delete(m.id);
       syncEmpty();
-      void persist();
+      void save(thread);
     },
   });
 
@@ -93,7 +115,9 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
       place(m.id, renderAnswer(m, m.answer, s, lang));
       return;
     }
-    place(m.id, renderUser(m, s, queueActionsFor(m)));
+    const existing = nodes.get(m.id);
+    if (existing) updateUser(existing, m, s, queueActionsFor(m));
+    else place(m.id, renderUser(m, s, queueActionsFor(m)));
     if (m.error) place(`${m.id}:error`, renderError(m.id, m.error, s, actionsFor(m)), m.id);
   };
 
@@ -149,11 +173,6 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     return out.slice(-(saveData() ? CONTEXT_SAVER : CONTEXT));
   };
 
-  const save = async (th: Thread) => {
-    th.updatedAt = Date.now();
-    if (th.messages.length) await store.put(th);
-  };
-
   /**
    * Send one question and record what came back. Works on any thread, because a
    * question queued offline is delivered even if the person has since started a
@@ -169,60 +188,80 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     }
     const shown = () => th === thread;
     setBusy(true);
-    delete m.error;
-    m.status = 'sent';
     let pending: HTMLElement | null = null;
     let slow: ReturnType<typeof setTimeout> | undefined;
-    if (shown()) {
-      mount(m);
-      nodes.get(`${m.id}:error`)?.remove();
-      nodes.delete(`${m.id}:error`);
-      const s = strings();
-      pending = place(`${m.id}:pending`, renderPending(m.id, s), m.id);
-      pending.scrollIntoView({ block: 'end' });
-      slow = setTimeout(() => pending?.append(h('p', { class: 'note' }, s.slow)), SLOW_AFTER_MS);
-    }
-
-    const res = await client.ask(
-      { messages: contextFor(th, m), scope: m.scope ?? 'platform' },
-      { idempotencyKey: m.id },
-    );
-    clearTimeout(slow);
-    pending?.remove();
-    nodes.delete(`${m.id}:pending`);
-
-    if (res.ok) {
-      const reply: StoredMessage = {
-        id: newId(),
-        role: 'assistant',
-        text: res.value.text,
-        at: Date.now(),
-        answer: res.value,
-      };
-      // Right after its own question, which is not the end of the thread if
-      // later questions were written while this one waited.
-      th.messages.splice(th.messages.indexOf(m) + 1, 0, reply);
+    try {
+      delete m.error;
+      m.status = 'sent';
+      // Written down BEFORE the request. A reload or a killed tab mid-flight
+      // would otherwise lose the question; on load a `sent` question with no
+      // answer is treated as queued and sent again under the same key.
+      await save(th);
       if (shown()) {
         mount(m);
-        place(reply.id, renderAnswer(reply, res.value, strings(), lang), m.id);
-        nodes.get(reply.id)!.scrollIntoView({ block: 'start' });
+        nodes.get(`${m.id}:error`)?.remove();
+        nodes.delete(`${m.id}:error`);
+        const s = strings();
+        pending = place(`${m.id}:pending`, renderPending(m.id, s), m.id);
+        pending.scrollIntoView({ block: 'end' });
+        slow = setTimeout(() => pending?.append(h('p', { class: 'note' }, s.slow)), SLOW_AFTER_MS);
       }
-      retryMs = RETRY_FIRST_MS;
-    } else if (res.error.kind === 'offline') {
-      // Not an error: the answer did not arrive, so the question waits and is
-      // sent again by itself. Nothing is lost and the person is told so.
-      m.status = 'queued';
-      if (shown()) mount(m);
-      scheduleRetry();
-    } else {
-      const { kind, retryAfterSec, upgradeUrl } = res.error;
-      m.status = 'failed';
-      m.error = { kind, retryAfterSec, upgradeUrl };
-      if (shown()) mount(m);
-      if (kind === 'unauthorized') showAuth();
+
+      const res = await client.ask(
+        { messages: contextFor(th, m), scope: m.scope ?? 'platform' },
+        { idempotencyKey: m.id },
+      );
+      clearTimeout(slow);
+      pending?.remove();
+      nodes.delete(`${m.id}:pending`);
+
+      if (res.ok) {
+        const reply: StoredMessage = {
+          id: newId(),
+          role: 'assistant',
+          text: res.value.text,
+          at: Date.now(),
+          answer: res.value,
+        };
+        // Right after its own question, which is not the end of the thread if
+        // later questions were written while this one waited.
+        th.messages.splice(th.messages.indexOf(m) + 1, 0, reply);
+        delete m.attempts;
+        if (shown()) {
+          mount(m);
+          place(reply.id, renderAnswer(reply, res.value, strings(), lang), m.id);
+          nodes.get(reply.id)!.scrollIntoView({ block: 'start' });
+        }
+        retryMs = RETRY_FIRST_MS;
+      } else if (res.error.kind === 'offline') {
+        m.attempts = (m.attempts ?? 0) + 1;
+        if (navigator.onLine && m.attempts >= MAX_SILENT_ATTEMPTS) {
+          // The browser says it is online and the answer still never comes,
+          // again and again. That is not a dead network but something between
+          // here and the API (a blocked request, a misconfigured origin), so
+          // say so and stop retrying quietly forever.
+          m.attempts = 0;
+          m.status = 'failed';
+          m.error = { kind: 'offline', retryAfterSec: null, upgradeUrl: null };
+        } else {
+          // Not an error: the answer did not arrive, so the question waits and
+          // is sent again by itself. Nothing is lost and the person is told so.
+          m.status = 'queued';
+          scheduleRetry();
+        }
+        if (shown()) mount(m);
+      } else {
+        const { kind, retryAfterSec, upgradeUrl } = res.error;
+        m.status = 'failed';
+        m.error = { kind, retryAfterSec, upgradeUrl };
+        if (shown()) mount(m);
+        if (kind === 'unauthorized') showAuth();
+      }
+      await save(th);
+    } finally {
+      clearTimeout(slow);
+      setBusy(false);
     }
-    await save(th);
-    setBusy(false);
   }
 
   const hasQueued = (ths: Thread[]) => ths.some((t) => t.messages.some((m) => m.status === 'queued'));
@@ -232,7 +271,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     if (flushing || busy || !auth.getKey()) return;
     flushing = true;
     try {
-      const others = (await store.list()).filter((t) => t.id !== thread.id);
+      const others = (await store.list().catch(() => [] as Thread[])).filter((t) => t.id !== thread.id);
       for (const th of [...others.reverse(), thread]) {
         for (const m of th.messages.filter((x) => x.status === 'queued')) {
           await deliver(th, m);
