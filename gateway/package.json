@@ -18,5 +18,14 @@
     "typescript": "^5.9.0",
     "vitest": "^4.1.0",
     "wrangler": "^4.147.0"
+  },
+  "dependencies": {
+    "jose": "^6.2.14"
+  },
+  "overrides": {
+    "sharp": "0.35.5",
+    "source-map-js": "1.2.2",
+    "vite": "8.3.5",
+    "undici": "8.12.3"
   }
 }
