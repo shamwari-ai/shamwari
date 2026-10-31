@@ -260,3 +260,51 @@ test('pressing Send now on a queued question keeps focus in the log, on the prog
   const inside = await page.evaluate(() => !!document.activeElement?.closest('.pending'));
   expect(inside).toBe(true);
 });
+
+test('asking is never blocked by a question already on its way', async ({ page }) => {
+  await openChat(page);
+  await ask(page, 'slow answer please'); // held for 3 s
+  await expect(page.locator('.pending')).toBeVisible();
+  await expect(page.locator('#send')).toBeEnabled();
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('article.msg.bot:not(.pending) .cite')).toHaveCount(2 + 1, { timeout: 15_000 }); // 1 + 2 sources
+});
+
+test('a brief 503 while the queue drains keeps the question queued and sends it again', async ({ page }) => {
+  await page.clock.install();
+  await openChat(page);
+  let tries = 0;
+  await page.route('**/v1/chat/completions', (r) => {
+    tries += 1;
+    return tries === 1 ? r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"auth_unavailable"}' }) : r.fallback();
+  });
+  await ask(page, 'Is everyone equal under the law?');
+  await expect.poll(() => tries).toBe(1);
+  // Not turned into a manual "Try again": it waits, and says so.
+  await expect(page.locator('article.queued')).toBeVisible();
+  await expect(page.locator('article.error')).toHaveCount(0);
+  await page.clock.runFor(16_000);
+  await expect(page.locator('article.msg.bot:not(.pending) .cite').first()).toBeVisible({ timeout: 15_000 });
+  expect(tries).toBe(2);
+});
+
+test('the install button is in plain view, survives a dismissed dialog, and goes when installed', async ({ page }) => {
+  await openChat(page);
+  await expect(page.locator('#install')).toBeHidden();
+  const offer = () =>
+    page.evaluate(() => {
+      const e = new Event('beforeinstallprompt', { cancelable: true }) as Event & { prompt: () => Promise<void> };
+      e.prompt = async () => {};
+      window.dispatchEvent(e);
+    });
+  await offer();
+  // Visible without opening Settings.
+  await expect(page.locator('#install')).toBeVisible();
+  await expect(page.locator('details.more')).not.toHaveAttribute('open', '');
+  await page.locator('#install').click(); // dialog dismissed: the event is spent
+  await expect(page.locator('#install')).toBeHidden();
+  await offer(); // the browser offers again later
+  await expect(page.locator('#install')).toBeVisible();
+  await page.evaluate(() => window.dispatchEvent(new Event('appinstalled')));
+  await expect(page.locator('#install')).toBeHidden();
+});

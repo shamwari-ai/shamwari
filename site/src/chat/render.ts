@@ -102,7 +102,10 @@ export function updateUser(el: HTMLElement, m: StoredMessage, s: Strings, queue?
   el.classList.toggle('queued', m.status === 'queued');
   if (m.status !== 'queued') return;
   // A status, not an alert: waiting to send is the app working as designed.
-  const extra = h('div', { class: 'queue-extra' }, h('p', { class: 'note', role: 'status' }, s.offlineQueued));
+  // Say the real reason: a brief outage is not "no connection", and the person
+  // should hear that the question is kept and will be tried again.
+  const why = m.hint === 'unavailable' ? s.errors.unavailable : m.hint === 'busy' ? s.errors.busy : s.offlineQueued;
+  const extra = h('div', { class: 'queue-extra' }, h('p', { class: 'note', role: 'status' }, why));
   if (queue) {
     const now = h('button', { type: 'button', class: 'btn' }, s.sendNow);
     const drop = h('button', { type: 'button', class: 'btn' }, s.discard);

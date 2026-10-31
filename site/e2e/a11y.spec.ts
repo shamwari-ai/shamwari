@@ -47,7 +47,7 @@ for (const scheme of ['light', 'dark'] as const) {
 }
 
 test('an error is announced as an alert, an answer in the polite log, an offline queue as a status', async ({ page, context }) => {
-  await openChat(page, 'sk_shamwari_mock_503');
+  await openChat(page, 'sk_shamwari_mock_402');
   await ask(page, 'hello');
   await expect(page.locator('article.error [role="alert"]')).toBeVisible();
 

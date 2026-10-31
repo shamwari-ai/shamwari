@@ -15,7 +15,23 @@ const read = (p) => readFileSync(join(out, p));
 const html = read('chat/index.html').toString('utf8');
 
 const refs = [...html.matchAll(/(?:href|src)="(\/[^"#?]+)"/g)].map((m) => m[1]);
-const precache = [...new Set(['/chat/', '/chat/manifest.webmanifest', ...refs.filter((r) => /^\/(_astro|chat)\//.test(r) || r === '/favicon.png' || r === '/apple-touch-icon.png'), '/chat/icons/icon-192.png'])].sort();
+
+// Everything the shell can need offline: the files the page names, the files its
+// scripts import, and the files its stylesheets point at. Reading the built files
+// (not guessing) means a later shared chunk or a font in the CSS cannot be left
+// out of the precache and break the shell offline.
+const wanted = new Set(refs.filter((r) => /^\/(_astro|chat)\//.test(r) || r === '/favicon.png' || r === '/apple-touch-icon.png'));
+const queue = [...wanted];
+while (queue.length) {
+  const f = queue.pop();
+  if (!/\.(js|css)$/.test(f)) continue;
+  const code = read(f).toString('utf8');
+  const found = f.endsWith('.js')
+    ? [...code.matchAll(/(?:from|import)\s*\(?\s*["']\.\/([^"']+)["']/g)].map((m) => `/_astro/${m[1]}`)
+    : [...code.matchAll(/url\(\s*["']?(\/[^"')?#]+)/g)].map((m) => m[1]);
+  for (const g of found) if (!wanted.has(g)) { wanted.add(g); queue.push(g); }
+}
+const precache = [...new Set(['/chat/', '/chat/manifest.webmanifest', ...wanted, '/chat/icons/icon-192.png'])].sort();
 
 const version = createHash('sha256')
   .update(precache.map((p) => `${p}:${createHash('sha256').update(read(p.endsWith('/') ? `${p}index.html` : p)).digest('hex')}`).join('\n'))
@@ -74,7 +90,12 @@ self.addEventListener('fetch', (e) => {
 `;
 writeFileSync(join(out, 'chat/sw.js'), sw);
 
-const api = new URL(process.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai').origin;
+// The API origin comes from the built page itself, the one the app will really
+// call, so the CSP and the app can never disagree (an env var and a .env file
+// could, and a blocked request looks like "offline" to the person).
+const metaApi = html.match(/<meta name="shamwari-api" content="([^"]+)"/)?.[1];
+if (!metaApi) throw new Error('post-build: the chat page has no shamwari-api meta tag');
+const api = new URL(metaApi).origin;
 const csp = [
   "default-src 'self'",
   "script-src 'self'",

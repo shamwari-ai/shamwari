@@ -66,7 +66,7 @@ for (const page of pages) {
   // Internal page links resolve to a route that was actually built. Asset
   // paths are checked against the file list instead.
   for (const [, href] of html.matchAll(/href="(\/[^"#]*)"/g)) {
-    if (/\.[a-z0-9]{2,12}$/i.test(href)) {
+    if (/\.(?:[a-z0-9]{2,5}|webmanifest)$/i.test(href)) {
       if (!assets.has(href)) fail.push(`${where}: missing asset ${href}`);
       continue;
     }
@@ -207,6 +207,7 @@ if (chatHtml) {
   else {
     const m = JSON.parse(readFileSync('dist/chat/manifest.webmanifest', 'utf8'));
     if (m.start_url !== '/chat/' || m.scope !== '/chat/') fail.push('chat manifest: start_url and scope must both be /chat/');
+    if ('orientation' in m) fail.push('chat manifest: do not lock orientation (WCAG 1.3.4)');
     if (m.display !== 'standalone') fail.push('chat manifest: display must be standalone');
     const sizes = new Set((m.icons ?? []).map((i) => `${i.sizes}/${i.purpose}`));
     for (const want of ['192x192/any', '512x512/any', '512x512/maskable']) if (!sizes.has(want)) fail.push(`chat manifest: missing icon ${want}`);
@@ -225,6 +226,8 @@ if (chatHtml) {
     const headers = readFileSync('dist/_headers', 'utf8');
     const csp = headers.match(/Content-Security-Policy:\s*(.+)/)?.[1] ?? '';
     if (!csp) fail.push('chat: no Content-Security-Policy on /chat/*');
+    const metaApi = html.match(/<meta name="shamwari-api" content="([^"]+)"/)?.[1];
+    if (!metaApi || !csp.includes(`connect-src 'self' ${new URL(metaApi).origin}`)) fail.push('chat CSP: connect-src does not name the API origin the page calls');
     if (/unsafe-(inline|eval)/.test(csp)) fail.push('chat CSP: unsafe-inline / unsafe-eval are not allowed');
     if (!/script-src 'self'(;|$)/.test(csp)) fail.push("chat CSP: script-src must be exactly 'self'");
     if (!/frame-ancestors 'none'/.test(csp)) fail.push("chat CSP: frame-ancestors 'none' missing");

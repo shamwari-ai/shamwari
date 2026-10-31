@@ -13,12 +13,14 @@ import {
 } from './render';
 import { newId, openStore, titleOf, type StoredMessage, type Thread } from './store';
 import { LANGUAGES, isLanguage } from './strings';
-import type { ChatMessage, Scope } from './types';
+import type { AskErrorKind, ChatMessage, Scope } from './types';
 
 const RETRY_FIRST_MS = 15_000;
 const RETRY_MAX_MS = 5 * 60_000;
 /** Unanswered tries, while the browser reports online, before it stops retrying quietly. */
 const MAX_SILENT_ATTEMPTS = 3;
+/** Failures that say nothing about the question itself, so it waits and is sent again by itself. */
+const TRANSIENT: AskErrorKind[] = ['offline', 'unavailable', 'busy'];
 
 /** How many earlier messages travel with a question. Fewer on Data Saver. */
 const CONTEXT = 6;
@@ -41,17 +43,28 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
 
   let lang = currentLanguage();
   let scope: Scope = 'platform';
-  let busy = false;
+  /** Messages with a request in flight. Replaces one global lock, so asking and the queue never block each other. */
+  const inflight = new Set<string>();
   let flushing = false;
+  let flushAgain = false;
   let retryMs = RETRY_FIRST_MS;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
-  const fresh = (): Thread => ({ id: newId(), title: '', updatedAt: Date.now(), messages: [] });
+  /**
+   * One object per thread, however often the store is read. Without it, opening
+   * a chat from history, or a background send, would work on a stale copy that a
+   * later write then overwrites.
+   */
+  const live = new Map<string, Thread>();
+  const fresh = (): Thread => {
+    const t: Thread = { id: newId(), title: '', updatedAt: Date.now(), messages: [] };
+    live.set(t.id, t);
+    return t;
+  };
 
   const log = $('#log');
   const input = $<HTMLTextAreaElement>('#q');
   const form = $<HTMLFormElement>('#composer');
-  const sendBtn = $<HTMLButtonElement>('#send');
   const strings = () => LANGUAGES[lang].strings;
   const nodes = new Map<string, HTMLElement>();
 
@@ -83,7 +96,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
   const recover = (t: Thread): boolean => {
     let changed = false;
     t.messages.forEach((m, i) => {
-      if (m.role === 'user' && m.status === 'sent' && t.messages[i + 1]?.role !== 'assistant') {
+      if (m.role === 'user' && m.status === 'sent' && !inflight.has(m.id) && t.messages[i + 1]?.role !== 'assistant') {
         m.status = 'queued';
         changed = true;
       }
@@ -93,9 +106,14 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
 
   /** Every stored thread, newest first; a failing store reads as empty, never as a crash. */
   const listThreads = async (): Promise<Thread[]> => {
-    const all = await store.list().catch(() => [] as Thread[]);
-    for (const t of all) if (recover(t)) void save(t);
-    return all;
+    const stored = await store.list().catch(() => [] as Thread[]);
+    return stored.map((t) => {
+      const known = live.get(t.id);
+      if (known) return known;
+      live.set(t.id, t);
+      if (recover(t)) void save(t); // only a thread seen for the first time can hold an interrupted send
+      return t;
+    });
   };
 
   const saved = await listThreads();
@@ -177,11 +195,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     $('#history').hidden = list.length === 0;
   };
 
-  const setBusy = (v: boolean) => {
-    busy = v;
-    sendBtn.disabled = v;
-    log.setAttribute('aria-busy', String(v));
-  };
+  const syncBusy = () => log.setAttribute('aria-busy', String(inflight.size > 0));
 
   // ---- asking --------------------------------------------------------------
   const contextFor = (th: Thread, target: StoredMessage): ChatMessage[] => {
@@ -203,14 +217,15 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
    * connection is replayed by the gateway instead of answered and metered twice.
    */
   async function deliver(th: Thread, m: StoredMessage): Promise<void> {
-    if (busy) return;
+    if (inflight.has(m.id)) return;
     if (!auth.getKey()) {
       showAuth();
       return;
     }
     const shown = () => th === thread;
     const startedIn = epoch;
-    setBusy(true);
+    inflight.add(m.id);
+    syncBusy();
     let pending: HTMLElement | null = null;
     let slow: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -260,13 +275,14 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
         // later questions were written while this one waited.
         th.messages.splice(th.messages.indexOf(m) + 1, 0, reply);
         delete m.attempts;
+        delete m.hint;
         if (shown()) {
           mount(m);
           place(reply.id, renderAnswer(reply, res.value, strings(), lang), m.id);
           nodes.get(reply.id)!.scrollIntoView({ block: 'start' });
         }
         retryMs = RETRY_FIRST_MS;
-      } else if (res.error.kind === 'offline') {
+      } else if (TRANSIENT.includes(res.error.kind)) {
         // Only a try made while the browser says it is online counts. Tries made
         // while truly offline are expected to fail and must not use up the allowance.
         if (navigator.onLine) m.attempts = (m.attempts ?? 0) + 1;
@@ -277,11 +293,12 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
           // say so and stop retrying quietly forever.
           m.attempts = 0;
           m.status = 'failed';
-          m.error = { kind: 'offline', retryAfterSec: null, upgradeUrl: null };
+          m.error = { kind: res.error.kind, retryAfterSec: res.error.retryAfterSec, upgradeUrl: null };
         } else {
           // Not an error: the answer did not arrive, so the question waits and
           // is sent again by itself. Nothing is lost and the person is told so.
           m.status = 'queued';
+          m.hint = res.error.kind as 'offline' | 'unavailable' | 'busy';
           scheduleRetry();
         }
         if (shown()) mount(m);
@@ -295,25 +312,39 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
       await save(th);
     } finally {
       clearTimeout(slow);
-      setBusy(false);
+      inflight.delete(m.id);
+      syncBusy();
     }
   }
 
   const hasQueued = (ths: Thread[]) => ths.some((t) => t.messages.some((m) => m.status === 'queued'));
 
-  /** Send every queued question, oldest thread first, one at a time, stopping at the first that cannot go. */
+  /**
+   * Send every queued question, oldest thread first, one at a time, stopping at
+   * the first that cannot go. A trigger that arrives while it runs (the network
+   * came back, the tab was shown) is not dropped: it runs again once.
+   */
   async function flush(): Promise<void> {
     // Offline, a timer-driven try can only fail; the `online` event runs this again.
-    if (flushing || busy || !auth.getKey() || !navigator.onLine) return;
+    if (!auth.getKey() || !navigator.onLine) return;
+    if (flushing) {
+      flushAgain = true;
+      return;
+    }
     flushing = true;
     try {
-      const others = (await listThreads()).filter((t) => t.id !== thread.id);
-      for (const th of [...others.reverse(), thread]) {
-        for (const m of th.messages.filter((x) => x.status === 'queued')) {
-          await deliver(th, m);
-          if (m.status === 'queued') return; // still no network: scheduleRetry already armed
+      do {
+        flushAgain = false;
+        const startedIn = epoch;
+        const others = (await listThreads()).filter((t) => t.id !== thread.id);
+        for (const th of [...others.reverse(), thread]) {
+          for (const m of th.messages.filter((x) => x.status === 'queued' && !inflight.has(x.id))) {
+            await deliver(th, m);
+            if (startedIn !== epoch) return; // Delete history ran: what is left of this list is gone
+            if (m.status === 'queued') return; // still no way through: scheduleRetry already armed
+          }
         }
-      }
+      } while (flushAgain);
     } finally {
       flushing = false;
     }
@@ -327,7 +358,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
 
   async function ask(text: string, withScope: Scope = scope): Promise<void> {
     const clean = text.trim();
-    if (!clean || busy) return;
+    if (!clean) return;
     // No key yet: ask for one and keep what was typed, rather than eating the question.
     if (!auth.getKey()) {
       showAuth();
@@ -431,6 +462,7 @@ export async function startApp(opts: { apiBase: string }): Promise<void> {
     } catch {
       /* the in-memory thread is replaced below either way */
     }
+    live.clear();
     thread = fresh();
     rebuild();
     void renderHistory();

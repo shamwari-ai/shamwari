@@ -48,7 +48,6 @@ test('a personal question gets the Shamwari Mind explanation, not a generic erro
 const FAILURES = [
   ['sk_shamwari_mock_402', /plan has run out/i],
   ['sk_shamwari_mock_429', /reached your limit/i],
-  ['sk_shamwari_mock_503', /having trouble right now/i],
   ['sk_shamwari_mock_403', /not allowed to ask/i],
 ] as const;
 for (const [key, message] of FAILURES) {
@@ -60,6 +59,15 @@ for (const [key, message] of FAILURES) {
     await expect(err.locator('[role="alert"]')).toBeVisible();
   });
 }
+
+test('honest message for 503: it says so at once, keeps the question and tries again by itself', async ({ page }) => {
+  await openChat(page, 'sk_shamwari_mock_503');
+  await ask(page, 'hello');
+  const waiting = page.locator('article.queued');
+  await expect(waiting).toContainText(/having trouble right now/i);
+  await expect(waiting).toContainText('hello'); // not lost
+  await expect(waiting.locator('[role="status"]')).toBeVisible();
+});
 
 test('429 offers the add-credit link and a wait time', async ({ page }) => {
   await openChat(page, 'sk_shamwari_mock_429');
