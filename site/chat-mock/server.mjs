@@ -60,6 +60,8 @@ const cors = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, content-type, idempotency-key',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  // Without this a browser hides Retry-After from the page, and the app cannot say how long to wait.
+  'Access-Control-Expose-Headers': 'Retry-After',
 };
 
 const send = (res, status, body, headers = {}) => {
@@ -75,6 +77,7 @@ export function createMock() {
       res.writeHead(204, cors);
       return res.end();
     }
+    if (req.method === 'GET' && req.url === '/health') return send(res, 200, { ok: true });
     if (req.method !== 'POST' || req.url !== '/v1/chat/completions') {
       return send(res, 404, { error: 'not_found' });
     }

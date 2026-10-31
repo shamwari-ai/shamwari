@@ -188,6 +188,18 @@ jobs:
         run: npm test
         working-directory: site
 
+      # End to end against the gateway mock, in a 360 px Android viewport:
+      # asks and citations, the personal-scope explanation, honest errors,
+      # local-only history, offline queue and axe. Builds its own copy of the
+      # site (dist-e2e/) pointed at the mock; dist/ stays the production build.
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+        working-directory: site
+
+      - name: End-to-end tests
+        run: npm run e2e
+        working-directory: site
+
   gitleaks:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
