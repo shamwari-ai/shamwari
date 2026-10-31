@@ -29,6 +29,20 @@ describe('ask()', () => {
     expect(r.value.grounded).toBe(true);
   });
 
+  it('marks its traffic as a channel so it is never kept as training material', async () => {
+    let seen: Headers | undefined;
+    const c = createClient({
+      baseUrl: base,
+      getKey: () => 'sk_shamwari_x',
+      fetch: (async (_u: string, init: RequestInit) => {
+        seen = new Headers(init.headers);
+        return new Response('{}', { status: 400 });
+      }) as typeof fetch,
+    });
+    await c.ask(q('hi'));
+    expect(seen?.get('x-shamwari-channel')).toBe('pwa');
+  });
+
   it('maps the personal-scope 409 to its own kind, not a generic error', async () => {
     const r = await withKey('sk_shamwari_mock_ok').ask(q('what is my salary', 'personal'));
     expect(r).toMatchObject({ ok: false, error: { kind: 'scope_requires_local_inference', status: 409 } });

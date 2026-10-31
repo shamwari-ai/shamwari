@@ -26,16 +26,18 @@ h1, h2, h3 { font-family: var(--font); margin: 0; }
 .skip { position: absolute; left: -999px; }
 .skip:focus { left: 8px; top: 8px; z-index: 10; background: var(--card); padding: 12px 16px; border-radius: 9999px; }
 
-.bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--card); }
+.bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--card); }
+.app > header { border-bottom: 1px solid var(--border); }
 .bar select { padding: 0 6px; max-width: 6.5rem; }
 .bar .btn { padding: 0 10px; }
-.bar h1 { flex: 1; font-size: 1rem; color: var(--primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar h1 { flex: 1; font-size: 1rem; color: var(--color-sodalite-on-container); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar select, .scope select, .btn {
   min-height: var(--tap); min-width: var(--tap);
   border-radius: 9999px; border: 1px solid var(--border-control, var(--border));
   background: var(--card); color: var(--foreground); font: inherit; padding: 0 12px; cursor: pointer; white-space: nowrap;
 }
-.btn.primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; font-weight: 600; }
+/* The brand fill and its text come as a pair in both themes (Mzizi sodalite-brand / on-brand). */
+.btn.primary { background: var(--color-sodalite-brand); color: var(--color-sodalite-on-brand); border-color: transparent; font-weight: 600; }
 .btn.danger { color: var(--destructive-text, var(--destructive)); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 :focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
@@ -93,7 +95,7 @@ h2.small { margin: 16px 0 8px; font-weight: 600; }
 .msg.user { background: var(--accent); margin-left: 12%; }
 .msg.bot { background: var(--card); border: 1px solid var(--border); margin-right: 4%; }
 .msg.refusal { border-color: var(--info, var(--ring)); border-width: 2px; }
-.msg.refusal h3 { font-size: 1rem; margin: 4px 0; }
+.msg.refusal h2 { font-size: 1rem; margin: 4px 0; }
 .msg.error { border-color: var(--destructive-text, var(--destructive)); }
 .msg .btn { margin-top: 10px; display: inline-flex; align-items: center; text-decoration: none; }
 .note, .meta { margin: 8px 0 0; font-size: 0.8125rem; color: var(--muted-foreground); }
@@ -104,12 +106,12 @@ h2.small { margin: 16px 0 8px; font-weight: 600; }
 }
 
 /* citations: first-class cards under the answer */
-.sources h3 { font-size: 0.8125rem; margin: 12px 0 6px; color: var(--muted-foreground); }
+.sources h2 { font-size: 0.8125rem; margin: 12px 0 6px; color: var(--muted-foreground); }
 .sources ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.cite { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid var(--primary); border-radius: 14px; background: var(--background); }
+.cite { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid var(--color-sodalite); border-radius: 14px; background: var(--background); }
 .cite .badge {
   justify-self: start; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
-  padding: 1px 8px; border-radius: 9999px; background: var(--primary); color: var(--primary-foreground);
+  padding: 1px 8px; border-radius: 9999px; background: var(--color-sodalite-brand); color: var(--color-sodalite-on-brand);
 }
 .cite-heading { font-size: 0.9375rem; }
 .cite-title { font-size: 0.875rem; }

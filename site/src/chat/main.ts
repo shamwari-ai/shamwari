@@ -31,17 +31,30 @@ if ('serviceWorker' in navigator) {
 }
 
 // Android/Chrome offers install through this event; iOS has no equivalent, and
-// people there use Share, then Add to Home Screen.
+// people there use Share, then Add to Home Screen. The button sits in plain view
+// (not inside Settings), is never shown to someone already running the installed
+// app, and goes away only when the install really happens: a dismissed dialog
+// spends the event, and the browser offers a fresh one later.
 interface InstallEvent extends Event {
   prompt(): Promise<void>;
 }
+const installBtn = document.querySelector<HTMLButtonElement>('#install');
+const standalone = matchMedia('(display-mode: standalone)').matches;
+let offered: InstallEvent | null = null;
 addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
-  const btn = document.querySelector<HTMLButtonElement>('#install');
-  if (!btn) return;
-  btn.hidden = false;
-  btn.addEventListener('click', () => {
-    void (e as InstallEvent).prompt();
-    btn.hidden = true;
-  });
+  if (!installBtn || standalone) return;
+  offered = e as InstallEvent;
+  installBtn.hidden = false;
+});
+installBtn?.addEventListener('click', () => {
+  if (!offered) return;
+  const ev = offered;
+  offered = null;
+  installBtn.hidden = true; // until the browser offers again
+  void ev.prompt();
+});
+addEventListener('appinstalled', () => {
+  offered = null;
+  if (installBtn) installBtn.hidden = true;
 });
