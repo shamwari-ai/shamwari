@@ -153,7 +153,12 @@ jobs:
         run: npm run check
         working-directory: docs-site
 
+  # Two Workers, two origins, built and tested independently:
+  #   site  -> shamwari-site, the marketing site on https://www.shamwari.ai
+  #   app   -> shamwari-app, Shamwari Chat on https://shamwari.ai/chat/
+  # Neither may contain the other's pages (check.mjs fails the build if it does).
   site:
+    # Name kept as it was, so a required-status rule on it keeps working.
     name: Landing page (build, links, tokens, size)
     runs-on: ubuntu-latest
     steps:
@@ -174,21 +179,54 @@ jobs:
 
       # astro check covers types. check.mjs covers what it cannot: dead
       # anchors and assets, colours with no base :root value, stray client
-      # JS, the size budget, and the language-discipline rules.
+      # JS, no app files, canonical and sitemap on www, the size budget, and
+      # the language-discipline rules.
       - name: Check
         run: npm run check
         working-directory: site
 
-      # Chat client against the gateway mock, the strings, and the guard that
-      # keeps Shamwari Chat from being called Live without evidence.
+      # The guard that keeps Shamwari Chat from being called Live without
+      # evidence, and the marketing links.
       - name: Unit tests
-        run: npm test
+        run: npm run test:site
+        working-directory: site
+
+  app:
+    name: Chat app (build, check, unit, e2e)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - run: npm ci
+        working-directory: site
+
+      - name: Build
+        run: npm run build:app
+        working-directory: site
+
+      # The installable shell and the budgets: manifest, service worker,
+      # headers and CSP, the 100 KB JS and 50 KB first-load limits, the
+      # root redirect, and nothing but the chat page.
+      - name: Check
+        run: npm run check:app
+        working-directory: site
+
+      # Chat client against the gateway mock, the strings, the sign-in providers.
+      - name: Unit tests
+        run: npm run test:app
         working-directory: site
 
       # End to end against the gateway mock, in a 360 px Android viewport:
       # asks and citations, the personal-scope explanation, honest errors,
-      # local-only history, offline queue and axe. Builds its own copy of the
-      # site (dist-e2e/) pointed at the mock; dist/ stays the production build.
+      # local-only history, offline queue, axe, and the Mukoko sign-in (flag
+      # on, against a stand-in for the session Worker). It builds its own
+      # copies of the app (dist-e2e/) pointed at the mock.
       - name: Install browser
         run: npx playwright install --with-deps chromium
         working-directory: site

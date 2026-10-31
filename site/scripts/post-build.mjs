@@ -1,6 +1,8 @@
 // Runs after `astro build`: writes the chat service worker (with a precache
 // list of the exact hashed files this build produced) and the response headers
-// for /chat/. Usage: node scripts/post-build.mjs [outDir]   (default dist)
+// for /chat/. Usage: node scripts/post-build.mjs [outDir]   (default dist-app)
+// It is the build step of the APP Worker only (npm run build:app); the marketing
+// site has no service worker and no chat.
 //
 // Both depend on the build output, which is why they are generated here
 // instead of living in public/: the service worker's cache name changes only
@@ -10,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const out = process.argv[2] ?? 'dist';
+const out = process.argv[2] ?? 'dist-app';
 const read = (p) => readFileSync(join(out, p));
 const html = read('chat/index.html').toString('utf8');
 

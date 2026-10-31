@@ -7,11 +7,18 @@
   "type": "module",
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build && node scripts/post-build.mjs",
+    "dev:app": "astro dev --config astro.app.config.mjs",
+    "build": "astro build",
+    "build:app": "astro build --config astro.app.config.mjs --outDir dist-app && node scripts/post-build.mjs dist-app",
     "preview": "wrangler dev",
-    "check": "astro check && node check.mjs",
+    "preview:app": "wrangler dev --config wrangler.app.jsonc",
+    "check": "astro check && node check.mjs marketing",
+    "check:app": "astro check && node check.mjs app",
     "deploy": "npm run build && wrangler deploy",
+    "deploy:app": "npm run build:app && wrangler deploy --config wrangler.app.jsonc",
     "test": "vitest run",
+    "test:site": "vitest run test/status.test.ts test/site.test.ts",
+    "test:app": "vitest run --exclude test/status.test.ts --exclude test/site.test.ts",
     "e2e": "playwright test"
   },
   "dependencies": {

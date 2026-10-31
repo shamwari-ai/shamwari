@@ -1,3 +1,5 @@
+// Post-build checks. `node check.mjs marketing` checks dist/ (the www.shamwari.ai
+// Worker); `node check.mjs app` checks dist-app/ (the shamwari.ai chat Worker).
 // Post-build checks on dist/. Astro covers types; these are the things it
 // cannot know about. Modelled on docs-site/check.mjs.
 import { readFileSync, readdirSync } from 'node:fs';
@@ -18,13 +20,43 @@ if (broken.length) {
   process.exit(1);
 }
 
-const files = walk('dist');
+const TARGET = process.argv[2] === 'app' ? 'app' : 'marketing';
+const DIST = TARGET === 'app' ? 'dist-app' : 'dist';
+const files = walk(DIST);
 const pages = files.filter((f) => f.endsWith('.html'));
 const fail = [];
-if (pages.length < 5) fail.push(`expected at least 5 built pages, found ${pages.length}`);
+if (TARGET === 'marketing' && pages.length < 4) fail.push(`expected at least 4 built pages, found ${pages.length}`);
 
-const routes = new Set(pages.map((p) => p.replace(/^dist/, '').replace(/index\.html$/, '')));
-const assets = new Set(files.map((f) => f.replace(/^dist/, '')));
+// Two Workers, two origins, and neither may carry the other's pages. The chat app
+// is https://shamwari.ai/chat/ (shamwari-app); the marketing site is
+// https://www.shamwari.ai (shamwari-site).
+const MARKETING_ORIGIN = 'https://www.shamwari.ai';
+const APP_ORIGIN = 'https://shamwari.ai';
+if (TARGET === 'marketing') {
+  for (const f of files) {
+    const rel = f.slice(DIST.length);
+    if (rel.startsWith('/chat/') || rel === '/_redirects') fail.push(`marketing build contains an app file: ${rel}`);
+  }
+}
+if (TARGET === 'app') {
+  for (const p of pages) {
+    if (!p.endsWith('/chat/index.html')) fail.push(`app build contains a page that is not the chat: ${p.slice(DIST.length)}`);
+  }
+  if (!pages.some((p) => p.endsWith('/chat/index.html'))) fail.push('app build has no /chat/ page');
+  const redirects = files.includes(`${DIST}/_redirects`) ? readFileSync(`${DIST}/_redirects`, 'utf8') : '';
+  if (!/^\/\s+\/chat\/\s+302\s*$/m.test(redirects)) fail.push('app build: the root / must 302 to /chat/ (_redirects)');
+  // Redirects may only go to the chat or to the marketing origin: the app Worker sends
+  // old marketing links to www but never serves a marketing page itself.
+  for (const line of redirects.split('\n')) {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) continue;
+    const dest = t.split(/\s+/)[1] ?? '';
+    if (!(dest.startsWith('/chat/') || dest.startsWith(MARKETING_ORIGIN + '/'))) fail.push(`app _redirects: "${t}" goes somewhere other than /chat/ or ${MARKETING_ORIGIN}`);
+  }
+}
+
+const routes = new Set(pages.map((p) => p.replace(new RegExp(`^${DIST}`), '').replace(/index\.html$/, '')));
+const assets = new Set(files.map((f) => f.replace(new RegExp(`^${DIST}`), '')));
 
 // The one permitted family of uses: naming the phrase in order to reject it.
 const PERMITTED = ['not the same as being open source', 'Say open weights, not open source'];
@@ -43,7 +75,7 @@ const stripUntilStable = (text, patterns) => {
   return text;
 };
 
-for (const src of ['src/components/DataScopes.astro', 'src/pages/index.astro']) {
+for (const src of TARGET === 'marketing' ? ['src/components/DataScopes.astro', 'src/pages/index.astro'] : []) {
   const code = stripUntilStable(readFileSync(src, 'utf8'), [
     /<!--[\s\S]*?-->/g,
     /\/\*[\s\S]*?\*\//g,
@@ -60,8 +92,15 @@ const chatScripts = new Set();
 
 for (const page of pages) {
   const html = readFileSync(page, 'utf8');
-  const where = page.replace(/^dist\//, '') || 'index.html';
+  const where = page.replace(new RegExp(`^${DIST}/`), '') || 'index.html';
   biggest = Math.max(biggest, Buffer.byteLength(html, 'utf8'));
+
+  // Canonical and social URLs belong to this Worker's own origin, so a search
+  // engine never sees the app under www or the marketing pages on the apex.
+  const own = TARGET === 'app' ? APP_ORIGIN : MARKETING_ORIGIN;
+  for (const m of html.matchAll(/(?:<link rel="canonical" href|property="og:url" content)="([^"]+)"/g)) {
+    if (!m[1].startsWith(own + '/')) fail.push(`${where}: canonical/og:url ${m[1]} is not on ${own}`);
+  }
 
   // Internal page links resolve to a route that was actually built. Asset
   // paths are checked against the file list instead.
@@ -178,18 +217,18 @@ const closure = new Set();
 const visit = (src) => {
   if (closure.has(src)) return;
   closure.add(src);
-  const code = readFileSync('dist' + src, 'utf8');
+  const code = readFileSync(DIST + src, 'utf8');
   for (const [, dep] of code.matchAll(/(?:^|[;}\s])(?:import|export)[^'"`;]*?from\s*["']\.\/([^"']+)["']/g)) visit('/_astro/' + dep);
 };
 for (const src of chatScripts) if (assets.has(src)) visit(src);
-const chatJs = [...closure].reduce((n, src) => n + gz('dist' + src), 0);
+const chatJs = [...closure].reduce((n, src) => n + gz(DIST + src), 0);
 if (chatJs > CHAT_JS_BUDGET) fail.push(`chat first-load JS is ${chatJs} B gzipped, over the ${CHAT_JS_BUDGET} B budget`);
 
 let chatCss = 0;
 let chatFirstLoad = 0;
 const chatHtml = pages.find((p) => p.endsWith('chat/index.html'));
 if (chatHtml) {
-  for (const [, href] of readFileSync(chatHtml, 'utf8').matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)) chatCss += gz('dist' + href);
+  for (const [, href] of readFileSync(chatHtml, 'utf8').matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)) chatCss += gz(DIST + href);
   if (chatCss > CHAT_CSS_BUDGET) fail.push(`chat CSS is ${chatCss} B gzipped, over the ${CHAT_CSS_BUDGET} B budget`);
   // docs/tiered-access-design.md: "R2 first load <= 50 KB over the wire" (HTML + CSS + JS, gzipped).
   chatFirstLoad = gz(chatHtml) + chatCss + chatJs;
@@ -205,7 +244,7 @@ if (chatHtml) {
   if (!/<link rel="manifest" href="\/chat\/manifest\.webmanifest"/.test(html)) fail.push('chat: no <link rel="manifest">');
   if (!assets.has('/chat/manifest.webmanifest')) fail.push('chat: manifest missing from the build');
   else {
-    const m = JSON.parse(readFileSync('dist/chat/manifest.webmanifest', 'utf8'));
+    const m = JSON.parse(readFileSync(`${DIST}/chat/manifest.webmanifest`, 'utf8'));
     if (m.start_url !== '/chat/' || m.scope !== '/chat/') fail.push('chat manifest: start_url and scope must both be /chat/');
     if ('orientation' in m) fail.push('chat manifest: do not lock orientation (WCAG 1.3.4)');
     if (m.display !== 'standalone') fail.push('chat manifest: display must be standalone');
@@ -215,7 +254,7 @@ if (chatHtml) {
   }
   if (!assets.has('/chat/sw.js')) fail.push('chat: sw.js missing (post-build did not run?)');
   else {
-    const sw = readFileSync('dist/chat/sw.js', 'utf8');
+    const sw = readFileSync(`${DIST}/chat/sw.js`, 'utf8');
     const list = JSON.parse(sw.match(/const PRECACHE = (\[.*?\]);/)?.[1] ?? '[]');
     if (!list.includes('/chat/')) fail.push('chat sw: the shell (/chat/) is not precached');
     for (const f of list) if (!assets.has(f) && !routes.has(f)) fail.push(`chat sw: precaches ${f}, which the build did not produce`);
@@ -223,7 +262,7 @@ if (chatHtml) {
   }
   if (!assets.has('/_headers')) fail.push('chat: _headers missing');
   else {
-    const headers = readFileSync('dist/_headers', 'utf8');
+    const headers = readFileSync(`${DIST}/_headers`, 'utf8');
     const csp = headers.match(/Content-Security-Policy:\s*(.+)/)?.[1] ?? '';
     if (!csp) fail.push('chat: no Content-Security-Policy on /chat/*');
     const metaApi = html.match(/<meta name="shamwari-api" content="([^"]+)"/)?.[1];
@@ -237,11 +276,32 @@ if (chatHtml) {
 // The audience is assumed to be on a slow connection.
 if (biggest > 51_200) fail.push(`largest page is ${biggest} bytes, over the 50KB budget`);
 
+if (TARGET === 'marketing') {
+  // The sitemap names only pages that were built, on the marketing origin.
+  const sm = assets.has('/sitemap.xml') ? readFileSync(`${DIST}/sitemap.xml`, 'utf8') : null;
+  if (!sm) fail.push('marketing build has no sitemap.xml');
+  else {
+    for (const [, loc] of sm.matchAll(/<loc>([^<]+)<\/loc>/g)) {
+      if (!loc.startsWith(MARKETING_ORIGIN + '/')) fail.push(`sitemap.xml: ${loc} is not on ${MARKETING_ORIGIN}`);
+      else if (!routes.has(new URL(loc).pathname)) fail.push(`sitemap.xml: ${loc} is not a built page`);
+    }
+  }
+  const robots = assets.has('/robots.txt') ? readFileSync(`${DIST}/robots.txt`, 'utf8') : '';
+  if (!robots.includes(`Sitemap: ${MARKETING_ORIGIN}/sitemap.xml`)) fail.push('robots.txt must point at the marketing sitemap');
+  // If the chat link is on the page at all, it goes to the app origin, never a relative path.
+  for (const p of pages) {
+    for (const [, href] of readFileSync(p, 'utf8').matchAll(/href="([^"]*\/chat\/?[^"]*)"/g)) {
+      if (href !== APP_ORIGIN + '/chat/') fail.push(`${p.slice(DIST.length)}: a chat link must be exactly ${APP_ORIGIN}/chat/, found ${href}`);
+    }
+  }
+}
+
 if (fail.length) {
   console.error('FAIL\n' + [...new Set(fail)].map((f) => '  - ' + f).join('\n'));
   process.exit(1);
 }
 console.log(
-  `ok — ${pages.length} pages, largest ${biggest} bytes, links and assets resolve, ` +
-    `client JS only on /chat/ (${chatJs} B gzipped first load, budget ${CHAT_JS_BUDGET}; CSS ${chatCss} B, budget ${CHAT_CSS_BUDGET}; whole first load ${chatFirstLoad} B, budget ${CHAT_FIRST_LOAD_BUDGET}), language rules held`,
+  TARGET === 'app'
+    ? `ok (app) — ${pages.length} page, links and assets resolve, client JS only on /chat/ (${chatJs} B gzipped first load, budget ${CHAT_JS_BUDGET}; CSS ${chatCss} B, budget ${CHAT_CSS_BUDGET}; whole first load ${chatFirstLoad} B, budget ${CHAT_FIRST_LOAD_BUDGET}), language rules held`
+    : `ok (marketing) — ${pages.length} pages, largest ${biggest} bytes, links and assets resolve, no client JS, no app files, canonical and sitemap on ${MARKETING_ORIGIN}, language rules held`,
 );

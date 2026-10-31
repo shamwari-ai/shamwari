@@ -38,8 +38,8 @@ export default defineConfig({
       // Both builds happen one after the other (they share Astro's cache), then both servers start.
       command:
         `export PUBLIC_SHAMWARI_API=${MOCK} && ` +
-        'npx astro build --outDir dist-e2e && node scripts/post-build.mjs dist-e2e && ' +
-        `PUBLIC_SHAMWARI_API=${MOCK_MUKOKO} PUBLIC_CHAT_AUTH=mukoko npx astro build --outDir dist-e2e-mukoko && PUBLIC_SHAMWARI_API=${MOCK_MUKOKO} node scripts/post-build.mjs dist-e2e-mukoko && ` +
+        'npx astro build --config astro.app.config.mjs --outDir dist-e2e && node scripts/post-build.mjs dist-e2e && ' +
+        `PUBLIC_SHAMWARI_API=${MOCK_MUKOKO} PUBLIC_CHAT_AUTH=mukoko npx astro build --config astro.app.config.mjs --outDir dist-e2e-mukoko && PUBLIC_SHAMWARI_API=${MOCK_MUKOKO} node scripts/post-build.mjs dist-e2e-mukoko && ` +
         '(node e2e/serve.mjs 4323 dist-e2e-mukoko --stub-auth & node e2e/serve.mjs 4322 dist-e2e & wait)',
       url: `${SITE}/chat/`,
       timeout: 180_000,

@@ -1,0 +1,21 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shamwari-app",
+  "compatibility_date": "2026-08-01",
+  "observability": { "enabled": true },
+
+  // Shamwari Chat: the PWA, its service worker, manifest and headers. Static
+  // output from `npm run build:app`; no Worker script, no bindings, no secrets.
+  // The root / answers with a 302 to /chat/ from app-public/_redirects.
+  "assets": { "directory": "./dist-app" },
+
+  // Reachable on https://shamwari-app.nyuchi.workers.dev as soon as it is deployed.
+  "workers_dev": true,
+
+  // DELIBERATELY NO "routes" YET. The apex https://shamwari.ai is attached to
+  // `shamwari-site` today; declaring it here would make a deploy fight for it.
+  // The owner attaches shamwari.ai to this Worker in the dashboard, in the order
+  // given in docs/domains-and-deploy.md, after this Worker is verified on its
+  // workers.dev address. Once it is attached, add:
+  //   "routes": [{ "pattern": "shamwari.ai", "custom_domain": true }]
+}

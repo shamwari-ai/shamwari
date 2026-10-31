@@ -7,14 +7,11 @@
   // Astro's static output. No Worker script, no bindings, no secrets.
   "assets": { "directory": "./dist" },
 
-  // shamwari.ai's DNS is still externally managed (not yet on Cloudflare),
-  // so the custom-domain routes below can't attach until that's moved over.
-  // workers_dev gives a working preview URL in the meantime:
+  // MARKETING ONLY. The chat app is a separate Worker (wrangler.app.jsonc,
+  // `shamwari-app`) on the apex https://shamwari.ai. This one is expected on
+  // https://www.shamwari.ai and nothing else. workers_dev gives a preview URL:
   // https://shamwari-site.nyuchi.workers.dev
   "workers_dev": true,
 
-  "routes": [
-    { "pattern": "shamwari.ai", "custom_domain": true },
-    { "pattern": "www.shamwari.ai", "custom_domain": true },
-  ],
+  "routes": [{ "pattern": "www.shamwari.ai", "custom_domain": true }],
 }
