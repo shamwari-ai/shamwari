@@ -27,6 +27,9 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
     headers: { 'Content-Type': 'application/json', ...headers },
   });
 
+/** Web chat traffic. The marker is the channel name, so SMS and USSD are not caught by it. */
+const isPwa = (req: Request): boolean => req.headers.get('X-Shamwari-Channel')?.toLowerCase() === 'pwa';
+
 /** The citations a caller sees, in the shape every response uses. */
 const citationsOf = (chunks: GroundChunk[]) =>
   chunks.map((c) => ({
@@ -519,6 +522,15 @@ const worker = {
           },
         },
       ];
+
+      // The web chat (X-Shamwari-Channel: pwa) keeps no content on the server
+      // (owner decision, 2026-10-31): no conversation document, so no message or
+      // answer text is stored and nothing from it can become training material.
+      // What remains is the usage event, which already carries the request id,
+      // scope, model, token counts, path and time, and never any text.
+      if (isPwa(req)) {
+        for (let i = sink.length - 1; i >= 0; i--) if (sink[i]?.collection === 'conversations') sink.splice(i, 1);
+      }
 
       // Usage goes to the meter, which may be the Servers API; everything
       // else (conversations, messages) stays on the sink queue.
