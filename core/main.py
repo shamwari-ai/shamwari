@@ -37,6 +37,7 @@ import asyncio
 import hashlib
 import hmac
 import os
+import re
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
@@ -138,25 +139,47 @@ class KeyResult(BaseModel):
     monthly_token_cap: int
 
 
+#: The one key type Shamwari admits. A valid key of any other type belongs to
+#: another product and is answered exactly like a bad key.
+SHAMWARI_KEY_TYPE = "shamwari"
+_HEX_SHA256 = re.compile(r"[0-9a-f]{64}")
+
+
+def _invalid_key() -> HTTPException:
+    """401 with a machine-readable body, so the gateway can tell "this key is
+    bad" (cache it) from "Core refused the Worker's own token" (do not)."""
+    return HTTPException(status.HTTP_401_UNAUTHORIZED, {"error": "invalid_key"})
+
+
 @app.post("/auth/verify", response_model=KeyResult, dependencies=[Depends(require_token)])
 async def verify_key(body: KeyLookup) -> KeyResult:
     """
-    Two-step lookup matching the existing platform.apiKeys indexes:
-    find by keyPrefix (indexed), then constant-time compare the hash.
+    Every Shamwari key shares the prefix `sk_shamwari_`, so the prefix is only a
+    bucket and `find_one` on it returns an arbitrary document: with two active
+    keys the hash compare ran against the wrong one and a valid key was refused.
+    The lookup is therefore by the SHA-256 of the full key, narrowed by prefix,
+    as docs/api-key-migration.md specifies, and the hash is compared again in
+    constant time. The failure reasons are deliberately indistinguishable.
     """
+    if not _HEX_SHA256.fullmatch(body.key_hash):
+        raise _invalid_key()
+
     doc = await client[DB_PLATFORM].apiKeys.find_one(
-        {"keyPrefix": body.key_prefix, "isActive": True}
+        {"keyPrefix": body.key_prefix, "keyHash": body.key_hash, "isActive": True}
     )
     if not doc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "unknown key")
+        raise _invalid_key()
 
-    stored = doc.get("keyHash", "")
-    if not hmac.compare_digest(stored, body.key_hash):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad key")
+    if not hmac.compare_digest(str(doc.get("keyHash", "")), body.key_hash):
+        raise _invalid_key()
+
+    # Fail closed: a missing keyType is not assumed to be ours.
+    if doc.get("keyType") != SHAMWARI_KEY_TYPE:
+        raise _invalid_key()
 
     expires = doc.get("expiresAt")
     if expires and expires.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "expired key")
+        raise _invalid_key()
 
     entity = await client["entity"].entities.find_one(
         {"_id": doc["ownerEntityId"]}, {"tier": 1, "monthlyTokenCap": 1}
@@ -166,7 +189,7 @@ async def verify_key(body: KeyLookup) -> KeyResult:
         api_key_id=str(doc["_id"]),
         owner_entity_id=str(doc["ownerEntityId"]),
         owner_person_id=str(doc["createdByPersonId"]) if doc.get("createdByPersonId") else None,
-        key_type=doc.get("keyType", "standard"),
+        key_type=doc["keyType"],
         tier=entity.get("tier", "community"),
         monthly_token_cap=int(entity.get("monthlyTokenCap", 100_000)),
     )
