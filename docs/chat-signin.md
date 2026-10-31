@@ -1,137 +1,179 @@
-# Shamwari Chat sign-in: the Servers API key route and the WorkOS redirect
+# Shamwari Chat sign-in: WorkOS access tokens at the gateway
 
-Tracking: #83. Context: `docs/chat-app.md` (how the chat works today),
-`docs/servers-api-contract.md` (how the gateway verifies keys). Status: **spec,
-not built.** Until it ships the chat keeps its developer-key mode behind the
-`AuthProvider` seam (`site/src/chat/auth.ts`).
+Tracking: #83, #81. Context: `docs/chat-app.md` (how the chat works today),
+`docs/data-api-routes.md` (G1). Status: **gateway half built in this PR; the chat
+session Worker is a design, not code.**
 
-**Provenance of the Console facts below.** The session that wrote this could not
-read `nyuchi/nyuchi-platform` (`console/backend`); the owner's session relayed
-how the Console signs in, and this spec follows that account. Anything marked
-_check_ should be confirmed against the Console code before it is built.
+**Owner decision, 2026-10-31: "go WorkOS-first".** A person signs in with WorkOS
+AuthKit and the gateway accepts their **WorkOS access token** as the Bearer
+credential. Minted `sk_shamwari_` keys are no longer how a person authenticates.
+This replaces the earlier design in this file (a Servers API `keys/issue` route that
+minted a per-person key) and G1 options A and B in `docs/data-api-routes.md`.
 
-## What the Console does (as relayed)
+**What was and was not verified.** The WorkOS facts below were checked against
+WorkOS's documentation on 2026-10-31 by the session that relayed the decision. They
+were not exercised against a real WorkOS tenant, because no tenant credentials are
+available to this session. Everything the gateway code assumes about the token is a
+configuration value (below), so a wrong assumption is a config change, not a code change.
 
-- Signs in through the **WorkOS Auth API on the custom domain `auth.mukoko.com`**,
-  app **Mukoko Account**, client `client_01KQBBSMQTSMTBN7HEC9KQBJC0`.
-- **PKCE authorization-code flow**, with a callback on the app's own origin.
-- An **encrypted first-party session cookie** holds the session.
-- **Refresh tokens are single-use**, so refreshes are serialised per token.
-- Server calls to the Nyuchi API use a **short-lived person token**.
+## What the gateway does
 
-## What the chat does, aligned to that
+`gateway/src/workos.ts`, called from `authenticate` (`gateway/src/auth.ts`).
 
-The chat is a static site, so the part that holds a session cookie and a refresh
-token needs a server. **Proposal: one small Worker, `chat-auth`, on
-`https://shamwari.ai/chat/auth/*`**, that does what the Console backend does and
-nothing else. It is a new deployment and needs the owner's yes.
+A Bearer credential is one of two shapes, told apart by prefix and never tried against
+each other:
+
+| Shape                      | Verified by                                      | Who uses it                     |
+| -------------------------- | ------------------------------------------------ | ------------------------------- |
+| `sk_shamwari_…`            | the key service (Core or Servers API), as before | machine callers, channels (SMS) |
+| three-segment JWT (`eyJ…`) | `workos.ts`, offline against the WorkOS JWKS     | people, via the chat            |
+| anything else              | refused 401, no outbound call                    |                                 |
+
+Verification, every step failing closed:
+
+1. **Signature**, RS256 only (`algorithms: ['RS256']`), key chosen from the JWKS by `kid`,
+   never from the token. `alg: none` and HS256-with-the-public-key-as-secret are refused.
+2. **`iss`** equals `WORKOS_ISSUER`; **`aud`** equals `WORKOS_AUDIENCE` and is _required_ (a
+   token with no `aud` is refused); **`client_id`** equals `WORKOS_CLIENT_ID`; `exp`, `iat`
+   and `sub` must be present (a token with no `exp` would otherwise never expire).
+3. **`sid`** must be present: it is what revocation is keyed on.
+4. **JWKS** is fetched from `https://api.workos.com/sso/jwks/{clientId}` (override with
+   `WORKOS_JWKS_URL`, HTTPS only), cached per isolate for 10 minutes, and re-fetched on an
+   unknown `kid` at most once per 30 seconds, so a flood of forged `kid`s cannot become a flood
+   at WorkOS. A JWKS outage is **503 `auth_unavailable`**, not 401: the person's session may be
+   fine, and a client that drops its session on a 401 would turn our outage into theirs.
+5. Nothing is cached per token. The signature check is the whole cost, and a cached verdict
+   would only lengthen the revocation window.
+
+### Scope: from `permissions`, default deny
+
+Authorize on the `permissions` claim, never on `role` strings.
+
+| Permission (owner defines in the JWT template) | Grants      |
+| ---------------------------------------------- | ----------- |
+| `shamwari:community`                           | `community` |
+| `shamwari:platform`                            | `platform`  |
+
+- A valid token with **neither** is refused (401). There is no default scope.
+- **`personal` cannot be granted by this file to anyone.** A `shamwari:personal` permission,
+  or any other string, is ignored. A person who needs `personal` uses Shamwari Mind on their
+  device; Cloud never serves it (rule 1). The gate that enforces this is unchanged and
+  independent of this code: `gateway/src/scope.ts` (409 `scope_requires_local_inference`) and
+  `core/main.py::resolve_scope`. `test/workos.test.ts` proves a token carrying a personal
+  permission still gets a 409 on a personal-scope request, with no provider or embedding call.
+
+### Who is metered
+
+Per person. The context is `ownerEntityId = workos:<sub>`, `ownerPersonId = <sub>`,
+`apiKeyId = workos:sid:<sid>`, `tier = community`, cap `WORKOS_MONTHLY_TOKEN_CAP` (positive
+integer; the owner sets it, suggested from the $0.20 per user per month target in
+`docs/tiered-access-design.md` converted with `gateway/pricing.json`). The `workos:` prefix
+keeps these ids out of the entity and API-key namespaces.
+
+`org_id` is deliberately not used for ownership: a chat user's quota is theirs, not their
+organisation's.
+
+> **Open question for the Nyuchi API (G6).** Quota reads `usage/rollup?owner_entity_id=…` and
+> the usage event carries `ownerEntityId`. Both now carry a `workos:<sub>` value that is not an
+> `entity.entities` id. The API has to accept it, or the gateway has to be told a different id
+> to use. Until that is settled, per-person quota depends on the API treating the id as an
+> opaque string.
+
+### Configuration (none of it secret)
+
+| Variable                   | Meaning                                                                |
+| -------------------------- | ---------------------------------------------------------------------- |
+| `WORKOS_CLIENT_ID`         | Turns WorkOS sign-in on. Unset means JWTs are refused with no call.    |
+| `WORKOS_ISSUER`            | The exact `iss` of the app's access tokens. **Unverified, see below.** |
+| `WORKOS_AUDIENCE`          | The `aud` the JWT template sets: our API's URI. Required.              |
+| `WORKOS_JWKS_URL`          | Optional. Defaults to the WorkOS JWKS URL for the client id.           |
+| `WORKOS_MONTHLY_TOKEN_CAP` | Per-person monthly cap, positive integer.                              |
+
+Enabled but incomplete (any of issuer, audience or cap missing or malformed) is
+**503, never permissive**.
+
+`WORKOS_ISSUER` is a value to read off a real token before setting. The Console signs in
+through the custom domain `auth.mukoko.com` (app **Mukoko Account**), and whether that changes
+`iss` from WorkOS's default is not something this session could confirm.
+
+## The chat: a thin session Worker (design, not built)
+
+The chat page is static. A browser that held a WorkOS refresh token itself would store it
+where page script can read it, and a single-use refresh token raced by two tabs signs the
+person out. So the part that holds the session is a server.
+
+**Proposal: one small Worker (`chat-auth`) on `https://shamwari.ai/chat/auth/*`**, a
+backend-for-frontend that reuses **the WorkOS SDK and the Console's session pattern**
+(`nyuchi/nyuchi-platform`, `console/backend`; this session could not read it, so confirm the
+SDK and pattern there). It writes no PKCE, refresh or locking code of its own beyond what the
+SDK provides.
 
 ```
-browser                    chat-auth Worker                WorkOS / Servers API
-  │ GET /chat/auth/login ───►│ make state + PKCE verifier, set short cookie
-  │◄── 302 auth.mukoko.com/user_management/authorize?client_id=…&redirect_uri=
-  │         https://shamwari.ai/chat/callback&code_challenge=…&state=…
-  │ …person signs in with Mukoko Account…
-  │ GET /chat/callback?code&state ─►│ check state, POST code + verifier to
-  │                                 │ auth.mukoko.com/user_management/authenticate
-  │                                 │ ◄─ access token, refresh token, person id
-  │                                 │ set encrypted session cookie (HttpOnly,
-  │                                 │ Secure, SameSite=Lax, Path=/chat/)
-  │                                 │ POST /v1/shamwari/keys/issue  (below)
-  │◄── 302 /chat/ + key in a one-time handoff (see "Handing the key over")
+browser                    chat-auth Worker                     WorkOS
+  │ GET /chat/auth/login ───►│ SDK: authorization URL (PKCE, state)
+  │◄── 302 to WorkOS ────────│
+  │ …person signs in…        │
+  │ GET /chat/callback?code ─►│ SDK: exchange the code; seal the session
+  │◄── Set-Cookie (HttpOnly, Secure, SameSite=Lax, Path=/chat/), 302 /chat/
+  │ GET /chat/auth/token ───►│ cookie → SDK refreshes if needed (server side only)
+  │◄── { access_token, expires_at }   Cache-Control: no-store
+  │ POST api.shamwari.ai/v1/chat/completions   Authorization: Bearer <access_token>
 ```
 
-- **Redirect URI to register on the WorkOS app:** `https://shamwari.ai/chat/callback`
-  (and, for testing, the branch-preview origin if the owner wants one; never a
-  wildcard).
-- **Single-use refresh tokens:** the Worker refreshes at most once per session at
-  a time (a per-session lock, for example a Durable Object or a KV lease with a
-  short TTL) and stores the new refresh token before using the new access token.
-- **Why not a pure browser PKCE flow?** It would work for the code exchange (a
-  public client needs no secret), but the refresh token would live in browser
-  storage, and a rotated single-use token raced by two tabs signs the person out.
-  The Console avoids both with the cookie and the lock; the chat should too.
+- The **refresh token never leaves the Worker.** The page gets only the short-lived access
+  token, keeps it in memory, and asks again on expiry or reload.
+- The CSP in `site/scripts/post-build.mjs` already restricts `connect-src` to the site and the
+  API origin and `script-src` to `'self'`, which is what protects an in-memory token from
+  injected script.
+- The chat's `AuthProvider` seam (`site/src/chat/auth.ts`) gains a `mukoko` provider whose
+  `getKey()` calls `/chat/auth/token`. The developer-key panel stays until this ships, then is
+  hidden outside development builds.
+- Sign-out is `POST /chat/auth/logout`: it clears the cookie and revokes the WorkOS session.
 
-## The Servers API route to build: issue a person's key
+## Revocation, stated plainly
 
-`POST /v1/shamwari/keys/issue` on the Nyuchi Servers API (internal, same
-`Authorization: Bearer <SERVERS_API_TOKEN>` and `x-nyuchi-internal-key` as the
-routes in `docs/servers-api-contract.md`). Called only by `chat-auth`.
+Revoking a session (sign-out, or an admin acting on `sid`) takes effect **when the access
+token already in the browser expires**, because the gateway verifies offline and does not
+call WorkOS per request. So the latency is the **access-token lifetime**, which is set in the
+WorkOS dashboard; its default was not verified here and the owner should pick a short value
+(minutes, not hours). After expiry the refresh fails server-side and the person is signed out.
 
-Request:
+If minutes is too long for some event (a compromised account), the lever is a `sid` deny list
+in KV consulted by `authenticate`. That is not built, because it adds a read to every request
+and the owner has not asked for faster revocation than the token lifetime.
 
-```json
-{ "person_id": "string", "surface": "shamwari-chat" }
-```
+The old design's 60-second window came from the key cache. A WorkOS token has no cache, so the
+window is the token lifetime instead.
 
-Behaviour:
+## Machine callers
 
-1. Find the person's existing **active** `shamwari` key for this surface in
-   `platform.api_keys`; if there is one, **rotate it** (revoke the old, mint a
-   new) rather than returning a stored secret, because the table holds only the
-   SHA-256 hash and the secret cannot be read back.
-2. Otherwise mint one. Format `sk_shamwari_` + 32 random bytes, URL-safe base64.
-3. Store: `key_type = "shamwari"`, `owner_person_id = person_id`, the person's
-   owning entity as `owner_entity_id`, `key_hash`, `key_prefix`
-   (`sk_shamwari_`), `is_active = true`.
-4. **Fixed limits, not caller-chosen:** `tier = "community"`,
-   `scopes = ["community", "platform"]` (never `personal`; a key that cannot ask
-   for it cannot be tricked into it), `monthly_token_cap` = a small integer set by
-   the owner (suggested to be set from the $0.20 per user per month target in
-   `docs/tiered-access-design.md`, converted to tokens with `gateway/pricing.json`).
-5. **Revocable:** the existing revoke path and the gateway's 60 s `AUTH_CACHE_TTL`
-   apply unchanged; the Console can revoke it.
+`sk_shamwari_` keys keep working through the same `KeyService` seam, unchanged, **until the
+machine-key path is decided**. WorkOS API keys exist but are **organisation-scoped** (user-scoped
+keys are announced, not shipped), hashed at rest and permission-scoped, which fits B2B or
+developer keys and not a per-person chat key. Whether to use them for machines is a separate
+decision (pricing and any user-scoped support are unverified). Channels (SMS, USSD) keep their
+owning-entity key.
 
-Response `200`:
+## What is built, what is not
 
-```json
-{ "api_key_id": "string", "key": "sk_shamwari_…", "monthly_token_cap": 100000,
-  "scopes": ["community", "platform"] }
-```
-
-The raw `key` is returned **once** and never logged. Errors: `401`/`403` for a bad
-service credential, `404 {"error":"unknown_person"}`, `409` if a rotation is
-already in flight for that person, `5xx` otherwise (the Worker shows the chat's
-"try again" state). The gateway needs **no change** to meter it per person: this
-is the key shape it already verifies (`owner_person_id` is part of the 200 body
-today).
-
-## Handing the key over to the page
-
-The gateway authenticates with a Bearer **key**, not a cookie, and the key has to
-reach `fetch()` in the page. Two options; the first is proposed.
-
-1. **A short-lived key the page re-fetches.** `GET /chat/auth/key` (cookie
-   authenticated, same origin, `Cache-Control: no-store`) returns the key; the
-   page keeps it in memory only, and asks again after a reload. The long-lived
-   secret is then the HttpOnly cookie, which script cannot read, and the key
-   can be rotated on every session refresh.
-2. **Proxy every call through `chat-auth`.** The page never sees a key; the Worker
-   attaches it. Strongest for secrecy, but it puts a Worker hop on every question,
-   which costs latency on the networks this app is built for and breaks the offline
-   queue's direct `Idempotency-Key` retry unless the Worker forwards it.
-
-With option 1 the CSP in `site/scripts/post-build.mjs` already restricts
-`connect-src` to the site and the API origin, and `script-src 'self'`, which is
-what protects an in-memory key from injected script.
-
-## What changes in the chat
-
-- A second `AuthProvider` (`mukoko`) next to `developerKey`: `getKey()` returns the
-  in-memory key; "Sign in with Mukoko" (disabled today) goes to
-  `/chat/auth/login`; sign-out clears the cookie through `POST /chat/auth/logout`.
-- The developer-key panel stays until this ships, then is hidden outside
-  development builds.
-- No change to the client, the queue or the scope handling.
+| Piece                                               | State                                    |
+| --------------------------------------------------- | ---------------------------------------- |
+| Gateway accepts and verifies a WorkOS token         | built, 36 tests, guards mutation-checked |
+| `permissions` → scopes, default deny, no `personal` | built, tested                            |
+| Per-person metering identity                        | built; API acceptance is open (G6)       |
+| `chat-auth` session Worker, `mukoko` AuthProvider   | **design only**                          |
+| Revocation by `sid` deny list                       | not built, not asked for                 |
 
 ## Needs the owner
 
-- A yes to the `chat-auth` Worker (a new deployment) and where its session
-  encryption key and WorkOS client secret (if the app is confidential) live.
-- The WorkOS redirect URI registration above.
-- The Servers API issue-key route, and the monthly token cap number.
-- Confirmation of the _check_ items against the Console code: cookie attributes,
-  the lock mechanism, and whether the person token is exchanged before or after
-  `keys/issue`.
-- A comment on `nyuchi-servers-api` issue #2 carrying the route spec above. That
-  repository is outside this session's access, so nothing was posted there.
+- **JWT template in the WorkOS dashboard:** set `aud` to our API's URI and issue the
+  `shamwari:community` / `shamwari:platform` permissions (the rendered template is capped at
+  3072 bytes; reserved claims are `iss`, `sub`, `exp`, `iat`, `nbf`, `jti`).
+- **Register** `https://shamwari.ai/chat/callback` on the WorkOS app (never a wildcard).
+- **Read `iss` off a real access token** and set `WORKOS_ISSUER`; set `WORKOS_AUDIENCE`,
+  `WORKOS_CLIENT_ID` and `WORKOS_MONTHLY_TOKEN_CAP`; choose the **access-token lifetime**.
+- **Approve the gateway auth change at merge time** (this PR adds the `jose` dependency, MIT,
+  the verifier for the token; nothing else new).
+- **A yes to the `chat-auth` Worker** (a new deployment) and where its cookie-sealing secret
+  and WorkOS client secret live.
+- **G6:** confirm the Nyuchi API accepts `workos:<sub>` as an owner id.

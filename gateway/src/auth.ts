@@ -1,5 +1,6 @@
 import type { Env, AuthContext } from './types';
 import { keyService } from './keys';
+import { looksLikeJwt, verifyWorkosToken } from './workos';
 
 async function sha256(raw: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
@@ -24,7 +25,17 @@ export type AuthResult =
 export async function authenticate(req: Request, env: Env): Promise<AuthResult> {
   const header = req.headers.get('Authorization') ?? '';
   const raw = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
-  if (!raw.startsWith('sk_shamwari_')) return { ok: false, reason: 'invalid' };
+
+  // Two credential shapes, told apart by prefix and never tried against each other.
+  // A WorkOS access token is verified offline (src/workos.ts) and needs no cache: the
+  // signature check is the whole cost, and a revoked session ends at the token's `exp`.
+  if (!raw.startsWith('sk_shamwari_')) {
+    if (!looksLikeJwt(raw)) return { ok: false, reason: 'invalid' };
+    const outcome = await verifyWorkosToken(raw, env);
+    return outcome.status === 'ok'
+      ? { ok: true, auth: outcome.ctx }
+      : { ok: false, reason: outcome.status };
+  }
 
   const hash = await sha256(raw);
   const cacheKey = `auth:${hash}`;
