@@ -15,22 +15,22 @@ checks) run unchanged.
 Set on the **Fly app `shamwari-core`** (the running service reads exactly these;
 `core/test_deploy_config.py` fails if the code reads another):
 
-| Name                       | Required | What it is for                                                            | Where the value comes from                                                                                                  |
-| -------------------------- | -------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `MONGODB_URI`              | yes      | Core's Mongo login (`shamwari`, `platform`, read `entity`)                | Atlas, project `6989ca17b7b03d132b6deb78`, cluster `nyuchi-platform-doc-db`: a database user with the grants listed below. |
-| `SHAMWARI_CORE_TOKEN`      | yes      | The edge Worker's bearer token. Opens auth, Ground, guardrails, sink, rollup | Generated: `openssl rand -hex 32`. Must be **the same value** as the gateway Worker secret of the same name.                |
-| `SHAMWARI_OPS_TOKEN`       | no       | Operator routes (`/replay/*`, `/rollup/by-tier`). Unset = those answer 503 | Generated, a **different** value from the Worker's. Held by whoever runs the replay schedule.                               |
-| `SERVERS_API_URL`          | no       | Where usage replay posts                                                  | Servers API hostname. Only when replay is switched on (`docs/usage-replay.md`).                                             |
-| `SERVERS_API_TOKEN`        | no       | Replay credential, should be scoped to writing usage events only          | Minted by the Servers API owner in the Console.                                                                             |
-| `SERVERS_API_INTERNAL_KEY` | no       | `x-nyuchi-internal-key` for the internal route                            | Minted in the Console.                                                                                                      |
+| Name                       | Required | What it is for                                                               | Where the value comes from                                                                                                 |
+| -------------------------- | -------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `MONGODB_URI`              | yes      | Core's Mongo login (`shamwari`, `platform`, read `entity`)                   | Atlas, project `6989ca17b7b03d132b6deb78`, cluster `nyuchi-platform-doc-db`: a database user with the grants listed below. |
+| `SHAMWARI_CORE_TOKEN`      | yes      | The edge Worker's bearer token. Opens auth, Ground, guardrails, sink, rollup | Generated: `openssl rand -hex 32`. Must be **the same value** as the gateway Worker secret of the same name.               |
+| `SHAMWARI_OPS_TOKEN`       | no       | Operator routes (`/replay/*`, `/rollup/by-tier`). Unset = those answer 503   | Generated, a **different** value from the Worker's. Held by whoever runs the replay schedule.                              |
+| `SERVERS_API_URL`          | no       | Where usage replay posts                                                     | Servers API hostname. Only when replay is switched on (`docs/usage-replay.md`).                                            |
+| `SERVERS_API_TOKEN`        | no       | Replay credential, should be scoped to writing usage events only             | Minted by the Servers API owner in the Console.                                                                            |
+| `SERVERS_API_INTERNAL_KEY` | no       | `x-nyuchi-internal-key` for the internal route                               | Minted in the Console.                                                                                                     |
 
 **Not set on the Fly app** (`ingest_ground.py` only, run from your own shell):
 
-| Name              | What it is for                                         | Where the value comes from                                                  |
-| ----------------- | ------------------------------------------------------ | --------------------------------------------------------------------------- |
-| `SUPABASE_DB_URL` | the audit record (`documents`, `corpus_sources`)       | Supabase project `hxjblxsheosjbjqgmlhx`, a direct connection string.        |
-| `CF_ACCOUNT_ID`   | embeds chunks on Workers AI                            | `125a2dfbc21f76a25c980609609e8218` (Nyuchi Web Services).                    |
-| `CF_API_TOKEN`    | embeds chunks with `@cf/baai/bge-m3`                   | A token scoped to **Workers AI read only**. Do not reuse a broad token.     |
+| Name              | What it is for                                   | Where the value comes from                                              |
+| ----------------- | ------------------------------------------------ | ----------------------------------------------------------------------- |
+| `SUPABASE_DB_URL` | the audit record (`documents`, `corpus_sources`) | Supabase project `hxjblxsheosjbjqgmlhx`, a direct connection string.    |
+| `CF_ACCOUNT_ID`   | embeds chunks on Workers AI                      | `125a2dfbc21f76a25c980609609e8218` (Nyuchi Web Services).               |
+| `CF_API_TOKEN`    | embeds chunks with `@cf/baai/bge-m3`             | A token scoped to **Workers AI read only**. Do not reuse a broad token. |
 
 Earlier notes in #81 and the old `fly.toml` header listed these three as Core's.
 They are not: Core never reads them while serving, so leaving them off shrinks
@@ -185,12 +185,12 @@ Data: Ground ingest is additive; nothing here deletes a chunk.
 
 ## Failure signs
 
-| You see                                  | Likely cause                                                        |
-| ---------------------------------------- | ------------------------------------------------------------------- |
-| Boot crash `KeyError: 'MONGODB_URI'`     | secret missing: `fly secrets list` shows names                      |
-| `/health` 500 / machine restarting       | Mongo unreachable: Atlas network access list, or a bad URI          |
+| You see                                            | Likely cause                                                                                   |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Boot crash `KeyError: 'MONGODB_URI'`               | secret missing: `fly secrets list` shows names                                                 |
+| `/health` 500 / machine restarting                 | Mongo unreachable: Atlas network access list, or a bad URI                                     |
 | Worker answers `401 invalid_api_key` to a real key | `SHAMWARI_CORE_TOKEN` differs between Fly and the Worker, or the `/auth/verify` defect (below) |
-| Worker answers `503 auth_unavailable`    | Core unreachable from the Worker: `CORE_URL`                        |
+| Worker answers `503 auth_unavailable`              | Core unreachable from the Worker: `CORE_URL`                                                   |
 
 **Known defect, owner-gated:** `/auth/verify` finds a key by `keyPrefix` only. Every
 Shamwari key shares `sk_shamwari_`, so with more than one active key it can fetch
