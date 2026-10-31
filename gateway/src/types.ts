@@ -21,6 +21,12 @@ export interface Env {
   /** Secret. Second factor the Servers API's internal routes require. */
   SERVERS_API_INTERNAL_KEY?: string;
 
+  /**
+   * Browser origins allowed to call the chat endpoint, comma separated, exact
+   * match (src/cors.ts). Absent means https://shamwari.ai and https://www.shamwari.ai.
+   */
+  CORS_ORIGINS?: string;
+
   EMBEDDING_MODEL: string;
   GROUND_TOP_K: string;
   AUTH_CACHE_TTL: string;
