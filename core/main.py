@@ -1,66 +1,77 @@
 """
-Shamwari Core — the service that owns MongoDB.
+Shamwari Core: the service that enforces Shamwari's two rules in front of its data.
 
-Runs on Nyuchi infrastructure, not at the Cloudflare edge. Three reasons:
-  1. The Atlas Data API was removed in September 2025 and the native driver
-     is not production-hardened in Workers.
-  2. Mongo credentials never reach a Cloudflare edge node.
-  3. Scope enforcement (below) must live somewhere Cloudflare cannot see.
+Core holds NO database login. Ground, the sink and usage live behind the Nyuchi API
+(/v1/shamwari, nyuchi/nyuchi-api#393), which Core reaches over Fly's private network
+with one internal key (nyuchi_api.py). That is the owner's decision of 2026-10-27:
+only the Nyuchi API talks to databases.
 
-SCOPE MODEL — the load-bearing rule of this service
----------------------------------------------------
+What Core is for, then, is deciding BEFORE a call is made, and checking what comes back:
+
+SCOPE MODEL, the load-bearing rule of this service
+--------------------------------------------------
 Shamwari's canonical architecture is three layers of intelligence:
 
-    personal   — the user's own pod data
-    community  — anonymised platform data
-    platform   — base Mukoko knowledge
+    personal   the user's own pod data
+    community  anonymised platform data
+    platform   base Mukoko knowledge
 
-Personal-layer content NEVER leaves the device or this service. It is not
-sent to Z.ai, Claude, or any other third-party provider. That is what
-makes "sovereign AI companion" true rather than marketing.
+Personal-layer content NEVER leaves the device or this service. It is not sent to
+Z.ai, Claude, or any other third-party provider. That is what makes "sovereign AI
+companion" true rather than marketing.
 
-Enforcement is structural: `resolve_scope` decides what a caller may see,
-and `/ground/search` cannot return personal chunks to a request that will
-be routed to Cloud. The Worker cannot override this.
+`resolve_scope` decides what a caller may see and `/ground/search` makes no data call
+at all for a request it refuses. The API decides again on its side, and Core checks the
+scope of what it gets back. Three checks, because a decision nothing downstream is
+obliged to read is a comment, not a control.
 
 PROVENANCE
 ----------
-Every logged exchange carries `licenseClass`. Only 'open_weight' may ever
-become Shamwari Mind training data. Anthropic and OpenAI terms bar using
-their outputs to train competing models, so premium-tier traffic is
-stamped 'restricted' at write time and filtered at read time.
+Every logged exchange carries `licenseClass`. Only 'open_weight' may ever become
+Shamwari Mind training data. Anthropic and OpenAI terms bar using their outputs to
+train competing models, so such traffic is stamped 'restricted' and the sink refuses
+to mark it trainable. Core checks a batch before it forwards it; the API checks again.
 """
 
 from __future__ import annotations
 
-import asyncio
-import hashlib
 import hmac
+import logging
 import os
 import re
-from datetime import datetime, timezone
+import time
+from contextlib import asynccontextmanager
 from enum import Enum
 from typing import Any, Literal
 
-import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, status
-from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 
-import replay
-import telemetry
+from nyuchi_api import DataApi, DataApiRefusal, DataApiUnavailable
 
-MONGODB_URI = os.environ["MONGODB_URI"]
+log = logging.getLogger("shamwari.core")
+
 CORE_TOKEN = os.environ["SHAMWARI_CORE_TOKEN"]
-#: Operator routes (replay, telemetry) take a DIFFERENT secret from the one the
-#: edge Worker holds, so a compromised Worker cannot trigger a replay, requeue
-#: dead-lettered events or read usage reports. Unset means those routes are shut.
+#: Operator routes take a DIFFERENT secret from the one the edge Worker holds, so a
+#: compromised Worker cannot read usage reports or reach the parked replay routes.
+#: Unset means those routes are shut.
 OPS_TOKEN = os.environ.get("SHAMWARI_OPS_TOKEN", "")
-DB_SHAMWARI = "shamwari"
-DB_PLATFORM = "platform"
 
-app = FastAPI(title="Shamwari Core", version="0.3.0")
-client = AsyncIOMotorClient(MONGODB_URI, maxPoolSize=20, serverSelectionTimeoutMS=5000)
+#: Built from the environment at import, so a missing key stops Core at boot, loudly,
+#: rather than at the first request. Tests replace it.
+api = DataApi.from_env()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    yield
+    await api.aclose()  # looked up at shutdown, so a replaced client is the one closed
+
+
+app = FastAPI(title="Shamwari Core", version="0.4.0", lifespan=lifespan)
+
+_ID = r"^[A-Za-z0-9_.:-]{1,64}$"
+_PERIOD = r"^\d{4}-(0[1-9]|1[0-2])$"
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +79,7 @@ client = AsyncIOMotorClient(MONGODB_URI, maxPoolSize=20, serverSelectionTimeoutM
 # ---------------------------------------------------------------------------
 
 async def require_token(authorization: str = Header(...)) -> None:
-    """Shared-secret gate. Only the Worker and the ingest job call this."""
+    """Shared-secret gate. Only the Worker calls this."""
     if not hmac.compare_digest(authorization.encode(), f"Bearer {CORE_TOKEN}".encode()):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad core token")
 
@@ -79,6 +90,15 @@ async def require_ops_token(authorization: str = Header(...)) -> None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "operator routes are not enabled")
     if not hmac.compare_digest(authorization.encode(), f"Bearer {OPS_TOKEN}".encode()):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad operator token")
+
+
+def _unavailable() -> HTTPException:
+    """The data API could not answer. Fail closed; say nothing about why."""
+    return HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, {"error": "data_api_unavailable"})
+
+
+def _refusal(e: DataApiRefusal) -> HTTPException:
+    return HTTPException(e.status_code, e.detail)
 
 
 # ---------------------------------------------------------------------------
@@ -99,9 +119,9 @@ def resolve_scope(requested: Scope, destination: Literal["cloud", "mind"]) -> Sc
     """
     Narrow the scope to what the destination is allowed to see.
 
-    A personal-scope request bound for Cloud is not silently downgraded —
-    that would leak by omission and produce a confidently wrong answer.
-    It is refused, so the caller must route to Mind or tell the user.
+    A personal-scope request bound for Cloud is not silently downgraded: that would
+    leak by omission and produce a confidently wrong answer. It is refused, so the
+    caller must route to Mind or tell the user.
     """
     if destination == "mind":
         return requested
@@ -122,137 +142,64 @@ def resolve_scope(requested: Scope, destination: Literal["cloud", "mind"]) -> Sc
 
 
 # ---------------------------------------------------------------------------
-# API key verification
+# API key verification: moved
 # ---------------------------------------------------------------------------
 
-class KeyLookup(BaseModel):
-    key_prefix: str
-    key_hash: str
-
-
-class KeyResult(BaseModel):
-    api_key_id: str
-    owner_entity_id: str
-    owner_person_id: str | None = None
-    key_type: str
-    tier: str
-    monthly_token_cap: int
-
-
-#: The one key type Shamwari admits. A valid key of any other type belongs to
-#: another product and is answered exactly like a bad key.
-SHAMWARI_KEY_TYPE = "shamwari"
-_HEX_SHA256 = re.compile(r"[0-9a-f]{64}")
-
-
-def _invalid_key() -> HTTPException:
-    """401 with a machine-readable body, so the gateway can tell "this key is
-    bad" (cache it) from "Core refused the Worker's own token" (do not)."""
-    return HTTPException(status.HTTP_401_UNAUTHORIZED, {"error": "invalid_key"})
-
-
-@app.post("/auth/verify", response_model=KeyResult, dependencies=[Depends(require_token)])
-async def verify_key(body: KeyLookup) -> KeyResult:
+@app.post("/auth/verify", dependencies=[Depends(require_token)])
+async def verify_key() -> None:
     """
-    Every Shamwari key shares the prefix `sk_shamwari_`, so the prefix is only a
-    bucket and `find_one` on it returns an arbitrary document: with two active
-    keys the hash compare ran against the wrong one and a valid key was refused.
-    The lookup is therefore by the SHA-256 of the full key, narrowed by prefix,
-    as docs/api-key-migration.md specifies, and the hash is compared again in
-    constant time. The failure reasons are deliberately indistinguishable.
+    Gone from Core, on purpose. Core used to look keys up in Mongo; it holds no database
+    login now, and the Nyuchi API authenticates a key from the raw key itself
+    (GET /v1/shamwari/whoami), which the Worker never sends to Core.
+
+    Kept as an explicit 501 and not removed, so a Worker still pointed here is told why
+    (it reads this as "auth unavailable" and denies, never admits) instead of getting a
+    404 that looks like a typo. The replacement is the Worker's key seam
+    (gateway/src/keys.ts) pointed at the API; docs/data-api-routes.md has the gap.
     """
-    if not _HEX_SHA256.fullmatch(body.key_hash):
-        raise _invalid_key()
-
-    doc = await client[DB_PLATFORM].apiKeys.find_one(
-        {"keyPrefix": body.key_prefix, "keyHash": body.key_hash, "isActive": True}
-    )
-    if not doc:
-        raise _invalid_key()
-
-    if not hmac.compare_digest(str(doc.get("keyHash", "")), body.key_hash):
-        raise _invalid_key()
-
-    # Fail closed: a missing keyType is not assumed to be ours.
-    if doc.get("keyType") != SHAMWARI_KEY_TYPE:
-        raise _invalid_key()
-
-    expires = doc.get("expiresAt")
-    if expires and expires.replace(tzinfo=timezone.utc) < datetime.now(timezone.utc):
-        raise _invalid_key()
-
-    entity = await client["entity"].entities.find_one(
-        {"_id": doc["ownerEntityId"]}, {"tier": 1, "monthlyTokenCap": 1}
-    ) or {}
-
-    return KeyResult(
-        api_key_id=str(doc["_id"]),
-        owner_entity_id=str(doc["ownerEntityId"]),
-        owner_person_id=str(doc["createdByPersonId"]) if doc.get("createdByPersonId") else None,
-        key_type=doc["keyType"],
-        tier=entity.get("tier", "community"),
-        monthly_token_cap=int(entity.get("monthlyTokenCap", 100_000)),
+    raise HTTPException(
+        status.HTTP_501_NOT_IMPLEMENTED,
+        {"error": "key_verification_moved", "to": "nyuchi-api /v1/shamwari/whoami"},
     )
 
 
 # ---------------------------------------------------------------------------
-# Ground — hybrid retrieval over shamwari.knowledgeBase
+# Ground: retrieval, through the API
 # ---------------------------------------------------------------------------
 
 class GroundQuery(BaseModel):
-    query: str
-    #: Absent means the caller did not embed the query, which is required of
-    #: a `mind` destination — see ground_search. 1024 is bge-m3 and matches
-    #: the live ground_vector_search index; a mismatch is rejected rather
-    #: than searched against the wrong index.
+    query: str = Field(min_length=1, max_length=2000)
+    #: Absent means the caller did not embed the query, which is required of a `mind`
+    #: destination (see ground_search). 1024 is bge-m3 and matches the live index; a
+    #: mismatch is rejected rather than searched against the wrong index.
     embedding: list[float] | None = Field(default=None, min_length=1024, max_length=1024)
-    owner_entity_id: str
+    owner_entity_id: str = Field(min_length=1, pattern=_ID)
     scope: Scope = Scope.PLATFORM
     destination: Literal["cloud", "mind"] = "cloud"
-    language: str | None = None
-    top_k: int = 6
-
-
-class GroundChunk(BaseModel):
-    content: str
-    heading: str | None = None
-    title: str
-    authority: str
-    resource_type: str
-    source_url: str | None = None
-    effective_from: str | None = None
-    #: What an answer cites: the section number and a display string such as
-    #: "Constitution of Zimbabwe ..., s 56(1)–(3)". Absent on older chunks.
-    section: str | None = None
-    citation: str | None = None
-    scope: str
+    language: str | None = Field(default=None, max_length=20)
+    top_k: int = Field(default=6, ge=1, le=20)
 
 
 @app.post("/ground/search", dependencies=[Depends(require_token)])
 async def ground_search(body: GroundQuery) -> dict[str, Any]:
     """
-    $rankFusion over the vector and lexical indexes.
+    Hybrid retrieval over Ground, run by the Nyuchi API.
 
-    Reciprocal Rank Fusion rather than averaging scores: the two indexes
-    produce incompatible score scales, and averaging them ranks badly.
-
-    The owner filter is what implements the three-layer model:
-      platform  -> ownerEntityId is null (shared corpus)
-      community -> shared corpus plus anonymised aggregates
-      personal  -> the caller's own pod, and only for mind destinations
+    What is Core's: the two rule checks below, made before any call, so a refused
+    request reads nothing and embeds nothing; and the check on what comes back. What is
+    the API's: building the query. Its owner / supersededBy / isActive filters on both
+    retrieval pipelines are tested in nyuchi-api (tests/test_shamwari.py), not here.
     """
     scope = resolve_scope(body.scope, body.destination)
 
     # RULE 1, AUTHORITATIVELY, IN THE LEAK PATH.
     #
-    # A `mind` destination that arrives carrying an embedding means the
-    # caller embedded the user's question before calling us. Embedding is
-    # inference, so on the edge that is a Cloudflare-hosted model seeing
-    # personal text — the leak this endpoint's own docstring claims cannot
-    # happen. The Worker guards it too (gateway/src/ground.ts); this is the
-    # check the Worker cannot bypass, and it is deliberately a refusal
-    # rather than a silent discard of the vector, because a discard would
-    # hide a Worker that had already leaked.
+    # A `mind` destination that arrives carrying an embedding means the caller embedded
+    # the user's question before calling us. Embedding is inference, so on the edge that
+    # is a Cloudflare-hosted model seeing personal text. The Worker guards it too
+    # (gateway/src/ground.ts); this is the check the Worker cannot bypass, and it is a
+    # refusal rather than a silent discard of the vector, because a discard would hide a
+    # Worker that had already leaked.
     if body.destination == "mind" and body.embedding is not None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -265,140 +212,35 @@ async def ground_search(body: GroundQuery) -> dict[str, Any]:
             },
         )
 
-    if scope is Scope.PERSONAL:
-        owner_filter: dict[str, Any] = {"ownerEntityId": body.owner_entity_id}
-    elif scope is Scope.COMMUNITY:
-        owner_filter = {"ownerEntityId": {"$in": [None, "__community__"]}}
-    else:
-        owner_filter = {"ownerEntityId": None}
-
-    prefilter = {
-        "isActive": True,
-        "supersededBy": None,  # never cite repealed law
-        **owner_filter,
-    }
-    if body.language:
-        prefilter["language"] = {"$in": [body.language, "en"]}
-
-    lexical: list[dict[str, Any]] = [
-        {
-            "$search": {
-                "index": "ground_text_search",
-                "compound": {
-                    "must": [
-                        {
-                            "text": {
-                                "query": body.query,
-                                "path": ["title", "heading", "content"],
-                            }
-                        }
-                    ],
-                    "filter": [{"equals": {"path": "isActive", "value": True}}],
-                },
-            }
-        },
-        # The owner filter belongs on BOTH retrieval pipelines, not just the
-        # vector one. Atlas Search cannot express the whole prefilter in its
-        # compound form, so it is re-applied as a $match immediately after
-        # $search — before $limit, so the limit counts documents the caller
-        # is actually allowed to see.
-        #
-        # Without this, $rankFusion merged lexical hits that had passed only
-        # an isActive check into a result set the caller was scope-gated out
-        # of: a platform-scope Cloud request could surface another entity's
-        # personal pod chunks by keyword and forward them to Moonshot. The
-        # scope model is only as strong as its least-filtered pipeline.
-        {"$match": prefilter},
-        {"$limit": body.top_k * 2},
-    ]
-
-    if body.embedding is None:
-        # Lexical only. Weaker ranking over the same corpus, not a different
-        # corpus — the prefilter above still applies. This is what a
-        # personal-scope query gets until Mind ships its own embedding, and
-        # it is the honest cost of not embedding on Cloud.
-        retrieval: list[dict[str, Any]] = [*lexical]
-    else:
-        retrieval = [
+    try:
+        out = await api.ground_search(
             {
-                "$rankFusion": {
-                    "input": {
-                        "pipelines": {
-                            "semantic": [
-                                {
-                                    "$vectorSearch": {
-                                        "index": "ground_vector_search",
-                                        "path": "embedding",
-                                        "queryVector": body.embedding,
-                                        "numCandidates": body.top_k * 20,
-                                        "limit": body.top_k * 2,
-                                        "filter": prefilter,
-                                    }
-                                }
-                            ],
-                            "lexical": lexical,
-                        }
-                    },
-                    # RRF, not averaged scores: the two indexes produce
-                    # incompatible score scales and averaging ranks badly.
-                    "combination": {"weights": {"semantic": 2, "lexical": 1}},
-                }
-            }
-        ]
-
-    pipeline: list[dict[str, Any]] = [
-        *retrieval,
-        {"$limit": body.top_k},
-        {
-            "$project": {
-                "_id": 0,
-                "content": 1,
-                "heading": 1,
-                "title": 1,
-                "authority": 1,
-                "resourceType": 1,
-                "sourceUrl": 1,
-                "effectiveFrom": 1,
-                "section": 1,
-                "citation": 1,
-            }
-        },
-    ]
-
-    cursor = client[DB_SHAMWARI].knowledgeBase.aggregate(pipeline)
-    rows = await cursor.to_list(length=body.top_k)
-
-    chunks = [
-        GroundChunk(
-            content=r["content"],
-            heading=r.get("heading"),
-            title=r.get("title", "Untitled"),
-            authority=r.get("authority", "Unknown"),
-            resource_type=r.get("resourceType", "unknown"),
-            source_url=r.get("sourceUrl"),
-            effective_from=(
-                r["effectiveFrom"].date().isoformat() if r.get("effectiveFrom") else None
-            ),
-            section=r.get("section"),
-            citation=r.get("citation"),
-            scope=scope.value,
-        )
-        for r in rows
-    ]
-
-    # A miss is a line in the corpus roadmap, written by a paying customer.
-    if not chunks:
-        await client[DB_SHAMWARI].groundMisses.insert_one(
-            {
-                "ownerEntityId": body.owner_entity_id,
                 "query": body.query,
-                "language": body.language,
+                **({"embedding": body.embedding} if body.embedding is not None else {}),
+                "owner_entity_id": body.owner_entity_id,
                 "scope": scope.value,
-                "createdAt": datetime.now(timezone.utc),
+                "destination": body.destination,
+                "language": body.language,
+                "top_k": body.top_k,
             }
         )
+    except DataApiRefusal as e:
+        raise _refusal(e) from None
+    except DataApiUnavailable:
+        raise _unavailable() from None
 
-    return {"scope": scope.value, "hit": bool(chunks), "chunks": [c.model_dump() for c in chunks]}
+    # The third check. Whatever the API says, every chunk must be a well-formed object that
+    # carries exactly the scope that was asked for. For a cloud destination that means
+    # cloud-safe by the API's own account of it; for Mind it means the caller's own scope and
+    # nothing else's. Anything else fails closed.
+    chunks = out["chunks"]
+    if out.get("scope") != scope.value or any(
+        not isinstance(c, dict) or c.get("scope") != scope.value for c in chunks
+    ):
+        log.error("data api answered with a scope other than the one asked for")
+        raise _unavailable()
+
+    return {"scope": scope.value, "hit": bool(out["chunks"]), "chunks": out["chunks"]}
 
 
 # ---------------------------------------------------------------------------
@@ -406,21 +248,21 @@ async def ground_search(body: GroundQuery) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 @app.get("/guardrails", dependencies=[Depends(require_token)])
-async def guardrails(surface: str = "shamwari.ai") -> dict[str, Any]:
-    """Active rules for a surface, highest priority first."""
-    cursor = (
-        client[DB_SHAMWARI]
-        .guardrails.find({"isActive": True, "$or": [{"surfaces": surface}, {"surfaces": None}]})
-        .sort("priority", 1)
-    )
-    rules = await cursor.to_list(length=200)
-    for r in rules:
-        r["_id"] = str(r["_id"])
-    return {"surface": surface, "rules": rules}
+async def guardrails(surface: str = "shamwari") -> dict[str, Any]:
+    """Active rules for a surface. The one copy lives at /v1/ai/guardrails."""
+    if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,39}", surface):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "bad surface")
+    try:
+        rules = await api.guardrails(surface)
+    except DataApiRefusal as e:
+        raise _refusal(e) from None
+    except DataApiUnavailable:
+        raise _unavailable() from None
+    return {**rules, "surface": surface}
 
 
 # ---------------------------------------------------------------------------
-# Sink — batched writes from the Worker's queue consumer
+# Sink: batched writes from the Worker's queue consumer
 # ---------------------------------------------------------------------------
 
 class BulkWrite(BaseModel):
@@ -430,83 +272,84 @@ class BulkWrite(BaseModel):
 
 _ALLOWED: dict[str, set[str]] = {
     "shamwari": {"conversations", "messages", "groundMisses"},
-    # serviceHealth carries the weekly degradation probe's reading. It holds
-    # no user content by construction — see gateway/src/probe.ts — and the
-    # collection already existed, unused.
+    # serviceHealth carries the weekly degradation probe's reading. It holds no user
+    # content by construction (gateway/src/probe.ts).
     "platform": {"usageEvents", "auditLog", "serviceHealth"},
 }
+_LICENCE = {"open_weight", "restricted"}
+_SCOPES = {"personal", "community", "platform"}
+
+
+def check_sink(database: str, collections: dict[str, list[dict[str, Any]]]) -> None:
+    """
+    Refuse a batch that breaks the allow-list or a provenance rule, before anything is
+    forwarded. The API checks the same rules again; this is the first of the two.
+    """
+    allowed = _ALLOWED.get(database)
+    if not allowed:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"database not writable: {database}")
+
+    for name, docs in collections.items():
+        if name not in allowed:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"collection not writable: {name}")
+        if name not in {"conversations", "messages"}:
+            continue
+        for d in docs:
+            # Refuse unstamped provenance rather than defaulting it to something permissive.
+            licence = d.get("licenseClass")
+            if not isinstance(licence, str) or licence not in _LICENCE:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, f"{name} document missing valid licenseClass"
+                )
+            scope = d.get("scope")
+            if not isinstance(scope, str) or scope not in _SCOPES:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{name} document missing valid scope")
+            eligible = d.get("trainingEligible")
+            if not isinstance(eligible, bool):
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST, f"{name} document missing boolean trainingEligible"
+                )
+
+            # licenseClass gates the teacher model's terms. It says nothing about the
+            # user's. A personal-scope exchange is the caller's own pod data and must
+            # never reach the Mind training corpus however permissive the teacher
+            # model's licence was, so refuse the combination at write time rather than
+            # filtering it at read time: a read-time filter is one forgotten WHERE
+            # clause away from training on someone's payslip.
+            if scope == "personal" and eligible:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{name} document is personal scope and must set trainingEligible=false",
+                )
+
+            # The other half of the same invariant. The Worker resolves licenseClass
+            # from the model that actually served (gateway/src/provenance.ts), but an AI
+            # Gateway dynamic route can substitute the model from a dashboard with no
+            # deploy, so the Worker's view is exactly the thing that can go stale.
+            if licence == "restricted" and eligible:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{name} document has restricted provenance and cannot set trainingEligible=true",
+                )
 
 
 @app.post("/sink/bulk", dependencies=[Depends(require_token)])
 async def sink_bulk(body: BulkWrite) -> dict[str, Any]:
     """
-    Allow-list, not a generic write proxy. An edge worker should not be
-    able to write to arbitrary collections even if it is compromised.
+    Allow-list, not a generic write proxy. An edge worker should not be able to write
+    to arbitrary collections even if it is compromised.
+
+    Documents are forwarded exactly as received (timestamps stay RFC 3339 strings; the
+    API parses them and gives each record a content-derived id, so a retried batch is a
+    counted duplicate and not a second row).
     """
-    allowed = _ALLOWED.get(body.database)
-    if not allowed:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"database not writable: {body.database}")
-
-    written: dict[str, int] = {}
-    for name, docs in body.collections.items():
-        if name not in allowed:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"collection not writable: {name}")
-        if not docs:
-            continue
-
-        for d in docs:
-            if isinstance(d.get("createdAt"), str):
-                d["createdAt"] = datetime.fromisoformat(d["createdAt"].replace("Z", "+00:00"))
-            # Refuse unstamped provenance rather than defaulting it to
-            # something permissive.
-            if name in {"conversations", "messages"} and d.get("licenseClass") not in {
-                "open_weight",
-                "restricted",
-            }:
-                raise HTTPException(
-                    status.HTTP_400_BAD_REQUEST,
-                    f"{name} document missing valid licenseClass",
-                )
-
-            # licenseClass gates the teacher model's terms. It says nothing
-            # about the user's. A personal-scope exchange is the caller's own
-            # pod data and must never reach the Mind training corpus however
-            # permissive the teacher model's licence was, so refuse the
-            # combination at write time rather than filtering it at read
-            # time — a read-time filter is one forgotten WHERE clause away
-            # from training on someone's payslip.
-            if name in {"conversations", "messages"} and d.get("scope") == "personal":
-                if d.get("trainingEligible") is not False:
-                    raise HTTPException(
-                        status.HTTP_400_BAD_REQUEST,
-                        f"{name} document is personal scope and must set "
-                        "trainingEligible=false",
-                    )
-
-            # The other half of the same invariant, and the authoritative
-            # copy of it. A restricted teacher model's output may be stored
-            # and served; it may never be marked trainable.
-            #
-            # The Worker already resolves licenseClass from the model that
-            # actually served (gateway/src/provenance.ts) and refuses this
-            # combination itself. This check exists because an AI Gateway
-            # dynamic route can substitute the model from a dashboard, with
-            # no deploy and no code review — so the Worker's view of what
-            # served is exactly the thing that can go stale. Two checks, for
-            # the same reason rule 1 has two: one is a single bug away from a
-            # corpus that has to be thrown away.
-            if name in {"conversations", "messages"}:
-                if d.get("licenseClass") == "restricted" and d.get("trainingEligible") is True:
-                    raise HTTPException(
-                        status.HTTP_400_BAD_REQUEST,
-                        f"{name} document has restricted provenance and cannot set "
-                        "trainingEligible=true",
-                    )
-
-        res = await client[body.database][name].insert_many(docs, ordered=False)
-        written[name] = len(res.inserted_ids)
-
-    return {"written": written}
+    check_sink(body.database, body.collections)
+    try:
+        return await api.sink(body.database, {k: v for k, v in body.collections.items() if v})
+    except DataApiRefusal as e:
+        raise _refusal(e) from None
+    except DataApiUnavailable:
+        raise _unavailable() from None
 
 
 # ---------------------------------------------------------------------------
@@ -515,176 +358,74 @@ async def sink_bulk(body: BulkWrite) -> dict[str, Any]:
 
 @app.get("/rollup", dependencies=[Depends(require_token)])
 async def rollup(owner_entity_id: str, billing_period: str) -> dict[str, Any]:
-    """
-    Aggregates on the existing ownerEntityId + billingPeriod index rather
-    than scanning a rolling window.
-    """
-    cursor = client[DB_PLATFORM].usageEvents.aggregate(
-        [
-            {"$match": {"ownerEntityId": owner_entity_id, "billingPeriod": billing_period}},
-            {
-                "$group": {
-                    "_id": None,
-                    "total_tokens": {"$sum": {"$add": ["$inputTokens", "$outputTokens"]}},
-                    "total_cost": {"$sum": "$costUsd"},
-                    "requests": {"$sum": 1},
-                }
-            },
-        ]
-    )
-    rows = await cursor.to_list(length=1)
-    if not rows:
-        return {"total_tokens": 0, "total_cost": 0.0, "requests": 0}
-    r = rows[0]
-    return {
-        "total_tokens": int(r.get("total_tokens") or 0),
-        "total_cost": float(r.get("total_cost") or 0.0),
-        "requests": int(r.get("requests") or 0),
-    }
+    if not re.fullmatch(_ID, owner_entity_id) or not re.fullmatch(_PERIOD, billing_period):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "bad owner or billing period")
+    try:
+        r = await api.usage_rollup(owner_entity_id, billing_period)
+    except DataApiRefusal as e:
+        raise _refusal(e) from None
+    except DataApiUnavailable:
+        raise _unavailable() from None
+    try:
+        return {
+            "total_tokens": int(r.get("total_tokens") or 0),
+            "total_cost": float(r.get("total_cost") or 0.0),
+            "requests": int(r.get("requests") or 0),
+        }
+    except (TypeError, ValueError):
+        raise _unavailable() from None
 
 
 # ---------------------------------------------------------------------------
-# Replay of spilled usage events to the Servers API (see replay.py)
+# Operator routes: parked until the data API has the routes they need
 # ---------------------------------------------------------------------------
+# Spill replay and the per-tier report read and mark rows in platform.usageEvents, which
+# Core could do while it held a Mongo login. Through the API they need routes that do not
+# exist yet (docs/data-api-routes.md, G3 and G4). They answer 501 rather than being
+# removed, so an operator who calls them is told why. Nothing at launch needs them: they
+# matter only when SERVERS_API_ENABLED is switched on.
 
-SERVERS_API_URL = os.environ.get("SERVERS_API_URL", "").rstrip("/")
-SERVERS_API_TOKEN = os.environ.get("SERVERS_API_TOKEN", "")
-SERVERS_API_INTERNAL_KEY = os.environ.get("SERVERS_API_INTERNAL_KEY", "")
-
-_SPILLED = {
-    "spilled": True,
-    "replayedAt": {"$exists": False},
-    "replayRejectedAt": {"$exists": False},
-}
-_replay_lock = asyncio.Lock()
-_last_replay: dict[str, Any] = {}
-_replay_started: dict[str, Any] = {}
-
-
-class MongoReplayStore:
-    """Spilled rows in platform.usageEvents. Rows are marked, never deleted."""
-
-    def __init__(self) -> None:
-        self.col = client[DB_PLATFORM].usageEvents
-
-    async def pending(self, limit: int) -> list[dict[str, Any]]:
-        cursor = self.col.find(_SPILLED).sort([("createdAt", 1), ("_id", 1)]).limit(limit)
-        return await cursor.to_list(length=limit)
-
-    async def mark_sent(self, ids: list[Any]) -> None:
-        await self.col.update_many(
-            {"_id": {"$in": ids}}, {"$set": {"replayedAt": datetime.now(timezone.utc)}}
-        )
-
-    async def mark_rejected(self, id: Any, reason: str) -> None:
-        await self.col.update_one(
-            {"_id": id},
-            {"$set": {"replayRejectedAt": datetime.now(timezone.utc), "replayRejectedReason": reason}},
-        )
-
-    async def requeue_rejected(self) -> int:
-        res = await self.col.update_many(
-            {"spilled": True, "replayRejectedAt": {"$exists": True}},
-            {"$unset": {"replayRejectedAt": "", "replayRejectedReason": ""}},
-        )
-        return res.modified_count
-
-
-_last_status: dict[str, Any] = {}
-
-
-def _sender(http: httpx.AsyncClient) -> replay.Send:
-    """One shared client per pass, not a new TLS handshake per send."""
-
-    async def send(body: list[dict[str, Any]]) -> replay.SendResult:
-        headers = {"Authorization": f"Bearer {SERVERS_API_TOKEN}"}
-        if SERVERS_API_INTERNAL_KEY:
-            headers["x-nyuchi-internal-key"] = SERVERS_API_INTERNAL_KEY
-        try:
-            res = await http.post(
-                f"{SERVERS_API_URL}/v1/shamwari/usage/events", json={"events": body}, headers=headers
-            )
-        except Exception as e:  # incl. a malformed URL: retry and report, never a 500
-            _last_status["last_error"] = type(e).__name__
-            return "retry"
-        _last_status["last_status"] = res.status_code
-        if 200 <= res.status_code < 300:
-            return "ok"
-        # Only a definite "this event is bad" dead-letters. A 401/403/404 may be
-        # OUR credential or route, so it is retried, never used to throw events
-        # away; last_status in the report says which one it is.
-        if res.status_code in (400, 422):
-            return "rejected"
-        return "retry"
-
-    return send
+_PARKED = {"error": "needs_data_api_route", "see": "docs/data-api-routes.md"}
 
 
 @app.post("/replay/usage", dependencies=[Depends(require_ops_token)])
-async def replay_usage() -> dict[str, Any]:
-    """Run one bounded pass. Call it on a schedule (every minute or so)."""
-    if not (SERVERS_API_URL and SERVERS_API_TOKEN):
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "servers api not configured")
-    if _replay_lock.locked():
-        return {"skipped": "a replay is already running", "running_since": _replay_started.get("at")}
-    async with _replay_lock:
-        _replay_started["at"] = datetime.now(timezone.utc).isoformat()
-        _last_status.clear()
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as http:
-                report = await replay.replay_once(MongoReplayStore(), _sender(http))
-        finally:
-            _replay_started.pop("at", None)
-    out = {**vars(report), **_last_status}
-    _last_replay.clear()
-    _last_replay.update(out)
-    return out
+async def replay_usage() -> None:
+    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, _PARKED)
 
 
 @app.post("/replay/requeue", dependencies=[Depends(require_ops_token)])
-async def replay_requeue() -> dict[str, Any]:
-    """Put dead-lettered events back in the queue, after the cause is fixed."""
-    return {"requeued": await MongoReplayStore().requeue_rejected()}
+async def replay_requeue() -> None:
+    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, _PARKED)
 
 
 @app.get("/replay/stats", dependencies=[Depends(require_ops_token)])
-async def replay_stats() -> dict[str, Any]:
-    """Spill depth and age. This is the quota-lag gauge: see docs/usage-replay.md."""
-    col = client[DB_PLATFORM].usageEvents
-    pending = await col.count_documents(_SPILLED)
-    oldest = await col.find(_SPILLED, {"createdAt": 1}).sort("createdAt", 1).limit(1).to_list(1)
-    age = None
-    if oldest and isinstance(oldest[0].get("createdAt"), datetime):
-        created = oldest[0]["createdAt"]
-        if created.tzinfo is None:
-            created = created.replace(tzinfo=timezone.utc)
-        age = int((datetime.now(timezone.utc) - created).total_seconds())
-    rejected = await col.count_documents(
-        {"spilled": True, "replayRejectedAt": {"$exists": True}}
-    )
-    return {
-        "pending": pending,
-        "oldest_pending_age_seconds": age,
-        "rejected": rejected,
-        "running_since": _replay_started.get("at"),
-        "last_run": dict(_last_replay) or None,
-    }
+async def replay_stats() -> None:
+    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, _PARKED)
 
 
 @app.get("/rollup/by-tier", dependencies=[Depends(require_ops_token)])
-async def rollup_by_tier(billing_period: str, owner_entity_id: str) -> dict[str, Any]:
-    """
-    Tokens by reach, routed tier and inference path for one owner, with a
-    labelled cost estimate. The owner is required so the query uses the
-    ownerEntityId + billingPeriod index instead of scanning the collection. Tokens are the fact; the cost is derived (see telemetry.py).
-    """
-    cursor = client[DB_PLATFORM].usageEvents.aggregate(
-        telemetry.by_tier_pipeline(billing_period, owner_entity_id)
-    )
-    return telemetry.shape(await cursor.to_list(length=500))
+async def rollup_by_tier(billing_period: str, owner_entity_id: str) -> None:
+    raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, _PARKED)
+
+
+#: /health is open (Fly's check, and anyone else) and each real check is an authenticated call
+#: with Core's key, so it is answered from a short cache. The API sees at most one readiness call
+#: per window however often /health is hit, and a hammered /health cannot spend Core's rate limit.
+_HEALTH_OK_SECONDS = 10.0
+_HEALTH_FAIL_SECONDS = 3.0
+_health: dict[str, Any] = {"until": 0.0, "ok": False}
 
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
-    await client.admin.command("ping")
-    return {"ok": True, "service": "shamwari-core", "version": "0.3.0"}
+    """Readiness: Core is up AND the data API answers Core's key. Fails closed otherwise."""
+    now = time.monotonic()
+    if now >= _health["until"]:
+        try:
+            await api.whoami()
+            _health.update(ok=True, until=now + _HEALTH_OK_SECONDS)
+        except (DataApiUnavailable, DataApiRefusal):
+            _health.update(ok=False, until=now + _HEALTH_FAIL_SECONDS)
+    if not _health["ok"]:
+        raise _unavailable()
+    return {"ok": True, "service": "shamwari-core", "version": "0.4.0"}

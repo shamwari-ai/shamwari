@@ -1,0 +1,12 @@
+# Dependencies of ingest_ground.py ONLY: the operator's own machine, never the Core image.
+# Hand-edited; requirements-ingest.txt is GENERATED from it (see requirements.in for how).
+#
+#     pip-compile --generate-hashes --strip-extras \
+#         --output-file=requirements-ingest.txt requirements-ingest.in
+#
+# The ingest talks to Postgres and Mongo directly until a ground-write route exists on the
+# Nyuchi API (docs/data-api-routes.md, G5). Until then it is a one-off from a trusted machine.
+
+-r requirements.in
+motor>=3.6
+asyncpg>=0.30
