@@ -2,6 +2,7 @@
 // cannot know about. Modelled on docs-site/check.mjs.
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { findClaimProblems, selfTest } from './claims.mjs';
 
 const walk = (dir) =>
@@ -20,7 +21,7 @@ if (broken.length) {
 const files = walk('dist');
 const pages = files.filter((f) => f.endsWith('.html'));
 const fail = [];
-if (pages.length < 4) fail.push(`expected at least 4 built pages, found ${pages.length}`);
+if (pages.length < 5) fail.push(`expected at least 5 built pages, found ${pages.length}`);
 
 const routes = new Set(pages.map((p) => p.replace(/^dist/, '').replace(/index\.html$/, '')));
 const assets = new Set(files.map((f) => f.replace(/^dist/, '')));
@@ -55,6 +56,7 @@ for (const src of ['src/components/DataScopes.astro', 'src/pages/index.astro']) 
 }
 
 let biggest = 0;
+const chatScripts = new Set();
 
 for (const page of pages) {
   const html = readFileSync(page, 'utf8');
@@ -144,12 +146,49 @@ for (const page of pages) {
     }
   }
 
-  // No client JavaScript: nothing on this site needs it. @bundu/ui's React
-  // primitives render server-side with no client:* directive anywhere, so
-  // this should hold even with React in the build.
-  if (/<script(?![^>]*type="application\/ld\+json")/i.test(html)) {
+  // No client JavaScript anywhere except the chat app. @bundu/ui's React
+  // primitives render server-side with no client:* directive, so the
+  // marketing pages ship none. The chat page is the one exception, and it may
+  // load only its own bundled module from /_astro/ (no third-party script, no
+  // inline script), whose size is held to the budget below.
+  const scripts = [...html.matchAll(/<script\b([^>]*)>/gi)].filter((m) => !/type="application\/ld\+json"/i.test(m[1]));
+  if (where === 'chat/index.html') {
+    for (const [, attrs] of scripts) {
+      const src = attrs.match(/\bsrc="([^"]+)"/)?.[1];
+      if (!src || !src.startsWith('/_astro/')) fail.push(`${where}: script is not a bundled /_astro/ module (${attrs.trim().slice(0, 60)})`);
+      else chatScripts.add(src);
+    }
+    if (!scripts.length) fail.push(`${where}: the chat page ships no script`);
+    // Web fonts block render on 2G; the chat shell uses the system stack.
+    if (/fonts\.(googleapis|gstatic)\.com/.test(html)) fail.push(`${where}: loads a web font; the chat shell is system-font only`);
+    if (!/<html lang="/.test(html)) fail.push(`${where}: <html> has no lang`);
+  } else if (scripts.length) {
     fail.push(`${where}: ships a <script> tag`);
   }
+}
+
+// First-load JS budget for the chat app, gzipped as a CDN would send it: the
+// module the page loads plus every static import it pulls in. Anything lazily
+// imported is not first load and is not counted, but is listed.
+const CHAT_JS_BUDGET = 100 * 1024;
+const CHAT_CSS_BUDGET = 30 * 1024;
+const gz = (file) => gzipSync(readFileSync(file)).length;
+const closure = new Set();
+const visit = (src) => {
+  if (closure.has(src)) return;
+  closure.add(src);
+  const code = readFileSync('dist' + src, 'utf8');
+  for (const [, dep] of code.matchAll(/(?:^|[;}\s])(?:import|export)[^'"`;]*?from\s*["']\.\/([^"']+)["']/g)) visit('/_astro/' + dep);
+};
+for (const src of chatScripts) if (assets.has(src)) visit(src);
+const chatJs = [...closure].reduce((n, src) => n + gz('dist' + src), 0);
+if (chatJs > CHAT_JS_BUDGET) fail.push(`chat first-load JS is ${chatJs} B gzipped, over the ${CHAT_JS_BUDGET} B budget`);
+
+let chatCss = 0;
+const chatHtml = pages.find((p) => p.endsWith('chat/index.html'));
+if (chatHtml) {
+  for (const [, href] of readFileSync(chatHtml, 'utf8').matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)) chatCss += gz('dist' + href);
+  if (chatCss > CHAT_CSS_BUDGET) fail.push(`chat CSS is ${chatCss} B gzipped, over the ${CHAT_CSS_BUDGET} B budget`);
 }
 
 // The audience is assumed to be on a slow connection.
@@ -161,5 +200,5 @@ if (fail.length) {
 }
 console.log(
   `ok — ${pages.length} pages, largest ${biggest} bytes, links and assets resolve, ` +
-    `no client JS, language rules held`,
+    `client JS only on /chat/ (${chatJs} B gzipped first load, budget ${CHAT_JS_BUDGET}; CSS ${chatCss} B, budget ${CHAT_CSS_BUDGET}), language rules held`,
 );
