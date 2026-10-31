@@ -1,3 +1,7 @@
+> **Parked (2026-10-31).** Core holds no database login now, so `/replay/*` answers 501 until the
+> Nyuchi API has the routes it needs, or replay moves into the API: `docs/data-api-routes.md`, G4.
+> `core/replay.py` and its tests are kept; only the store behind them changes.
+
 # Usage replay: delivering spilled events to the Servers API
 
 Status: built behind the same off-by-default flag as the rest of the seam

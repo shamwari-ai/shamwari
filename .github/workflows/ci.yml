@@ -56,12 +56,9 @@ jobs:
     env:
       # Core reads its configuration at import time and fails loudly on a
       # missing variable. Placeholders are enough to prove it imports —
-      # neither Mongo nor Postgres is contacted until a request arrives.
-      MONGODB_URI: mongodb://placeholder
-      SUPABASE_DB_URL: postgresql://placeholder
+      # the data API is not contacted until a request arrives.
       SHAMWARI_CORE_TOKEN: placeholder
-      CF_ACCOUNT_ID: placeholder
-      CF_API_TOKEN: placeholder
+      NYUCHI_API_INTERNAL_KEY: nyk_placeholder.nys_placeholder
     steps:
       - uses: actions/checkout@v6
 
@@ -106,8 +103,8 @@ jobs:
       - name: Image imports Core
         run: >
           docker run --rm
-          -e MONGODB_URI=mongodb://placeholder
           -e SHAMWARI_CORE_TOKEN=placeholder
+          -e NYUCHI_API_INTERNAL_KEY=nyk_placeholder.nys_placeholder
           --entrypoint python shamwari-core:ci
           -c "import main; print(main.app.title, main.app.version)"
 

@@ -49,17 +49,33 @@ class Image(unittest.TestCase):
 
 
 class LeastPrivilege(unittest.TestCase):
-    """What Core's Servers API credential can do: write usage events, nothing else."""
+    """What Core's one data-API credential can do: the four /v1/shamwari routes and the guardrails read."""
 
-    def test_core_calls_exactly_one_servers_api_route(self):
-        src = (HERE / "main.py").read_text() + (HERE / "replay.py").read_text()
-        routes = set(re.findall(r"/v1/shamwari/[\w/-]+", src))
-        self.assertEqual(routes, {"/v1/shamwari/usage/events"})
+    def test_core_calls_exactly_these_data_api_routes(self):
+        src = (HERE / "nyuchi_api.py").read_text()  # the only module that makes a request
+        routes = set(re.findall(r"/v1/[\w-]+(?:/[\w-]+)+", src))
+        self.assertEqual(
+            routes,
+            {
+                "/v1/shamwari/whoami",
+                "/v1/shamwari/ground/search",
+                "/v1/shamwari/sink",
+                "/v1/shamwari/usage/rollup",
+                "/v1/ai/guardrails",
+            },
+        )
 
     def test_core_never_issues_revokes_or_reads_keys(self):
-        src = (HERE / "main.py").read_text()
-        for word in ("keys/issue", "keys/revoke", "keys/list", "api_keys", "keys/create"):
+        src = (HERE / "main.py").read_text() + (HERE / "nyuchi_api.py").read_text()
+        for word in ("keys/issue", "keys/revoke", "keys/list", "api_keys", "keys/create", "apiKeys"):
             self.assertNotIn(word, src)
+
+    def test_core_holds_no_database_driver_or_login(self):
+        """The owner's rule: only the Nyuchi API talks to databases."""
+        for py in ("main.py", "nyuchi_api.py"):
+            src = (HERE / py).read_text()
+            for word in ("motor", "pymongo", "asyncpg", "MONGODB", "SUPABASE"):
+                self.assertNotIn(word, src, f"{py} mentions {word}")
 
     def test_no_secret_reaches_a_log_or_the_report(self):
         import asyncio

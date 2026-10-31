@@ -17,7 +17,7 @@ RUN pip install --require-hashes -r requirements.txt
 
 # ingest_ground.py is deliberately NOT here: it reads database and Cloudflare
 # credentials Core must never be given, and it runs from the operator's shell.
-COPY main.py replay.py telemetry.py usage_event_fields.json ./
+COPY main.py nyuchi_api.py replay.py telemetry.py usage_event_fields.json ./
 
 # Not root: Core holds database credentials and enforces rule 1.
 RUN useradd --system --uid 10001 --no-create-home core
