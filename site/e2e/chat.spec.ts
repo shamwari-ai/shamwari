@@ -57,7 +57,7 @@ for (const [key, message] of FAILURES) {
     await ask(page, 'hello');
     const err = page.locator('article.error');
     await expect(err).toContainText(message);
-    await expect(err).toHaveAttribute('role', 'alert');
+    await expect(err.locator('[role="alert"]')).toBeVisible();
   });
 }
 

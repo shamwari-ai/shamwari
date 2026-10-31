@@ -172,6 +172,7 @@ for (const page of pages) {
 // imported is not first load and is not counted, but is listed.
 const CHAT_JS_BUDGET = 100 * 1024;
 const CHAT_CSS_BUDGET = 30 * 1024;
+const CHAT_FIRST_LOAD_BUDGET = 50 * 1024;
 const gz = (file) => gzipSync(readFileSync(file)).length;
 const closure = new Set();
 const visit = (src) => {
@@ -185,10 +186,14 @@ const chatJs = [...closure].reduce((n, src) => n + gz('dist' + src), 0);
 if (chatJs > CHAT_JS_BUDGET) fail.push(`chat first-load JS is ${chatJs} B gzipped, over the ${CHAT_JS_BUDGET} B budget`);
 
 let chatCss = 0;
+let chatFirstLoad = 0;
 const chatHtml = pages.find((p) => p.endsWith('chat/index.html'));
 if (chatHtml) {
   for (const [, href] of readFileSync(chatHtml, 'utf8').matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)) chatCss += gz('dist' + href);
   if (chatCss > CHAT_CSS_BUDGET) fail.push(`chat CSS is ${chatCss} B gzipped, over the ${CHAT_CSS_BUDGET} B budget`);
+  // docs/tiered-access-design.md: "R2 first load <= 50 KB over the wire" (HTML + CSS + JS, gzipped).
+  chatFirstLoad = gz(chatHtml) + chatCss + chatJs;
+  if (chatFirstLoad > CHAT_FIRST_LOAD_BUDGET) fail.push(`chat first load is ${chatFirstLoad} B gzipped, over the ${CHAT_FIRST_LOAD_BUDGET} B R2 budget`);
 }
 
 // The installable shell: manifest, icons, service worker and headers have to
@@ -235,5 +240,5 @@ if (fail.length) {
 }
 console.log(
   `ok — ${pages.length} pages, largest ${biggest} bytes, links and assets resolve, ` +
-    `client JS only on /chat/ (${chatJs} B gzipped first load, budget ${CHAT_JS_BUDGET}; CSS ${chatCss} B, budget ${CHAT_CSS_BUDGET}), language rules held`,
+    `client JS only on /chat/ (${chatJs} B gzipped first load, budget ${CHAT_JS_BUDGET}; CSS ${chatCss} B, budget ${CHAT_CSS_BUDGET}; whole first load ${chatFirstLoad} B, budget ${CHAT_FIRST_LOAD_BUDGET}), language rules held`,
 );

@@ -28,19 +28,20 @@ const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
 <body>
   <a class="skip" href="#q" data-i18n="skipToQuestion">Skip to the question box</a>
   <div class="app">
-    <header class="bar">
-      <h1 data-i18n="appName">Shamwari Chat</h1>
-      <label class="sr-only" for="lang" data-i18n="language">Language</label>
-      <select id="lang" aria-describedby="review"></select>
-      <button type="button" id="new-chat" class="btn" data-i18n="newChat">New chat</button>
+    <header>
+      <div class="bar">
+        <h1 data-i18n="appName">Shamwari Chat</h1>
+        <label class="sr-only" for="lang" data-i18n="language">Language</label>
+        <select id="lang" aria-describedby="review"></select>
+        <button type="button" id="new-chat" class="btn" data-i18n="newChat">New chat</button>
+      </div>
+      <p id="offline" class="notice" role="status" hidden data-i18n="offlineBanner">
+        You are offline. You can still write questions; they will be sent later.
+      </p>
+      <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
+        This language is a draft and still needs review by a native speaker.
+      </p>
     </header>
-
-    <p id="offline" class="notice" role="status" hidden data-i18n="offlineBanner">
-      You are offline. You can still write questions; they will be sent later.
-    </p>
-    <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
-      This language is a draft and still needs review by a native speaker.
-    </p>
 
     <main id="thread" tabindex="-1">
       <p class="lead" data-i18n="tagline">Ask a question. Get the answer with the section it came from.</p>
@@ -76,6 +77,8 @@ const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
       <p id="key-error" class="small bad" role="alert" hidden data-i18n="authKeyBad">That does not look like a Shamwari key. It starts with sk_shamwari_.</p>
     </section>
 
+    <section class="ask" aria-labelledby="ask-title">
+      <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
     <div class="scope">
       <label for="scope" data-i18n="scopeLabel">Asking about</label>
       <select id="scope">
@@ -90,6 +93,7 @@ const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
       <textarea id="q" rows="1" enterkeyhint="send" data-i18n-attr="placeholder:placeholder" placeholder="Ask about law or tax"></textarea>
       <button type="submit" id="send" class="btn primary" data-i18n="send">Send</button>
     </form>
+    </section>
 
     <footer>
       <p data-i18n="footer">Answered by Shamwari Cloud (a routed model). This is not legal advice.</p>

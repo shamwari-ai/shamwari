@@ -68,7 +68,7 @@ export function renderAnswer(m: StoredMessage, a: Answer, s: Strings, lang: Lang
       ? h(
           'section',
           { class: 'sources', 'aria-label': s.sources },
-          h('h3', {}, s.sources),
+          h('h2', {}, s.sources),
           h('ul', {}, ...a.citations.map((c) => renderCitation(c, s, lang))),
         )
       : h('p', { class: 'note' }, s.noSources),
@@ -106,9 +106,14 @@ export function renderUser(m: StoredMessage, s: Strings, queue?: QueueActions): 
 export function renderPending(id: string, s: Strings): HTMLElement {
   return h(
     'article',
-    { class: 'msg bot pending', 'data-id': `${id}:pending`, role: 'status', 'aria-label': s.shamwari },
-    h('p', { class: 'who' }, s.shamwari),
-    h('p', { class: 'text' }, s.thinking, h('span', { class: 'dots', 'aria-hidden': 'true' }, ' ●●●')),
+    { class: 'msg bot pending', 'data-id': `${id}:pending`, 'aria-label': s.shamwari },
+    // The role sits on a div, not the article: an article may not carry it.
+    h(
+      'div',
+      { role: 'status' },
+      h('p', { class: 'who' }, s.shamwari),
+      h('p', { class: 'text' }, s.thinking, h('span', { class: 'dots', 'aria-hidden': 'true' }, ' ●●●')),
+    ),
   );
 }
 
@@ -126,10 +131,14 @@ export function renderScopeRefusal(id: string, s: Strings, actions: ErrorActions
   ask.addEventListener('click', actions.askGeneral);
   return h(
     'article',
-    { class: 'msg bot refusal', 'data-id': `${id}:error`, role: 'status', 'aria-label': s.shamwari },
-    h('p', { class: 'who' }, s.shamwari),
-    h('h3', {}, s.scopePersonalTitle),
-    h('p', { class: 'text' }, s.scopePersonalBody),
+    { class: 'msg bot refusal', 'data-id': `${id}:error`, 'aria-label': s.shamwari },
+    h(
+      'div',
+      { role: 'status' },
+      h('p', { class: 'who' }, s.shamwari),
+      h('h2', {}, s.scopePersonalTitle),
+      h('p', { class: 'text' }, s.scopePersonalBody),
+    ),
     ask,
   );
 }
@@ -143,10 +152,14 @@ export function renderError(
   if (e.kind === 'scope_requires_local_inference') return renderScopeRefusal(id, s, actions);
   const el = h(
     'article',
-    { class: 'msg bot error', 'data-id': `${id}:error`, role: 'alert', 'aria-label': s.shamwari },
-    h('p', { class: 'who' }, s.shamwari),
-    h('p', { class: 'text' }, s.errors[e.kind as keyof Strings['errors']] ?? s.errors.unknown),
-    e.retryAfterSec ? h('p', { class: 'note' }, `${s.retryIn} ${e.retryAfterSec} ${s.seconds}.`) : null,
+    { class: 'msg bot error', 'data-id': `${id}:error`, 'aria-label': s.shamwari },
+    h(
+      'div',
+      { role: 'alert' },
+      h('p', { class: 'who' }, s.shamwari),
+      h('p', { class: 'text' }, s.errors[e.kind as keyof Strings['errors']] ?? s.errors.unknown),
+      e.retryAfterSec ? h('p', { class: 'note' }, `${s.retryIn} ${e.retryAfterSec} ${s.seconds}.`) : null,
+    ),
   );
   if (e.upgradeUrl && (e.kind === 'payment_required' || e.kind === 'rate_limited')) {
     el.append(h('a', { class: 'btn', href: e.upgradeUrl, target: '_blank', rel: 'noopener noreferrer' }, s.upgrade));
