@@ -32,16 +32,20 @@ test('a question written offline is queued, then sent once when the network retu
 
 test('a queued question survives a reload and can be discarded', async ({ page, context }) => {
   await openChat(page);
+  // The reload below is served by the service worker, so make sure it is in charge first.
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   await context.setOffline(true);
   await ask(page, 'Will this still be here?');
   await expect(page.locator('article.queued')).toBeVisible();
 
-  await page.reload().catch(() => {});
-  await context.setOffline(false);
-  await page.goto('/chat/');
+  await page.reload(); // still offline: the shell and the queued question come from the device
   await page.waitForSelector('html[data-ready="true"]');
-  // Back online it was sent by itself on load.
-  await expect(page.locator('article.msg.bot').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('article.queued')).toContainText('Will this still be here?');
+
+  // Back online, it is sent by itself, in this same page (no navigation racing the send).
+  await context.setOffline(false);
+  // The answer itself (a citation), not the "pending" bubble that is also a bot message.
+  await expect(page.locator('article.msg.bot:not(.pending) .cite').first()).toBeVisible({ timeout: 15_000 });
 
   await context.setOffline(true);
   await ask(page, 'Discard me');
