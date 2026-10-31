@@ -118,3 +118,33 @@ change is compared against it.
 
 Soft only: re-run with `--replace` and the corrected file, or set `isActive` to
 false on a slug in Atlas (owner action). Nothing in the repo deletes a chunk.
+
+## The end-to-end contract test
+
+`scripts/e2e.sh` runs the real Worker code (`gateway/test/e2e.test.ts`) against a real
+Core process (`core/e2e_app.py`: Core's own app over an in-memory store holding the
+fixture corpus and one chunk that must never be served), with a fake model that
+answers from the system prompt it is sent. It runs in CI and needs no network or
+credentials. It proves:
+
+- A platform-scope question comes back with `s 56 Equality and non-discrimination`,
+  the authority and the effective date in the response, and the same section in the
+  prompt the model saw.
+- Another entity's chunk that matches the question exactly is never served.
+- A personal-scope request is a 409 `scope_requires_local_inference` with **zero**
+  provider calls, **zero** embedding calls, zero reads of the Ground store and zero queue messages,
+  including when `MIND_AVAILABLE` is `true`. `/v1/ground/context` with Mind available
+  retrieves without embedding the question at the edge.
+- Core refuses the same requests on its own, without the Worker's help.
+- `licenseClass` and `trainingEligible` are stamped from the model that actually
+  served: an open-weight model is trainable, a substituted unlisted one is
+  `restricted` and not, and Core independently refuses a restricted row marked
+  trainable.
+
+Each guard was checked by breaking it. It uses a fake store and a fake model, so it
+says nothing about Atlas scoring or a real model's wording.
+
+**Found while writing it:** with a question vector, `$vectorSearch` returns the nearest
+chunks however irrelevant, so an off-topic question is still "grounded" and is handed
+unrelated sections to cite (`it.todo` in the test). Core has no relevance floor; setting
+one needs real Atlas scores, so it is left for the first real-store evaluation.
