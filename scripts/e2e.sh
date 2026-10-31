@@ -3,8 +3,8 @@
 #
 #   scripts/e2e.sh
 #
-# Starts core/e2e_app.py (Core's real app over an in-memory store holding the fixture
-# corpus) on a free local port, runs gateway/test/e2e.test.ts against it, and stops it.
+# Starts core/e2e_app.py (Core's real app, talking over HTTP to a stand-in Nyuchi API that
+# holds the fixture corpus) on a free local port, runs gateway/test/e2e.test.ts against it, and stops it.
 # Needs Core's dependencies installed (pip install --require-hashes -r core/requirements.txt)
 # and `npm ci` done in gateway/. No network, no credentials, nothing deployed.
 set -euo pipefail
@@ -16,7 +16,7 @@ token="$("$python" -c 'import secrets; print(secrets.token_hex(16))')"
 log="$(mktemp)"
 
 cd "$root/core"
-E2E_APP=1 E2E_CORE_TOKEN="$token" "$python" -m uvicorn e2e_app:app --host 127.0.0.1 --port "$port" --log-level warning >"$log" 2>&1 &
+E2E_APP=1 E2E_PORT="$port" E2E_CORE_TOKEN="$token" "$python" -m uvicorn e2e_app:app --host 127.0.0.1 --port "$port" --log-level warning >"$log" 2>&1 &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true; rm -f "$log"' EXIT
 

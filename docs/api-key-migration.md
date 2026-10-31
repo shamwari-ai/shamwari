@@ -108,10 +108,10 @@ fail if a revoked, expired, wrong-type or unavailable result ever calls Core.
 
 ## Known gaps in the Core path
 
-> **A fix for both gaps below is prepared, tested and unmerged** (draft PR, refs #81).
-> It is the owner's change and waits for a named yes. Before merging it, run the
-> read-only count in that PR to confirm every active `sk_shamwari_` key has
-> `keyType: "shamwari"`; the fix refuses a missing or other type.
+> **Superseded (2026-10-31).** Core holds no database login and no longer looks keys up, so both gaps
+> below are gone from Core; `/auth/verify` answers 501. The gateway half of the earlier fix (a Core error
+> is no longer cached as an invalid key) is merged. Authenticating a customer key is gap G1 in
+> `docs/data-api-routes.md`.
 
 Core's `/auth/verify` (not touched here; the Core auth change is #81 and is the
 owner's) has two gaps that this plan has to account for before phase 5:
