@@ -47,7 +47,7 @@ export const STATUS: StatusItem[] = [
   {
     state: 'building',
     title: 'Shamwari Chat',
-    body: 'Ask in Shona, Ndebele or English and get the answer with the section it came from. A lightweight app that installs from the browser and is built for slow connections. It is being built and tested against a stand-in for the API; it is not on this site yet and does not answer real questions. Sign-in will use your Mukoko Account, and is decided but not built.',
+    body: 'Ask in Shona, Ndebele or English and get the answer with the section it came from. A lightweight app that installs from the browser and is built for slow connections. It is being built and tested against a stand-in for the API; it is not on this site yet and does not answer real questions yet. Sign-in will use your Mukoko Account, and is decided but not built.',
     issues: [83],
   },
   {
