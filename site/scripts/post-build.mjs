@@ -15,7 +15,23 @@ const read = (p) => readFileSync(join(out, p));
 const html = read('chat/index.html').toString('utf8');
 
 const refs = [...html.matchAll(/(?:href|src)="(\/[^"#?]+)"/g)].map((m) => m[1]);
-const precache = [...new Set(['/chat/', '/chat/manifest.webmanifest', ...refs.filter((r) => /^\/(_astro|chat)\//.test(r) || r === '/favicon.png' || r === '/apple-touch-icon.png'), '/chat/icons/icon-192.png'])].sort();
+
+// Everything the shell can need offline: the files the page names, the files its
+// scripts import, and the files its stylesheets point at. Reading the built files
+// (not guessing) means a later shared chunk or a font in the CSS cannot be left
+// out of the precache and break the shell offline.
+const wanted = new Set(refs.filter((r) => /^\/(_astro|chat)\//.test(r) || r === '/favicon.png' || r === '/apple-touch-icon.png'));
+const queue = [...wanted];
+while (queue.length) {
+  const f = queue.pop();
+  if (!/\.(js|css)$/.test(f)) continue;
+  const code = read(f).toString('utf8');
+  const found = f.endsWith('.js')
+    ? [...code.matchAll(/(?:from|import)\s*\(?\s*["']\.\/([^"']+)["']/g)].map((m) => `/_astro/${m[1]}`)
+    : [...code.matchAll(/url\(\s*["']?(\/[^"')?#]+)/g)].map((m) => m[1]);
+  for (const g of found) if (!wanted.has(g)) { wanted.add(g); queue.push(g); }
+}
+const precache = [...new Set(['/chat/', '/chat/manifest.webmanifest', ...wanted, '/chat/icons/icon-192.png'])].sort();
 
 const version = createHash('sha256')
   .update(precache.map((p) => `${p}:${createHash('sha256').update(read(p.endsWith('/') ? `${p}index.html` : p)).digest('hex')}`).join('\n'))
@@ -29,14 +45,25 @@ const SCOPE = '/chat/';
 
 self.addEventListener('install', (e) => {
   // Precache is all-or-nothing: a half-cached shell is worse than none.
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE).then((c) => c.addAll(PRECACHE)).then(() => {
+      // First install: take over at once, so the very first visit works offline.
+      // An UPDATE waits until every open tab is closed instead: a page that is
+      // already running keeps the files (and cache) it started with, and is never
+      // switched to a worker whose cache no longer holds them.
+      if (!self.registration.active) return self.skipWaiting();
+    }),
+  );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('shamwari-chat-') && k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => self.clients.claim()),
+    caches.keys().then((keys) => {
+      const old = keys.filter((k) => k.startsWith('shamwari-chat-') && k !== CACHE);
+      return Promise.all(old.map((k) => caches.delete(k))).then(() => {
+        if (!old.length) return self.clients.claim();
+      });
+    }),
   );
 });
 
@@ -51,17 +78,11 @@ self.addEventListener('fetch', (e) => {
   if (url.pathname === '/chat/sw.js') return;
 
   if (req.mode === 'navigate') {
-    // Shell first, so it opens at once on a bad connection; refresh it in the background.
-    e.respondWith(
-      caches.match('/chat/').then((hit) => {
-        const refresh = fetch(req).then((res) => {
-          if (res.ok) caches.open(CACHE).then((c) => c.put('/chat/', res.clone()));
-          return res;
-        });
-        if (hit) { e.waitUntil(refresh.catch(() => {})); return hit; }
-        return refresh;
-      }),
-    );
+    // Shell from cache, at once. It is NOT refreshed from here: fresh HTML would
+    // name hashed assets that this worker's precache does not hold. A new build
+    // ships a new worker (its file changes), which precaches the new shell and
+    // assets together and takes over once the old tabs are closed.
+    e.respondWith(caches.match('/chat/').then((hit) => hit || fetch(req)));
     return;
   }
   e.respondWith(caches.match(req).then((hit) => hit || fetch(req)));
@@ -69,7 +90,12 @@ self.addEventListener('fetch', (e) => {
 `;
 writeFileSync(join(out, 'chat/sw.js'), sw);
 
-const api = new URL(process.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai').origin;
+// The API origin comes from the built page itself, the one the app will really
+// call, so the CSP and the app can never disagree (an env var and a .env file
+// could, and a blocked request looks like "offline" to the person).
+const metaApi = html.match(/<meta name="shamwari-api" content="([^"]+)"/)?.[1];
+if (!metaApi) throw new Error('post-build: the chat page has no shamwari-api meta tag');
+const api = new URL(metaApi).origin;
 const csp = [
   "default-src 'self'",
   "script-src 'self'",
