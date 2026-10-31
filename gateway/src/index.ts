@@ -48,10 +48,27 @@ async function overQuota(env: Env, auth: AuthContext): Promise<boolean> {
   try {
     const total = await keyService(env).usageTotal(auth.ownerEntityId, billingPeriod());
     return total > auth.monthlyTokenCap;
-  } catch {
-    // Fail open. A rollup outage must not stop a paying customer.
+  } catch (e) {
+    // Fail open. A rollup outage must not stop a paying customer. But it also means the cap is
+    // not enforced while it lasts, so say so (no identifier, no content in the line).
+    console.warn('quota rollup failed, cap not enforced', String(e));
     return false;
   }
+}
+
+/**
+ * Whether a stored conversation may ever reach the Mind training pipeline. Every term is a
+ * way to say no; there is no way to say yes except being an open_weight answer to a caller
+ * who was asked. Channel traffic and signed-in people (WorkOS) have not been asked, so
+ * neither is trainable until the owner decides on consent.
+ */
+export function conversationTrainable(
+  scope: string,
+  licenseClass: string,
+  viaChannel: boolean,
+  keyType: string,
+): boolean {
+  return scope !== 'personal' && licenseClass === 'open_weight' && !viaChannel && keyType !== 'workos';
 }
 
 interface ChatBody {
@@ -92,9 +109,15 @@ async function admit(
   if (!authed.ok) {
     // 'unavailable' is a 503, not a 401: the caller's key may be fine, and a
     // client that drops a good key on a 401 would turn our outage into theirs.
-    return authed.reason === 'unavailable'
-      ? { ok: false, response: json({ error: 'auth_unavailable' }, 503, { 'Retry-After': '5' }) }
-      : { ok: false, response: json({ error: 'invalid_api_key' }, 401) };
+    if (authed.reason === 'unavailable') {
+      return { ok: false, response: json({ error: 'auth_unavailable' }, 503, { 'Retry-After': '5' }) };
+    }
+    // A real sign-in that is not provisioned for Shamwari. Not a 401: the client would send the
+    // person back to sign in and hand them a new token with the same gap.
+    if (authed.reason === 'forbidden') {
+      return { ok: false, response: json({ error: 'not_provisioned', reason: authed.detail }, 403) };
+    }
+    return { ok: false, response: json({ error: 'invalid_api_key' }, 401) };
   }
   const auth = authed.auth;
   const quota = async (): Promise<Response | null> =>
@@ -476,9 +499,12 @@ const worker = {
             // most likely to type something personal, so it is metered and
             // nothing more until the owner decides on consent.
             trainingEligible:
-              decision.scope !== 'personal' &&
-              result.licenseClass === 'open_weight' &&
-              !req.headers.has('X-Shamwari-Channel'),
+              conversationTrainable(
+                decision.scope,
+                result.licenseClass,
+                req.headers.has('X-Shamwari-Channel'),
+                auth.keyType,
+              ),
             promoted: false,
             lastMessageAt: now,
             createdAt: now,

@@ -55,8 +55,8 @@ mode follows the device). Mzizi has no chat or citation component today.
   after a dropped connection is replayed by the gateway instead of answered and
   metered twice.
 - **Scope.** The app sends `scope: community` or `platform` and never
-  `personal`. A personal question gets the gateway's `409
-scope_requires_local_inference`, and the app explains it kindly: personal
+  `personal`. A personal question gets the gateway's 409
+  (`scope_requires_local_inference`), and the app explains it kindly: personal
   questions need Shamwari Mind on the device, which is not shipped yet. It is
   never rendered as a generic error.
 - **Language claims.** The footer says "Answered by Shamwari Cloud (a routed
@@ -78,28 +78,12 @@ first without touching the chat:
    session's classifier), so this is a proposal to check against the Console,
    not a description of it.
 
-### Proposal: how a signed-in person gets a metered per-person key
+### Sign-in: WorkOS access tokens (decided 2026-10-31)
 
-1. The chat redirects to AuthKit (Mukoko Account) and returns to
-   `https://shamwari.ai/chat/callback` with an authorization code.
-2. A Servers API route (new, internal, namespace `/v1/shamwari`) exchanges the
-   code, finds the person, and **issues or returns that person's key** in
-   `platform.api_keys`: `key_type = "shamwari"`, `owner_person_id` set, tier
-   `community`, scopes `["community","platform"]` (never `personal`), a small
-   `monthly_token_cap`. This is exactly the shape `docs/servers-api-contract.md`
-   already verifies, so the gateway needs no change to meter it per person.
-3. The key is returned once to the browser and stored on the device. Signing out
-   removes it; the Console can revoke it, and the gateway stops honouring it
-   within `AUTH_CACHE_TTL` (60 s).
-4. Risk to accept or reject: a key in `localStorage` is readable by script on the
-   origin. Mitigations are a strict CSP on `/chat/` (no third-party script), a
-   low cap, no `personal` scope, and revocation. The stronger alternative is a
-   session cookie plus a same-origin Worker that attaches the key, which adds a
-   server component this repo deliberately does not have yet.
-
-**Needs the owner:** the Servers API issuing route, a WorkOS redirect URI for
-`https://shamwari.ai/chat/callback`, and a decision between the two storage
-options above.
+A signed-in person authenticates with their WorkOS access token as the Bearer credential, not a
+minted key. The gateway verifies it offline and meters per person; a thin session Worker holds
+the cookie and refresh token. The design, the revocation latency and what the owner must do are
+in `docs/chat-signin.md`. The `AuthProvider` seam above is where the second mode plugs in.
 
 ## Gateway changes this needs (not made here)
 

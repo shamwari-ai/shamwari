@@ -1,5 +1,6 @@
 import type { Env, AuthContext } from './types';
 import { keyService } from './keys';
+import { looksLikeJwt, verifyWorkosToken } from './workos';
 
 async function sha256(raw: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
@@ -8,7 +9,8 @@ async function sha256(raw: string): Promise<string> {
 
 export type AuthResult =
   | { ok: true; auth: AuthContext }
-  | { ok: false; reason: 'invalid' | 'unavailable' };
+  | { ok: false; reason: 'invalid' | 'unavailable' }
+  | { ok: false; reason: 'forbidden'; detail: string };
 
 /**
  * KV first, key service on miss. Only the hash is ever transmitted or cached,
@@ -24,7 +26,19 @@ export type AuthResult =
 export async function authenticate(req: Request, env: Env): Promise<AuthResult> {
   const header = req.headers.get('Authorization') ?? '';
   const raw = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
-  if (!raw.startsWith('sk_shamwari_')) return { ok: false, reason: 'invalid' };
+
+  // Two credential shapes, told apart by prefix and never tried against each other.
+  // A WorkOS access token is verified offline (src/workos.ts) and needs no cache: the
+  // signature check is the whole cost, and a revoked session ends at the token's `exp`.
+  if (!raw.startsWith('sk_shamwari_')) {
+    if (!looksLikeJwt(raw)) return { ok: false, reason: 'invalid' };
+    const outcome = await verifyWorkosToken(raw, env);
+    if (outcome.status === 'ok') return { ok: true, auth: outcome.ctx };
+    if (outcome.status === 'forbidden') {
+      return { ok: false, reason: 'forbidden', detail: outcome.reason };
+    }
+    return { ok: false, reason: outcome.status };
+  }
 
   const hash = await sha256(raw);
   const cacheKey = `auth:${hash}`;
