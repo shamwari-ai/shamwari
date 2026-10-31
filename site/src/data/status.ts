@@ -34,20 +34,20 @@ export const STATUS: StatusItem[] = [
   {
     state: 'building',
     title: 'The Zimbabwean legal and tax corpus',
-    body: 'Sources are being reviewed and approved one at a time — we ingest what we have the rights to, nothing scraped first and asked about later. The Constitution of Zimbabwe is first in.',
+    body: 'Sources are being reviewed and approved one at a time: we ingest what we have the rights to, nothing scraped first and asked about later. Nothing is loaded yet, so Shamwari cannot cite a real source today. The Constitution of Zimbabwe goes in first. ZimLII, a free library of Zimbabwean law, licenses its legislation for non-commercial use by default, which does not fit a commercial service, so it stays out until we have its permission.',
     issues: [17, 18],
     highlight: true,
   },
   {
     state: 'building',
     title: 'Shamwari API',
-    body: 'An OpenAI-style API for Shamwari Cloud. The gateway is deployed and answers, but it cannot accept a key until Core is deployed. Keys, usage and token metering are next.',
+    body: 'An OpenAI-style API for Shamwari Cloud. The gateway is running and answers, but it accepts no key yet: the service behind it is not deployed and the key store is still being built. How developers get keys is not decided.',
     issues: [19],
   },
   {
     state: 'building',
     title: 'Shamwari Chat',
-    body: 'Ask in Shona, Ndebele or English and get the answer with the section it came from. A lightweight app that installs from the browser and is built for slow connections. It is being built and tested against a stand-in for the API; it does not answer real questions yet.',
+    body: 'Ask in Shona, Ndebele or English and get the answer with the section it came from. A lightweight app that installs from the browser and is built for slow connections. It is being built and tested against a stand-in for the API; it is not on this site yet and does not answer real questions. Sign-in will use your Mukoko Account, and is decided but not built.',
     issues: [83],
   },
   {

@@ -297,46 +297,65 @@ unqueryable vectors. Keep that behaviour.
 
 ## Current state
 
-| Piece                                     | Status                                                                 |
-| ----------------------------------------- | ---------------------------------------------------------------------- |
-| Supabase schema + provenance gates        | live, advisors clean                                                   |
-| Mongo indexes, Ground vector + text       | live, READY                                                            |
-| 22 corpus sources seeded                  | 5 blocked pending licence review                                       |
-| `core/`                                   | written, syntax-verified, **not deployed**                             |
-| `gateway/`                                | written, typecheck clean, structural assertions pass, **not deployed** |
-| rule-1 enforcement downstream of the gate | fixed 2026-08-27, 3 defects, tests added                               |
-| `shamwari.knowledgeBase` content          | **EMPTY — this is the only blocker to a demo**                         |
+As of 2026-10-31. "Live" means running and reachable today; "merged" means on
+`staging` and **not deployed**. Rows marked _owner statement_ are facts about other
+repositories that the owner relayed and this repo's session could not read.
+
+| Piece                                     | Status                                                                                                                                                                                                                                                                                                                   |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Supabase schema + provenance gates        | live, advisors clean                                                                                                                                                                                                                                                                                                     |
+| Mongo indexes, Ground vector + text       | live, READY                                                                                                                                                                                                                                                                                                              |
+| Corpus sources                            | 22 seeded: 15 approved, 7 not (checked live 2026-10-31); see the blocked list below                                                                                                                                                                                                                                      |
+| `shamwari.knowledgeBase` content          | **EMPTY (count 0, checked 2026-10-31).** No citation demo exists yet                                                                                                                                                                                                                                                     |
+| `www.shamwari.ai`, `docs.shamwari.ai`     | live                                                                                                                                                                                                                                                                                                                     |
+| `gateway/`                                | **deployed** (Worker answers `/health`, `mind: false`), but **no customer key is accepted**: key verification is not wired to anything that is running                                                                                                                                                                   |
+| `core/`                                   | merged, **not deployed**: image never built, no Fly app, `core.shamwari.ai` does not resolve. Holds **no database login**: it reaches data only through the Nyuchi API (#127, `docs/data-api-routes.md`)                                                                                                                 |
+| Chat (`site/src/chat`, `/chat/`)          | merged to `staging` (shell #116, thread and citations #119, with gateway support #124 and #125), **not released**: `www.shamwari.ai/chat/` is a 404. Runs against a stand-in; does not answer real questions                                                                                                             |
+| Chat sign-in                              | **decision, not built:** Mukoko Account (WorkOS) tokens verified at the gateway, no per-user keys (owner, 2026-10-31). Spec `docs/chat-signin.md`. Gateway change is #130, draft, needs the owner's approval                                                                                                             |
+| Machine and developer keys                | **undecided.** Seam to the Servers API is merged and off (`SERVERS_API_ENABLED=false`); the ledger that would hold the keys is not deployed (`nyuchi-ledger` pending, checked 2026-10-31)                                                                                                                                |
+| Servers API, ledger, Nyuchi API, Console  | _owner statement:_ the Servers API's ledger stores are being built now; ledger code, bring-up and restore-drill scripts released to `data-infra` main, nothing deployed; Nyuchi API citation fields and a locked Ground-ingest route, identity sync, sessions API and Console work merged to their staging, not deployed |
+| rule-1 enforcement downstream of the gate | fixed 2026-08-27, 3 defects, tests added; rule 1 and rule 2 are counted in the end-to-end contract test (#122)                                                                                                                                                                                                           |
+| Billing                                   | off. Meter usage, invoice the first ten customers by hand                                                                                                                                                                                                                                                                |
+
+Open drafts: #130 (WorkOS-first gateway auth), #120 and #123 (chat offline shell and
+accessibility tests), #129 (a note that Core holds no database login).
 
 ### The single next step
 
-Deploy Core, then ingest the Constitution:
+Everything in the way is an owner step; nothing in the repo does it. In order:
 
-```bash
-cd core
-python ingest_ground.py --source "Constitution of Zimbabwe" \
-  --file ./constitution-2013.txt \
-  --title "Constitution of Zimbabwe Amendment (No. 20) Act 2013" \
-  --slug constitution-2013 --effective-from 2013-05-22 --dataset zw-law-v1
-```
-
-It is the only legal source currently approved, ground-eligible **and**
-mind-eligible. Public domain, foundational, and it makes the citation demo real.
+1. **Create the Core Fly app and set its secrets** (`docs/core-fly-runbook.md`), then
+   deploy Core. Until then the gateway cannot answer a real question.
+2. **Ingest the Constitution** (`docs/ground-ingest.md`). It needs the official PDF
+   downloaded in a browser (the publisher's page blocks scripts) and its terms read.
+   `core/ingest_ground.py` still writes with its own four credentials. _Owner
+   statement, not verifiable here:_ the first ingest will go through the Nyuchi API's
+   locked ingest route instead, which needs four owner steps: a Postgres login, the Fly
+   secret `SHAMWARI_CORPUS_DATABASE_URL`, a redeploy of the `nyuchi-ai` Worker and an
+   ingest key. Either way this is what makes the citation demo real. The Constitution
+   is public domain, foundational, approved, ground-eligible and mind-eligible; other
+   sources are approved too, but it does not answer tax questions.
+3. **Set up WorkOS for Chat sign-in:** a JWT template and the redirect URI
+   `https://shamwari.ai/chat/callback`, then approve #130.
+4. **Decide the machine and developer key path**, and when the ledger is deployed
+   (the owner runs its `bring-up.sh`).
 
 ---
 
 ## Blocked on human decisions — do not resolve these in code
 
-Five corpus sources are `is_approved = false` because their terms have not been
-read. `ingest_ground.py` **refuses** them rather than warning and continuing.
-Keep that behaviour.
+Seven corpus sources are `is_approved = false` (checked live 2026-10-31): the five
+below, plus Zimbabwe Government Publications and Shamwari Community Contributions.
+`ingest_ground.py` **refuses** them rather than warning and continuing. Keep that
+behaviour.
 
-| Source           | Why blocked                                                                                                                       |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| ZimLII           | Likely CC-BY via AfricanLII/Laws.Africa. **Highest-value unblock, probably a 5-minute read.**                                     |
-| Veritas Zimbabwe | Best SI coverage in Zimbabwe. Partnership candidate — approach before scraping.                                                   |
-| AGRITEX          | Ministry terms unconfirmed                                                                                                        |
-| MoHCC / EDLIZ    | Clinical accuracy — human review mandatory before Ground eligibility                                                              |
-| ZIMSEC           | **DO NOT SCRAPE.** Copyrighted, needs a licence agreement. Probably the most commercially valuable education asset once licensed. |
+| Source           | Why blocked                                                                                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ZimLII           | **Terms read 2026-10-31:** default licence is CC BY-NC 4.0 (no commercial use), which conflicts with selling Shamwari. Some collections may carry other licences (check each); otherwise needs a written agreement. |
+| Veritas Zimbabwe | Best SI coverage in Zimbabwe. Partnership candidate — approach before scraping.                                                                                                                                     |
+| AGRITEX          | Ministry terms unconfirmed                                                                                                                                                                                          |
+| MoHCC / EDLIZ    | Clinical accuracy — human review mandatory before Ground eligibility                                                                                                                                                |
+| ZIMSEC           | **DO NOT SCRAPE.** Copyrighted, needs a licence agreement. Probably the most commercially valuable education asset once licensed.                                                                                   |
 
 Scraped news (`news.articles`, 23,231 docs) is Ground-eligible with citation
 and link-out. **Not** Mind training data without a redistribution licence.
