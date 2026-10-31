@@ -51,12 +51,12 @@ API. The API authenticates a key from the raw key (`whoami`). Options:
 - **A (recommended): the Worker calls `GET https://api.nyuchi.com/v1/shamwari/whoami` with the
   customer's own key** (`X-API-Key`), caches the result by hash as today, and Core is not in the
   path. The raw key goes to the first-party API, never to Core. Needs:
-  1. `whoami` to return `scopes` (the key's `personal`/`community`/`platform` entitlement, per
+  - `whoami` to return `scopes` (the key's `personal`/`community`/`platform` entitlement, per
      `docs/servers-api-contract.md`) and to answer 401 `{"error":"invalid_key"}` for an unknown,
      revoked or expired key, and for any key whose `key_type` is not `shamwari`. Today it returns
      `key_type` of `internal` or `external` only.
-  2. A key type `shamwari` that the Console can mint (the shared-table decision of 2026-10-29).
-  3. The Worker's `KeyService.verify(prefix, hash)` seam to take the raw key, and `authenticate`
+  - A key type `shamwari` that the Console can mint (the shared-table decision of 2026-10-29).
+  - The Worker's `KeyService.verify(prefix, hash)` seam to take the raw key, and `authenticate`
      to stop requiring the `sk_shamwari_` prefix if Shamwari keys use the API's `nyk_`/`nys_` form.
      That is the gateway auth change in #81 and the owner's.
 - B: `POST /v1/shamwari/keys/verify {key_prefix, key_hash}` as in the Servers API contract. The
