@@ -18,6 +18,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import secrets
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -68,7 +69,8 @@ asyncio.run(
 )
 
 #: A real key, so the Worker's key check goes to Core's /auth/verify and not to a stub.
-E2E_API_KEY = "sk_shamwari_e2e_0123456789abcdef"
+# Random per process, built at runtime: no key-shaped literal in the repo for a secret scanner to flag.
+E2E_API_KEY = "sk_shamwari_" + secrets.token_hex(16)
 asyncio.run(
     client["platform"].apiKeys.insert_many(
         [
