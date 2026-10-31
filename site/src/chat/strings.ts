@@ -39,6 +39,7 @@ export const en = {
   example2: 'What are my rights if I am arrested?',
   example3: 'Who must pay income tax in Zimbabwe?',
   settings: 'Settings',
+  install: 'Install app',
   scopeLabel: 'Asking about',
   scope: {
     platform: 'General knowledge',
@@ -115,6 +116,7 @@ export const sn: Strings = {
   example2: 'Kodzero dzangu dziri dzipi kana ndabatwa?',
   example3: 'Ndiani anofanira kubhadhara mutero wemari inopinza muZimbabwe?',
   settings: 'Zvirongwa',
+  install: 'Isa app',
   scopeLabel: 'Mubvunzo wekuti',
   scope: {
     platform: 'Ruzivo rwakawandisa',
@@ -188,6 +190,7 @@ export const nd: Strings = {
   example2: 'Amalungelo ami ayini nxa ngiboshiwe?',
   example3: 'Ngubani okumele akhokhe intela yemali engenayo eZimbabwe?',
   settings: 'Izilungiso',
+  install: 'Faka i-app',
   scopeLabel: 'Umbuzo ngokuthi',
   scope: {
     platform: 'Ulwazi olujwayelekileyo',

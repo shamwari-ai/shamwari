@@ -76,14 +76,31 @@ export function renderAnswer(m: StoredMessage, a: Answer, s: Strings, lang: Lang
   );
 }
 
-export function renderUser(m: StoredMessage, s: Strings): HTMLElement {
-  return h(
+export interface QueueActions {
+  sendNow(): void;
+  discard(): void;
+}
+
+export function renderUser(m: StoredMessage, s: Strings, queue?: QueueActions): HTMLElement {
+  const el = h(
     'article',
     { class: 'msg user', 'data-id': m.id, 'aria-label': s.you },
     h('p', { class: 'who' }, s.you),
     h('p', { class: 'text' }, m.text),
-    m.status === 'queued' ? h('p', { class: 'note', role: 'status' }, s.queued) : null,
   );
+  if (m.status === 'queued') {
+    el.classList.add('queued');
+    // A status, not an alert: waiting to send is the app working as designed.
+    el.append(h('p', { class: 'note', role: 'status' }, s.offlineQueued));
+    if (queue) {
+      const now = h('button', { type: 'button', class: 'btn' }, s.sendNow);
+      const drop = h('button', { type: 'button', class: 'btn' }, s.discard);
+      now.addEventListener('click', queue.sendNow);
+      drop.addEventListener('click', queue.discard);
+      el.append(h('div', { class: 'row' }, now, drop));
+    }
+  }
+  return el;
 }
 
 export function renderPending(id: string, s: Strings): HTMLElement {
