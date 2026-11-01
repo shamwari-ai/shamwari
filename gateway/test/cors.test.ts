@@ -172,6 +172,15 @@ describe('configuration', () => {
     expect(allowedOrigins({ CORS_ORIGINS: 'https://shamwari.ai/' })).toEqual(['https://shamwari.ai']);
   });
 
+  it('strips every trailing slash, quickly, however many there are', () => {
+    const many = 'https://shamwari.ai' + '/'.repeat(100_000);
+    const start = Date.now();
+    expect(allowedOrigins({ CORS_ORIGINS: many })).toEqual(['https://shamwari.ai']);
+    expect(Date.now() - start).toBeLessThan(500);
+    // An entry that is only slashes is blank once stripped, so it is dropped.
+    expect(allowedOrigins({ CORS_ORIGINS: '///, https://a.example/' })).toEqual(['https://a.example']);
+  });
+
   it('can be set, and trims and ignores blanks', () => {
     expect(allowedOrigins({ CORS_ORIGINS: ' https://a.example , ,https://b.example ' })).toEqual([
       'https://a.example',
