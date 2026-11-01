@@ -19,12 +19,16 @@ import * as idem from './idempotency';
 import { drain } from './sink';
 import { detectLanguage } from './lang';
 import { probe, healthDoc } from './probe';
+import { preflight, withCors } from './cors';
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body, null, 2), {
     status,
     headers: { 'Content-Type': 'application/json', ...headers },
   });
+
+/** Web chat traffic. The marker is the channel name, so SMS and USSD are not caught by it. */
+const isPwa = (req: Request): boolean => req.headers.get('X-Shamwari-Channel')?.toLowerCase() === 'pwa';
 
 /** The citations a caller sees, in the shape every response uses. */
 const citationsOf = (chunks: GroundChunk[]) =>
@@ -44,10 +48,27 @@ async function overQuota(env: Env, auth: AuthContext): Promise<boolean> {
   try {
     const total = await keyService(env).usageTotal(auth.ownerEntityId, billingPeriod());
     return total > auth.monthlyTokenCap;
-  } catch {
-    // Fail open. A rollup outage must not stop a paying customer.
+  } catch (e) {
+    // Fail open. A rollup outage must not stop a paying customer. But it also means the cap is
+    // not enforced while it lasts, so say so (no identifier, no content in the line).
+    console.warn('quota rollup failed, cap not enforced', String(e));
     return false;
   }
+}
+
+/**
+ * Whether a stored conversation may ever reach the Mind training pipeline. Every term is a
+ * way to say no; there is no way to say yes except being an open_weight answer to a caller
+ * who was asked. Channel traffic and signed-in people (WorkOS) have not been asked, so
+ * neither is trainable until the owner decides on consent.
+ */
+export function conversationTrainable(
+  scope: string,
+  licenseClass: string,
+  viaChannel: boolean,
+  keyType: string,
+): boolean {
+  return scope !== 'personal' && licenseClass === 'open_weight' && !viaChannel && keyType !== 'workos';
 }
 
 interface ChatBody {
@@ -88,9 +109,15 @@ async function admit(
   if (!authed.ok) {
     // 'unavailable' is a 503, not a 401: the caller's key may be fine, and a
     // client that drops a good key on a 401 would turn our outage into theirs.
-    return authed.reason === 'unavailable'
-      ? { ok: false, response: json({ error: 'auth_unavailable' }, 503, { 'Retry-After': '5' }) }
-      : { ok: false, response: json({ error: 'invalid_api_key' }, 401) };
+    if (authed.reason === 'unavailable') {
+      return { ok: false, response: json({ error: 'auth_unavailable' }, 503, { 'Retry-After': '5' }) };
+    }
+    // A real sign-in that is not provisioned for Shamwari. Not a 401: the client would send the
+    // person back to sign in and hand them a new token with the same gap.
+    if (authed.reason === 'forbidden') {
+      return { ok: false, response: json({ error: 'not_provisioned', reason: authed.detail }, 403) };
+    }
+    return { ok: false, response: json({ error: 'invalid_api_key' }, 401) };
   }
   const auth = authed.auth;
   const quota = async (): Promise<Response | null> =>
@@ -472,9 +499,12 @@ const worker = {
             // most likely to type something personal, so it is metered and
             // nothing more until the owner decides on consent.
             trainingEligible:
-              decision.scope !== 'personal' &&
-              result.licenseClass === 'open_weight' &&
-              !req.headers.has('X-Shamwari-Channel'),
+              conversationTrainable(
+                decision.scope,
+                result.licenseClass,
+                req.headers.has('X-Shamwari-Channel'),
+                auth.keyType,
+              ),
             promoted: false,
             lastMessageAt: now,
             createdAt: now,
@@ -518,6 +548,15 @@ const worker = {
           },
         },
       ];
+
+      // The web chat (X-Shamwari-Channel: pwa) keeps no content on the server
+      // (owner decision, 2026-10-31): no conversation document, so no message or
+      // answer text is stored and nothing from it can become training material.
+      // What remains is the usage event, which already carries the request id,
+      // scope, model, token counts, path and time, and never any text.
+      if (isPwa(req)) {
+        for (let i = sink.length - 1; i >= 0; i--) if (sink[i]?.collection === 'conversations') sink.splice(i, 1);
+      }
 
       // Usage goes to the meter, which may be the Servers API; everything
       // else (conversations, messages) stays on the sink queue.
@@ -687,4 +726,24 @@ const worker = {
   },
 } satisfies ExportedHandler<Env, SinkMessage>;
 
-export default worker;
+/**
+ * CORS wraps the router from outside, so every response a browser can see from
+ * the chat endpoint (a 401, a 409, a 429, and an unexpected 500) carries it. An
+ * exception that escaped without it would reach the page as an opaque network
+ * failure, which the chat app would show as "offline" and hide the real fault.
+ */
+export default {
+  ...worker,
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const early = preflight(req, env);
+    if (early) return early;
+    let res: Response;
+    try {
+      res = await worker.fetch(req, env, ctx);
+    } catch (e) {
+      console.error('unhandled error', String(e));
+      res = json({ error: 'internal_error' }, 500);
+    }
+    return withCors(req, env, res);
+  },
+} satisfies ExportedHandler<Env, SinkMessage>;

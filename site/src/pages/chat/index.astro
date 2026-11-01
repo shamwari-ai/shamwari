@@ -1,0 +1,118 @@
+---
+// Shamwari Chat: the R1 chat app and R2 Lite PWA from shamwari-ai/shamwari#83.
+//
+// Its own tiny layout, not Layout.astro: no web fonts, no marketing header,
+// and the only client JS on the site. The page is complete English HTML
+// without JavaScript; the script translates it and runs the chat.
+import '../../chat/chat.css';
+import { en } from '../../chat/strings';
+
+// Fixed at build time and never read from the URL (see chat/main.ts).
+const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Shamwari Chat</title>
+  <meta name="description" content="Ask in Shona, Ndebele or English and get the answer with the section it came from." />
+  <link rel="canonical" href="https://shamwari.ai/chat/" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  <meta name="theme-color" content="#283593" />
+  <meta name="shamwari-api" content={api} />
+  <link rel="manifest" href="/chat/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Shamwari" />
+</head>
+<body>
+  <a class="skip" href="#q" data-i18n="skipToQuestion">Skip to the question box</a>
+  <div class="app">
+    <header>
+      <div class="bar">
+        <h1 data-i18n="appName">Shamwari Chat</h1>
+        <label class="sr-only" for="lang" data-i18n="language">Language</label>
+        <select id="lang" aria-describedby="review"></select>
+        <button type="button" id="new-chat" class="btn" data-i18n="newChat">New chat</button>
+      </div>
+      <p id="offline" class="notice" role="status" hidden data-i18n="offlineBanner">
+        You are offline. You can still write questions; they will be sent later.
+      </p>
+      <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
+        This language is a draft and still needs review by a native speaker.
+      </p>
+    </header>
+
+    <main id="thread" tabindex="-1">
+      <p class="lead" data-i18n="tagline">Ask a question. Get the answer with the section it came from.</p>
+      <p><button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button></p>
+      <section id="empty" aria-labelledby="try">
+        <h2 id="try" class="small" data-i18n="tryAsking">Try asking</h2>
+        <ul class="examples">
+          <li><button type="button" class="btn chip" data-example data-i18n="example1">What does the Constitution say about equality?</button></li>
+          <li><button type="button" class="btn chip" data-example data-i18n="example2">What are my rights if I am arrested?</button></li>
+          <li><button type="button" class="btn chip" data-example data-i18n="example3">Who must pay income tax in Zimbabwe?</button></li>
+        </ul>
+      </section>
+      <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
+      <details id="history" hidden>
+        <summary data-i18n="earlierChats">Earlier chats</summary>
+        <ul id="history-list"></ul>
+      </details>
+      <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>
+    </main>
+
+    <section id="auth" class="panel" aria-labelledby="auth-title" hidden>
+      <h2 id="auth-title" data-i18n="authTitle">Sign in to ask</h2>
+      <p>
+        <button type="button" class="btn" disabled aria-describedby="mukoko-soon" data-i18n="authMukoko">Sign in with Mukoko</button>
+      </p>
+      <p id="mukoko-soon" class="small" data-i18n="authMukokoSoon">Mukoko sign-in is coming. For now, use a developer key.</p>
+      <h3 data-i18n="authDevTitle">Developer key (testing only)</h3>
+      <p class="small" data-i18n="authDevHelp">Paste a Shamwari API key. It is kept on this device only and is sent only to the Shamwari API. Do not use this on a shared phone.</p>
+      <form id="auth-form" class="row">
+        <label class="sr-only" for="key" data-i18n="authDevTitle">Developer key (testing only)</label>
+        <input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk_shamwari_…" />
+        <button type="submit" class="btn primary" data-i18n="authDevSave">Use this key</button>
+      </form>
+      <p id="key-error" class="small bad" role="alert" hidden data-i18n="authKeyBad">That does not look like a Shamwari key. It starts with sk_shamwari_.</p>
+    </section>
+
+    <section class="ask" aria-labelledby="ask-title">
+      <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
+    <div class="scope">
+      <label for="scope" data-i18n="scopeLabel">Asking about</label>
+      <select id="scope">
+        <option value="platform" data-i18n="scope.platform">General knowledge</option>
+        <option value="community" data-i18n="scope.community">Community knowledge</option>
+        <option value="personal" data-i18n="scope.personal">My own information</option>
+      </select>
+    </div>
+
+    <form id="composer" class="composer" autocomplete="off">
+      <label class="sr-only" for="q" data-i18n="placeholder">Ask about law or tax</label>
+      <textarea id="q" rows="1" enterkeyhint="send" data-i18n-attr="placeholder:placeholder" placeholder="Ask about law or tax"></textarea>
+      <button type="submit" id="send" class="btn primary" data-i18n="send">Send</button>
+    </form>
+    </section>
+
+    <footer>
+      <p data-i18n="footer">{en.footer}</p>
+      <p data-i18n="storedHere">Your chat history is saved on this device only. Shamwari keeps a record of each question it answers, to run the service. Questions are not used to train Shamwari Mind.</p>
+      <details class="more">
+        <summary data-i18n="settings">Settings</summary>
+        <p class="small" data-i18n="privacyDetail">{en.privacyDetail}</p>
+        <p class="row">
+          <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
+          <button type="button" id="signout" class="btn" hidden data-i18n="authDevClear">Remove key</button>
+        </p>
+      </details>
+      <p id="toast" class="small" role="status"></p>
+    </footer>
+  </div>
+  <script>
+    import '../../chat/main';
+  </script>
+</body>
+</html>

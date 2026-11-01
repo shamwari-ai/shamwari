@@ -15,9 +15,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --require-hashes -r requirements.txt
 
-COPY main.py replay.py telemetry.py usage_event_fields.json ingest_ground.py ./
+# ingest_ground.py is deliberately NOT here: it reads database and Cloudflare
+# credentials Core must never be given, and it runs from the operator's shell.
+COPY main.py nyuchi_api.py ./
 
-# Not root: Core holds database credentials and enforces rule 1.
+# Not root: Core enforces rule 1 and holds the data API key.
 RUN useradd --system --uid 10001 --no-create-home core
 USER core
 

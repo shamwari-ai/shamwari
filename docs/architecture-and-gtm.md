@@ -126,8 +126,10 @@ instead of by guesswork. Read it weekly.
 3. **Verticals** — AGRITEX, MoHCC, ZIMSEC (licence required)
 4. **Language** — Masakhane, Common Voice, VOA, UZ ALRI partnership
 
-Five sources are blocked pending licence review. Ingestion refuses them rather
-than warning. ZimLII is the highest-value unblock.
+Seven sources are not approved. Ingestion refuses them rather than warning.
+ZimLII's terms were read on 2026-10-31: its default licence is CC BY-NC 4.0, which
+does not fit commercial use, so it needs permission or a collection with a
+different licence.
 
 ---
 

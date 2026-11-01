@@ -28,3 +28,9 @@ and never contains that.
 """
 regexTarget = "line"
 regexes = ['''Bearer sk_shamwari_\.\.\.''', '''SECRET-\d''']
+
+# The one historical commit that still trips the history scan. It introduced the
+# obviously fake end-to-end key `sk_shamwari_e2e_0123...` in core/e2e_app.py; #128
+# builds that value at runtime, so no current file carries it. The entry covers only that
+# commit; every other commit is still scanned.
+commits = ["e85168eeac54ca8918143b45b910766d7776e37c"]

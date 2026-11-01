@@ -1,4 +1,8 @@
-# Core's dependency SPEC. Hand-edited.
+# Core's SERVICE dependency spec. Hand-edited.
+#
+# No database driver is here, on purpose: Core holds no database login and reaches data
+# through the Nyuchi API (httpx). The ingest script, which does talk to the stores from the
+# operator's own machine, has its own spec: requirements-ingest.in.
 #
 # `requirements.txt` is GENERATED from this file and is what actually gets
 # installed — fully pinned, with hashes. Do not edit it by hand.
@@ -21,7 +25,5 @@
 
 fastapi>=0.115
 uvicorn[standard]>=0.32
-motor>=3.6
-asyncpg>=0.30
 httpx>=0.28
 pydantic>=2.9

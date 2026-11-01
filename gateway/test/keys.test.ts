@@ -125,13 +125,30 @@ describe('default implementation', () => {
     expect(urls).toEqual(['https://core.example/auth/verify']);
   });
 
-  it('keeps the legacy failure shape: a Core error is a cached invalid, still closed', async () => {
+  it('a Core outage is unavailable and is not cached as a verdict on the key', async () => {
     vi.stubGlobal('fetch', async () => new Response('boom', { status: 500 }));
     const { env, store } = makeEnv(SERVERS_OFF());
-    expect(await authenticate(req(), env)).toEqual({
-      ok: false,
-      reason: 'invalid',
-    });
+    expect(await authenticate(req(), env)).toEqual({ ok: false, reason: 'unavailable' });
+    expect([...store.values()]).toEqual([]);
+  });
+
+  it("Core refusing the Worker's own token is unavailable, not a bad key", async () => {
+    vi.stubGlobal(
+      'fetch',
+      async () => new Response('{"detail":"bad core token"}', { status: 401 }),
+    );
+    const { env, store } = makeEnv(SERVERS_OFF());
+    expect(await authenticate(req(), env)).toEqual({ ok: false, reason: 'unavailable' });
+    expect([...store.values()]).toEqual([]);
+  });
+
+  it('a bad key is invalid and the negative is cached', async () => {
+    vi.stubGlobal(
+      'fetch',
+      async () => new Response('{"detail":{"error":"invalid_key"}}', { status: 401 }),
+    );
+    const { env, store } = makeEnv(SERVERS_OFF());
+    expect(await authenticate(req(), env)).toEqual({ ok: false, reason: 'invalid' });
     expect([...store.values()]).toEqual(['"invalid"']);
   });
 

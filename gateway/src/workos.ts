@@ -1,0 +1,197 @@
+import { createRemoteJWKSet, errors, jwtVerify } from 'jose';
+import type { JWTPayload } from 'jose';
+import type { AuthContext, Env, Scope } from './types';
+
+/**
+ * Verifies a WorkOS AuthKit access token offline against the JWKS, and turns
+ * its claims into an AuthContext. docs/chat-signin.md has the design.
+ *
+ * The properties that matter, each pinned by test/workos.test.ts:
+ *
+ *   - The algorithm is pinned to RS256 and the key comes from the JWKS, never
+ *     from the token. `alg: none` and an HS256 token signed with the public key
+ *     as a shared secret are both refused.
+ *   - `iss` and `client_id` must match configuration, `exp` and `sub` must be present.
+ *     `aud` is checked, and required, whenever `WORKOS_AUDIENCE` is set; when it is not
+ *     set the check is off by owner decision and `client_id` is the isolation.
+ *   - Every valid token gets one fixed grant, decided here in code: community and
+ *     platform, the free tier. No claim, permission or role is read to decide it, so
+ *     none can raise it, and `personal` is not a scope this file can grant to anyone
+ *     (rule 1). A token carrying `data:admin` gets exactly what one carrying nothing gets.
+ *   - Fails closed. A verdict on the token ('invalid') and a failure to reach a
+ *     verdict ('unavailable') are different outcomes, so a JWKS outage is a 503
+ *     and not a sign-out.
+ */
+
+/**
+ * What a signed-in person may ask for, whoever they are. Not read from the token. A paid
+ * tier later comes from the UCP subscription / ledger entitlement, not from a permission.
+ */
+export const FIXED_GRANT: readonly Scope[] = ['community', 'platform'];
+
+export const WORKOS_KEY_TYPE = 'workos';
+
+/**
+ * The JWT-template claim carrying the platform's one canonical person id (WorkOS
+ * `externalId`). Usage and quota key on this, never on WorkOS's own `sub`, so a person
+ * is the same person on every Nyuchi surface. Owner-defined in the template.
+ */
+export const PERSON_ID_CLAIM = 'person_id';
+
+// The id is interpolated into a Core URL on the default quota path, so it must be inert
+// there, and Core validates owner ids against exactly this pattern (core/main.py `_ID`):
+// a longer one would pass here and 422 there. Keep the two in step. A canonical id outside
+// this is refused, not escaped and passed along. The session id gets the same treatment
+// because it is embedded in the api key id.
+export const PERSON_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
+
+export type WorkosOutcome =
+  | { status: 'ok'; ctx: AuthContext }
+  | { status: 'invalid' }
+  /**
+   * A genuine token for an account with no usable canonical person id. That is provisioning,
+   * not a bad credential, so it is a 403 that says so and not a 401 that sends the person
+   * round the sign-in loop for a token with the same defect.
+   */
+  | { status: 'forbidden'; reason: 'no_person_id' }
+  | { status: 'unavailable' };
+
+/** Three dot-separated base64url segments: shaped like a JWT, not yet believed. */
+export function looksLikeJwt(raw: string): boolean {
+  return /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*$/.test(raw);
+}
+
+/** WorkOS sign-in is off unless a client id is configured. */
+export function workosEnabled(env: Env): boolean {
+  return Boolean(env.WORKOS_CLIENT_ID);
+}
+
+interface Config {
+  clientId: string;
+  issuer: string;
+  /** Absent means the `aud` claim is not checked: `iss`, `client_id` and `exp` carry the isolation. */
+  audience: string | undefined;
+  jwksUrl: URL;
+  monthlyTokenCap: number;
+  maxTokenAgeSeconds: number;
+}
+
+/** null when enabled but incomplete: that is 'unavailable', never "accept anyway". */
+function config(env: Env): Config | null {
+  const { WORKOS_CLIENT_ID: clientId, WORKOS_ISSUER: issuer, WORKOS_AUDIENCE: audience } = env;
+  const cap = Number(env.WORKOS_MONTHLY_TOKEN_CAP);
+  if (!clientId || !issuer) return null;
+  // Optional by owner decision: the Shamwari Chat app is its own AuthKit application, so the
+  // `client_id` check already isolates it, and `aud` sits in a JWT template shared by every
+  // app in the environment. But when it IS configured it is required, and a variable that is
+  // set to nothing is a mistake to refuse, not a request to stop checking.
+  if (audience !== undefined && audience.trim() === '') return null;
+  if (!Number.isInteger(cap) || cap <= 0) return null;
+  // A ceiling on how long any token may have been valid, whatever `exp` it carries: a
+  // template left at a long lifetime then costs a refusal and not a long revocation window.
+  const maxAge = env.WORKOS_MAX_TOKEN_AGE_SECONDS === undefined ? 3600 : Number(env.WORKOS_MAX_TOKEN_AGE_SECONDS);
+  if (!Number.isInteger(maxAge) || maxAge <= 0) return null;
+  let jwksUrl: URL;
+  try {
+    jwksUrl = new URL(
+      env.WORKOS_JWKS_URL || `https://api.workos.com/sso/jwks/${encodeURIComponent(clientId)}`,
+    );
+  } catch {
+    return null;
+  }
+  if (jwksUrl.protocol !== 'https:') return null;
+  return { clientId, issuer, audience, jwksUrl, monthlyTokenCap: cap, maxTokenAgeSeconds: maxAge };
+}
+
+// One JWKS set per URL per isolate. jose caches the keys, re-fetches on an
+// unknown `kid`, and will not re-fetch more than once per cooldown however many
+// forged kids arrive, so a flood of bad tokens cannot become a flood at WorkOS.
+const JWKS_CACHE_MAX_AGE_MS = 10 * 60 * 1000;
+const JWKS_COOLDOWN_MS = 30 * 1000;
+const JWKS_TIMEOUT_MS = 1500;
+const jwksSets = new Map<string, ReturnType<typeof createRemoteJWKSet>>();
+
+function jwksFor(url: URL) {
+  const key = url.toString();
+  let set = jwksSets.get(key);
+  if (!set) {
+    set = createRemoteJWKSet(url, {
+      cacheMaxAge: JWKS_CACHE_MAX_AGE_MS,
+      cooldownDuration: JWKS_COOLDOWN_MS,
+      timeoutDuration: JWKS_TIMEOUT_MS,
+    });
+    jwksSets.set(key, set);
+  }
+  return set;
+}
+
+/** For tests: forget cached keys so one test's JWKS does not answer for the next. */
+export function resetJwksCache(): void {
+  jwksSets.clear();
+}
+
+/**
+ * Errors that are a verdict on the token. Everything jose raises about the token itself is,
+ * including ones this list would not think to name (an unsupported header, a bad `crit`).
+ * What is ours, and so 'unavailable', is failing to reach or read the JWKS: a timeout, a
+ * non-200 or unreadable answer (jose's generic error), a malformed key set, or a network
+ * error that is not a jose error at all.
+ */
+const OURS = new Set(['ERR_JWKS_TIMEOUT', 'ERR_JOSE_GENERIC', 'ERR_JWKS_INVALID']);
+function isVerdict(e: unknown): boolean {
+  return e instanceof errors.JOSEError && !OURS.has(e.code);
+}
+
+const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
+
+export async function verifyWorkosToken(token: string, env: Env): Promise<WorkosOutcome> {
+  if (!workosEnabled(env)) return { status: 'invalid' };
+  const cfg = config(env);
+  if (!cfg) {
+    console.error('workos sign-in is enabled but its configuration is incomplete');
+    return { status: 'unavailable' };
+  }
+
+  let payload: JWTPayload;
+  try {
+    ({ payload } = await jwtVerify(token, jwksFor(cfg.jwksUrl), {
+      algorithms: ['RS256'],
+      issuer: cfg.issuer,
+      ...(cfg.audience === undefined ? {} : { audience: cfg.audience }),
+      requiredClaims: ['exp', 'iat', 'sub'],
+      maxTokenAge: cfg.maxTokenAgeSeconds,
+    }));
+  } catch (e) {
+    return { status: isVerdict(e) ? 'invalid' : 'unavailable' };
+  }
+
+  if (!nonEmpty(payload.sub)) return { status: 'invalid' };
+  // A token minted for another WorkOS app that shares our issuer and audience.
+  if (payload.client_id !== cfg.clientId) return { status: 'invalid' };
+  // The session id is what revocation is keyed on; a token without one cannot be revoked.
+  if (typeof payload.sid !== 'string' || !PERSON_ID_PATTERN.test(payload.sid)) {
+    return { status: 'invalid' };
+  }
+
+  // No canonical id means no metering identity. Falling back to the raw `sub` would split
+  // one person across two quota identities, so the request is refused instead.
+  const personId = payload[PERSON_ID_CLAIM];
+  if (typeof personId !== 'string' || !PERSON_ID_PATTERN.test(personId)) {
+    return { status: 'forbidden', reason: 'no_person_id' };
+  }
+
+  return {
+    status: 'ok',
+    ctx: {
+      // Metered and capped per person, on the platform's canonical person id. The api key
+      // id is the session, prefixed so it cannot be read as a real key id.
+      apiKeyId: `workos:sid:${payload.sid}`,
+      ownerEntityId: personId,
+      ownerPersonId: personId,
+      keyType: WORKOS_KEY_TYPE,
+      tier: 'community',
+      monthlyTokenCap: cfg.monthlyTokenCap,
+      scopes: [...FIXED_GRANT],
+    },
+  };
+}
