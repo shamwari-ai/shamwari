@@ -39,7 +39,14 @@ const EXPOSE_HEADERS = 'Retry-After, Idempotent-Replayed';
 
 export const CORS_PATHS = new Set(['/v1/chat/completions']);
 
-const normalise = (o: string): string => o.trim().replace(/\/+$/, '');
+const normalise = (o: string): string => {
+  // Strip trailing slashes with a linear scan; a /\/+$/ regex backtracks quadratically on a
+  // long run of slashes (CodeQL js/polynomial-redos).
+  const t = o.trim();
+  let end = t.length;
+  while (end > 0 && t.charCodeAt(end - 1) === 47) end--;
+  return t.slice(0, end);
+};
 
 export function allowedOrigins(env: Pick<Env, 'CORS_ORIGINS'>): string[] {
   if (env.CORS_ORIGINS === undefined) return DEFAULT_CORS_ORIGINS;

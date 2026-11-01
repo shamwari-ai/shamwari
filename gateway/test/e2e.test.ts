@@ -108,7 +108,7 @@ function world(
       });
       return realFetch(url, init);
     }
-    if (u.includes('gateway.ai.cloudflare.com')) {
+    if (new URL(u).hostname === 'gateway.ai.cloudflare.com') {
       const body = JSON.parse(String(init?.body)) as { messages: { role: string; content: string }[] };
       const system = body.messages.find((m) => m.role === 'system')?.content ?? '';
       wire.inference.push({ system, headers: (init?.headers ?? {}) as Record<string, string> });
