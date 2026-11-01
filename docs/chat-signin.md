@@ -236,9 +236,19 @@ owning-entity key.
   refuses both (403 `not_provisioned`).
 - **Done: WorkOS `externalId` is set** for the 11 linked people (reconcile applied, in sync).
   Anyone without one is refused until they are linked.
-- **Still to do: read `iss` off a real access token** from the Shamwari Chat app and set
-  `WORKOS_ISSUER`; set `WORKOS_CLIENT_ID`, `WORKOS_MONTHLY_TOKEN_CAP` (and `WORKOS_AUDIENCE` only
-  if `aud` is added to the template). Not verified here: no real token has been inspected.
+- **Set in `gateway/wrangler.jsonc` (production vars), not yet read off a real token:**
+  `WORKOS_CLIENT_ID` is the Shamwari Chat client above. `WORKOS_ISSUER` is
+  `https://auth.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0`, taken from the
+  environment's OIDC discovery document (`.well-known/openid-configuration`), which returns the
+  **Mukoko Account** client id in the issuer even when queried with the Shamwari Chat client id,
+  so the issuer is per environment and not per app. WorkOS advises copying `iss` from a decoded
+  token because the documented form varies (a trailing slash is tolerated here). If this is
+  wrong, every WorkOS token is refused with 401 and `sk_shamwari_` keys are unaffected.
+  The JWKS (default URL for the chat client id) serves the same signing key as the Mukoko Account
+  one, checked. `WORKOS_AUDIENCE` is unset. `WORKOS_MONTHLY_TOKEN_CAP` is `1000000`: about $0.20
+  at the economy model's blended price, an estimate the owner can replace.
+- **Still to do: decode one real access token** from the Shamwari Chat app and confirm `iss`,
+  `client_id`, `sid` and `person_id` before the chat flag is turned on.
 - **Approve the gateway auth change at merge time** (this PR adds the `jose` dependency, MIT,
   the verifier for the token; nothing else new).
 - **A yes to the `chat-auth` Worker** (a new deployment) and where its cookie-sealing secret
