@@ -31,45 +31,51 @@ export default function App() {
   const [queue, setQueue] = useState<QueuedAsk[]>([]);
   const [draft, setDraft] = useState('');
   const keyRef = useRef<string | null>(null);
+  // The queue's source of truth: flush() runs across awaits and must never write back a stale snapshot.
+  const queueRef = useRef<QueuedAsk[]>([]);
   const busy = useRef(false);
   const client = useMemo(() => createClient({ baseUrl: apiBase, getKey: () => keyRef.current }), []);
 
   const push = (i: Item) => setItems((p) => [...p, i]);
-  const persist = (q: QueuedAsk[]) => { setQueue(q); void saveQueue(q); };
+  const persist = (q: QueuedAsk[]) => { queueRef.current = q; setQueue(q); void saveQueue(q); };
 
-  const flush = useCallback(async (q: QueuedAsk[]) => {
+  const flush = useCallback(async () => {
     if (busy.current) return;
     busy.current = true;
-    let cur = q;
-    for (const ask of q) {
-      // Same id every retry: the gateway replays instead of metering twice.
-      const r = await client.ask({ messages: [{ role: 'user', content: ask.question }], scope: 'platform' }, { idempotencyKey: ask.id });
-      if (r.ok) {
-        const text = clampBytes(r.value.text, BUDGET.maxAnswerBytes);
-        cur = dequeue(cur, ask.id);
-        setItems((p) => [...p.map((i) => (i.kind === 'q' && i.id === ask.id ? { ...i, pending: false } : i)),
-          { kind: 'a', id: ask.id + ':a', answer: { ...r.value, text: text.text, truncated: r.value.truncated || text.clipped } }]);
-      } else if (retryable(r.error.kind)) {
-        break; // keep the rest queued, in order
-      } else {
-        cur = dequeue(cur, ask.id);
-        setItems((p) => [...p, { kind: 'note', id: ask.id + ':e', text: errorText[r.error.kind] }]);
+    try {
+      // Re-read the ref each round so a question typed mid-flush is sent too, and is never overwritten.
+      for (;;) {
+        const ask = queueRef.current[0];
+        if (!ask) break;
+        // Same id every retry: the gateway replays instead of metering twice.
+        const r = await client.ask({ messages: [{ role: 'user', content: ask.question }], scope: 'platform' }, { idempotencyKey: ask.id });
+        if (r.ok) {
+          const text = clampBytes(r.value.text, BUDGET.maxAnswerBytes);
+          persist(dequeue(queueRef.current, ask.id));
+          setItems((p) => [...p.map((i) => (i.kind === 'q' && i.id === ask.id ? { ...i, pending: false } : i)),
+            { kind: 'a', id: ask.id + ':a', answer: { ...r.value, text: text.text, truncated: r.value.truncated || text.clipped } }]);
+        } else if (retryable(r.error.kind)) {
+          break; // keep everything queued, in order
+        } else {
+          persist(dequeue(queueRef.current, ask.id));
+          setItems((p) => [...p, { kind: 'note', id: ask.id + ':e', text: errorText[r.error.kind] }]);
+        }
       }
+    } finally {
+      busy.current = false;
     }
-    persist(cur);
-    busy.current = false;
   }, [client]);
 
   useEffect(() => {
     void (async () => {
       const [k, q] = await Promise.all([loadKey(), loadQueue()]);
-      keyRef.current = k; setKey(k); setQueue(q);
+      keyRef.current = k; setKey(k); persist(q);
       setItems(q.map((a) => ({ kind: 'q', id: a.id, text: a.question, pending: true })));
       if (!k) setShowSettings(true);
-      else if (q.length) void flush(q);
+      else if (q.length) void flush();
     })();
     // Back in the foreground is the nearest thing to "network returned" without a native module.
-    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') void loadQueue().then(flush); });
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') void flush(); });
     return () => sub.remove();
   }, [flush]);
 
@@ -79,10 +85,10 @@ export default function App() {
     const ask: QueuedAsk = { id: Crypto.randomUUID(), question: q, createdAt: Date.now() };
     // Scope is always 'platform' here: the app has no on-device Mind yet, and a
     // personal-scope ask must never be queued (queue.ts refuses it).
-    const r = enqueue(queue, ask, 'platform');
+    const r = enqueue(queueRef.current, ask, 'platform');
     if (!r.ok) { push({ kind: 'note', id: ask.id, text: r.reason === 'queue_full' ? 'Too many questions waiting. Go online to send them first.' : 'That question is too long.' }); return; }
     push({ kind: 'q', id: ask.id, text: q, pending: true });
-    setDraft(''); persist(r.queue); void flush(r.queue);
+    setDraft(''); persist(r.queue); void flush();
   };
 
   const render = ({ item }: { item: Item }) => {
@@ -116,7 +122,7 @@ export default function App() {
         <View style={s.panel}>
           <Text style={s.text}>Sign-in is coming. Until then, paste your Shamwari key. It stays in your phone's secure store.</Text>
           <TextInput style={s.input} value={keyDraft} onChangeText={setKeyDraft} placeholder="Shamwari key" placeholderTextColor={t.muted} autoCapitalize="none" autoCorrect={false} secureTextEntry />
-          <Pressable style={s.btn} onPress={() => { const k = keyDraft.trim() || null; keyRef.current = k; setKey(k); void saveKey(k ?? ''); setKeyDraft(''); setShowSettings(false); if (k) void flush(queue); }} accessibilityRole="button">
+          <Pressable style={s.btn} onPress={() => { const k = keyDraft.trim() || null; keyRef.current = k; setKey(k); void saveKey(k ?? ''); setKeyDraft(''); setShowSettings(false); if (k) void flush(); }} accessibilityRole="button">
             <Text style={s.btnText}>Save</Text>
           </Pressable>
           <Text style={s.meta}>Personal questions are answered only on your device, never in the cloud.</Text>
