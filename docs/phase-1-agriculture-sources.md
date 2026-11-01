@@ -50,7 +50,7 @@ country brief. They remain candidates; no terms were read for them.
 Each sample uses only what the page said. "Unverified" lines were written by the
 model and must not ship.
 
-**1. Rain outlook (MSD, scraped `weatherzw.org.zw/products/seasonal-forecast/2026-2027-seasonal-forecast/`)**
+### 1. Rain outlook (MSD, scraped `weatherzw.org.zw/products/seasonal-forecast/2026-2027-seasonal-forecast/`)
 
 > The Met Services Department expects below-normal rain this season (2026/27)
 > because of El Nino, and a very erratic start: a large part of the country may
@@ -60,7 +60,7 @@ model and must not ship.
 
 chiShona: **unverified, do not ship.** `Mvura inotarisirwa kuva shoma kupfuura yakajairika mwaka uno, uye kutanga kwayo kunogona kusava nechokwadi.` MSD publishes its own Shona edition of the outlook (2025/26: "MAMIRIRO EMWAKA WEMVURA"); ingest that text instead of translating.
 
-**2. National production (ZIMSTAT, scraped from the Post-Harvest Survey 2024/25 PDF)**
+### 2. National production (ZIMSTAT, scraped from the Post-Harvest Survey 2024/25 PDF)
 
 > Mashonaland West grew the most maize in 2024/25: about 393,058 tonnes, 21.6% of
 > the national 1,819,819 tonnes. Communal areas produced about 44% of all maize.
@@ -71,7 +71,7 @@ national soya bean total as `7,750` while Table 3.2 gives `57,750`; Table 3.6
 prints an A1 pearl millet figure as `3,6259`; the text says "2025/25". Numbers
 from PDFs need a human check against the table before they reach a route.
 
-**3. Market prices (AMA, scraped `ama.co.zw/market-commodity-price-28-09-2021-3/`)**
+### 3. Market prices (AMA, scraped `ama.co.zw/market-commodity-price-28-09-2021-3/`)
 
 > The last AMA price I can see is from 8 November 2025: potatoes at Mbare were
 > US$0.45 to US$0.55 a kg. That is a year old, so please check today's price
