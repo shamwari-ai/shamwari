@@ -362,6 +362,32 @@ describe('audience is optional by config, required when configured', () => {
   });
 });
 
+describe('the issuer is matched exactly, except for one trailing slash', () => {
+  it.each([
+    ['configured bare, token with a slash', ISSUER, `${ISSUER}/`],
+    ['configured with a slash, token bare', `${ISSUER}/`, ISSUER],
+    ['both bare', ISSUER, ISSUER],
+    ['both with a slash', `${ISSUER}/`, `${ISSUER}/`],
+  ])('accepts %s', async (_label, configured, inToken) => {
+    expect(await verify(await token({ iss: inToken }), makeEnv({ WORKOS_ISSUER: configured }))).toBe('ok');
+  });
+
+  it.each([
+    ['a different path', `${ISSUER}x`],
+    ['a different host', ISSUER.replace('auth.example.test', 'evil.example')],
+    ['a prefix of it', ISSUER.slice(0, -4)],
+    ['two slashes', `${ISSUER}//`],
+    ['a query string', `${ISSUER}?a=b`],
+    ['a different case', ISSUER.toUpperCase()],
+  ])('refuses %s', async (_label, inToken) => {
+    expect(await verify(await token({ iss: inToken }))).toBe('invalid');
+  });
+
+  it('is unavailable when the configured issuer is only slashes', async () => {
+    expect(await verify(await token(), makeEnv({ WORKOS_ISSUER: '///' }))).toBe('unavailable');
+  });
+});
+
 describe('failing closed', () => {
   it('is unavailable, not invalid and not ok, when the JWKS endpoint is down', async () => {
     jwksBehaviour = () => new Response('boom', { status: 500 });
