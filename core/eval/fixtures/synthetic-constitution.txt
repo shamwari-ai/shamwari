@@ -1,0 +1,237 @@
+SYNTHETIC TEST FIXTURE
+Written for Shamwari's tests in our own words. It is NOT the text of the Constitution of
+Zimbabwe and must never be ingested or cited as law. It reproduces the layout (contents list,
+chapters, numbered sections, numbered subsections) and the section numbers the evaluation
+questions expect, so the chunker, the citation parser and the retrieval metrics can be tested
+offline. The real text is supplied by the operator from a source whose terms they have read.
+
+ARRANGEMENT OF SECTIONS
+
+CHAPTER 3
+CITIZENSHIP
+35 Zimbabwean citizenship and nationality
+36 Citizenship by birth
+37 Citizenship by descent
+CHAPTER 4
+DECLARATION OF RIGHTS
+48 Right to life
+51 Right to human dignity
+52 Right to personal security
+53 Freedom from torture
+55 Freedom from forced labour
+56 Equality and non-discrimination
+57 Right to privacy
+58 Freedom of assembly and association
+59 Freedom to demonstrate and petition
+60 Freedom of conscience
+61 Freedom of expression and freedom of the media
+62 Access to information
+65 Labour rights
+66 Freedom of movement and residence
+67 Political rights
+69 Right to a fair hearing
+70 Rights of accused persons
+71 Property rights
+73 Right to environment
+75 Right to education
+76 Right to health care
+77 Right to food and water
+78 Marriage rights
+81 Rights of children
+85 Enforcement of fundamental human rights and freedoms
+CHAPTER 5
+EXECUTIVE AUTHORITY
+91 Qualifications for election as President
+95 Term of office of President
+96 Resignation of President
+CHAPTER 7
+ELECTIONS
+143 Term of Parliament
+CHAPTER 8
+JUDICIARY
+164 Judicial independence
+
+CHAPTER 3
+CITIZENSHIP
+
+35 Zimbabwean citizenship and nationality
+(1) Persons are Zimbabwean citizens by birth, descent or registration.
+(2) Citizens have duties as well as rights, including loyalty to the country.
+
+36 Citizenship by birth
+(1) Persons are Zimbabwean citizens by birth if they were born in Zimbabwe and, when they were
+born, either their mother or their father was a Zimbabwean citizen.
+(2) A person born outside Zimbabwe is not a citizen by birth under this section.
+(3) A child found in Zimbabwe who is, or appears to be, less than fifteen years of age, and whose
+parents are not known, is presumed to be a citizen by birth.
+
+37 Citizenship by descent
+(1) A person born outside Zimbabwe is a citizen by descent if one parent was a citizen by birth
+or registration at the time of the birth.
+(2) The registration of such a birth must be made within the time an Act of Parliament sets.
+
+CHAPTER 4
+DECLARATION OF RIGHTS
+
+Part 2
+Fundamental human rights and freedoms
+
+48 Right to life
+(1) Every person has the right to life.
+(2) A law may allow the death penalty only for murder committed in aggravating circumstances,
+and the court must keep a discretion whether to impose it.
+(3) The penalty must not be imposed or carried out on a woman, or on a person under twenty-one.
+
+51 Right to human dignity
+Every person has inherent dignity in their private and public life, and the right to have that
+dignity respected and protected.
+
+52 Right to personal security
+Every person has the right to bodily and psychological integrity, including freedom from all
+forms of violence from public or private sources.
+
+53 Freedom from torture
+No person may be subjected to physical or psychological torture or to cruel, inhuman or
+degrading treatment or punishment.
+
+55 Freedom from forced labour
+No person may be made to perform forced or compulsory labour.
+
+56 Equality and non-discrimination
+(1) All persons are equal before the law and have the right to equal protection and benefit of the law.
+(2) Women and men have the right to equal treatment, including equal opportunities in political,
+economic, cultural and social spheres.
+(3) Every person has the right not to be treated in an unfairly discriminatory manner on grounds
+such as nationality, race, tribe, place of birth, language, religious belief, political affiliation,
+sex, gender, marital status, age, pregnancy or disability.
+(4) Treatment is unfairly discriminatory if people are subjected to a condition or disability that
+others are not.
+
+57 Right to privacy
+Every person has the right to privacy, which includes not having their home, premises or property
+entered without their permission, their person searched, their possessions seized, or the privacy
+of their communications infringed.
+
+58 Freedom of assembly and association
+Every person has the freedom of assembly and association, and the freedom not to assemble or
+associate.
+
+59 Freedom to demonstrate and petition
+Every person has the right to demonstrate and to present petitions, but must do so peacefully.
+
+60 Freedom of conscience
+(1) Every person has the right to freedom of conscience, which includes freedom of thought,
+opinion, religion or belief.
+(2) No person may be compelled to take an oath that is contrary to their religion or belief.
+
+61 Freedom of expression and freedom of the media
+(1) Every person has the right to freedom of expression, which includes freedom to seek, receive
+and communicate ideas and other information, and freedom of artistic expression.
+(2) Freedom of the media includes freedom from interference and protection of sources.
+(3) Broadcasting and other media must be free to determine independently the editorial content
+of their broadcasts or other communications.
+
+62 Access to information
+Every citizen and permanent resident has the right of access to any information held by the State
+in so far as the information is required in the interests of public accountability.
+
+65 Labour rights
+(1) Every person has the right to fair and safe labour practices and standards and to be paid a
+fair and reasonable wage.
+(2) Except for members of the security services, every employee has the right to form and join a
+trade union and to strike.
+
+66 Freedom of movement and residence
+Every Zimbabwean citizen and everyone else who is legally in Zimbabwe has the right to move
+freely within Zimbabwe, to reside in any part of the country and to leave it.
+
+67 Political rights
+(1) Every Zimbabwean citizen has the right to free, fair and regular elections for any elective
+public office.
+(2) Every citizen has the right to form, to join and to participate in the activities of a
+political party or organisation of their choice.
+
+69 Right to a fair hearing
+(1) Every person has the right to a fair, speedy and public hearing within a reasonable time
+before an independent and impartial court.
+(3) Every person accused of an offence has the right to a fair and public trial within a
+reasonable time before an independent and impartial court.
+(4) Every person has a right, at their own expense, to choose and be represented by a legal
+practitioner before any court, tribunal or forum.
+
+70 Rights of accused persons
+Any person accused of an offence must be presumed innocent until proved guilty, must be informed
+promptly of the charge and must have adequate time and facilities to prepare a defence.
+
+71 Property rights
+(1) Every person has the right, in any part of Zimbabwe, to acquire, hold, occupy, use, transfer
+and dispose of all forms of property.
+(3) No person may be compulsorily deprived of property except under a law of general
+application, and only for a public purpose, with fair and adequate compensation paid promptly.
+
+73 Right to environment
+Every person has the right to an environment that is not harmful to their health or well-being,
+and to have the environment protected for present and future generations.
+
+75 Right to education
+(1) Every citizen and permanent resident of Zimbabwe has a right to a basic State-funded
+education, including adult basic education, and to further education which the State must make
+progressively available.
+
+76 Right to health care
+(1) Every citizen and permanent resident of Zimbabwe has the right to have access to basic
+health-care services, including reproductive health-care services.
+(3) No person may be refused emergency medical treatment at any health institution.
+
+77 Right to food and water
+Every person has the right to safe, clean and potable water and to sufficient food, and the State
+must take reasonable legislative and other measures to achieve these rights.
+
+78 Marriage rights
+(1) Every person who has attained the age of eighteen years has the right to found a family.
+(2) No person may be compelled to enter into marriage against their will.
+
+81 Rights of children
+(1) Every child, that is to say every boy and girl under the age of eighteen years, has the right
+to equal treatment before the law, to the prompt provision of a birth certificate, and to
+education, health care services, nutrition and shelter.
+(2) A child's best interests are paramount in every matter concerning the child.
+
+85 Enforcement of fundamental human rights and freedoms
+(1) Any of the following persons may approach a court, alleging that a fundamental right has been
+infringed: any person acting in their own interests; any person acting on behalf of another who
+cannot act for themselves; any person acting as a member, or in the interests, of a group or class
+of persons; any person acting in the public interest; any association acting in the interests of
+its members.
+
+CHAPTER 5
+EXECUTIVE AUTHORITY
+
+91 Qualifications for election as President
+(1) A person qualifies for election as President if they are a Zimbabwean citizen by birth or
+descent, have attained the age of forty years, are ordinarily resident in Zimbabwe and are
+registered as a voter.
+(2) A person may not serve as President for more than two terms.
+
+95 Term of office of President
+(1) The President's term of office is five years and begins when the President is sworn in.
+(2) The limit of two terms applies whether or not the terms are continuous.
+
+96 Resignation of President
+The President may resign by written notice to the Speaker, who must give public notice of the
+resignation as soon as possible and in any event within twenty-four hours.
+
+CHAPTER 7
+ELECTIONS
+
+143 Term of Parliament
+Parliament is elected for a five-year term that runs from the date on which the President-elect
+is sworn in and assumes office.
+
+CHAPTER 8
+JUDICIARY
+
+164 Judicial independence
+(1) The courts are independent and are subject only to this Constitution and the law, which they
+must apply impartially, expeditiously and without fear, favour or prejudice.
+(3) An order or decision of a court binds the State and all persons and governmental institutions.

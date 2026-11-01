@@ -2,6 +2,7 @@
 // cannot know about. Modelled on docs-site/check.mjs.
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 import { findClaimProblems, selfTest } from './claims.mjs';
 
 const walk = (dir) =>
@@ -20,7 +21,7 @@ if (broken.length) {
 const files = walk('dist');
 const pages = files.filter((f) => f.endsWith('.html'));
 const fail = [];
-if (pages.length < 4) fail.push(`expected at least 4 built pages, found ${pages.length}`);
+if (pages.length < 5) fail.push(`expected at least 5 built pages, found ${pages.length}`);
 
 const routes = new Set(pages.map((p) => p.replace(/^dist/, '').replace(/index\.html$/, '')));
 const assets = new Set(files.map((f) => f.replace(/^dist/, '')));
@@ -55,6 +56,7 @@ for (const src of ['src/components/DataScopes.astro', 'src/pages/index.astro']) 
 }
 
 let biggest = 0;
+const chatScripts = new Set();
 
 for (const page of pages) {
   const html = readFileSync(page, 'utf8');
@@ -64,7 +66,7 @@ for (const page of pages) {
   // Internal page links resolve to a route that was actually built. Asset
   // paths are checked against the file list instead.
   for (const [, href] of html.matchAll(/href="(\/[^"#]*)"/g)) {
-    if (/\.[a-z0-9]{2,5}$/i.test(href)) {
+    if (/\.(?:[a-z0-9]{2,5}|webmanifest)$/i.test(href)) {
       if (!assets.has(href)) fail.push(`${where}: missing asset ${href}`);
       continue;
     }
@@ -144,11 +146,91 @@ for (const page of pages) {
     }
   }
 
-  // No client JavaScript: nothing on this site needs it. @bundu/ui's React
-  // primitives render server-side with no client:* directive anywhere, so
-  // this should hold even with React in the build.
-  if (/<script(?![^>]*type="application\/ld\+json")/i.test(html)) {
+  // No client JavaScript anywhere except the chat app. @bundu/ui's React
+  // primitives render server-side with no client:* directive, so the
+  // marketing pages ship none. The chat page is the one exception, and it may
+  // load only its own bundled module from /_astro/ (no third-party script, no
+  // inline script), whose size is held to the budget below.
+  const scripts = [...html.matchAll(/<script\b([^>]*)>/gi)].filter((m) => !/type="application\/ld\+json"/i.test(m[1]));
+  if (where === 'chat/index.html') {
+    for (const [, attrs] of scripts) {
+      const src = attrs.match(/\bsrc="([^"]+)"/)?.[1];
+      if (!src || !src.startsWith('/_astro/')) fail.push(`${where}: script is not a bundled /_astro/ module (${attrs.trim().slice(0, 60)})`);
+      else chatScripts.add(src);
+    }
+    if (!scripts.length) fail.push(`${where}: the chat page ships no script`);
+    // Web fonts block render on 2G; the chat shell uses the system stack.
+    if (/fonts\.(googleapis|gstatic)\.com/.test(html)) fail.push(`${where}: loads a web font; the chat shell is system-font only`);
+    if (!/<html lang="/.test(html)) fail.push(`${where}: <html> has no lang`);
+  } else if (scripts.length) {
     fail.push(`${where}: ships a <script> tag`);
+  }
+}
+
+// First-load JS budget for the chat app, gzipped as a CDN would send it: the
+// module the page loads plus every static import it pulls in. Anything lazily
+// imported is not first load and is not counted, but is listed.
+const CHAT_JS_BUDGET = 100 * 1024;
+const CHAT_CSS_BUDGET = 30 * 1024;
+const CHAT_FIRST_LOAD_BUDGET = 50 * 1024;
+const gz = (file) => gzipSync(readFileSync(file)).length;
+const closure = new Set();
+const visit = (src) => {
+  if (closure.has(src)) return;
+  closure.add(src);
+  const code = readFileSync('dist' + src, 'utf8');
+  for (const [, dep] of code.matchAll(/(?:^|[;}\s])(?:import|export)[^'"`;]*?from\s*["']\.\/([^"']+)["']/g)) visit('/_astro/' + dep);
+};
+for (const src of chatScripts) if (assets.has(src)) visit(src);
+const chatJs = [...closure].reduce((n, src) => n + gz('dist' + src), 0);
+if (chatJs > CHAT_JS_BUDGET) fail.push(`chat first-load JS is ${chatJs} B gzipped, over the ${CHAT_JS_BUDGET} B budget`);
+
+let chatCss = 0;
+let chatFirstLoad = 0;
+const chatHtml = pages.find((p) => p.endsWith('chat/index.html'));
+if (chatHtml) {
+  for (const [, href] of readFileSync(chatHtml, 'utf8').matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)) chatCss += gz('dist' + href);
+  if (chatCss > CHAT_CSS_BUDGET) fail.push(`chat CSS is ${chatCss} B gzipped, over the ${CHAT_CSS_BUDGET} B budget`);
+  // docs/tiered-access-design.md: "R2 first load <= 50 KB over the wire" (HTML + CSS + JS, gzipped).
+  chatFirstLoad = gz(chatHtml) + chatCss + chatJs;
+  if (chatFirstLoad > CHAT_FIRST_LOAD_BUDGET) fail.push(`chat first load is ${chatFirstLoad} B gzipped, over the ${CHAT_FIRST_LOAD_BUDGET} B R2 budget`);
+}
+
+// The installable shell: manifest, icons, service worker and headers have to
+// agree with each other and with what the build produced. A service worker that
+// precaches a file the build no longer emits fails to install, silently, and the
+// app then has no offline mode: so every precache entry is checked here.
+if (chatHtml) {
+  const html = readFileSync(chatHtml, 'utf8');
+  if (!/<link rel="manifest" href="\/chat\/manifest\.webmanifest"/.test(html)) fail.push('chat: no <link rel="manifest">');
+  if (!assets.has('/chat/manifest.webmanifest')) fail.push('chat: manifest missing from the build');
+  else {
+    const m = JSON.parse(readFileSync('dist/chat/manifest.webmanifest', 'utf8'));
+    if (m.start_url !== '/chat/' || m.scope !== '/chat/') fail.push('chat manifest: start_url and scope must both be /chat/');
+    if ('orientation' in m) fail.push('chat manifest: do not lock orientation (WCAG 1.3.4)');
+    if (m.display !== 'standalone') fail.push('chat manifest: display must be standalone');
+    const sizes = new Set((m.icons ?? []).map((i) => `${i.sizes}/${i.purpose}`));
+    for (const want of ['192x192/any', '512x512/any', '512x512/maskable']) if (!sizes.has(want)) fail.push(`chat manifest: missing icon ${want}`);
+    for (const i of m.icons ?? []) if (!assets.has(i.src)) fail.push(`chat manifest: missing icon file ${i.src}`);
+  }
+  if (!assets.has('/chat/sw.js')) fail.push('chat: sw.js missing (post-build did not run?)');
+  else {
+    const sw = readFileSync('dist/chat/sw.js', 'utf8');
+    const list = JSON.parse(sw.match(/const PRECACHE = (\[.*?\]);/)?.[1] ?? '[]');
+    if (!list.includes('/chat/')) fail.push('chat sw: the shell (/chat/) is not precached');
+    for (const f of list) if (!assets.has(f) && !routes.has(f)) fail.push(`chat sw: precaches ${f}, which the build did not produce`);
+    if (/caches\.put\([^)]*v1\/chat/.test(sw) || /completions/.test(sw)) fail.push('chat sw: must never cache API traffic');
+  }
+  if (!assets.has('/_headers')) fail.push('chat: _headers missing');
+  else {
+    const headers = readFileSync('dist/_headers', 'utf8');
+    const csp = headers.match(/Content-Security-Policy:\s*(.+)/)?.[1] ?? '';
+    if (!csp) fail.push('chat: no Content-Security-Policy on /chat/*');
+    const metaApi = html.match(/<meta name="shamwari-api" content="([^"]+)"/)?.[1];
+    if (!metaApi || !csp.includes(`connect-src 'self' ${new URL(metaApi).origin}`)) fail.push('chat CSP: connect-src does not name the API origin the page calls');
+    if (/unsafe-(inline|eval)/.test(csp)) fail.push('chat CSP: unsafe-inline / unsafe-eval are not allowed');
+    if (!/script-src 'self'(;|$)/.test(csp)) fail.push("chat CSP: script-src must be exactly 'self'");
+    if (!/frame-ancestors 'none'/.test(csp)) fail.push("chat CSP: frame-ancestors 'none' missing");
   }
 }
 
@@ -161,5 +243,5 @@ if (fail.length) {
 }
 console.log(
   `ok — ${pages.length} pages, largest ${biggest} bytes, links and assets resolve, ` +
-    `no client JS, language rules held`,
+    `client JS only on /chat/ (${chatJs} B gzipped first load, budget ${CHAT_JS_BUDGET}; CSS ${chatCss} B, budget ${CHAT_CSS_BUDGET}; whole first load ${chatFirstLoad} B, budget ${CHAT_FIRST_LOAD_BUDGET}), language rules held`,
 );

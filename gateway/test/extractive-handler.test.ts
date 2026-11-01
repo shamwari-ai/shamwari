@@ -187,7 +187,10 @@ describe('when every inference path fails', () => {
 
   it('has nothing honest to say without a Ground hit, so the failure stands', async () => {
     const { env } = setup({ inferenceFails: true, chunks: [] });
-    await expect(worker.fetch(ask({}), env, ctx)).rejects.toThrow();
+    // The failure stands: a 500, not an invented answer. (It was an unhandled
+    // exception before the CORS wrapper turned it into a readable 500.)
+    const res = await worker.fetch(ask({}), env, ctx);
+    expect(res.status).toBe(500);
   });
 });
 
@@ -207,6 +210,57 @@ describe('a normal answer is unchanged', () => {
     expect(usage.priceTableVersion).toBeTruthy();
     expect(usage).toHaveProperty('costUsdEstimate');
     expect(usage.costUsdEstimate === null || typeof usage.costUsdEstimate === 'number').toBe(true);
+  });
+});
+
+describe('the web chat keeps no content on the server', () => {
+  const pwa = (body: Record<string, unknown> = {}) => {
+    const r = ask(body);
+    r.headers.set('X-Shamwari-Channel', 'pwa');
+    return r;
+  };
+
+  it('writes no conversation, but still writes the usage event', async () => {
+    const { env, calls } = setup();
+    const res = await worker.fetch(pwa(), env, ctx);
+    expect(res.status).toBe(200);
+    await Promise.resolve();
+    expect(calls.sink.map((m) => m.collection)).toEqual(['usageEvents']);
+    const usage = calls.sink[0]?.doc as any;
+    expect(usage).toMatchObject({ scope: 'platform', inferencePath: 'gateway' });
+    expect(typeof usage.requestId).toBe('string');
+    expect(usage.inputTokens).toBeGreaterThanOrEqual(0);
+    // Nothing that was typed or answered is in anything that was stored.
+    const stored = JSON.stringify(calls.sink);
+    expect(stored).not.toContain('Do I have a right to life?');
+    expect(stored).not.toContain('generated');
+  });
+
+  it('is matched by the channel name only, so SMS still behaves as before', async () => {
+    const { env, calls } = setup();
+    const r = ask({});
+    r.headers.set('X-Shamwari-Channel', 'sms');
+    await worker.fetch(r, env, ctx);
+    await Promise.resolve();
+    const conv = calls.sink.find((m) => m.collection === 'conversations')?.doc as any;
+    expect(conv).toBeTruthy();
+    expect(conv.trainingEligible).toBe(false);
+  });
+
+  it('leaves everyone else alone: a plain request still stores the conversation', async () => {
+    const { env, calls } = setup();
+    await worker.fetch(ask({}), env, ctx);
+    await Promise.resolve();
+    expect(calls.sink.map((m) => m.collection).sort()).toEqual(['conversations', 'usageEvents']);
+  });
+
+  it('rule 1 is unchanged: personal scope is still refused before anything is called', async () => {
+    const { env, calls } = setup({ scopes: ['personal', 'community', 'platform'] });
+    const res = await worker.fetch(pwa({ scope: 'personal' }), env, ctx);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as any).error).toBe('scope_requires_local_inference');
+    expect(calls.embed + calls.ground + calls.inference).toBe(0);
+    expect(calls.sink).toEqual([]);
   });
 });
 
