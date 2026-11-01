@@ -197,6 +197,27 @@ jobs:
         run: npm run e2e
         working-directory: site
 
+  mobile:
+    name: Mobile (types, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - run: npm ci
+        working-directory: mobile
+
+      - run: npm run typecheck
+        working-directory: mobile
+
+      - run: npm test
+        working-directory: mobile
+
   gitleaks:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
