@@ -55,7 +55,9 @@
     "CF_ACCOUNT_ID": "125a2dfbc21f76a25c980609609e8218",
     "CF_GATEWAY_ID": "shamwari",
     "CF_ROUTE_NAME": "shamwari",
-    "CORE_URL": "https://core.shamwari.ai",
+    // Core's Fly address (docs/core-fly-runbook.md, "Point the Worker at Core"). The
+    // core.shamwari.ai name was never created; the Fly hostname needs no DNS of ours.
+    "CORE_URL": "https://shamwari-core.fly.dev",
     "EMBEDDING_MODEL": "@cf/baai/bge-m3",
     "GROUND_TOP_K": "6",
     "AUTH_CACHE_TTL": "60",
@@ -83,7 +85,26 @@
     // on, set SERVERS_API_URL here and SERVERS_API_TOKEN as a secret. Contract:
     // docs/servers-api-contract.md. If on but unconfigured, auth fails closed.
     "SERVERS_API_ENABLED": "false",
+
+    // WorkOS sign-in for people (docs/chat-signin.md). None of these is a secret. The
+    // Shamwari Chat AuthKit application is its own app, so the client_id check is what
+    // keeps tokens minted for any other Mukoko app out; `aud` is deliberately NOT set (the
+    // production JWT template carries none; setting it would make every token without it fail).
+    "WORKOS_CLIENT_ID": "client_01M68PCT0T5ECHKDYH45ECT0GV",
+    // From the environment's OIDC discovery document, NOT yet read off a real access token
+    // (WorkOS advises copying `iss` from a decoded token; a trailing slash is tolerated). If it
+    // is wrong every WorkOS token is refused with 401 and `sk_shamwari_` keys are unaffected.
+    "WORKOS_ISSUER": "https://auth.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0",
+    // Tokens per person per month. About $0.20 at the economy model's blended price (pricing.json:
+    // 85% input at $0.15/M, 15% output at $0.50/M is about $0.20/M, so 1M tokens), the unit-cost
+    // target in docs/tiered-access-design.md. An estimate; the owner's number replaces it.
+    "WORKOS_MONTHLY_TOKEN_CAP": "1000000",
   },
+
+  // api.shamwari.ai is this Worker. A custom domain creates its own DNS record and
+  // certificate; it needs the shamwari.ai zone in this account (the marketing site already
+  // holds shamwari.ai and www.shamwari.ai here).
+  "routes": [{ "pattern": "api.shamwari.ai", "custom_domain": true }],
 
   // wrangler secret put:
   //   SHAMWARI_CORE_TOKEN shared with Core
