@@ -1,12 +1,12 @@
 import type { ExpoConfig } from 'expo/config';
 
 /**
- * The EAS project id is not a secret, but it does not exist yet: the Expo
- * project `shamwari` must be created once on expo.dev (see mobile/README.md).
- * Until EAS_PROJECT_ID is set the app runs without OTA updates, which is
- * correct for local development.
+ * The EAS project `@nyuchi-web-services/shamwari`. A project id is an identifier, not a secret (it is
+ * printed in every app config and in every update URL), so it is committed. EAS_PROJECT_ID overrides it,
+ * for a fork or a staging project, and an empty value turns over-the-air updates off.
  */
-const projectId = process.env.EAS_PROJECT_ID;
+const DEFAULT_PROJECT_ID = '3edfc139-4592-48ad-84a3-aacd0f0a9e72';
+const projectId = process.env.EAS_PROJECT_ID ?? DEFAULT_PROJECT_ID;
 
 const config: ExpoConfig = {
   name: 'Shamwari',
