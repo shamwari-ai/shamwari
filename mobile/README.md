@@ -38,8 +38,18 @@ llama.rn / on-device Mind needs a development build, not Expo Go (backlog item 1
 
 ## The Expo project
 
-EAS project `@nyuchi-web-services/shamwari` (id `3edfc139-4592-48ad-84a3-aacd0f0a9e72`, committed in
-`app.config.ts`: an identifier, not a secret). With **Base directory = `mobile`** and the GitHub repo
-linked, `.eas/workflows/publish-preview-update.yml` publishes every push to `staging` that touches
-`mobile/**` to the `preview` update branch (the workflow validates against the project). Builds are separate
-and cost money: they need a usage budget first, and the cost is stated on issue #144 before any is run.
+EAS project `@nyuchi-web-services/shamwari`; its id is the committed default in `app.config.ts` (an
+identifier, not a secret) and `EAS_PROJECT_ID` overrides it. `.eas/workflows/publish-preview-update.yml`
+publishes every push to `staging` that touches `mobile/**` to the `preview` update branch. The workflow file
+validates against the project (checked with the Expo connector on 2026-11-02), but whether it actually runs
+depends on two dashboard settings that have **not** been checked: **Base directory = `mobile`** and the
+GitHub repo `shamwari-ai/shamwari` linked to the project. If a push to `staging` publishes nothing, check
+those two first. Builds are separate and cost money: they need a usage budget first, and the cost is stated
+on issue #144 before any is run.
+
+## Known duplication
+
+`src/lib/client.ts` and `types.ts` are adapted from `site/src/chat/` (the gateway
+contract). They should become one shared package once the site and the app share
+a workspace; until then a contract change must be made in both (the gateway tests
+and `mobile/test/lib.test.ts` both pin it).

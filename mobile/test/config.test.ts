@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /** app.config.ts reads the environment when it loads, so each case loads a fresh copy. */
 async function load(env: Record<string, string | undefined> = {}) {
@@ -11,10 +11,22 @@ async function load(env: Record<string, string | undefined> = {}) {
 }
 const ID = '3edfc139-4592-48ad-84a3-aacd0f0a9e72';
 
+// The shell, CI or an EAS workflow may already set these (EAS_PROJECT_ID is a documented override). Each test
+// starts from a clean slate and the original values come back afterwards, so results never depend on the
+// environment or on test order.
+const VARS = ['EAS_PROJECT_ID', 'EXPO_PUBLIC_SHAMWARI_API', 'EXPO_PUBLIC_WORKOS_CLIENT_ID'] as const;
+const saved: Partial<Record<(typeof VARS)[number], string | undefined>> = {};
+beforeEach(() => {
+  for (const v of VARS) {
+    saved[v] = process.env[v];
+    delete process.env[v];
+  }
+});
 afterEach(() => {
-  delete process.env.EAS_PROJECT_ID;
-  delete process.env.EXPO_PUBLIC_SHAMWARI_API;
-  delete process.env.EXPO_PUBLIC_WORKOS_CLIENT_ID;
+  for (const v of VARS) {
+    if (saved[v] === undefined) delete process.env[v];
+    else process.env[v] = saved[v];
+  }
 });
 
 describe('app config', () => {
@@ -44,12 +56,18 @@ describe('app config', () => {
     expect(c.android?.package).toBe('ai.shamwari.app');
   });
 
-  it('puts nothing secret-looking in the public config (everything here ships inside the app)', async () => {
+  it('ships only the known public keys in extra: adding one is a deliberate edit to this list', async () => {
+    // Everything in the app config is readable by anyone who downloads the app. This list is a tripwire that
+    // makes a new key a conscious decision. It is NOT a secret scanner: gitleaks in CI is the control for that.
     const c = await load();
-    const flat = JSON.stringify(c);
-    expect(flat).not.toMatch(/client_secret|api[_-]?key|password|sk_[a-z]+_|private[_-]?key/i);
-    const extra = Object.keys(c.extra ?? {});
-    expect(extra.sort()).toEqual(['apiBaseUrl', 'eas', 'workosClientId']);
+    expect(Object.keys(c.extra ?? {}).sort()).toEqual(['apiBaseUrl', 'eas', 'workosClientId']);
+    expect(JSON.stringify(c)).not.toMatch(/client_secret|sk_[a-z]+_/i);
+  });
+
+  it('is not affected by variables already set in the environment', async () => {
+    process.env.EAS_PROJECT_ID = 'ambient';
+    process.env.EXPO_PUBLIC_WORKOS_CLIENT_ID = 'client_ambient';
+    expect((await load({ EAS_PROJECT_ID: undefined, EXPO_PUBLIC_WORKOS_CLIENT_ID: undefined })).extra?.eas).toEqual({ projectId: ID });
   });
 
   it('declares the plugins the native modules need', async () => {
