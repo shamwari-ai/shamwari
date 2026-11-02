@@ -117,6 +117,21 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
 `shamwari-site` add `shamwari.ai` back. The marketing site serves both hostnames again,
 as it does today.
 
+## Before sign-in can work (owner steps; all in the dashboard)
+
+The session Worker (`site/worker/`, see `docs/chat-signin.md`) ships inside `shamwari-app`. It is
+inert until these are done, and the page keeps using developer-key mode (`PUBLIC_CHAT_AUTH` is off):
+
+1. In Cloudflare, open **Secrets Store** and create two secrets: the WorkOS **API key** for the
+   Shamwari Chat environment, and a **cookie password** (32 or more random characters).
+2. Tell the next session the store id and the two secret names. They go into
+   `secrets_store_secrets` in `site/wrangler.app.jsonc` (the commented block). Nothing else is
+   needed from you: no value is ever put in git.
+3. The first deploy of `shamwari-app` also creates the `SessionRefresh` Durable Object (a migration
+   in the same file). It shows up under Workers & Pages > shamwari-app > Bindings.
+4. Sign-in cannot be tried on the `workers.dev` address: WorkOS accepts only
+   `https://shamwari.ai/lite/callback`. Test it after the apex is attached to `shamwari-app`.
+
 ## Things this has not verified
 
 - **What `wrangler deploy` does to a custom domain that is not in the file.** See step 6.
