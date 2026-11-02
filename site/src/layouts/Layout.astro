@@ -5,7 +5,7 @@ import Breadcrumb from '@bundu/ui/Breadcrumb.astro';
 import SocialIcon from '@bundu/ui/SocialIcon.astro';
 import { Button } from '@bundu/ui/ui/button';
 import { deriveBreadcrumbs } from '@bundu/ui';
-import { BREADCRUMB_LABELS, PAGES, REPO, CONTACT_EMAIL } from '../lib/site';
+import { BREADCRUMB_LABELS, PAGES, REPO, CONTACT_EMAIL, CHAT_URL, CHAT_LIVE } from '../lib/site';
 
 interface Props {
   title: string;
@@ -76,7 +76,11 @@ const canonical = new URL(Astro.url.pathname, Astro.site);
       Shamwari
       <span class="font-sans text-caption font-semibold uppercase tracking-widest text-muted-foreground">AI</span>
     </span>
-    <Button slot="action" href="/contact/" size="sm">Get in touch</Button>
+    {CHAT_LIVE ? (
+      <Button slot="action" href={CHAT_URL} size="sm">Open chat</Button>
+    ) : (
+      <Button slot="action" href="/contact/" size="sm">Get in touch</Button>
+    )}
 
     {crumbs.length >= 2 && (
       <div class="container-custom pt-6">

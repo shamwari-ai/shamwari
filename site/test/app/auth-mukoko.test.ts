@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { mukokoAuth, parseExpiry } from '../src/chat/auth-mukoko';
+import { mukokoAuth, parseExpiry } from '../../src/chat/auth-mukoko';
 
 const TOKEN = 'eyJhbGciOiJSUzI1NiJ9.payload-secret-part.signature';
 
@@ -55,7 +55,7 @@ describe('mukoko auth', () => {
     const auth = mukokoAuth({ fetch: fetchMock as unknown as typeof fetch, hintStorage: spyStorage() });
     await auth.refresh();
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('/chat/auth/token');
+    expect(url).toBe('/lite/auth/token');
     expect(init).toMatchObject({ method: 'GET', credentials: 'same-origin', cache: 'no-store' });
     expect(init.body).toBeUndefined();
   });
@@ -75,7 +75,7 @@ describe('mukoko auth', () => {
     expect(auth.getKey()).toBeNull();
     expect(auth.signedIn()).toBe(false);
     expect(await auth.ensureKey()).toBeNull(); // and it does not quietly sign itself back in
-    expect(calls).toContain('POST /chat/auth/logout');
+    expect(calls).toContain('POST /lite/auth/logout');
   });
 
   it('sign-out still clears the page if the logout call fails', async () => {
@@ -204,7 +204,7 @@ describe('mukoko auth', () => {
     expect(second.signedIn()).toBe(false);
     calls.length = 0;
     expect(await second.refresh()).toBe(false);
-    expect(calls).toEqual(['/chat/auth/logout']); // tried to finish signing out, did NOT ask for a token
+    expect(calls).toEqual(['/lite/auth/logout']); // tried to finish signing out, did NOT ask for a token
     expect(second.signedIn()).toBe(false);
 
     // Online again: the sign-out completes, and only then could anything renew.
@@ -212,7 +212,7 @@ describe('mukoko auth', () => {
     const third = auth();
     calls.length = 0;
     await third.refresh();
-    expect(calls[0]).toBe('/chat/auth/logout');
+    expect(calls[0]).toBe('/lite/auth/logout');
     expect(hint.data.has('shamwari.mukoko.logout')).toBe(false);
   });
 
