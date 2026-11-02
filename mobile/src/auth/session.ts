@@ -42,6 +42,7 @@ export class SessionUnavailable extends Error {
 }
 
 export type SignInResult = 'signed_in' | 'cancelled' | 'failed';
+type RefreshOutcome = 'ok' | 'terminal' | 'rejected' | 'transient' | 'stale';
 
 /**
  * The person's WorkOS session on this phone.
@@ -58,7 +59,13 @@ export type SignInResult = 'signed_in' | 'cancelled' | 'failed';
  */
 export class Session {
   private access: { token: string; expMs: number } | null = null;
-  private inflight: Promise<'ok' | 'terminal' | 'transient'> | null = null;
+  private inflight: Promise<RefreshOutcome> | null = null;
+  private signingIn: Promise<SignInResult> | null = null;
+  /** Bumped by every sign-in and sign-out. A refresh that started in an earlier epoch is DISCARDED. */
+  private epoch = 0;
+  /** WorkOS refused the stored session for a non-terminal reason: the person must sign in again, the keystore is untouched. */
+  private rejected = false;
+  private signedOutAt = 0;
 
   constructor(
     private readonly cfg: AuthConfig,
@@ -66,10 +73,22 @@ export class Session {
   ) {}
 
   async isSignedIn(): Promise<boolean> {
-    return (await this.p.secure.get(REFRESH_KEY)) !== null;
+    return !this.rejected && (await this.p.secure.get(REFRESH_KEY)) !== null;
   }
 
-  async signIn(): Promise<SignInResult> {
+  /** One sign-in at a time (a double tap must not overwrite the first one's verifier), and never throws. */
+  signIn(): Promise<SignInResult> {
+    this.signingIn ??= this.doSignIn()
+      .catch((): SignInResult => 'failed') // a locked keystore or a browser fault is a failed sign-in, not a crash
+      .finally(() => {
+        this.signingIn = null;
+      });
+    return this.signingIn;
+  }
+
+  private async doSignIn(): Promise<SignInResult> {
+    if (!this.cfg.clientId) return 'failed';
+    this.epoch++; // any refresh already running belongs to the old session and must not write back
     const pkce = await newPkce(this.p.randomBytes, this.p.sha256);
     // Persist BEFORE the browser opens: the OS can kill the app while the browser is up, and the
     // verifier cannot be re-derived. It is also what proves the redirect is the one we started.
@@ -89,6 +108,7 @@ export class Session {
       const r = await exchangeCode(this.p.fetch, this.cfg, cb.code, pending.verifier);
       if (!r.ok) return 'failed';
       await this.p.secure.set(REFRESH_KEY, r.tokens.refreshToken);
+      this.rejected = false;
       this.setAccess(r.tokens.accessToken);
       return 'signed_in';
     } finally {
@@ -102,7 +122,7 @@ export class Session {
     if (this.access && this.access.expMs - this.p.now() > SKEW_MS) return this.access.token;
     if (!(await this.isSignedIn())) return null;
     const outcome = await this.refresh();
-    if (outcome === 'terminal') return null;
+    if (outcome === 'terminal' || outcome === 'rejected' || outcome === 'stale') return null;
     if (outcome === 'transient') {
       // Still inside its real lifetime? Use it rather than fail a request the person is watching.
       if (this.access && this.access.expMs > this.p.now()) return this.access.token;
@@ -119,6 +139,7 @@ export class Session {
   }
 
   async signOut(): Promise<void> {
+    this.signedOutAt = ++this.epoch; // a refresh in flight must not write a session back after this
     let sid = this.access ? readClaims(this.access.token).sid : null;
     if (!sid && (await this.isSignedIn())) {
       // After a restart only the refresh token remains, and the logout URL needs the session id.
@@ -126,32 +147,47 @@ export class Session {
     }
     // Local state goes first, so dismissing the browser still leaves the person signed out here.
     this.access = null;
+    this.rejected = false;
     await this.p.secure.delete(REFRESH_KEY).catch(() => undefined);
     await this.p.secure.delete(PENDING_KEY).catch(() => undefined);
     if (sid) await this.p.openUrl(buildLogoutUrl(this.cfg, sid)).catch(() => undefined);
   }
 
-  private refresh(): Promise<'ok' | 'terminal' | 'transient'> {
+  private refresh(): Promise<RefreshOutcome> {
     this.inflight ??= this.doRefresh().finally(() => {
       this.inflight = null;
     });
     return this.inflight;
   }
 
-  private async doRefresh(): Promise<'ok' | 'terminal' | 'transient'> {
+  private async doRefresh(): Promise<RefreshOutcome> {
+    const epoch = this.epoch;
     const stored = await this.p.secure.get(REFRESH_KEY);
     if (!stored) return 'terminal';
     const r = await refreshTokens(this.p.fetch, this.cfg, stored);
+    // The person signed out or in while this was in flight: whatever WorkOS said is about a session
+    // that no longer exists. Writing it back would resurrect it or delete the new one.
+    if (epoch !== this.epoch) return 'stale';
     if (!r.ok) {
       if (r.failure === 'terminal') {
         this.access = null;
         await this.p.secure.delete(REFRESH_KEY).catch(() => undefined);
         return 'terminal';
       }
+      if (r.failure === 'rejected') {
+        this.access = null;
+        this.rejected = true; // ask them to sign in; do NOT touch the stored credential
+        return 'rejected';
+      }
       return 'transient';
     }
     // Save the rotated refresh token first: the old one is already spent.
     await this.p.secure.set(REFRESH_KEY, r.tokens.refreshToken);
+    if (epoch !== this.epoch) {
+      // Signed out while the write was in flight: the write may have landed after sign-out's delete.
+      if (this.signedOutAt > epoch) await this.p.secure.delete(REFRESH_KEY).catch(() => undefined);
+      return 'stale';
+    }
     this.setAccess(r.tokens.accessToken);
     return 'ok';
   }

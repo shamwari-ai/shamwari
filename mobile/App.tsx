@@ -44,6 +44,8 @@ export default function App() {
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attempts = useRef(0);
   const busy = useRef(false);
+  // Bumped by sign-out. A send that was already in flight sees the change and discards its answer.
+  const generation = useRef(0);
   const client = useMemo(
     () =>
       createClient({
@@ -65,6 +67,7 @@ export default function App() {
   const flush = useCallback(async () => {
     if (busy.current) return;
     busy.current = true;
+    const gen = generation.current;
     try {
       // Re-read the ref each round so a question typed mid-flush is sent too, and is never overwritten.
       for (;;) {
@@ -72,6 +75,8 @@ export default function App() {
         if (!ask) break;
         // Same id every retry: the gateway replays instead of metering twice.
         const r = await client.ask({ messages: [{ role: 'user', content: ask.question }], scope: 'platform' }, { idempotencyKey: ask.id });
+        // Signed out while this was in flight: the answer belongs to the person who left. Drop it.
+        if (gen !== generation.current) break;
         if (r.ok) {
           const text = clampBytes(r.value.text, BUDGET.maxAnswerBytes);
           attempts.current = 0; setStatus(null);
@@ -91,7 +96,7 @@ export default function App() {
           // question, say what to do, and resume when the person has done it.
           setStatus(r.error.kind);
           // The session may have just ended (a terminal refusal): make the screen say so.
-          void session.isSignedIn().then(setSignedIn);
+          session.isSignedIn().then(setSignedIn, () => undefined);
           if (r.error.kind === 'unauthorized') setShowSettings(true);
           break;
         } else {
@@ -114,7 +119,8 @@ export default function App() {
         if (isLanguage(savedLang)) setLang(savedLang);
         keyRef.current = k; setKey(k); persist(q);
         setItems(q.map((a) => ({ kind: 'q', id: a.id, text: a.question, pending: true })));
-        const signed = await session.isSignedIn();
+        // A keystore error here must not stop the saved key and queue from loading.
+        const signed = await session.isSignedIn().catch(() => false);
         setSignedIn(signed);
         if (!k && !signed) setShowSettings(true);
         else if (q.length) void flush();
@@ -146,7 +152,7 @@ export default function App() {
 
   const signIn = async () => {
     setStatus(null);
-    const r = await session.signIn();
+    const r = await session.signIn(); // never throws: a keystore or browser fault is 'failed'
     if (r === 'signed_in') {
       setSignedIn(true);
       setShowSettings(false);
@@ -155,13 +161,20 @@ export default function App() {
   };
 
   const signOut = async () => {
-    await session.signOut();
-    // On a shared phone the next person must not send, or read, the previous person's questions.
+    // Wipe this phone's copy of the person FIRST, before the browser opens: if the app is killed or the
+    // browser hangs, the next person must still find nothing of theirs and nothing able to send as them.
+    generation.current++;
     if (retryTimer.current) clearTimeout(retryTimer.current);
+    retryTimer.current = null;
+    attempts.current = 0;
     persist([]);
     setItems([]);
+    keyRef.current = null;
+    setKey(null);
     setSignedIn(false);
     setStatus('signedOut');
+    void saveKey('').catch(() => undefined);
+    await session.signOut().catch(() => undefined);
   };
 
   const render = ({ item }: { item: Item }) => {

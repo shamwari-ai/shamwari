@@ -1,4 +1,4 @@
-import { base64urlDecode } from './pkce';
+import { base64urlDecode, utf8Decode } from './pkce';
 
 /**
  * The WorkOS AuthKit calls the app makes, as plain functions. Read from the
@@ -21,16 +21,23 @@ export interface AuthConfig {
   apiBase: string;
 }
 
+/** Query string by hand: RN's URLSearchParams has not always implemented set(), and the Node tests cannot tell. */
+const qs = (params: Record<string, string>): string =>
+  Object.entries(params)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join('&');
+const base = (cfg: AuthConfig) => cfg.apiBase.replace(/\/+$/, '');
+
 export function buildAuthorizeUrl(cfg: AuthConfig, p: { challenge: string; state: string }): string {
-  const u = new URL('/user_management/authorize', cfg.apiBase);
-  u.searchParams.set('response_type', 'code');
-  u.searchParams.set('client_id', cfg.clientId);
-  u.searchParams.set('redirect_uri', cfg.redirectUri);
-  u.searchParams.set('provider', 'authkit');
-  u.searchParams.set('state', p.state);
-  u.searchParams.set('code_challenge', p.challenge);
-  u.searchParams.set('code_challenge_method', 'S256');
-  return u.toString();
+  return `${base(cfg)}/user_management/authorize?${qs({
+    response_type: 'code',
+    client_id: cfg.clientId,
+    redirect_uri: cfg.redirectUri,
+    provider: 'authkit',
+    state: p.state,
+    code_challenge: p.challenge,
+    code_challenge_method: 'S256',
+  })}`;
 }
 
 export type Callback =
@@ -38,18 +45,23 @@ export type Callback =
   | { kind: 'error'; error: string }
   | { kind: 'invalid' };
 
-/** Parse the redirect by hand: Hermes' URL has no searchParams on custom schemes in every version. */
+const decode = (s: string): string => {
+  try {
+    return decodeURIComponent(s.replace(/\+/g, ' '));
+  } catch {
+    return s; // a stray % in a field we do not depend on (error_description) must not break the redirect
+  }
+};
+
+/** Parse the redirect by hand: a value may contain '=', and one bad field must not discard the rest. */
 export function parseCallback(url: string): Callback {
-  const q = url.split('#')[0].split('?')[1];
+  const q = url.split('#')[0].split('?').slice(1).join('?');
   if (!q) return { kind: 'invalid' };
   const params: Record<string, string> = {};
   for (const pair of q.split('&')) {
-    const [k, v = ''] = pair.split('=');
-    try {
-      params[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g, ' '));
-    } catch {
-      return { kind: 'invalid' };
-    }
+    const i = pair.indexOf('=');
+    const k = decode(i < 0 ? pair : pair.slice(0, i));
+    if (k) params[k] = i < 0 ? '' : decode(pair.slice(i + 1));
   }
   if (params.error) return { kind: 'error', error: params.error };
   if (params.code && params.state) return { kind: 'ok', code: params.code, state: params.state };
@@ -58,16 +70,19 @@ export function parseCallback(url: string): Callback {
 
 export type Tokens = { accessToken: string; refreshToken: string };
 /**
- * terminal: the credential is spent, revoked or expired (the person must sign in again).
+ * terminal: WorkOS said the grant is spent, revoked or expired (`invalid_grant`). The person must sign in again.
+ * rejected: WorkOS refused the request for another reason (a wrong client id, a client that may not be
+ *   public, an unexpected 4xx). The person cannot use the session now, but the stored credential is
+ *   KEPT: a configuration mistake must never wipe everyone's session.
  * transient: not now (offline, rate limit, WorkOS down). The session is NOT over.
  */
-export type TokenFailure = 'terminal' | 'transient';
+export type TokenFailure = 'terminal' | 'rejected' | 'transient';
 export type TokenResult = { ok: true; tokens: Tokens } | { ok: false; failure: TokenFailure };
 
 async function authenticate(f: typeof fetch, cfg: AuthConfig, body: Record<string, string>): Promise<TokenResult> {
   let res: Response;
   try {
-    res = await f(new URL('/user_management/authenticate', cfg.apiBase).toString(), {
+    res = await f(`${base(cfg)}/user_management/authenticate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ client_id: cfg.clientId, ...body }),
@@ -82,9 +97,12 @@ async function authenticate(f: typeof fetch, cfg: AuthConfig, body: Record<strin
       ? { ok: true, tokens: { accessToken: o.access_token, refreshToken: o.refresh_token } }
       : { ok: false, failure: 'transient' }; // a 200 we cannot read is not proof the session is over
   }
-  // Only a clear "this credential is no good" ends a session. Everything else (429, 5xx, an
-  // unexpected 4xx) keeps it, so our or WorkOS's outage is never somebody's sign-out.
-  if (res.status === 401 || o.error === 'invalid_grant') return { ok: false, failure: 'terminal' };
+  // Only a clear "this grant is no good" ends a session. A 429 or 5xx is an outage (keep it); any
+  // other 4xx, a 401 included, means a request or configuration problem (keep the credential, but the
+  // person is asked to sign in). Never delete a credential on an answer we cannot read.
+  if (o.error === 'invalid_grant') return { ok: false, failure: 'terminal' };
+  if (res.status === 429 || res.status >= 500) return { ok: false, failure: 'transient' };
+  if (res.status >= 400) return { ok: false, failure: 'rejected' };
   return { ok: false, failure: 'transient' };
 }
 
@@ -95,10 +113,7 @@ export const refreshTokens = (f: typeof fetch, cfg: AuthConfig, refreshToken: st
   authenticate(f, cfg, { grant_type: 'refresh_token', refresh_token: refreshToken });
 
 export function buildLogoutUrl(cfg: AuthConfig, sessionId: string): string {
-  const u = new URL('/user_management/sessions/logout', cfg.apiBase);
-  u.searchParams.set('session_id', sessionId);
-  u.searchParams.set('return_to', cfg.logoutReturnTo);
-  return u.toString();
+  return `${base(cfg)}/user_management/sessions/logout?${qs({ session_id: sessionId, return_to: cfg.logoutReturnTo })}`;
 }
 
 /**
@@ -109,7 +124,7 @@ export function buildLogoutUrl(cfg: AuthConfig, sessionId: string): string {
  */
 export function readClaims(jwt: string): { exp: number | null; sid: string | null } {
   try {
-    const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(jwt.split('.')[1] ?? '')));
+    const payload = JSON.parse(utf8Decode(base64urlDecode(jwt.split('.')[1] ?? '')));
     return {
       exp: typeof payload.exp === 'number' ? payload.exp : null,
       sid: typeof payload.sid === 'string' && payload.sid ? payload.sid : null,

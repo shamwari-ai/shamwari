@@ -37,6 +37,16 @@ export function base64urlDecode(s: string): Uint8Array {
   return Uint8Array.from(out);
 }
 
+/** UTF-8 decode without TextDecoder (not guaranteed on every Hermes build). */
+export function utf8Decode(bytes: Uint8Array): string {
+  let pct = '';
+  for (const b of bytes) pct += '%' + b.toString(16).padStart(2, '0');
+  return decodeURIComponent(pct);
+}
+
+/** ASCII bytes of a string (the PKCE verifier is base64url, so ASCII), without TextEncoder. */
+export const asciiBytes = (s: string) => Uint8Array.from(s, (c) => c.charCodeAt(0) & 255);
+
 export async function challengeFor(verifier: string, sha256: Sha256): Promise<string> {
   return base64url(await sha256(verifier));
 }

@@ -153,10 +153,51 @@ describe('sign-in', () => {
     expect(h.store.size).toBe(0);
   });
 
-  it('parses callbacks safely', () => {
+  it('parses callbacks robustly: values may contain "=", a stray % elsewhere never hides the outcome', () => {
     expect(parseCallback('x://cb?code=a%20b&state=s')).toEqual({ kind: 'ok', code: 'a b', state: 's' });
+    expect(parseCallback('x://cb?code=ab==&state=s')).toEqual({ kind: 'ok', code: 'ab==', state: 's' });
+    expect(parseCallback('x://cb?error=access_denied&error_description=bad%')).toEqual({ kind: 'error', error: 'access_denied' });
     expect(parseCallback('x://cb')).toEqual({ kind: 'invalid' });
-    expect(parseCallback('x://cb?code=%E0%A4%A&state=s')).toEqual({ kind: 'invalid' });
+    expect(parseCallback('x://cb?state=only')).toEqual({ kind: 'invalid' });
+  });
+
+  it('a double tap is ONE sign-in: one browser, and the first one still completes', async () => {
+    const h = harness();
+    let opens = 0;
+    h.browser.next = (url) => {
+      opens++;
+      return { type: 'success', url: `ai.shamwari.app://callback?code=c&state=${stateOf(url)}` };
+    };
+    h.respond(() => ok({ exp: NOW_S + 300, sid: 's' }, 'rt1'));
+    const [a, b] = await Promise.all([h.s.signIn(), h.s.signIn()]);
+    expect([a, b, opens]).toEqual(['signed_in', 'signed_in', 1]);
+  });
+
+  it('a locked keystore or a browser fault is a failed sign-in, never a thrown error', async () => {
+    const h = harness();
+    h.browser.next = () => { throw new Error('browser fault'); };
+    await expect(h.s.signIn()).resolves.toBe('failed');
+    const store = new Map<string, string>();
+    const s = new Session(cfg, {
+      fetch: (async () => new Response('{}')) as unknown as typeof fetch,
+      secure: { get: async () => null, set: async () => { throw new Error('locked'); }, delete: async () => undefined },
+      openAuthSession: async () => ({ type: 'cancel' }), openUrl: async () => undefined,
+      randomBytes: (n) => new Uint8Array(randomBytes(n)), sha256, now: () => 0,
+    });
+    await expect(s.signIn()).resolves.toBe('failed');
+    expect(store.size).toBe(0);
+  });
+
+  it('with no client id configured, sign-in fails closed without opening anything', async () => {
+    let opened = 0;
+    const s = new Session({ ...cfg, clientId: '' }, {
+      fetch: (async () => new Response('{}')) as unknown as typeof fetch,
+      secure: { get: async () => null, set: async () => undefined, delete: async () => undefined },
+      openAuthSession: async () => { opened++; return { type: 'cancel' }; }, openUrl: async () => undefined,
+      randomBytes: (n) => new Uint8Array(randomBytes(n)), sha256, now: () => 0,
+    });
+    expect(await s.signIn()).toBe('failed');
+    expect(opened).toBe(0);
   });
 });
 
@@ -236,6 +277,79 @@ describe('refresh', () => {
     h.respond(() => new Response(JSON.stringify({ access_token: 'opaque2', refresh_token: 'rt2' })));
     await h.s.getAccessToken();
     expect(h.calls).toHaveLength(1);
+  });
+});
+
+describe('refresh races and classification', () => {
+  async function signedIn() {
+    const h = harness();
+    completes(h);
+    h.respond(() => ok({ exp: NOW_S + 300, sid: 'sess_1' }, 'rt1'));
+    await h.s.signIn();
+    h.calls.length = 0;
+    return h;
+  }
+  /** Wait until WorkOS has actually been called, so the request is genuinely in flight. */
+  const inFlight = async (h: Harness) => {
+    for (let i = 0; i < 50 && h.calls.length === 0; i++) await new Promise((r) => setTimeout(r, 0));
+    expect(h.calls.length).toBeGreaterThan(0);
+  };
+  const gate = () => {
+    let release!: () => void;
+    const p = new Promise<void>((r) => (release = r));
+    return { p, release };
+  };
+
+  it('a refresh that finishes AFTER sign-out cannot sign the person back in', async () => {
+    const h = await signedIn();
+    h.setNow((NOW_S + 290) * 1000);
+    const g = gate();
+    h.respond(async () => { await g.p; return ok({ exp: NOW_S + 600, sid: 'sess_1' }, 'rt2'); });
+    const pending = h.s.getAccessToken(); // refresh now in flight
+    await inFlight(h);
+    await h.s.signOut();
+    g.release();
+    expect(await pending).toBeNull();
+    expect(h.store.size).toBe(0); // nothing resurrected in the keystore
+    expect(await h.s.isSignedIn()).toBe(false);
+    expect(await h.s.getAccessToken()).toBeNull();
+  });
+
+  it('a stale refresh cannot overwrite or delete a newer sign-in', async () => {
+    const h = await signedIn();
+    h.setNow((NOW_S + 290) * 1000);
+    const g = gate();
+    h.respond(async () => { await g.p; return new Response('{"error":"invalid_grant"}', { status: 400 }); });
+    const pending = h.s.getAccessToken();
+    await inFlight(h);
+    completes(h);
+    h.respond(() => ok({ exp: NOW_S + 900, sid: 'sess_2' }, 'rt_new'));
+    expect(await h.s.signIn()).toBe('signed_in');
+    g.release();
+    await pending;
+    expect(h.store.get('shamwari.rt')).toBe('rt_new'); // the late invalid_grant did not delete the new session
+    expect(await h.s.isSignedIn()).toBe(true);
+  });
+
+  it('only invalid_grant deletes the credential; a 401 for any other reason keeps it and asks for a new sign-in', async () => {
+    const h = await signedIn();
+    h.setNow((NOW_S + 400) * 1000);
+    h.respond(() => new Response('{"error":"invalid_client"}', { status: 401 }));
+    expect(await h.s.getAccessToken()).toBeNull();
+    expect(h.store.get('shamwari.rt')).toBe('rt1'); // a wrong client id must not wipe everyone's session
+    expect(await h.s.isSignedIn()).toBe(false); // but the screen asks them to sign in
+    completes(h);
+    h.respond(() => ok({ exp: NOW_S + 1200, sid: 'sess_3' }, 'rt3'));
+    expect(await h.s.signIn()).toBe('signed_in');
+    expect(await h.s.isSignedIn()).toBe(true);
+  });
+
+  it('a 400 invalid_grant is terminal', async () => {
+    const h = await signedIn();
+    h.setNow((NOW_S + 400) * 1000);
+    h.respond(() => new Response('{"error":"invalid_grant"}', { status: 400 }));
+    expect(await h.s.getAccessToken()).toBeNull();
+    expect(h.store.size).toBe(0);
   });
 });
 

@@ -1,6 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
+import { asciiBytes } from './pkce';
 import { Session, type Ports } from './session';
 import type { AuthConfig } from './workos';
 
@@ -8,7 +9,8 @@ const SCHEME = 'ai.shamwari.app';
 
 export function authConfig(extra: { workosClientId?: string } | undefined): AuthConfig {
   return {
-    clientId: extra?.workosClientId ?? 'client_01M68PCT0T5ECHKDYH45ECT0GV',
+    // One source: app.config.ts (extra.workosClientId). Missing means sign-in fails closed, it never guesses a client.
+    clientId: extra?.workosClientId ?? '',
     redirectUri: `${SCHEME}://callback`,
     logoutReturnTo: `${SCHEME}://signed-out`,
     apiBase: 'https://api.workos.com',
@@ -35,7 +37,7 @@ export function createNativeSession(cfg: AuthConfig): Session {
     },
     randomBytes: (n) => Crypto.getRandomBytes(n),
     sha256: async (s) =>
-      new Uint8Array(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, new TextEncoder().encode(s))),
+      new Uint8Array(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, asciiBytes(s))),
     now: () => Date.now(),
   };
   return new Session(cfg, ports);
