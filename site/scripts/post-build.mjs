@@ -11,12 +11,13 @@
 import { createHash } from 'node:crypto';
 import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const out = process.argv[2] ?? 'dist-app';
 
 // The two icons the marketing site and the app share live once, in public/; the app
 // build takes its copy here rather than keeping a second binary that can drift.
-for (const icon of ['favicon.png', 'apple-touch-icon.png']) copyFileSync(join('public', icon), join(out, icon));
+for (const icon of ['favicon.png', 'apple-touch-icon.png']) copyFileSync(fileURLToPath(new URL(`../public/${icon}`, import.meta.url)), join(out, icon));
 const read = (p) => readFileSync(join(out, p));
 const html = read('lite/index.html').toString('utf8');
 

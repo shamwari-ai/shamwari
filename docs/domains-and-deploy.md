@@ -29,10 +29,11 @@ build), or if a redirect goes anywhere except `/chat/`, `/lite/` or the marketin
 origin. The app Worker redirects the three old apex marketing links (`/blueprint/`,
 `/project/`, `/contact/`) to `www`; a redirect is not serving a page.
 
-**"Open chat" on the marketing site** points at `https://shamwari.ai/chat/` and is
-**not shown until the app is released** (build variable `PUBLIC_CHAT_LIVE=true` on the
-marketing build). Until then it shows "Get in touch", because a link to an app that
-answers 404 would say it is ready when it is not.
+**"Open chat" on the marketing site** points at `https://shamwari.ai/chat/`, the MAIN
+Shamwari Chat (a separate build), not the light chat this Worker serves at `/lite/`. It is
+**not shown until that chat is released** (build variable `PUBLIC_CHAT_LIVE=true` on the
+marketing build). Until then it shows "Get in touch", because a link that answers 404 would
+say the chat is ready when it is not. Do not set the variable before `/chat/` answers.
 
 ## What the code now assumes about hostnames
 
@@ -55,6 +56,19 @@ answers 404 would say it is ready when it is not.
 
 Everything below is done in the Cloudflare dashboard, on a phone is fine. Do the steps in
 this order; each one is safe to stop after.
+
+**Two gates before step 5 (moving the apex).** Both come from the code review of this change:
+
+- **`https://shamwari.ai/chat/` must already answer.** After the move the apex root redirects
+  there, and today nothing serves it. Until the main chat is deployed, moving the apex would
+  turn the root URL of the company into a 404. If the main chat is not ready, either wait, or
+  change the one line in `site/app-public/_redirects` (and the matching check in
+  `site/check.mjs`) so the root goes to `/lite/` for now.
+- **Do step 6's config change in the same sitting.** Until `site/wrangler.jsonc` stops
+  declaring the apex, the next routine deploy of `shamwari-site` can try to take it back from
+  `shamwari-app`, and whether Wrangler does that is **not verified**. Merge step 6's change
+  straight after the move, and pause `shamwari-site`'s automatic deploys in between if you
+  can.
 
 1. **Merge the code.** The stack and this change reach `main` only when the owner says.
    Nothing changes for visitors yet: `shamwari-site` keeps serving both hostnames until
