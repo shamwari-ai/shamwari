@@ -461,7 +461,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
         $('#toast').textContent = strings().signInRetry;
         return;
       }
-      location.assign('/chat/auth/login');
+      location.assign('/lite/auth/login');
     });
   }
 
