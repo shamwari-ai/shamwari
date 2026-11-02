@@ -12,7 +12,8 @@ const stubAuth = process.argv.includes('--stub-auth');
 // A STAND-IN for the chat session Worker (docs/chat-signin.md), which is a design,
 // not code. It speaks only the three calls the page makes and keeps its state in
 // memory; the tests steer it through POST /__stub/auth and read it back with GET.
-const stub = { session: false, tokens: [], tokenCalls: 0, logoutCalls: 0, tokenStatus: null };
+const stub = { session: false, tokens: [], tokenCalls: 0, logoutCalls: 0, tokenStatus: null, tokenDelayMs: 0, logoutDelayMs: 0 };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const json = (res, status, body, headers = {}) => {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers });
   res.end(JSON.stringify(body));
@@ -22,7 +23,7 @@ async function stubRoute(req, res, path) {
     if (req.method === 'POST') {
       let raw = '';
       for await (const c of req) raw += c;
-      Object.assign(stub, { tokenCalls: 0, logoutCalls: 0, tokenStatus: null, tokens: [], session: false }, JSON.parse(raw || '{}'));
+      Object.assign(stub, { tokenCalls: 0, logoutCalls: 0, tokenStatus: null, tokens: [], session: false, tokenDelayMs: 0, logoutDelayMs: 0 }, JSON.parse(raw || '{}'));
     }
     return json(res, 200, { tokenCalls: stub.tokenCalls, logoutCalls: stub.logoutCalls, session: stub.session });
   }
@@ -33,6 +34,7 @@ async function stubRoute(req, res, path) {
   }
   if (path === '/chat/auth/token') {
     stub.tokenCalls += 1;
+    if (stub.tokenDelayMs) await sleep(stub.tokenDelayMs); // a slow link to the Worker
     if (stub.tokenStatus) return json(res, stub.tokenStatus, { error: 'session_ended' });
     // The session is a flag here, not a real cookie check: what is under test is the page, not the Worker.
     if (!stub.session) return json(res, 401, { error: 'no_session' });
@@ -41,6 +43,7 @@ async function stubRoute(req, res, path) {
   }
   if (path === '/chat/auth/logout' && req.method === 'POST') {
     stub.logoutCalls += 1;
+    if (stub.logoutDelayMs) await sleep(stub.logoutDelayMs); // a request that hangs
     stub.session = false;
     res.writeHead(204, { 'Set-Cookie': 'stub_session=; Path=/chat/; Max-Age=0; HttpOnly' });
     return res.end();
