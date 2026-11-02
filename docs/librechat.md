@@ -33,6 +33,163 @@ So every answer carries one of these labels:
 
 Nothing labelled _To test_ is a finding yet.
 
+## Relayed direction, awaiting owner confirmation in this session
+
+Everything in this section is marked **owner decision recorded 1 Nov 2026
+(relayed by orchestrator), awaiting owner confirmation in this session.** It
+reached this work as messages from another Claude session quoting the owner. It
+did not come from the owner in the session that wrote this page, and several
+items reverse the original brief. So each is written as a design with options
+and consequences, and **none is built, decided or assumed** until the owner
+confirms it here in one pass. Where this section conflicts with the rest of the
+page, this section is the proposal and the rest is the confirmed brief.
+
+**Path change relayed:** the light chat moves to `shamwari.ai/lite/*` (not
+`/chat/lite`). LibreChat owns `/chat/*`. Every `/chat/lite` in this page reads
+`/lite` if confirmed. The service-worker trap is unchanged: the old worker is
+scoped to `/chat/` and must retire itself before the route moves.
+
+### 1. Fork instead of thin patch set
+
+Relayed: "librechat out the box is the base we build it to make it ours."
+
+| Option                                       | What it means                                                             | Consequence                                                                                         |
+| -------------------------------------------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| A. Config plus thin patches (original brief) | Stock image, patches in `PATCHES.md`                                      | Cheapest upgrades; cannot add a scope selector, structured citations or Servers API without patches |
+| B. Fork at the pinned tag (relayed)          | Repo under `shamwari-ai`, `upstream` remote, our work as separate commits | We own the code and can change anything; every upstream security release becomes our merge job      |
+
+If B, the policy: base is the exact tag `v0.8.8` (commit `e8f3be08`); `upstream`
+points at `danny-avila/LibreChat`; our changes land as clearly separated
+commits by area (theme, scope selector, citations, Servers API, voice and
+i18n) so a merge conflict names its owner; upstream release tags are merged
+within a stated window (security releases first); the MIT licence text and
+copyright notice stay in place and in `NOTICE`; the CI guard (gateway-only
+endpoint, no provider keys, registration off) runs against the fork unchanged.
+**Owner step:** the fork needs a repo under `shamwari-ai`, which this session
+does not create. One step for the owner:
+`gh repo fork danny-avila/LibreChat --org shamwari-ai --fork-name librechat --clone=false`.
+The honest cost of B is recurring merge work; the ceiling on it is how much we
+change.
+
+### 2. Edge optimisation (the tunnel is the origin path, the edge does the rest)
+
+Relayed: "by porting it through a tunnel we can optimize it at edge."
+
+| Item             | Proposal                                                                                                                                                                                                       | Status                                                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Static build     | Worker serves and caches LibreChat's hashed JS, CSS, fonts and icons with `Cache-Control: public, max-age=31536000, immutable`; Brotli; early hints                                                            | To test, needs a build to know the file set                                                             |
+| Dynamic traffic  | API, auth and any streaming go through the tunnel, never cached                                                                                                                                                | Design                                                                                                  |
+| Edge limits      | Rate limit and an early session check at the edge so unauthenticated or abusive traffic never wakes the origin                                                                                                 | The gateway's limits and scope gate stay authoritative; **Rule 1 enforcement is not moved to the edge** |
+| Origin placement | Put the origin in the nearest Fly region to users; **verify** which regions exist (an African region is not assumed) and measure the tunnel hop's extra latency for streaming                                  | To verify before choosing a region                                                                      |
+| Cache safety     | Only public static assets are cacheable. A test fails if any user-specific response (anything under `/api`, `/oauth`, any response with `Set-Cookie` or an `Authorization` request) carries a cacheable header | Test named in the build list                                                                            |
+
+Numbers asked for (first-load size and time-to-first-token on a throttled
+mobile profile, before and after) are **unmeasured**; they come from the weight
+job, which gains a "before edge caching / after" pair.
+
+### 3. Two surfaces, one look
+
+Relayed: the original build is customised into the edge chat, and both must look
+like one product.
+
+- **Full app:** LibreChat (fork or stock), own database, behind the tunnel.
+- **Edge chat at `/lite`:** runs entirely on the Worker with no origin and no
+  database, light enough for weak networks.
+- **One visual language:** shared tokens in one file (Mzizi tokens, sodalite,
+  Noto fonts) consumed by both, so they cannot drift. LibreChat layout patterns
+  reproduced in the edge chat: collapsible left sidebar of conversations, calm
+  empty state, wide rounded composer. **Only in the full app:** server-side
+  history, search, cross-device sync (they need storage).
+- **Edge chat storage (proposal, owner to confirm):** conversation history on
+  the device only. **Nothing is stored for personal scope.** Anything beyond that
+  is a question for the owner, not a default.
+- Scope control, the 409 notice and citations appear in both.
+- Accessibility and weak-network check for the edge chat: keyboard operation,
+  contrast, and a size budget that fails the build.
+
+### 4. Edge chat redesign
+
+Relayed: the current page ("a form with a scope dropdown") is a redesign, not a
+restyle. Target is the familiar Claude / ChatGPT / LibreChat pattern, with the
+phone reference the owner sent (via the same relay): no marketing chrome, slim
+top row (sidebar toggle left, one icon right), one centred greeting about 60%
+down in display type with the Shamwari mark in sodalite, **no suggestion chips
+or cards in the empty state** (this supersedes an earlier relayed line about
+chips), a single wide rounded composer with a quiet placeholder and one control
+row (plus, mode pill, model label, mic, voice), safe-area padding, a keyboard
+that pushes the composer up without jumping. Scope lives in that control row as
+a pill, not a dropdown.
+
+Pattern set, kept small: collapsible sidebar (device-local list; slide-over on
+phones); auto-growing composer, Enter sends and Shift+Enter breaks the line;
+Send and Stop; user message as a subtle bubble and the answer as plain flowing
+text; markdown rendered safely with code blocks and a copy button; copy and
+retry per message; scroll-to-bottom with anchoring that does not fight the
+reader; citations as small numbered chips opening a source card; the personal
+409 as a calm inline notice saying what to do next.
+
+Constraints and consequences:
+
+- **Streaming:** the gateway does not stream today. A typing cue is possible
+  without streaming; true streaming text needs the gateway shim in "Streaming"
+  above and the owner's yes.
+- **Library or not:** no heavy framework. If assistant-ui or the AI SDK UI is
+  proposed, its cost is measured against the old page's 16.0 KB before adoption.
+- **Voice and mic:** shown in the reference, but there is no Shona or Ndebele
+  text-to-speech in the Cloudflare catalogue (`CLAUDE.md`, voice findings), and
+  any voice input must pass the scope gate first. They are placeholders until
+  that is solved, not shipped controls.
+- **Done is the owner's call:** Playwright screenshots at a phone and a desktop
+  viewport (empty and mid-conversation) go in the PR; the look is not marked
+  done by the author.
+
+### 5. Edge routing between the two surfaces
+
+Relayed: screen size or device class must **not** decide; a laptop or iPad is
+normally on wifi. Default is the full app. Route to the edge chat only on real
+signals, with a manual switch remembered on the device.
+
+| Signal                                                                      | Where it exists                                            | Use                                                                     |
+| --------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `Save-Data: on` request header                                              | Chromium browsers; not Safari or Firefox (verify at build) | Strong: route to `/lite`                                                |
+| Network Information API (`effectiveType`, `saveData`)                       | Chromium only; **not Safari/iPad**                         | Never depended on; hint only                                            |
+| `deviceMemory`, `hardwareConcurrency`                                       | Chromium for memory; wider for cores (verify)              | Hint only                                                               |
+| `request.cf` edge measurements (for example `clientTcpRtt`, `httpProtocol`) | Worker side, every browser                                 | The cross-browser signal; fields and availability verified in the build |
+| Manual "Use light version / Use full version"                               | Any                                                        | Wins over everything; remembered on the device                          |
+
+Thresholds are **proposed, not measured**: send to `/lite` only when Save-Data is
+on, or the edge-measured round trip is high enough to suggest a weak link (a
+number chosen from real traffic, not from this page). Unknown or missing signals
+default to **full**. The routing function is pure and unit-tested: laptop on
+wifi gets full; Save-Data phone gets edge; unknown signals get full; a manual
+choice wins.
+
+### 6. Sizes and density (Mzizi proposal, not an edit to Mzizi)
+
+Relayed: phones use Apple-aligned sizes (44 pt minimum touch target); wide
+screens with a fine pointer step down to a calm dense layout; targets never fall
+below 24 by 24 CSS px on fine pointers (WCAG 2.2 AA) and body text stays near
+14 px or larger; contrast, focus rings, zoom and reduced motion unchanged.
+
+- Implemented once as density tokens in the shared token file, driven by
+  breakpoint plus `(hover: hover) and (pointer: fine)`, not per component.
+- **The Apple numbers are not stated here.** They must be read from Apple's
+  published Human Interface Guidelines at build time and cited by page; this
+  session has not done that, and the table the relay asked for (token, old
+  value, new value, Apple reference) is filled from that reading, not memory.
+- The Mzizi package is **not edited**. The change is drafted as an upstream issue
+  for the owner (Apple-aligned sizes plus a desktop density mode, with
+  before and after measurements at phone, tablet and desktop widths).
+- A test fails if a fine-pointer target drops below the floor.
+
+### What confirming this changes
+
+If the owner confirms all six: the Architecture and cutover sections gain the
+fork and the `/lite` path; the build splits into at least three PRs (fork and
+guard, Worker with edge caching and routing, edge-chat redesign with shared
+tokens); the cost table is unchanged except for engineering time. If only some:
+the owner names them and the rest stay as the original brief.
+
 ## The pin
 
 |         |                                                                                                                |
