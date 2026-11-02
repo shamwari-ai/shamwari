@@ -88,7 +88,7 @@ export class Session {
 
   private async doSignIn(): Promise<SignInResult> {
     if (!this.cfg.clientId) return 'failed';
-    this.epoch++; // any refresh already running belongs to the old session and must not write back
+    const epoch = ++this.epoch; // any refresh already running belongs to the old session and must not write back
     const pkce = await newPkce(this.p.randomBytes, this.p.sha256);
     // Persist BEFORE the browser opens: the OS can kill the app while the browser is up, and the
     // verifier cannot be re-derived. It is also what proves the redirect is the one we started.
@@ -99,6 +99,8 @@ export class Session {
         this.cfg.redirectUri,
       );
       if (result.type !== 'success') return 'cancelled';
+      // Signed out (or began another sign-in) while the browser was open: this one is superseded.
+      if (epoch !== this.epoch) return 'cancelled';
       const cb = parseCallback(result.url);
       if (cb.kind === 'error') return cb.error === 'access_denied' ? 'cancelled' : 'failed';
       if (cb.kind !== 'ok') return 'failed';
@@ -107,6 +109,9 @@ export class Session {
       if (!pending || !safeEqual(pending.state, cb.state)) return 'failed';
       const r = await exchangeCode(this.p.fetch, this.cfg, cb.code, pending.verifier);
       if (!r.ok) return 'failed';
+      // The person signed out (or began another sign-in) while the browser was open: this sign-in is
+      // superseded. Writing the tokens now would sign them back in after they asked to leave.
+      if (epoch !== this.epoch) return 'cancelled';
       await this.p.secure.set(REFRESH_KEY, r.tokens.refreshToken);
       this.rejected = false;
       this.setAccess(r.tokens.accessToken);

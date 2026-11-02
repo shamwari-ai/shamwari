@@ -25,6 +25,15 @@ npx expo start          # open in Expo Go (SDK 58) on a phone
 npm run typecheck && npm test
 ```
 
+## Where the logic lives, and how it is tested
+
+`App.tsx` only draws. Every decision (the offline queue, retry backoff, holding questions when the person
+must act, the wipe-first sign-out) is in `src/chat/controller.ts`, with the network, keystore, timers and
+ids as injected ports, so `test/controller.test.ts` drives it exactly as the screen does, with no phone.
+Sign-in is in `src/auth/` and tested in `test/auth.test.ts`. A test counts only if it fails when its
+guard is removed; the main guards in both files (listed in the pull requests that added them) were checked that way. What still needs a real device:
+the drawing itself, the keychain, the system browser and a real WorkOS tenant.
+
 llama.rn / on-device Mind needs a development build, not Expo Go (backlog item 11).
 
 ## One-time owner step: create the Expo project

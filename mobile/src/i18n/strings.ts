@@ -31,6 +31,7 @@ export const en = {
   signedOutCleared: "Signed out. Your chats were removed from this device.",
   signedIn: "You are signed in.",
   signInFailed: "Sign-in did not finish. Please try again.",
+  wipeFailed: "Signed out, but this phone could not clear everything. Restart the app before handing the phone to anyone else.",
   errors: {
     unauthorized: "Your key was not accepted. Check it, or sign in again.",
     payment_required: "Your plan has run out. Add credit to keep asking.",
@@ -80,6 +81,7 @@ export const sn: Strings = {
   signedOutCleared: "Mabuda. Hurukuro dzenyu dzabviswa pafoni iyi.",
   signedIn: "Mapinda.",
   signInFailed: "Hatina kukwanisa kupedza kupinda. Edzai zvakare.",
+  wipeFailed: "Mabuda, asi foni iyi haina kukwanisa kubvisa zvose. Vhurai app zvakare musati mapa munhu mumwe foni.",
   errors: {
     unauthorized: "Key yenyu haina kugamuchirwa. Tarisai, kana mupinde zvakare.",
     payment_required: "Chirongwa chenyu chapera. Wedzerai mari kuti mupfuurire kubvunza.",
@@ -126,6 +128,7 @@ export const nd: Strings = {
   signedOutCleared: "Usuphumile. Ingxoxo zakho zisusiwe kulefoni.",
   signedIn: "Usungenile.",
   signInFailed: "Asikwazanga ukuqeda ukungena. Zama futhi.",
+  wipeFailed: "Usuphumile, kodwa le foni ayikwazanga ukususa konke. Qalisa i-app futhi ungakayinikeli omunye umuntu.",
   errors: {
     unauthorized: "I-key yakho ayamukelwanga. Hlola, loba ungene futhi.",
     payment_required: "Uhlelo lwakho seluphelile. Engeza imali ukuze uqhubeke ubuza.",

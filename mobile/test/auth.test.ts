@@ -280,6 +280,27 @@ describe('refresh', () => {
   });
 });
 
+describe('sign-out during sign-in', () => {
+  it('a sign-in that completes after the person signed out is superseded: no tokens are written', async () => {
+    const h = harness();
+    let release!: () => void;
+    const open = new Promise<void>((r) => (release = r));
+    h.browser.next = async (url) => {
+      await open;
+      return { type: 'success', url: `ai.shamwari.app://callback?code=c&state=${stateOf(url)}` };
+    };
+    h.respond(() => ok({ exp: NOW_S + 300, sid: 'sess_x' }, 'rt_x'));
+    const signing = h.s.signIn();
+    await new Promise((r) => setTimeout(r, 0));
+    await h.s.signOut();
+    release();
+    expect(await signing).toBe('cancelled');
+    expect(h.store.has('shamwari.rt')).toBe(false);
+    expect(await h.s.isSignedIn()).toBe(false);
+    expect(await h.s.getAccessToken()).toBeNull();
+  });
+});
+
 describe('refresh races and classification', () => {
   async function signedIn() {
     const h = harness();
