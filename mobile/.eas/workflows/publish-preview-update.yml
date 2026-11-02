@@ -1,0 +1,16 @@
+# Publish every push to staging as an over-the-air update on the `preview`
+# branch/channel. No native build, so no build minutes: JS-only changes reach
+# any preview build with the same appVersion runtime.
+name: Publish preview update
+
+on:
+  push:
+    branches: ['staging']
+    paths: ['mobile/**']
+
+jobs:
+  publish_preview_update:
+    name: Publish preview update
+    type: update
+    params:
+      branch: preview
