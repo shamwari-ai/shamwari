@@ -13,10 +13,10 @@ export function errorMessage(
 }
 
 /** Everything the app can tell the person besides an answer. Stored as a key, rendered in the current language. */
-export type MsgKey = AskErrorKind | 'signInFailed' | 'signedOut' | 'tooLong' | 'queueFull' | 'readFailed' | 'saveKeyFailed' | 'saveQueueFailed';
+export type MsgKey = AskErrorKind | 'signInFailed' | 'signedOut' | 'wipeFailed' | 'tooLong' | 'queueFull' | 'readFailed' | 'saveKeyFailed' | 'saveQueueFailed';
 
 type Wording = Parameters<typeof errorMessage>[0] & {
-  signInFailed: string; signedOutCleared: string; tooLong: string; queueFull: string; readFailed: string; saveKeyFailed: string; saveQueueFailed: string; savedRetry: string;
+  signInFailed: string; signedOutCleared: string; wipeFailed: string; tooLong: string; queueFull: string; readFailed: string; saveKeyFailed: string; saveQueueFailed: string; savedRetry: string;
 };
 
 /** Text for a message in the given language. Transient failures also say the question is saved, so nobody resubmits it. */
@@ -24,6 +24,7 @@ export function msgText(str: Wording, key: MsgKey): string {
   switch (key) {
     case 'signInFailed': return str.signInFailed;
     case 'signedOut': return str.signedOutCleared;
+    case 'wipeFailed': return str.wipeFailed;
     case 'tooLong': return str.tooLong;
     case 'queueFull': return str.queueFull;
     case 'readFailed': return str.readFailed;

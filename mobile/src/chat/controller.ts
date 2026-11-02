@@ -62,6 +62,7 @@ export class ChatController {
   /** Bumped by sign-out. A send already in flight sees the change and discards its answer. */
   private generation = 0;
   private started = false;
+  private disposed = false;
 
   constructor(private readonly p: ChatPorts) {}
 
@@ -73,12 +74,22 @@ export class ChatController {
   };
   /** The fallback credential, read at request time by the HTTP client. */
   devKey = (): string | null => this.key;
+  /**
+   * Stop everything this controller has in motion. Safe to call and then start() again: React runs
+   * effect cleanup and setup back to back in development, and a disposed controller must come back.
+   */
   dispose(): void {
+    this.disposed = true;
+    this.generation++; // work in flight belongs to the old run: its answers are dropped and it arms nothing
     this.clearRetry();
     this.listeners.clear();
+    this.started = false;
   }
 
   private set(patch: Partial<ChatState>): void {
+    const keys = Object.keys(patch) as (keyof ChatState)[];
+    // A patch that changes nothing must not re-render the screen (a low-end phone redraws the whole list).
+    if (keys.every((k) => Object.is(this.state[k], patch[k]))) return;
     this.state = { ...this.state, ...patch };
     for (const l of [...this.listeners]) l();
   }
@@ -97,22 +108,28 @@ export class ChatController {
 
   // ---- lifecycle -----------------------------------------------------------------------------
   async start(): Promise<void> {
-    if (this.started) return; // React runs effects twice in development
+    if (this.started) return; // two start() calls at once are one
     this.started = true;
+    this.disposed = false;
+    const gen = this.generation;
     try {
       const [k, q] = await Promise.all([this.p.store.loadKey(), this.p.store.loadQueue()]);
+      // Signed out (or disposed) while the stores were being read: what was just loaded is exactly what
+      // sign-out wiped. Restoring it would bring the last person's key and questions back.
+      if (gen !== this.generation) return;
       this.key = k;
       this.set({ hasKey: k !== null });
       this.persist(q);
       this.set({ items: q.map((a): Item => ({ kind: 'q', id: a.id, text: a.question, pending: true })) });
       // A keystore error here must not stop the saved key and queue from loading.
       const signed = await this.p.session.isSignedIn().catch(() => false);
+      if (gen !== this.generation) return;
       this.set({ signedIn: signed });
       if (!k && !signed) this.set({ showSettings: true });
       else if (q.length) void this.flush();
     } catch {
       // Secure storage can fail (locked keystore, restore from backup). Start empty, let the person re-enter a key.
-      this.set({ status: 'readFailed', showSettings: true });
+      if (gen === this.generation) this.set({ status: 'readFailed', showSettings: true });
     }
   }
 
@@ -188,7 +205,7 @@ export class ChatController {
           // what to do, and resume when the person has done it.
           this.set({ status: r.error.kind });
           // The session may have just ended (a terminal refusal): make the screen say so.
-          this.p.session.isSignedIn().then((s) => this.set({ signedIn: s }), () => undefined);
+          this.p.session.isSignedIn().then((s) => void (gen === this.generation && this.set({ signedIn: s })), () => undefined);
           if (r.error.kind === 'unauthorized') this.set({ showSettings: true });
           break;
         } else {
@@ -204,14 +221,17 @@ export class ChatController {
       this.busy = false;
       // Signed out mid-request, and someone has already asked something new: the old loop could not
       // send it (it was busy), so start again now rather than leave it waiting for the next nudge.
-      if (gen !== this.generation && this.state.queue.length > 0) void this.flush();
+      if (gen !== this.generation && !this.disposed && this.state.queue.length > 0) void this.flush();
     }
   }
 
   // ---- credentials ---------------------------------------------------------------------------
   async signIn(): Promise<void> {
     this.set({ status: null });
+    const gen = this.generation;
     const r = await this.p.session.signIn(); // never throws: a keystore or browser fault is 'failed'
+    // Signed out while the browser was open: that sign-in is superseded and must not mark the phone signed in.
+    if (gen !== this.generation) return;
     if (r === 'signed_in') {
       this.set({ signedIn: true, showSettings: false });
       void this.flush();
@@ -224,10 +244,15 @@ export class ChatController {
     this.generation++;
     this.clearRetry();
     this.attempts = 0;
-    this.persist([]);
     this.key = null;
-    this.set({ items: [], hasKey: false, signedIn: false, status: 'signedOut' });
-    void this.p.store.saveKey('').catch(() => undefined);
+    this.set({ queue: [], items: [], hasKey: false, signedIn: false, status: 'signedOut' });
+    // The screen is clear. Now make the STORAGE match, and say so if it does not: a locked or flaky
+    // keystore must never leave the last person's key or questions behind while the screen says they are gone.
+    // (Called directly, not through persist(), so a failure here cannot overwrite this message.)
+    const wipe = () => Promise.allSettled([this.p.store.saveKey(''), this.p.store.saveQueue([])]);
+    let results = await wipe();
+    if (results.some((r) => r.status === 'rejected')) results = await wipe(); // one more try
+    if (results.some((r) => r.status === 'rejected')) this.set({ status: 'wipeFailed' });
     await this.p.session.signOut().catch(() => undefined);
   }
 

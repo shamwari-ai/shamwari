@@ -2,7 +2,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as Crypto from 'expo-crypto';
 import Constants from 'expo-constants';
 import { getLocales } from 'expo-localization';
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   AppState, FlatList, KeyboardAvoidingView, Linking, Platform, Pressable, SafeAreaView,
   StyleSheet, Text, TextInput, View, useColorScheme,
@@ -28,7 +28,9 @@ export default function App() {
 
   // Every decision (the queue, retry, holding questions, sign-out) lives in ChatController, which
   // test/controller.test.ts drives without a phone. This file draws what it says.
-  const ctl = useMemo(() => {
+  // useRef, not useMemo: React may drop and recompute a memo, and two controllers would send the same queue twice.
+  const ref = useRef<ChatController | null>(null);
+  ref.current ??= (() => {
     const session = createNativeSession(authConfig(Constants.expoConfig?.extra));
     let controller!: ChatController;
     const client = createClient({
@@ -48,7 +50,8 @@ export default function App() {
       now: () => Date.now(),
     });
     return controller;
-  }, []);
+  })();
+  const ctl = ref.current;
   const { items, status, signedIn, hasKey, showSettings } = useSyncExternalStore(ctl.subscribe, ctl.getState);
 
   useEffect(() => {

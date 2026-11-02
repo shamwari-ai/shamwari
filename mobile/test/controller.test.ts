@@ -35,6 +35,8 @@ function make(init: { key?: string | null; queue?: QueuedAsk[]; signedIn?: boole
   const sessionState = { signedIn: init.signedIn ?? false, signOutCalls: 0, signInResult: 'signed_in' as SignInResult, isSignedInThrows: false };
   let signOutGate: Promise<void> | null = null;
   let ids = 0;
+  const gates: Partial<Record<'loadKey' | 'signIn' | 'isSignedIn', Promise<void>>> = {};
+  const failing = { saveKey: 0, saveQueue: 0 };
   const ports: ChatPorts = {
     ask: async (req, opts) => {
       asks.push({ req, key: opts.idempotencyKey });
@@ -49,9 +51,12 @@ function make(init: { key?: string | null; queue?: QueuedAsk[]; signedIn?: boole
     session: {
       isSignedIn: async () => {
         if (sessionState.isSignedInThrows) throw new Error('keystore locked');
-        return sessionState.signedIn;
+        const v = sessionState.signedIn; // the answer is read now and delivered after the gate, like a slow keystore
+        if (gates.isSignedIn) await gates.isSignedIn;
+        return v;
       },
       signIn: async () => {
+        if (gates.signIn) await gates.signIn;
         if (sessionState.signInResult === 'signed_in') sessionState.signedIn = true;
         return sessionState.signInResult;
       },
@@ -62,10 +67,21 @@ function make(init: { key?: string | null; queue?: QueuedAsk[]; signedIn?: boole
       },
     },
     store: {
-      loadKey: async () => store.key,
-      saveKey: async (k) => void (savedKeys.push(k), (store.key = k || null)),
+      loadKey: async () => {
+        if (gates.loadKey) await gates.loadKey;
+        return store.key;
+      },
+      saveKey: async (k) => {
+        if (failing.saveKey > 0) { failing.saveKey--; throw new Error('keystore locked'); }
+        savedKeys.push(k);
+        store.key = k || null;
+      },
       loadQueue: async () => store.queue,
-      saveQueue: async (q) => void (savedQueues.push(q.map((a) => a.question)), (store.queue = q)),
+      saveQueue: async (q) => {
+        if (failing.saveQueue > 0) { failing.saveQueue--; throw new Error('storage full'); }
+        savedQueues.push(q.map((a) => a.question));
+        store.queue = q;
+      },
     },
     setTimer: (fn, ms) => {
       timers.push({ fn, ms, cleared: false });
@@ -80,6 +96,14 @@ function make(init: { key?: string | null; queue?: QueuedAsk[]; signedIn?: boole
   return {
     ctl, asks, store, savedQueues, savedKeys, timers, live, sessionState,
     onAsk: (f: typeof askImpl) => (askImpl = f),
+    /** Hold one of the slow operations until release() is called. */
+    gate: (name: 'loadKey' | 'signIn' | 'isSignedIn') => {
+      const d = deferred<void>();
+      gates[name] = d.promise;
+      return () => { delete gates[name]; d.resolve(); };
+    },
+    /** Make the next n calls of a store write fail. */
+    failNext: (name: 'saveKey' | 'saveQueue', n: number) => void (failing[name] = n),
     holdSignOut: () => { const d = deferred<void>(); signOutGate = d.promise; return d.resolve; },
     state: (): ChatState => ctl.getState(),
     maxInFlight: () => maxInFlight,
@@ -541,5 +565,105 @@ describe('view plumbing', () => {
     const h = make({ key: 'sk_very_secret' });
     await h.ctl.start();
     expect(JSON.stringify(h.state())).not.toContain('sk_very_secret');
+  });
+});
+
+describe('sign-out when storage misbehaves, and races at the edges', () => {
+  it('retries a failed wipe once, and a wipe that works on the retry is a clean sign-out', async () => {
+    const h = make({ key: 'devkey', signedIn: true, queue: [{ id: 'o', question: 'private', createdAt: 1 }] });
+    h.onAsk(() => fail('offline'));
+    await h.ctl.start();
+    await idle();
+    h.failNext('saveKey', 1);
+    await h.ctl.signOut();
+    expect(h.store.key).toBeNull();
+    expect(h.store.queue).toEqual([]);
+    expect(h.state().status).toBe('signedOut');
+    expect(h.sessionState.signOutCalls).toBe(1);
+  });
+
+  it('a wipe that keeps failing is SAID: the screen is clear, the status is wipeFailed, and sign-out still completes', async () => {
+    const h = make({ key: 'devkey', signedIn: true, queue: [{ id: 'o', question: 'private', createdAt: 1 }] });
+    h.onAsk(() => fail('offline'));
+    await h.ctl.start();
+    await idle();
+    h.failNext('saveKey', 5);
+    h.failNext('saveQueue', 5);
+    await h.ctl.signOut();
+    expect(h.state().status).toBe('wipeFailed'); // not hidden, and not overwritten by a queue-save error
+    expect(h.state()).toMatchObject({ items: [], queue: [], hasKey: false, signedIn: false });
+    expect(h.ctl.devKey()).toBeNull();
+    expect(h.sessionState.signOutCalls).toBe(1);
+  });
+
+  it('start() that is still reading the stores when the person signs out does not bring the wiped data back', async () => {
+    const h = make({ key: 'lastperson', queue: [{ id: 'o', question: 'theirs', createdAt: 1 }] });
+    const release = h.gate('loadKey');
+    const starting = h.ctl.start();
+    await idle();
+    await h.ctl.signOut();
+    release();
+    await starting;
+    await idle();
+    expect(h.state()).toMatchObject({ items: [], queue: [], hasKey: false });
+    expect(h.ctl.devKey()).toBeNull();
+    expect(h.asks).toHaveLength(0);
+  });
+
+  it('a sign-in that completes after sign-out cannot mark the phone signed in or send anything', async () => {
+    const h = make({ queue: [] });
+    await h.ctl.start();
+    const release = h.gate('signIn');
+    const signing = h.ctl.signIn();
+    await idle();
+    await h.ctl.signOut();
+    release();
+    await signing;
+    await idle();
+    expect(h.state().signedIn).toBe(false);
+    expect(h.state().status).toBe('signedOut');
+    expect(h.asks).toHaveLength(0);
+  });
+
+  it('a late "still signed in" answer after a rejection cannot undo a sign-out', async () => {
+    const h = make({ key: 'k', signedIn: true });
+    h.onAsk(() => fail('unauthorized'));
+    await h.ctl.start();
+    const release = h.gate('isSignedIn');
+    h.ctl.send('q');
+    await idle(); // rejected; the controller is waiting on the session
+    await h.ctl.signOut();
+    release();
+    await idle();
+    expect(h.state().signedIn).toBe(false);
+  });
+
+  it('dispose stops work in flight: nothing is shown, no retry is armed, and start() brings the controller back', async () => {
+    const h = make({ key: 'k' });
+    const inflight = deferred<Result<Answer>>();
+    h.onAsk((n) => (n === 1 ? inflight.promise : answer('after remount')));
+    await h.ctl.start();
+    h.ctl.send('q');
+    await idle();
+    h.ctl.dispose(); // what React does between two development mounts
+    inflight.resolve(fail('offline'));
+    await idle();
+    expect(h.live()).toHaveLength(0); // the old run armed nothing
+    await h.ctl.start(); // the second mount
+    await idle();
+    expect(texts(h.state())).toEqual(['q:q', 'a:after remount']);
+    expect(h.state().queue).toEqual([]);
+  });
+
+  it('a patch that changes nothing does not re-render the screen', async () => {
+    const h = make({ key: 'k' });
+    await h.ctl.start();
+    let n = 0;
+    h.ctl.subscribe(() => n++);
+    h.ctl.setShowSettings(false);
+    h.ctl.setShowSettings(false);
+    expect(n).toBe(0);
+    h.ctl.setShowSettings(true);
+    expect(n).toBe(1);
   });
 });
