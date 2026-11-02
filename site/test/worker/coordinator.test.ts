@@ -79,4 +79,29 @@ describe('RefreshCoordinator (single-use refresh tokens)', () => {
     ).rejects.toThrow('boom');
     expect(await c.run('B', async () => ok(1))).toEqual(ok(1));
   });
+
+  it('a restarted coordinator answers a second caller from a restored snapshot, without refreshing again', async () => {
+    const first = new RefreshCoordinator();
+    await first.run('OLD', async () => ok(1));
+    const snap = first.snapshot();
+    expect(snap).toMatchObject({ from: 'OLD', result: ok(1) });
+
+    const afterEviction = new RefreshCoordinator(); // a fresh object, as after an eviction
+    afterEviction.restore(JSON.parse(JSON.stringify(snap)));
+    let calls = 0;
+    const r = await afterEviction.run('OLD', async () => (calls++, ok(2)));
+    expect(r).toEqual(ok(1));
+    expect(calls).toBe(0);
+  });
+
+  it('a restored snapshot never overrides a newer in-memory result, and null/undefined restore nothing', async () => {
+    const c = new RefreshCoordinator();
+    await c.run('A', async () => ok(1));
+    c.restore({ from: 'B', at: Date.now(), result: ok(9) });
+    expect(c.snapshot()?.from).toBe('A');
+    const d = new RefreshCoordinator();
+    d.restore(undefined);
+    d.restore(null);
+    expect(d.snapshot()).toBeNull();
+  });
 });

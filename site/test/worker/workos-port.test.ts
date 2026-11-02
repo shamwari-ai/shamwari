@@ -120,7 +120,7 @@ describe('the WorkOS port', () => {
     });
   });
 
-  it('check: no cookie, an unreadable cookie, or a throw is an invalid session', async () => {
+  it('check: no cookie or an unreadable cookie is an invalid session; an unexpected throw is "unavailable", never a sign-out', async () => {
     for (const reason of ['invalid_session_cookie', 'no_session_cookie_provided']) {
       const f = fakeWorkos();
       f.session.authenticate = async () => ({ authenticated: false, reason }) as never;
@@ -133,7 +133,7 @@ describe('the WorkOS port', () => {
       throw new Error('unseal failed');
     };
     expect(await (await makePort(env, f.w)).check('s')).toEqual({
-      status: 'invalid',
+      status: 'unavailable',
     });
   });
 
@@ -172,9 +172,17 @@ describe('the WorkOS port', () => {
     expect(await p.refresh('s')).toEqual({ status: 'retry' });
   });
 
-  it('revoke ends the WorkOS session by the sid in the verified token', async () => {
-    const { w, seen } = fakeWorkos();
-    await (await makePort(env, w)).revoke('s');
-    expect(seen.revoke![0]).toEqual({ sessionId: 'sid1' });
+  it('revoke ends the WorkOS session even when the access token in the cookie has EXPIRED (the usual case)', async () => {
+    const f = fakeWorkos();
+    // authenticate() fails for an expired access token; revoke must not depend on it.
+    f.session.authenticate = async () => ({ authenticated: false, reason: 'invalid_jwt' }) as never;
+    await (await makePort(env, f.w)).revoke('s');
+    expect(f.seen.revoke![0]).toEqual({ sessionId: 'sid-from-cookie' });
+  });
+
+  it('revoke with an unreadable cookie revokes nothing and does not throw', async () => {
+    const f = fakeWorkos({ getSessionFromCookie: async () => undefined });
+    await (await makePort(env, f.w)).revoke('s');
+    expect(f.seen.revoke).toBeUndefined();
   });
 });

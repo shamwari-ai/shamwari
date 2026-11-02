@@ -10,9 +10,15 @@ import type { RefreshResult } from './session';
  * Instances live inside a Durable Object keyed by session id (refresh-do.ts), so
  * "one at a time" holds across isolates and regions, not just inside one.
  */
+export interface CoordinatorSnapshot {
+  from: string;
+  at: number;
+  result: RefreshResult;
+}
+
 export class RefreshCoordinator {
   private tail: Promise<unknown> = Promise.resolve();
-  private last: { from: string; at: number; result: RefreshResult } | null = null;
+  private last: CoordinatorSnapshot | null = null;
 
   constructor(
     private readonly now: () => number = Date.now,
@@ -20,13 +26,22 @@ export class RefreshCoordinator {
     private readonly reuseMs = 30_000,
   ) {}
 
-  run(sealed: string, refresh: () => Promise<RefreshResult>): Promise<RefreshResult> {
+  /** What a restarted coordinator needs to answer a second caller that still holds the old cookie. */
+  snapshot(): CoordinatorSnapshot | null {
+    return this.last ? { from: this.last.from, at: this.last.at, result: this.last.result } : null;
+  }
+  restore(s: CoordinatorSnapshot | null | undefined): void {
+    if (s && !this.last) this.last = s;
+  }
+
+  /** `key` identifies the cookie being refreshed (a hash of it in production, never the cookie itself at rest). */
+  run(key: string, refresh: () => Promise<RefreshResult>): Promise<RefreshResult> {
     const next = this.tail.then(async () => {
       const l = this.last;
-      if (l && l.from === sealed && l.result.status === 'ok' && this.now() - l.at < this.reuseMs) return l.result;
+      if (l && l.from === key && l.result.status === 'ok' && this.now() - l.at < this.reuseMs) return l.result;
       const result = await refresh();
       // Only a success is reused. A retryable failure must be retried, and a denial is final anyway.
-      this.last = { from: sealed, at: this.now(), result };
+      this.last = { from: key, at: this.now(), result };
       return result;
     });
     this.tail = next.catch(() => undefined);

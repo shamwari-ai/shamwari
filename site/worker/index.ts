@@ -40,15 +40,21 @@ export default {
         },
       };
       return await handle(req, deps);
-    } catch {
-      // Misconfiguration or an unexpected fault: say so, and do not touch the cookie.
+    } catch (err) {
+      // Misconfiguration (a secret not bound yet) or an unexpected fault. Say so in the logs, with
+      // the message only (never the request, cookies or tokens), and do not touch the cookie.
+      console.error('session worker failed:', err instanceof Error ? err.message : 'unknown error');
+      const path = new URL(req.url).pathname;
+      // A browser navigating to sign-in lands back on the app with a reason, not on a JSON blob.
+      if (req.method === 'GET' && (path === '/lite/auth/login' || path === '/lite/callback')) {
+        return new Response(null, {
+          status: 302,
+          headers: { Location: '/lite/?signin=failed', 'Cache-Control': 'no-store' },
+        });
+      }
       return new Response(JSON.stringify({ error: 'unavailable' }), {
         status: 503,
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-store',
-          'Retry-After': '30',
-        },
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'Retry-After': '30' },
       });
     }
   },

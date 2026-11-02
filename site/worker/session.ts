@@ -27,7 +27,9 @@
 export type CheckResult =
   | { status: 'valid'; accessToken: string; sid: string }
   | { status: 'expired'; sid: string }
-  | { status: 'invalid' };
+  | { status: 'invalid' }
+  /** We could not tell (an unexpected fault). Never a sign-out: the cookie is left alone. */
+  | { status: 'unavailable' };
 
 export type RefreshResult =
   | { status: 'ok'; sealed: string; accessToken: string }
@@ -61,6 +63,12 @@ export interface Deps {
 export const SESSION_COOKIE = '__Secure-shamwari_session';
 export const STATE_COOKIE = '__Secure-shamwari_oauth';
 export const COOKIE_PATH = '/lite/';
+/**
+ * Browsers silently drop a cookie over about 4096 bytes (name and attributes included). A sealed
+ * session that large is refused where we can SEE it (sign-in fails visibly; a renewal ends the
+ * session honestly) instead of being dropped by the browser with no sign-in and no error.
+ */
+export const MAX_COOKIE_VALUE = 3800;
 /** Renew when the token has less than this left, so the page never holds one about to lapse. */
 export const RENEW_BELOW_SECONDS = 60;
 /**
@@ -97,21 +105,28 @@ function eq(a: string, b: string): boolean {
   return d === 0;
 }
 
-/** `exp` (epoch seconds) from a JWT that something else has already verified. */
-export function jwtExp(token: string): number | null {
+/** The payload of a JWT that something else has already verified, or null if it is not one. */
+export function jwtClaims(token: string): Record<string, unknown> | null {
   try {
     const seg = token.split('.')[1] ?? '';
-    const json = atob(
-      seg
-        .replace(/-/g, '+')
-        .replace(/_/g, '/')
-        .padEnd(Math.ceil(seg.length / 4) * 4, '='),
-    );
-    const exp = (JSON.parse(json) as { exp?: unknown }).exp;
-    return typeof exp === 'number' && Number.isFinite(exp) ? exp : null;
+    const o = JSON.parse(
+      atob(
+        seg
+          .replace(/-/g, '+')
+          .replace(/_/g, '/')
+          .padEnd(Math.ceil(seg.length / 4) * 4, '='),
+      ),
+    ) as unknown;
+    return o && typeof o === 'object' && !Array.isArray(o) ? (o as Record<string, unknown>) : null;
   } catch {
     return null;
   }
+}
+
+/** `exp` (epoch seconds) from a JWT that something else has already verified. */
+export function jwtExp(token: string): number | null {
+  const exp = jwtClaims(token)?.exp;
+  return typeof exp === 'number' && Number.isFinite(exp) ? exp : null;
 }
 
 const json = (status: number, body: unknown, extra: Record<string, string | string[]> = {}) => {
@@ -148,7 +163,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     if (!expected || !got || !eq(expected, got)) return redirect('/lite/?signin=failed', [spent]);
     if (url.searchParams.has('error') || !code) return redirect('/lite/?signin=failed', [spent]);
     const session = await deps.port.exchangeCode(code);
-    if (!session) return redirect('/lite/?signin=failed', [spent]);
+    if (!session || session.sealed.length > MAX_COOKIE_VALUE) return redirect('/lite/?signin=failed', [spent]);
     return redirect('/lite/', [spent, cookieHeader(SESSION_COOKIE, session.sealed, SESSION_COOKIE_MAX_AGE)]);
   }
 
@@ -161,6 +176,9 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     const end = () => json(401, { error: 'signed_out' }, { Vary: 'Cookie', 'Set-Cookie': clear(SESSION_COOKIE) });
     const checked = await deps.port.check(sealed);
     if (checked.status === 'invalid') return end();
+    const later = (seconds: number) =>
+      json(503, { error: 'unavailable' }, { Vary: 'Cookie', 'Retry-After': String(seconds) });
+    if (checked.status === 'unavailable') return later(5);
 
     if (checked.status === 'valid') {
       const exp = jwtExp(checked.accessToken);
@@ -180,16 +198,16 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
         },
       );
     }
+    // The refresh token inside the OLD cookie is spent now: from here the NEW sealed session is the
+    // only copy that works, so it is set on every outcome below that is not "we cannot keep it".
+    if (r.sealed.length > MAX_COOKIE_VALUE) return end();
     const exp = jwtExp(r.accessToken);
-    if (exp === null) return json(503, { error: 'unavailable' }, { Vary: 'Cookie', 'Retry-After': '5' });
-    return json(
-      200,
-      { access_token: r.accessToken, expires_at: exp },
-      {
-        Vary: 'Cookie',
-        'Set-Cookie': cookieHeader(SESSION_COOKIE, r.sealed, SESSION_COOKIE_MAX_AGE),
-      },
-    );
+    const fresh = cookieHeader(SESSION_COOKIE, r.sealed, SESSION_COOKIE_MAX_AGE);
+    if (exp === null) {
+      // A token with no readable expiry is not handed out, but the new cookie is kept.
+      return json(503, { error: 'unavailable' }, { Vary: 'Cookie', 'Retry-After': '1', 'Set-Cookie': fresh });
+    }
+    return json(200, { access_token: r.accessToken, expires_at: exp }, { Vary: 'Cookie', 'Set-Cookie': fresh });
   }
 
   if (path === '/lite/auth/logout') {

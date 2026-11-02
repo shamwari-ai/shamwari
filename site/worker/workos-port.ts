@@ -1,5 +1,5 @@
 import { WorkOS } from '@workos-inc/node';
-import type { AuthKitPort, CheckResult, RefreshResult } from './session';
+import { jwtClaims, type AuthKitPort, type CheckResult, type RefreshResult } from './session';
 
 /**
  * The only file that talks to the WorkOS SDK. Every WorkOS-specific decision is
@@ -54,22 +54,13 @@ export async function makePort(env: WorkerEnv, workosOverride?: WorkOS): Promise
 
   /** `sid` from a token the SDK has already read out of our own sealed cookie. */
   const sidOf = (accessToken: string): string | null => {
-    try {
-      const seg = accessToken.split('.')[1] ?? '';
-      const o = JSON.parse(
-        atob(
-          seg
-            .replace(/-/g, '+')
-            .replace(/_/g, '/')
-            .padEnd(Math.ceil(seg.length / 4) * 4, '='),
-        ),
-      ) as {
-        sid?: unknown;
-      };
-      return typeof o.sid === 'string' && o.sid ? o.sid : null;
-    } catch {
-      return null;
-    }
+    const sid = jwtClaims(accessToken)?.sid;
+    return typeof sid === 'string' && sid ? sid : null;
+  };
+  /** The session id from the sealed cookie, whether or not its access token has expired. */
+  const sidFromSealed = async (sealed: string): Promise<string | null> => {
+    const data = await um.getSessionFromCookie({ sessionData: sealed, cookiePassword });
+    return data ? sidOf(data.accessToken) : null;
   };
 
   return {
@@ -97,26 +88,18 @@ export async function makePort(env: WorkerEnv, workosOverride?: WorkOS): Promise
     async check(sealed): Promise<CheckResult> {
       try {
         const a = await load(sealed).authenticate();
-        if (a.authenticated)
-          return {
-            status: 'valid',
-            accessToken: a.accessToken,
-            sid: a.sessionId,
-          };
+        if (a.authenticated) return { status: 'valid', accessToken: a.accessToken, sid: a.sessionId };
         // An expired access token fails verification as invalid_jwt. That is the ordinary
         // "time to refresh" case; anything else (no cookie, unreadable cookie) is not a session.
         if (a.reason === 'invalid_jwt') {
-          const data = await um.getSessionFromCookie({
-            sessionData: sealed,
-            cookiePassword,
-          });
-          const sid = data ? sidOf(data.accessToken) : null;
+          const sid = await sidFromSealed(sealed);
           return sid ? { status: 'expired', sid } : { status: 'invalid' };
         }
         return { status: 'invalid' };
       } catch {
-        // A cookie we cannot read (wrong password after rotation, tampering) is not a session.
-        return { status: 'invalid' };
+        // The SDK reports a cookie it cannot read (wrong password, tampering) as a result, not a
+        // throw. A throw is something unexpected, and an unexpected fault must never be a sign-out.
+        return { status: 'unavailable' };
       }
     },
 
@@ -138,8 +121,9 @@ export async function makePort(env: WorkerEnv, workosOverride?: WorkOS): Promise
     },
 
     async revoke(sealed) {
-      const a = await load(sealed).authenticate();
-      const sid = a.authenticated ? a.sessionId : null;
+      // Not authenticate(): that fails for an expired access token, which is the usual state of a
+      // cookie when someone comes back and signs out, and the WorkOS session would stay alive.
+      const sid = await sidFromSealed(sealed);
       if (sid) await um.revokeSession({ sessionId: sid });
     },
   };

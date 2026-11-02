@@ -343,7 +343,7 @@ Everything in the way is an owner step; nothing in the repo does it. In order:
    domain, foundational, approved, ground-eligible and mind-eligible; other sources are
    approved too, but it does not answer tax questions.
 3. **Finish WorkOS for Chat sign-in.** The Shamwari Chat app, its JWT claim and the
-   redirect `https://shamwari.ai/chat/callback` exist (owner statement; `docs/chat-signin.md`); the light chat also needs `https://shamwari.ai/lite/callback`, `/lite/auth/login` and the `/lite/` logout return added in WorkOS.
+   redirects `https://shamwari.ai/chat/callback` and `https://shamwari.ai/lite/callback` (the light chat), the matching logout returns and the sign-in start `https://shamwari.ai/lite/auth/login` are registered (owner statement, 2026-11-02, read back from the WorkOS response by the orchestrating session; `docs/chat-signin.md`). WorkOS allows ONE sign-in-start value, so it moves to the main chat's path when that becomes primary.
    Left: read `iss` off a real access token, set the gateway variables
    (`WORKOS_ISSUER`, `WORKOS_CLIENT_ID`, `WORKOS_MONTHLY_TOKEN_CAP`) and deploy the gateway;
    create the two Secrets Store secrets for the session Worker and give their store id and

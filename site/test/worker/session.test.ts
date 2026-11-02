@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { handle, SESSION_COOKIE, STATE_COOKIE, jwtExp } from '../../worker/session';
-import { NOW, deps, fakePort, jwt, req, setCookies } from './helpers';
+import { handle, SESSION_COOKIE, STATE_COOKIE, MAX_COOKIE_VALUE, jwtClaims, jwtExp } from '../../worker/session';
+import { NOW, b64, deps, fakePort, jwt, req, setCookies } from './helpers';
 
 const secs = NOW / 1000;
 const live = jwt({ exp: secs + 300, sid: 's1' });
@@ -209,19 +209,60 @@ describe('token', () => {
     expect(res.headers.get('Retry-After')).toBe('120');
   });
 
-  it('a refreshed token with no readable expiry is not handed out', async () => {
+  it('a refreshed token with no readable expiry is not handed out, but the NEW cookie is kept (the old token is spent)', async () => {
     const port = fakePort();
     port.checkResult = { status: 'expired', sid: 's1' };
     const res = await handle(
       withCookie(),
       deps(port, async () => ({
         status: 'ok',
-        sealed: 'S',
+        sealed: 'S-NEW',
         accessToken: 'not-a-jwt',
       })),
     );
     expect(res.status).toBe(503);
+    expect(res.headers.get('Retry-After')).toBe('1');
+    expect(await res.text()).not.toContain('not-a-jwt');
+    expect(setCookies(res)[0]).toContain(`${SESSION_COOKIE}=S-NEW`);
+  });
+
+  it('an unexpected fault while checking the cookie is a 503 and never a sign-out', async () => {
+    const port = fakePort();
+    port.checkResult = { status: 'unavailable' };
+    const res = await handle(withCookie(), deps(port));
+    expect(res.status).toBe(503);
+    expect(res.headers.get('Retry-After')).toBe('5');
     expect(setCookies(res)).toEqual([]);
+  });
+
+  it('a sealed session too big for a cookie fails visibly instead of being dropped by the browser', async () => {
+    const big = 'x'.repeat(MAX_COOKIE_VALUE + 1);
+    // Sign-in: back to the app with a reason, and no session cookie.
+    const port = fakePort();
+    port.codeResult = { sealed: big };
+    const cb = await handle(
+      req('/lite/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
+      deps(port),
+    );
+    expect(cb.headers.get('Location')).toBe('/lite/?signin=failed');
+    expect(setCookies(cb).some((c) => c.startsWith(`${SESSION_COOKIE}=x`))).toBe(false);
+    // Renewal: the session ends honestly (401 + cleared) rather than looping on a cookie that never lands.
+    const p2 = fakePort();
+    p2.checkResult = { status: 'expired', sid: 's1' };
+    const r = await handle(
+      withCookie(),
+      deps(p2, async () => ({ status: 'ok', sealed: big, accessToken: jwt({ exp: secs + 300 }) })),
+    );
+    expect(r.status).toBe(401);
+    expect(setCookies(r)[0]).toContain('Max-Age=0');
+    // A cookie right at the limit is still fine.
+    const p3 = fakePort();
+    p3.codeResult = { sealed: 'y'.repeat(MAX_COOKIE_VALUE) };
+    const ok = await handle(
+      req('/lite/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
+      deps(p3),
+    );
+    expect(ok.headers.get('Location')).toBe('/lite/');
   });
 
   it('refuses a request the browser says is cross-site, before reading the cookie', async () => {
@@ -319,6 +360,12 @@ describe('logout', () => {
 describe('other', () => {
   it('answers 404 to anything else', async () => {
     expect((await handle(req('/lite/auth/other'), deps(fakePort()))).status).toBe(404);
+  });
+  it('jwtClaims reads the payload and nothing else', () => {
+    expect(jwtClaims(jwt({ sid: 's', exp: 5 }))).toEqual({ sid: 's', exp: 5 });
+    expect(jwtClaims('garbage')).toBeNull();
+    // A JSON array is not a set of claims.
+    expect(jwtClaims(`${b64({})}.${Buffer.from('[1]').toString('base64url')}.x`)).toBeNull();
   });
   it('jwtExp reads exp and nothing else', () => {
     expect(jwtExp(jwt({ exp: 5 }))).toBe(5);

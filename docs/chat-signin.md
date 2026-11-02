@@ -189,8 +189,25 @@ browser                    shamwari-app Worker (worker/)         WorkOS
 - **Refresh is serialised per session** by a Durable Object (`SessionRefresh`, keyed by WorkOS `sid`),
   because refresh tokens are single-use: two tabs renewing together cause one refresh, and the second
   gets the first one's result (for 30 s) instead of spending the same token twice and being signed out.
-- **Only a terminal answer ends a session.** A WorkOS outage or rate limit is `503` with `Retry-After`
-  and the cookie stays, so our outage is not their sign-out.
+- **Only a terminal answer ends a session.** A WorkOS outage, a rate limit or an unexpected fault while
+  reading the cookie is `503` with `Retry-After` and the cookie stays, so our outage is not their
+  sign-out. The only paths to a 401 and a cleared cookie are a cookie we cannot read at all (wrong
+  password, tampering), a terminal refusal from WorkOS, or a session too large to keep (below).
+- **A renewal's new cookie is always kept.** The old refresh token is spent the moment WorkOS answers,
+  so even when the new access token cannot be used (no readable `exp`) the new sealed cookie is set and
+  the answer is a quick `503` retry.
+- **The cookie size is checked where it can be seen.** A sealed session over 3800 characters is refused
+  (sign-in goes back to `/lite/?signin=failed`; a renewal ends the session honestly) rather than being
+  silently dropped by the browser. The real size with an access token, refresh token and user record
+  has still not been measured.
+- **Sign-out revokes the WorkOS session even when the access token has expired**, which is the usual
+  state of the cookie when someone comes back and signs out (the session id is read from the sealed
+  cookie, not from a verified token).
+- **The refresh de-duplication survives eviction:** the Durable Object also writes its last successful
+  result to its own storage, keyed by a hash of the old cookie (never the cookie), and ignores it after
+  30 s.
+- **Failures are logged** (the message only, never the request, cookies or tokens) and a browser
+  navigation to sign-in lands back on the app with `?signin=failed` instead of a JSON page.
 - **No open redirect:** after sign-in the person always lands on `/lite/`; the request cannot choose.
   The login `state` is random, single-use and compared in constant time. A failed sign-in returns to
   `/lite/?signin=failed` (the page does not show a message for it yet).
