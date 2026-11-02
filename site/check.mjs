@@ -47,13 +47,25 @@ if (TARGET === 'app') {
   const redirects = files.includes(`${DIST}/_redirects`) ? readFileSync(`${DIST}/_redirects`, 'utf8') : '';
   // The apex root goes to /chat/ (the main Shamwari Chat, owned by another build) for now; this app is /lite/.
   if (!/^\/\s+\/chat\/\s+302\s*$/m.test(redirects)) fail.push('app build: the root / must 302 to /chat/ (_redirects)');
-  // Redirects may only go to the chat or to the marketing origin: the app Worker sends
-  // old marketing links to www but never serves a marketing page itself.
+  // Redirects may only go to the chat, the light chat, or the marketing origin: the app Worker
+  // sends old marketing links to www but never serves a marketing page itself. The destination
+  // is parsed, not prefix-matched, so "//host", "/chat/../x" and "/chat//host" cannot slip past.
+  const redirectDestinationOk = (dest) => {
+    if (!dest || dest.startsWith('//') || dest.includes('..')) return false;
+    let u;
+    try {
+      u = new URL(dest, APP_ORIGIN);
+    } catch {
+      return false;
+    }
+    if (u.origin === APP_ORIGIN) return !u.pathname.includes('//') && (u.pathname.startsWith('/chat/') || u.pathname.startsWith('/lite/'));
+    return u.origin === MARKETING_ORIGIN;
+  };
   for (const line of redirects.split('\n')) {
     const t = line.trim();
     if (!t || t.startsWith('#')) continue;
     const dest = t.split(/\s+/)[1] ?? '';
-    if (!(dest.startsWith('/chat/') || dest.startsWith('/lite/') || dest.startsWith(MARKETING_ORIGIN + '/'))) fail.push(`app _redirects: "${t}" goes somewhere other than /chat/, /lite/ or ${MARKETING_ORIGIN}`);
+    if (!redirectDestinationOk(dest)) fail.push(`app _redirects: "${t}" goes somewhere other than /chat/, /lite/ or ${MARKETING_ORIGIN}`);
   }
 }
 

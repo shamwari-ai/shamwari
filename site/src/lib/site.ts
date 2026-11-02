@@ -6,10 +6,11 @@ export const REPO = 'https://github.com/bundu-labs/shamwari';
 export const CONTACT_EMAIL = 'hello@shamwari.ai';
 
 /**
- * Where the chat app lives: its own Worker on the apex, never a path on this site.
- * "Open chat" is only shown once the app is released (PUBLIC_CHAT_LIVE=true at
- * build time); until then /chat/ answers 404 everywhere, and a link to it would
- * be a dead end that says the app is ready when it is not.
+ * Where "Open chat" goes: the MAIN Shamwari Chat at /chat/ on the apex, owned by a separate
+ * build, never a path on this site. It is not the light edge chat this repository's app serves
+ * at /lite/. "Open chat" is only shown once that is released (PUBLIC_CHAT_LIVE=true at build
+ * time); until /chat/ answers, a link to it would be a dead end that says the chat is ready
+ * when it is not, so do not set the flag before then.
  */
 export const CHAT_URL = 'https://shamwari.ai/chat/';
 export const CHAT_LIVE = import.meta.env.PUBLIC_CHAT_LIVE === 'true';
