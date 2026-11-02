@@ -1,5 +1,5 @@
 // @ts-check
-// The APP: Shamwari Chat, served by the `shamwari-app` Worker at https://shamwari.ai/chat/.
+// The APP: Shamwari Chat, the light edge chat, served by the `shamwari-app` Worker at https://shamwari.ai/lite/.
 // Built from app-src/ (only the chat page) with app-public/ (only the chat's own
 // assets), so no marketing page can end up in it. The marketing site is
 // astro.config.mjs and the `shamwari-site` Worker on https://www.shamwari.ai.

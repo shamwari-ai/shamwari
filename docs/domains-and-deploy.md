@@ -11,21 +11,21 @@ is never dead.
 | --------------- | ------------------------------------------- | -------------------------------------------------------------- |
 | Worker          | `shamwari-app`                              | `shamwari-site` (the existing one)                             |
 | Hostname        | `https://shamwari.ai` (the apex)            | `https://www.shamwari.ai`                                      |
-| Pages           | `/chat/` only. `/` answers 302 to `/chat/`. | Home, Blueprint, Project, Contact, `sitemap.xml`, `robots.txt` |
+| Pages           | `/lite/` only. `/` answers 302 to `/chat/`. | Home, Blueprint, Project, Contact, `sitemap.xml`, `robots.txt` |
 | Source          | `site/app-src/`, `site/app-public/`         | `site/src/`, `site/public/`                                    |
 | Astro config    | `site/astro.app.config.mjs`                 | `site/astro.config.mjs`                                        |
 | Wrangler config | `site/wrangler.app.jsonc`                   | `site/wrangler.jsonc`                                          |
 | Build           | `npm run build:app` into `site/dist-app/`   | `npm run build` into `site/dist/`                              |
 | CI job          | "Chat app (build, check, unit, e2e)"        | "Landing page (build, links, tokens, size)" (name unchanged)   |
-| Canonical URLs  | `https://shamwari.ai/chat/`                 | `https://www.shamwari.ai/...`                                  |
-| Service worker  | scope `/chat/`                              | none                                                           |
+| Canonical URLs  | `https://shamwari.ai/lite/`                 | `https://www.shamwari.ai/...`                                  |
+| Service worker  | scope `/lite/`                              | none                                                           |
 
 The API is a third hostname, `https://api.shamwari.ai` (the `shamwari-gateway` Worker).
 
 **Neither build can carry the other's pages.** `site/check.mjs` fails the marketing build
-if it contains any `/chat/` file, and fails the app build if it contains any page that is
-not `/chat/`, if the root does not 302 to `/chat/`, or if a redirect goes anywhere except
-the chat or the marketing origin. Canonical and social URLs must be on each Worker's own
+if it contains any `/lite/` or `/chat/` file, and fails the app build if it contains any page
+that is not `/lite/`, if the root does not 302 to `/chat/` (the main Shamwari Chat, another
+build), or if a redirect goes anywhere except `/chat/`, `/lite/` or the marketing origin. Canonical and social URLs must be on each Worker's own
 origin. The app Worker redirects the three old apex marketing links (`/blueprint/`,
 `/project/`, `/contact/`) to `www`; a redirect is not serving a page.
 
@@ -43,10 +43,12 @@ answers 404 would say it is ready when it is not.
   origin, so the chat works the day it is deployed. It also still allows `www`, which the
   marketing site never needs (it makes no API calls); a small follow-up PR tightens it to
   the app origin only. That tightening is hygiene, not a dependency of the move.
-- **Service worker** scope `/chat/` on the app origin; it passes `/chat/auth/*` and
-  `/chat/callback` straight to the network.
-- **WorkOS redirect URI**: `https://shamwari.ai/chat/callback` (unchanged; the callback
-  is on the app origin, as the Console's own pattern requires).
+- **Service worker** scope `/lite/` on the app origin; it passes `/lite/auth/*` and
+  `/lite/callback` straight to the network.
+- **WorkOS redirect URI**: `https://shamwari.ai/lite/callback` (moved from `/chat/callback` on
+  2026-11-01 when the PWA became the light chat at `/lite/`; the callback is on the app origin, as
+  the Console's own pattern requires). The WorkOS application must also allow the sign-in start
+  `https://shamwari.ai/lite/auth/login` and the logout return `https://shamwari.ai/lite/`.
 - **The shared brand overlay** `site/src/styles/brand-shamwari.css` is imported by both.
 
 ## Switching it on: the order matters
@@ -65,7 +67,7 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
    command `npm ci && npm run build:app`. Deploy command
    `npx wrangler deploy --config wrangler.app.jsonc`. Production branch `main`.
    (It is the same repository as `shamwari-site`; it is a second Workers Builds project.)
-3. **Check it on its own address.** Open `https://shamwari-app.nyuchi.workers.dev/chat/`.
+3. **Check it on its own address.** Open `https://shamwari-app.nyuchi.workers.dev/lite/`.
    The chat should load, and `https://shamwari-app.nyuchi.workers.dev/` should redirect to
    it. It cannot answer a question yet: it calls `https://api.shamwari.ai`, which does
    not exist until step 4. Do not go on if the page does not load.
@@ -81,8 +83,8 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
    `shamwari-site`, accept that instead: it avoids the gap. The apex is without a Worker
    for the few seconds between the two taps; that is the one unavoidable moment, and it
    is why this step is last before the check.
-6. **Verify.** `https://shamwari.ai/` goes to `/chat/`. `https://www.shamwari.ai/` shows the
-   marketing site. `https://shamwari.ai/blueprint/` redirects to `www`. `https://www.shamwari.ai/chat/`
+6. **Verify.** `https://shamwari.ai/` goes to `/chat/` (where the main chat will live; until it is deployed that is a 404, which is expected). `https://www.shamwari.ai/` shows the
+   marketing site. `https://shamwari.ai/lite/` shows the light chat. `https://shamwari.ai/blueprint/` redirects to `www`. `https://www.shamwari.ai/chat/`
    is a 404.
    **Then make the files match the dashboard, in ONE small change:** add
    `{ "pattern": "shamwari.ai", "custom_domain": true }` to `routes` in
@@ -93,7 +95,7 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
    Whether `wrangler deploy` removes a custom domain that is missing from the file is
    **not verified**, which is the reason to keep the two in step. Watch the first deploy
    of each Worker after this change and confirm the hostnames are still attached.
-7. **Later, not now:** register the WorkOS redirect URI `https://shamwari.ai/chat/callback`;
+7. **Later, not now:** register the WorkOS redirect URI `https://shamwari.ai/lite/callback`;
    set `PUBLIC_CHAT_AUTH=mukoko` on the app build only when the session Worker exists; set
    `PUBLIC_CHAT_LIVE=true` on the marketing build when the app is released.
 
@@ -114,7 +116,7 @@ inert until these are done, and the page keeps using developer-key mode (`PUBLIC
 3. The first deploy of `shamwari-app` also creates the `SessionRefresh` Durable Object (a migration
    in the same file). It shows up under Workers & Pages > shamwari-app > Bindings.
 4. Sign-in cannot be tried on the `workers.dev` address: WorkOS accepts only
-   `https://shamwari.ai/chat/callback`. Test it after the apex is attached to `shamwari-app`.
+   `https://shamwari.ai/lite/callback`. Test it after the apex is attached to `shamwari-app`.
 
 ## Things this has not verified
 

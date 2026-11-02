@@ -13,7 +13,7 @@ const seen = async (page: Page) => ((await (await page.request.get(`${MOCK}/__se
 const reset = (page: Page) => page.request.delete(`${MOCK}/__seen`);
 
 async function open(page: Page) {
-  await page.goto('/chat/');
+  await page.goto('/lite/');
   await page.waitForSelector('html[data-ready="true"]');
   await page.waitForSelector('html[data-auth-ready="true"]'); // the silent start-up renewal has answered
 }
@@ -146,7 +146,7 @@ test('the Mukoko button starts sign-in on the Worker, which the service worker m
   await page.reload();
   await page.waitForSelector('html[data-auth-ready="true"]');
   await page.getByRole('button', { name: 'Sign in with Mukoko' }).click();
-  await page.waitForURL('**/chat/');
+  await page.waitForURL('**/lite/');
   // The login route set the session: the shell the service worker serves is the SAME page,
   // so the only proof it reached the network is the state the stub recorded.
   expect((await state(page)).session).toBe(true);
@@ -164,6 +164,27 @@ test('signing out removes the chats from this device, so the next person does no
   await page.waitForSelector('html[data-auth-ready="true"]');
   await expect(page.locator('#log article')).toHaveCount(0);
   await expect(page.locator('#history')).toBeHidden();
+});
+
+test('signing out clears the chats at once even when the sign-out request hangs', async ({ page }) => {
+  await open(page);
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('.cite').first()).toBeVisible();
+  await steer(page, { session: true, logoutDelayMs: 30_000 }); // the Worker never answers in time
+  await page.getByText('Settings').click();
+  await page.locator('#signout').click();
+  // The chats are gone from the device without waiting for the network.
+  await expect(page.locator('#toast')).toContainText('removed from this device', { timeout: 3_000 });
+  await expect(page.locator('#log article')).toHaveCount(0);
+});
+
+test('a question sent while the start-up renewal is still in flight waits for it and is not dropped', async ({ page }) => {
+  await steer(page, { session: true, tokens: [VALID], tokenDelayMs: 1_500 });
+  await page.goto('/lite/');
+  await page.waitForSelector('html[data-ready="true"]'); // the renewal has been asked for, not answered
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('article.msg.bot:not(.pending) .cite').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('#auth')).toBeHidden();
 });
 
 test('a start-up renewal that fails on the network is not a sign-out: the question is kept and sent later', async ({ page }) => {

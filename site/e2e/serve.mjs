@@ -1,5 +1,5 @@
 // A static file server for dist-e2e/, standing in for Workers static assets
-// (directory index, correct content types, service workers allowed on /chat/).
+// (directory index, correct content types, service workers allowed on /lite/).
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
@@ -12,7 +12,8 @@ const stubAuth = process.argv.includes('--stub-auth');
 // A STAND-IN for the chat session Worker (docs/chat-signin.md), which is a design,
 // not code. It speaks only the three calls the page makes and keeps its state in
 // memory; the tests steer it through POST /__stub/auth and read it back with GET.
-const stub = { session: false, tokens: [], tokenCalls: 0, logoutCalls: 0, tokenStatus: null };
+const stub = { session: false, tokens: [], tokenCalls: 0, logoutCalls: 0, tokenStatus: null, tokenDelayMs: 0, logoutDelayMs: 0 };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const json = (res, status, body, headers = {}) => {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers });
   res.end(JSON.stringify(body));
@@ -22,27 +23,29 @@ async function stubRoute(req, res, path) {
     if (req.method === 'POST') {
       let raw = '';
       for await (const c of req) raw += c;
-      Object.assign(stub, { tokenCalls: 0, logoutCalls: 0, tokenStatus: null, tokens: [], session: false }, JSON.parse(raw || '{}'));
+      Object.assign(stub, { tokenCalls: 0, logoutCalls: 0, tokenStatus: null, tokens: [], session: false, tokenDelayMs: 0, logoutDelayMs: 0 }, JSON.parse(raw || '{}'));
     }
     return json(res, 200, { tokenCalls: stub.tokenCalls, logoutCalls: stub.logoutCalls, session: stub.session });
   }
-  if (path === '/chat/auth/login') {
+  if (path === '/lite/auth/login') {
     stub.session = true;
-    res.writeHead(302, { Location: '/chat/', 'Set-Cookie': 'stub_session=1; Path=/chat/; HttpOnly; SameSite=Lax' });
+    res.writeHead(302, { Location: '/lite/', 'Set-Cookie': 'stub_session=1; Path=/lite/; HttpOnly; SameSite=Lax' });
     return res.end();
   }
-  if (path === '/chat/auth/token') {
+  if (path === '/lite/auth/token') {
     stub.tokenCalls += 1;
+    if (stub.tokenDelayMs) await sleep(stub.tokenDelayMs); // a slow link to the Worker
     if (stub.tokenStatus) return json(res, stub.tokenStatus, { error: 'session_ended' });
     // The session is a flag here, not a real cookie check: what is under test is the page, not the Worker.
     if (!stub.session) return json(res, 401, { error: 'no_session' });
     const token = stub.tokens.length ? stub.tokens.shift() : `eyJhbGciOiJSUzI1NiJ9.valid-${stub.tokenCalls}.sig`;
     return json(res, 200, { access_token: token, expires_at: Math.floor(Date.now() / 1000) + 300 });
   }
-  if (path === '/chat/auth/logout' && req.method === 'POST') {
+  if (path === '/lite/auth/logout' && req.method === 'POST') {
     stub.logoutCalls += 1;
+    if (stub.logoutDelayMs) await sleep(stub.logoutDelayMs); // a request that hangs
     stub.session = false;
-    res.writeHead(204, { 'Set-Cookie': 'stub_session=; Path=/chat/; Max-Age=0; HttpOnly' });
+    res.writeHead(204, { 'Set-Cookie': 'stub_session=; Path=/lite/; Max-Age=0; HttpOnly' });
     return res.end();
   }
   return false;
@@ -94,7 +97,7 @@ createServer(async (req, res) => {
     res.writeHead(redirect.status, { Location: redirect.location });
     return res.end();
   }
-  if (stubAuth && (path.startsWith('/__stub/') || path.startsWith('/chat/auth/'))) {
+  if (stubAuth && (path.startsWith('/__stub/') || path.startsWith('/lite/auth/'))) {
     if ((await stubRoute(req, res, path)) !== false) return;
   }
   let file = join(root, path);

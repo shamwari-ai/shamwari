@@ -28,22 +28,24 @@ const fail = [];
 if (TARGET === 'marketing' && pages.length < 4) fail.push(`expected at least 4 built pages, found ${pages.length}`);
 
 // Two Workers, two origins, and neither may carry the other's pages. The chat app
-// is https://shamwari.ai/chat/ (shamwari-app); the marketing site is
+// is https://shamwari.ai/lite/ (shamwari-app); the main Shamwari Chat at /chat/ is another
+// build. The marketing site is
 // https://www.shamwari.ai (shamwari-site).
 const MARKETING_ORIGIN = 'https://www.shamwari.ai';
 const APP_ORIGIN = 'https://shamwari.ai';
 if (TARGET === 'marketing') {
   for (const f of files) {
     const rel = f.slice(DIST.length);
-    if (rel.startsWith('/chat/') || rel === '/_redirects') fail.push(`marketing build contains an app file: ${rel}`);
+    if (rel.startsWith('/lite/') || rel.startsWith('/chat/') || rel === '/_redirects') fail.push(`marketing build contains an app file: ${rel}`);
   }
 }
 if (TARGET === 'app') {
   for (const p of pages) {
-    if (!p.endsWith('/chat/index.html')) fail.push(`app build contains a page that is not the chat: ${p.slice(DIST.length)}`);
+    if (!p.endsWith('/lite/index.html')) fail.push(`app build contains a page that is not the chat: ${p.slice(DIST.length)}`);
   }
-  if (!pages.some((p) => p.endsWith('/chat/index.html'))) fail.push('app build has no /chat/ page');
+  if (!pages.some((p) => p.endsWith('/lite/index.html'))) fail.push('app build has no /lite/ page');
   const redirects = files.includes(`${DIST}/_redirects`) ? readFileSync(`${DIST}/_redirects`, 'utf8') : '';
+  // The apex root goes to /chat/ (the main Shamwari Chat, owned by another build) for now; this app is /lite/.
   if (!/^\/\s+\/chat\/\s+302\s*$/m.test(redirects)) fail.push('app build: the root / must 302 to /chat/ (_redirects)');
   // Redirects may only go to the chat or to the marketing origin: the app Worker sends
   // old marketing links to www but never serves a marketing page itself.
@@ -51,7 +53,7 @@ if (TARGET === 'app') {
     const t = line.trim();
     if (!t || t.startsWith('#')) continue;
     const dest = t.split(/\s+/)[1] ?? '';
-    if (!(dest.startsWith('/chat/') || dest.startsWith(MARKETING_ORIGIN + '/'))) fail.push(`app _redirects: "${t}" goes somewhere other than /chat/ or ${MARKETING_ORIGIN}`);
+    if (!(dest.startsWith('/chat/') || dest.startsWith('/lite/') || dest.startsWith(MARKETING_ORIGIN + '/'))) fail.push(`app _redirects: "${t}" goes somewhere other than /chat/, /lite/ or ${MARKETING_ORIGIN}`);
   }
 }
 
@@ -191,7 +193,7 @@ for (const page of pages) {
   // load only its own bundled module from /_astro/ (no third-party script, no
   // inline script), whose size is held to the budget below.
   const scripts = [...html.matchAll(/<script\b([^>]*)>/gi)].filter((m) => !/type="application\/ld\+json"/i.test(m[1]));
-  if (where === 'chat/index.html') {
+  if (where === 'lite/index.html') {
     for (const [, attrs] of scripts) {
       const src = attrs.match(/\bsrc="([^"]+)"/)?.[1];
       if (!src || !src.startsWith('/_astro/')) fail.push(`${where}: script is not a bundled /_astro/ module (${attrs.trim().slice(0, 60)})`);
@@ -226,7 +228,7 @@ if (chatJs > CHAT_JS_BUDGET) fail.push(`chat first-load JS is ${chatJs} B gzippe
 
 let chatCss = 0;
 let chatFirstLoad = 0;
-const chatHtml = pages.find((p) => p.endsWith('chat/index.html'));
+const chatHtml = pages.find((p) => p.endsWith('lite/index.html'));
 if (chatHtml) {
   for (const [, href] of readFileSync(chatHtml, 'utf8').matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)) chatCss += gz(DIST + href);
   if (chatCss > CHAT_CSS_BUDGET) fail.push(`chat CSS is ${chatCss} B gzipped, over the ${CHAT_CSS_BUDGET} B budget`);
@@ -241,22 +243,22 @@ if (chatHtml) {
 // app then has no offline mode: so every precache entry is checked here.
 if (chatHtml) {
   const html = readFileSync(chatHtml, 'utf8');
-  if (!/<link rel="manifest" href="\/chat\/manifest\.webmanifest"/.test(html)) fail.push('chat: no <link rel="manifest">');
-  if (!assets.has('/chat/manifest.webmanifest')) fail.push('chat: manifest missing from the build');
+  if (!/<link rel="manifest" href="\/lite\/manifest\.webmanifest"/.test(html)) fail.push('chat: no <link rel="manifest">');
+  if (!assets.has('/lite/manifest.webmanifest')) fail.push('chat: manifest missing from the build');
   else {
-    const m = JSON.parse(readFileSync(`${DIST}/chat/manifest.webmanifest`, 'utf8'));
-    if (m.start_url !== '/chat/' || m.scope !== '/chat/') fail.push('chat manifest: start_url and scope must both be /chat/');
+    const m = JSON.parse(readFileSync(`${DIST}/lite/manifest.webmanifest`, 'utf8'));
+    if (m.start_url !== '/lite/' || m.scope !== '/lite/') fail.push('chat manifest: start_url and scope must both be /lite/');
     if ('orientation' in m) fail.push('chat manifest: do not lock orientation (WCAG 1.3.4)');
     if (m.display !== 'standalone') fail.push('chat manifest: display must be standalone');
     const sizes = new Set((m.icons ?? []).map((i) => `${i.sizes}/${i.purpose}`));
     for (const want of ['192x192/any', '512x512/any', '512x512/maskable']) if (!sizes.has(want)) fail.push(`chat manifest: missing icon ${want}`);
     for (const i of m.icons ?? []) if (!assets.has(i.src)) fail.push(`chat manifest: missing icon file ${i.src}`);
   }
-  if (!assets.has('/chat/sw.js')) fail.push('chat: sw.js missing (post-build did not run?)');
+  if (!assets.has('/lite/sw.js')) fail.push('chat: sw.js missing (post-build did not run?)');
   else {
-    const sw = readFileSync(`${DIST}/chat/sw.js`, 'utf8');
+    const sw = readFileSync(`${DIST}/lite/sw.js`, 'utf8');
     const list = JSON.parse(sw.match(/const PRECACHE = (\[.*?\]);/)?.[1] ?? '[]');
-    if (!list.includes('/chat/')) fail.push('chat sw: the shell (/chat/) is not precached');
+    if (!list.includes('/lite/')) fail.push('chat sw: the shell (/lite/) is not precached');
     for (const f of list) if (!assets.has(f) && !routes.has(f)) fail.push(`chat sw: precaches ${f}, which the build did not produce`);
     if (/caches\.put\([^)]*v1\/chat/.test(sw) || /completions/.test(sw)) fail.push('chat sw: must never cache API traffic');
   }
@@ -264,7 +266,7 @@ if (chatHtml) {
   else {
     const headers = readFileSync(`${DIST}/_headers`, 'utf8');
     const csp = headers.match(/Content-Security-Policy:\s*(.+)/)?.[1] ?? '';
-    if (!csp) fail.push('chat: no Content-Security-Policy on /chat/*');
+    if (!csp) fail.push('chat: no Content-Security-Policy on /lite/*');
     const metaApi = html.match(/<meta name="shamwari-api" content="([^"]+)"/)?.[1];
     if (!metaApi || !csp.includes(`connect-src 'self' ${new URL(metaApi).origin}`)) fail.push('chat CSP: connect-src does not name the API origin the page calls');
     if (/unsafe-(inline|eval)/.test(csp)) fail.push('chat CSP: unsafe-inline / unsafe-eval are not allowed');
@@ -302,6 +304,6 @@ if (fail.length) {
 }
 console.log(
   TARGET === 'app'
-    ? `ok (app) — ${pages.length} page, links and assets resolve, client JS only on /chat/ (${chatJs} B gzipped first load, budget ${CHAT_JS_BUDGET}; CSS ${chatCss} B, budget ${CHAT_CSS_BUDGET}; whole first load ${chatFirstLoad} B, budget ${CHAT_FIRST_LOAD_BUDGET}), language rules held`
+    ? `ok (app) — ${pages.length} page, links and assets resolve, client JS only on /lite/ (${chatJs} B gzipped first load, budget ${CHAT_JS_BUDGET}; CSS ${chatCss} B, budget ${CHAT_CSS_BUDGET}; whole first load ${chatFirstLoad} B, budget ${CHAT_FIRST_LOAD_BUDGET}), language rules held`
     : `ok (marketing) — ${pages.length} pages, largest ${biggest} bytes, links and assets resolve, no client JS, no app files, canonical and sitemap on ${MARKETING_ORIGIN}, language rules held`,
 );

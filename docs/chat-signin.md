@@ -160,7 +160,7 @@ person out. So the part that holds the session is a server.
 
 **Built in `site/worker/`, as part of the `shamwari-app` Worker** (not a third Worker): static
 assets answer everything, and `assets.run_worker_first` in `site/wrangler.app.jsonc` sends only
-`/chat/auth/login`, `/chat/auth/token`, `/chat/auth/logout` and `/chat/callback` to the script.
+`/lite/auth/login`, `/lite/auth/token`, `/lite/auth/logout` and `/lite/callback` to the script.
 It uses the **WorkOS SDK** (`@workos-inc/node`, its `workerd` build) for the authorization URL,
 the code exchange, cookie sealing, JWT verification, refresh and session revocation. There is no
 PKCE, sealing or token-refresh code of our own. (The Console's own pattern in
@@ -168,19 +168,19 @@ PKCE, sealing or token-refresh code of our own. (The Console's own pattern in
 
 ```
 browser                    shamwari-app Worker (worker/)         WorkOS
-  | GET /chat/auth/login --->| state (random, one-time cookie); SDK authorization URL
+  | GET /lite/auth/login --->| state (random, one-time cookie); SDK authorization URL
   |<-- 302 to WorkOS --------|
   | ...person signs in...    |
-  | GET /chat/callback?code ->| state checked; SDK exchanges the code and SEALS the session
-  |<-- Set-Cookie __Host-shamwari_session (HttpOnly, Secure, SameSite=Lax), 302 /chat/
-  | GET /chat/auth/token --->| SDK verifies; refreshes if < 60 s left (one at a time per session)
+  | GET /lite/callback?code ->| state checked; SDK exchanges the code and SEALS the session
+  |<-- Set-Cookie __Secure-shamwari_session (Path=/lite/) (HttpOnly, Secure, SameSite=Lax), 302 /lite/
+  | GET /lite/auth/token --->| SDK verifies; refreshes if < 60 s left (one at a time per session)
   |<-- { access_token, expires_at }   Cache-Control: no-store, Vary: Cookie
   | POST api.shamwari.ai/v1/chat/completions   Authorization: Bearer <access_token>
 ```
 
 - The **refresh token never leaves the Worker**: it exists only inside the sealed cookie. The page
   gets the short-lived access token, keeps it in memory, and asks again on expiry or reload.
-- **What the page expects** (`site/src/chat/auth-mukoko.ts`): `GET /chat/auth/token` returns
+- **What the page expects** (`site/src/chat/auth-mukoko.ts`): `GET /lite/auth/token` returns
   `{ "access_token": "<jwt>", "expires_at": <epoch seconds> }`. **401 means the session is over**
   (the Worker also clears the cookie); anything else (403, 5xx, a network failure) is "not now",
   never a sign-out. The page reads no claim from the token.
@@ -191,18 +191,18 @@ browser                    shamwari-app Worker (worker/)         WorkOS
   gets the first one's result (for 30 s) instead of spending the same token twice and being signed out.
 - **Only a terminal answer ends a session.** A WorkOS outage or rate limit is `503` with `Retry-After`
   and the cookie stays, so our outage is not their sign-out.
-- **No open redirect:** after sign-in the person always lands on `/chat/`; the request cannot choose.
+- **No open redirect:** after sign-in the person always lands on `/lite/`; the request cannot choose.
   The login `state` is random, single-use and compared in constant time. A failed sign-in returns to
-  `/chat/?signin=failed` (the page does not show a message for it yet).
-- `/chat/auth/token` and `/chat/auth/logout` refuse requests the browser marks `Sec-Fetch-Site: cross-site`.
-- Sign-out is `POST /chat/auth/logout`: it clears both cookies at once and revokes the WorkOS session
+  `/lite/?signin=failed` (the page does not show a message for it yet).
+- `/lite/auth/token` and `/lite/auth/logout` refuse requests the browser marks `Sec-Fetch-Site: cross-site`.
+- Sign-out is `POST /lite/auth/logout`: it clears both cookies at once and revokes the WorkOS session
   in the background; a failed revocation does not stop the sign-out.
 - The CSP already restricts `connect-src` to the site and the API origin and `script-src` to `'self'`,
   which is what protects an in-memory token from injected script.
 
 **Configuration, by name only.** Public vars in `wrangler.app.jsonc`: `WORKOS_CLIENT_ID`
 (`client_01M68PCT0T5ECHKDYH45ECT0GV`, not a secret) and `WORKOS_REDIRECT_URI`
-(`https://shamwari.ai/chat/callback`). Two **secrets**, bound from the account's Secrets Store and
+(`https://shamwari.ai/lite/callback`). Two **secrets**, bound from the account's Secrets Store and
 never written into git: `WORKOS_API_KEY` (the WorkOS environment's API key; the Worker is a
 confidential client) and `COOKIE_PASSWORD` (seals the cookie; at least 32 random characters).
 With either unbound the auth routes answer `503` and the page stays on developer-key mode.
@@ -254,7 +254,10 @@ owning-entity key.
 - **Done in WorkOS production (2026-10-31, relayed by the orchestrating session):** a dedicated
   AuthKit application **Shamwari Chat**, client `client_01M68PCT0T5ECHKDYH45ECT0GV` (not a
   secret), **access-token lifetime 300 s**, redirect URI `https://shamwari.ai/chat/callback` only,
-  logout `https://shamwari.ai/chat/`, web origin `https://shamwari.ai`. So
+  logout `https://shamwari.ai/chat/`, web origin `https://shamwari.ai`. **The sign-in page is now the light
+  chat at `/lite/` (owner, 2026-11-01), so the app also needs the redirect URI
+  `https://shamwari.ai/lite/callback`, the sign-in start `https://shamwari.ai/lite/auth/login` and the
+  logout return `https://shamwari.ai/lite/`; the `/chat/` values are for the main chat and are left alone.** So
   `WORKOS_CLIENT_ID=client_01M68PCT0T5ECHKDYH45ECT0GV`, and the revocation window is about five
   minutes. The shared "Mukoko Account" app was not used because it has about forty redirect URIs
   and a five-hour access-token lifetime.

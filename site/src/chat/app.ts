@@ -128,6 +128,8 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   let thread: Thread = saved.find((t) => t.messages.length) ?? fresh();
   /** Bumped by Delete history, so a request still in flight cannot write its thread back. */
   let epoch = 0;
+  /** The start-up renewal while it is in flight (Mukoko only). A send in that window waits for it. */
+  let startup: Promise<void> | null = null;
 
   // ---- rendering -----------------------------------------------------------
   const actionsFor = (m: StoredMessage): ErrorActions => ({
@@ -378,6 +380,9 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   async function ask(text: string, withScope: Scope = scope): Promise<void> {
     const clean = text.trim();
     if (!clean) return;
+    // Straight after the sign-in redirect the cookie has not been turned into a token yet. A
+    // question sent in that window waits for the start-up renewal instead of being dropped.
+    if (startup) await startup;
     // No key yet: ask for one and keep what was typed, rather than eating the question.
     if (!auth.signedIn()) {
       showAuth();
@@ -431,13 +436,17 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     input.focus();
   });
   $('#signout').addEventListener('click', async () => {
-    await auth.signOut();
+    // Start the sign-out (its first, synchronous part flips the app to signed out), then clear
+    // the chats WITHOUT waiting on the network: a hung request must not leave the previous
+    // person's chats on a phone that is being handed to someone else.
+    const ended = Promise.resolve(auth.signOut());
     // A Mukoko account belongs to a person, and the phone may not. Signing out takes
     // their chats off this device so the next person to open it does not read them.
     if (auth.kind === 'mukoko') {
       await wipeHistory();
       $('#toast').textContent = strings().signedOutCleared;
     }
+    await ended;
     syncAuth();
     showAuth();
   });
@@ -447,7 +456,13 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     $('#mukoko-soon').hidden = true;
     mukokoBtn.removeAttribute('aria-describedby'); // it pointed at the "coming soon" text
     $('#signout').dataset.i18n = 'signOut';
-    mukokoBtn.addEventListener('click', () => location.assign('/chat/auth/login'));
+    mukokoBtn.addEventListener('click', async () => {
+      if (auth.prepareSignIn && !(await auth.prepareSignIn())) {
+        $('#toast').textContent = strings().signInRetry;
+        return;
+      }
+      location.assign('/lite/auth/login');
+    });
   }
 
   // ---- controls ------------------------------------------------------------
@@ -537,20 +552,23 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   syncAuth();
   void renderHistory();
   document.documentElement.dataset.ready = 'true';
+  const afterAuth = () => {
+    document.documentElement.dataset.authReady = 'true';
+    if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
+  };
   if (auth.kind === 'mukoko') {
     // One silent renewal at start (the session cookie, if there is one, becomes a
     // token in memory), alongside the UI instead of in front of it: a slow link
     // must not hold up showing and writing questions. Until it answers, the
     // sign-in panel stays down so a signed-in person never sees it flash.
-    void auth.refresh().then(() => {
+    startup = auth.refresh().then(() => {
+      startup = null;
       authPanel.hidden = auth.signedIn();
       syncAuth();
-      document.documentElement.dataset.authReady = 'true';
-      if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
+      afterAuth();
     });
   } else {
     if (!auth.signedIn()) authPanel.hidden = false;
-    document.documentElement.dataset.authReady = 'true';
-    if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
+    afterAuth();
   }
 }

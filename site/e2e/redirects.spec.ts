@@ -30,5 +30,5 @@ test('the app serves no marketing page of its own', async ({ page }) => {
   for (const path of ['/index.html', '/blueprint/index.html', '/project/index.html']) {
     expect((await page.request.get(path)).status(), path).toBe(404);
   }
-  expect((await page.request.get('/chat/')).status()).toBe(200);
+  expect((await page.request.get('/lite/')).status()).toBe(200);
 });

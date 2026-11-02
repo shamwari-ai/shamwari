@@ -1,5 +1,5 @@
-import { WorkOS } from "@workos-inc/node";
-import type { AuthKitPort, CheckResult, RefreshResult } from "./session";
+import { WorkOS } from '@workos-inc/node';
+import type { AuthKitPort, CheckResult, RefreshResult } from './session';
 
 /**
  * The only file that talks to the WorkOS SDK. Every WorkOS-specific decision is
@@ -10,7 +10,7 @@ import type { AuthKitPort, CheckResult, RefreshResult } from "./session";
  * and those arrive as Secrets Store bindings (an object with get()) or, for
  * local development only, as plain strings from .dev.vars:
  *   WORKOS_CLIENT_ID      public: the AuthKit application's client id
- *   WORKOS_REDIRECT_URI   public: exactly https://shamwari.ai/chat/callback
+ *   WORKOS_REDIRECT_URI   public: exactly https://shamwari.ai/lite/callback
  *   WORKOS_API_KEY        SECRET: the environment's API key (confidential client)
  *   COOKIE_PASSWORD       SECRET: seals the session cookie; at least 32 characters
  */
@@ -30,8 +30,8 @@ export interface DurableObjectNamespaceLike {
 }
 
 export async function secret(b: SecretBinding): Promise<string | undefined> {
-  if (typeof b === "string") return b || undefined;
-  if (b && typeof b.get === "function") return (await b.get()) || undefined;
+  if (typeof b === 'string') return b || undefined;
+  if (b && typeof b.get === 'function') return (await b.get()) || undefined;
   return undefined;
 }
 
@@ -40,39 +40,33 @@ export type Port = AuthKitPort & {
 };
 
 /** Misconfiguration is an error to the caller (a 500), never a silent "signed out". */
-export async function makePort(
-  env: WorkerEnv,
-  workosOverride?: WorkOS,
-): Promise<Port> {
+export async function makePort(env: WorkerEnv, workosOverride?: WorkOS): Promise<Port> {
   const clientId = env.WORKOS_CLIENT_ID;
   const redirectUri = env.WORKOS_REDIRECT_URI;
   const apiKey = await secret(env.WORKOS_API_KEY);
   const cookiePassword = await secret(env.COOKIE_PASSWORD);
-  if (!clientId || !redirectUri || !apiKey || !cookiePassword)
-    throw new Error("session worker is not configured");
-  if (cookiePassword.length < 32)
-    throw new Error("COOKIE_PASSWORD must be at least 32 characters");
+  if (!clientId || !redirectUri || !apiKey || !cookiePassword) throw new Error('session worker is not configured');
+  if (cookiePassword.length < 32) throw new Error('COOKIE_PASSWORD must be at least 32 characters');
 
   const workos = workosOverride ?? new WorkOS(apiKey, { clientId });
   const um = workos.userManagement;
-  const load = (sealed: string) =>
-    um.loadSealedSession({ sessionData: sealed, cookiePassword });
+  const load = (sealed: string) => um.loadSealedSession({ sessionData: sealed, cookiePassword });
 
   /** `sid` from a token the SDK has already read out of our own sealed cookie. */
   const sidOf = (accessToken: string): string | null => {
     try {
-      const seg = accessToken.split(".")[1] ?? "";
+      const seg = accessToken.split('.')[1] ?? '';
       const o = JSON.parse(
         atob(
           seg
-            .replace(/-/g, "+")
-            .replace(/_/g, "/")
-            .padEnd(Math.ceil(seg.length / 4) * 4, "="),
+            .replace(/-/g, '+')
+            .replace(/_/g, '/')
+            .padEnd(Math.ceil(seg.length / 4) * 4, '='),
         ),
       ) as {
         sid?: unknown;
       };
-      return typeof o.sid === "string" && o.sid ? o.sid : null;
+      return typeof o.sid === 'string' && o.sid ? o.sid : null;
     } catch {
       return null;
     }
@@ -81,7 +75,7 @@ export async function makePort(
   return {
     authorizationUrl: (state) =>
       um.getAuthorizationUrl({
-        provider: "authkit",
+        provider: 'authkit',
         clientId,
         redirectUri,
         state,
@@ -105,24 +99,24 @@ export async function makePort(
         const a = await load(sealed).authenticate();
         if (a.authenticated)
           return {
-            status: "valid",
+            status: 'valid',
             accessToken: a.accessToken,
             sid: a.sessionId,
           };
         // An expired access token fails verification as invalid_jwt. That is the ordinary
         // "time to refresh" case; anything else (no cookie, unreadable cookie) is not a session.
-        if (a.reason === "invalid_jwt") {
+        if (a.reason === 'invalid_jwt') {
           const data = await um.getSessionFromCookie({
             sessionData: sealed,
             cookiePassword,
           });
           const sid = data ? sidOf(data.accessToken) : null;
-          return sid ? { status: "expired", sid } : { status: "invalid" };
+          return sid ? { status: 'expired', sid } : { status: 'invalid' };
         }
-        return { status: "invalid" };
+        return { status: 'invalid' };
       } catch {
         // A cookie we cannot read (wrong password after rotation, tampering) is not a session.
-        return { status: "invalid" };
+        return { status: 'invalid' };
       }
     },
 
@@ -130,19 +124,16 @@ export async function makePort(
       try {
         const r = await load(sealed).refresh({ cookiePassword });
         if (r.authenticated) {
-          if (!r.sealedSession || !r.session?.accessToken)
-            return { status: "retry" };
+          if (!r.sealedSession || !r.session?.accessToken) return { status: 'retry' };
           return {
-            status: "ok",
+            status: 'ok',
             sealed: r.sealedSession,
             accessToken: r.session.accessToken,
           };
         }
-        return r.retryable
-          ? { status: "retry", retryAfter: r.retryAfter }
-          : { status: "denied" };
+        return r.retryable ? { status: 'retry', retryAfter: r.retryAfter } : { status: 'denied' };
       } catch {
-        return { status: "retry" };
+        return { status: 'retry' };
       }
     },
 

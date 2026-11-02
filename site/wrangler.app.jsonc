@@ -7,23 +7,23 @@
   // Shamwari Chat: the PWA, its service worker, manifest and headers (static
   // output of `npm run build:app`), plus the SESSION WORKER (worker/) that does
   // sign-in. Static assets answer everything except the four routes below, which
-  // run the Worker first. The root / answers with a 302 to /chat/ from
+  // run the Worker first. The root / answers with a 302 to /chat/ (the main Shamwari Chat) from
   // app-public/_redirects.
   "main": "worker/index.ts",
   "assets": {
     "directory": "./dist-app",
     "run_worker_first": [
-      "/chat/auth/login",
-      "/chat/auth/token",
-      "/chat/auth/logout",
-      "/chat/callback",
+      "/lite/auth/login",
+      "/lite/auth/token",
+      "/lite/auth/logout",
+      "/lite/callback",
     ],
   },
 
   // Public configuration, safe in git. The client id is NOT a secret.
   "vars": {
     "WORKOS_CLIENT_ID": "client_01M68PCT0T5ECHKDYH45ECT0GV",
-    "WORKOS_REDIRECT_URI": "https://shamwari.ai/chat/callback",
+    "WORKOS_REDIRECT_URI": "https://shamwari.ai/lite/callback",
   },
 
   // One instance per WorkOS session id. Refresh tokens are single-use, so every

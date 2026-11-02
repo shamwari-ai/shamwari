@@ -1,5 +1,5 @@
-import { RefreshCoordinator } from "./coordinator";
-import { makePort, type WorkerEnv } from "./workos-port";
+import { RefreshCoordinator } from './coordinator';
+import { makePort, type WorkerEnv } from './workos-port';
 
 /**
  * One instance per WorkOS session id. It holds no data worth keeping (the
@@ -21,12 +21,9 @@ export class SessionRefresh {
     const { sealed } = (await req.json().catch(() => ({}))) as {
       sealed?: unknown;
     };
-    if (typeof sealed !== "string" || !sealed)
-      return new Response("bad request", { status: 400 });
+    if (typeof sealed !== 'string' || !sealed) return new Response('bad request', { status: 400 });
     const port = await makePort(this.env);
-    const result = await this.coordinator.run(sealed, () =>
-      port.refresh(sealed),
-    );
+    const result = await this.coordinator.run(sealed, () => port.refresh(sealed));
     return Response.json(result);
   }
 }

@@ -1,4 +1,4 @@
-import type { RefreshResult } from "./session";
+import type { RefreshResult } from './session';
 
 /**
  * Serialises refreshes for ONE session. WorkOS refresh tokens are single-use, so two
@@ -12,8 +12,7 @@ import type { RefreshResult } from "./session";
  */
 export class RefreshCoordinator {
   private tail: Promise<unknown> = Promise.resolve();
-  private last: { from: string; at: number; result: RefreshResult } | null =
-    null;
+  private last: { from: string; at: number; result: RefreshResult } | null = null;
 
   constructor(
     private readonly now: () => number = Date.now,
@@ -21,19 +20,10 @@ export class RefreshCoordinator {
     private readonly reuseMs = 30_000,
   ) {}
 
-  run(
-    sealed: string,
-    refresh: () => Promise<RefreshResult>,
-  ): Promise<RefreshResult> {
+  run(sealed: string, refresh: () => Promise<RefreshResult>): Promise<RefreshResult> {
     const next = this.tail.then(async () => {
       const l = this.last;
-      if (
-        l &&
-        l.from === sealed &&
-        l.result.status === "ok" &&
-        this.now() - l.at < this.reuseMs
-      )
-        return l.result;
+      if (l && l.from === sealed && l.result.status === 'ok' && this.now() - l.at < this.reuseMs) return l.result;
       const result = await refresh();
       // Only a success is reused. A retryable failure must be retried, and a denial is final anyway.
       this.last = { from: sealed, at: this.now(), result };

@@ -166,7 +166,13 @@ export function createClient(config: ClientConfig) {
     const first = await once(req, opts);
     if (first.ok || first.error.kind !== 'unauthorized' || first.error.status !== 401) return first;
     // A 401 from the gateway (not a missing key): one silent renewal, one more try.
-    if (!config.onUnauthorized || !(await config.onUnauthorized())) return first;
+    if (!config.onUnauthorized) return first;
+    if (!(await config.onUnauthorized())) {
+      // The renewal did not produce a fresh credential (offline, a 5xx, a firewall). The gateway
+      // did reject the old one, but nothing was repeated, so this is not the final 401 that ends
+      // a session: report "no credential" and let the caller treat it as "did not arrive".
+      return { ok: false, error: { ...first.error, status: null } };
+    }
     return once(req, opts);
   }
 
