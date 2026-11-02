@@ -261,13 +261,20 @@ Rules the code keeps, each pinned by a test that fails when it breaks:
 - **Rotation is saved first.** The new refresh token is written before the new access token is used,
   because the old one is already spent.
 - **Refresh is serialised.** Any number of concurrent callers cause one refresh.
-- **Only a terminal answer ends a session** (401 or `invalid_grant`). An outage, a 429 or a network
-  failure keeps the session; the ask stays queued and is retried (the client treats a throwing
-  credential lookup as offline, not as signed out).
+- **Only `invalid_grant` deletes the stored credential.** An outage, a 429 or a network failure keeps the
+  session; the ask stays queued and is retried (the client treats a throwing credential lookup as
+  offline, not as signed out). Any other refusal (a 401 `invalid_client`, an unexpected 4xx) means a
+  request or configuration problem: the person is asked to sign in, but the keystore is **not** touched,
+  so a wrong client id can never wipe everyone's session.
+- **No stale write.** Sign-in and sign-out bump an epoch; a refresh that was in flight is discarded, so a
+  late answer can neither sign the person back in after sign-out nor delete a newer sign-in.
+  Two taps on "Sign in" are one sign-in.
 - **After a 401** the app renews once and retries once with a different token; it never loops.
-- **Sign-out** clears local state first (so dismissing the browser still signs the person out), opens
-  the WorkOS logout URL for the session, and clears the waiting questions and thread, so on a shared
-  phone the next person cannot send or read the last person's.
+- **Sign-out** wipes this phone's copy first, before the browser opens: the waiting questions, the
+  thread, the pasted developer key and the keystore session, and any send already in flight has its
+  answer dropped. Only then does it open the WorkOS logout URL for the session. So on a shared phone,
+  killing the app or a hung browser still leaves the next person nothing of the last person's and
+  nothing able to send as them.
 - **Rule 1 is untouched:** sign-in grants nothing new. The gateway still gives a signed-in person only
   the fixed `community` + `platform` grant, and the app still refuses a personal-scope ask on the phone.
 
@@ -278,7 +285,9 @@ developer key; sign-in needs a development or preview build.
 
 **Not verified:** nothing here has met a real WorkOS tenant or a phone. In particular: that the
 Shamwari Chat application accepts a public-client exchange (no secret) and refresh; the exact error
-body WorkOS returns for a spent refresh token (the app treats 401 and `invalid_grant` as terminal);
+body WorkOS returns for a spent or revoked refresh token (the app deletes the credential only on
+`invalid_grant`; if WorkOS answers a revoked token with another code, the person is asked to sign in
+again and nothing is deleted);
 that `sid` is present in the token the app holds (it is needed to build the logout URL); and the
 keychain behaviour across an iOS reinstall (a keychain item can outlive the app).
 
