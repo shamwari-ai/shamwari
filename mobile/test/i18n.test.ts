@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LANGUAGES, pickLanguage } from '../src/i18n/strings';
-import { errorMessage } from '../src/lib/messages';
+import { errorMessage, msgText } from '../src/lib/messages';
 import type { AskErrorKind } from '../src/lib/types';
 
 const flat = (o: unknown, p = ''): Record<string, string> =>
@@ -29,6 +29,14 @@ describe('strings', () => {
     expect(pickLanguage(['nr-ZA'])).toBe('nd');
     expect(pickLanguage(['de', 'fr'])).toBe('en');
     expect(pickLanguage([])).toBe('en');
+  });
+  it('tells the person a transient failure is saved, and shows the cloud notice not a sovereignty claim', () => {
+    for (const l of ['en', 'sn', 'nd'] as const) {
+      const s = LANGUAGES[l].strings;
+      for (const k of ['offline', 'unavailable', 'busy', 'rate_limited'] as const) expect(msgText(s, k)).toContain(s.savedRetry);
+      expect(msgText(s, 'unauthorized')).not.toContain(s.savedRetry);
+      expect(s.cloudNotice.length).toBeGreaterThan(20);
+    }
   });
   it('explains the Rule 1 refusal in full, in every language, and covers every failure kind', () => {
     const kinds: AskErrorKind[] = ['unauthorized', 'payment_required', 'forbidden_scope', 'rate_limited', 'unavailable', 'busy', 'offline', 'bad_request', 'unknown'];

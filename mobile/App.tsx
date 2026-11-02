@@ -10,7 +10,7 @@ import {
 import { BUDGET, byteLength, clampBytes } from './src/lib/budget';
 import { createClient } from './src/lib/client';
 import { LANGUAGES, isLanguage, pickLanguage } from './src/i18n/strings';
-import { errorMessage, needsPerson, retryable } from './src/lib/messages';
+import { msgText, needsPerson, retryable, type MsgKey } from './src/lib/messages';
 import { dequeue, enqueue, type QueuedAsk } from './src/lib/queue';
 import { loadKey, loadLang, loadQueue, saveKey, saveLang, saveQueue } from './src/lib/storage';
 import { dark, light } from './src/lib/theme';
@@ -19,7 +19,7 @@ import type { Answer, Language } from './src/lib/types';
 type Item =
   | { kind: 'q'; id: string; text: string; pending: boolean }
   | { kind: 'a'; id: string; answer: Answer }
-  | { kind: 'note'; id: string; text: string };
+  | { kind: 'note'; id: string; msg: MsgKey };
 
 const apiBase = (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ?? 'https://api.shamwari.ai';
 
@@ -35,12 +35,9 @@ export default function App() {
   const keyRef = useRef<string | null>(null);
   // The queue's source of truth: flush() runs across awaits and must never write back a stale snapshot.
   const queueRef = useRef<QueuedAsk[]>([]);
-  const [status, setStatus] = useState<string | null>(null);
+  const [status, setStatus] = useState<MsgKey | null>(null);
   const [lang, setLang] = useState<Language>(() => pickLanguage(getLocales().map((l) => l.languageTag)));
   const { strings: str, needsNativeReview } = LANGUAGES[lang];
-  // flush() and the startup effect outlive a render, so they read the current wording through a ref.
-  const strRef = useRef(str);
-  strRef.current = str;
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attempts = useRef(0);
   const busy = useRef(false);
@@ -49,7 +46,7 @@ export default function App() {
   const push = (i: Item) => setItems((p) => [...p, i]);
   const persist = (q: QueuedAsk[]) => {
     queueRef.current = q; setQueue(q);
-    saveQueue(q).catch(() => setStatus(strRef.current.saveQueueFailed));
+    saveQueue(q).catch(() => setStatus('saveQueueFailed'));
   };
 
   const flush = useCallback(async () => {
@@ -71,7 +68,7 @@ export default function App() {
         } else if (retryable(r.error.kind)) {
           // Keep everything queued, in order, say why, and try again on a backoff
           // (or the server's Retry-After) instead of waiting for the app to be reopened.
-          setStatus(errorMessage(strRef.current, r.error.kind));
+          setStatus(r.error.kind);
           const wait = Math.max((r.error.retryAfterSec ?? 0) * 1000, Math.min(300_000, 10_000 * 2 ** attempts.current++));
           if (retryTimer.current) clearTimeout(retryTimer.current);
           retryTimer.current = setTimeout(() => { retryTimer.current = null; void flush(); }, wait);
@@ -79,12 +76,12 @@ export default function App() {
         } else if (needsPerson(r.error.kind)) {
           // A bad key or a used-up plan is not the question's fault: keep every saved
           // question, say what to do, and resume when the person has done it.
-          setStatus(errorMessage(strRef.current, r.error.kind));
+          setStatus(r.error.kind);
           if (r.error.kind === 'unauthorized') setShowSettings(true);
           break;
         } else {
           persist(dequeue(queueRef.current, ask.id));
-          setItems((p) => [...p, { kind: 'note', id: ask.id + ':e', text: errorMessage(strRef.current, r.error.kind) }]);
+          setItems((p) => [...p, { kind: 'note', id: ask.id + ':e', msg: r.error.kind }]);
         }
       }
     } finally {
@@ -97,7 +94,8 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       try {
-        const [k, q, savedLang] = await Promise.all([loadKey(), loadQueue(), loadLang()]);
+        // The language is a preference: if reading it fails, the key and queue must still load.
+        const [k, q, savedLang] = await Promise.all([loadKey(), loadQueue(), loadLang().catch(() => null)]);
         if (isLanguage(savedLang)) setLang(savedLang);
         keyRef.current = k; setKey(k); persist(q);
         setItems(q.map((a) => ({ kind: 'q', id: a.id, text: a.question, pending: true })));
@@ -105,7 +103,7 @@ export default function App() {
         else if (q.length) void flush();
       } catch {
         // Secure storage can fail (locked keystore, restore from backup). Start empty and let the person re-enter the key.
-        setStatus(strRef.current.readFailed);
+        setStatus('readFailed');
         setShowSettings(true);
       }
     })();
@@ -118,20 +116,20 @@ export default function App() {
     const q = draft.trim();
     if (!q) return;
     // Never cut a question short silently: a cut Shona sentence is a different question.
-    if (byteLength(q) > BUDGET.maxQuestionBytes) { setStatus(str.tooLong); return; }
+    if (byteLength(q) > BUDGET.maxQuestionBytes) { setStatus('tooLong'); return; }
     setStatus(null);
     const ask: QueuedAsk = { id: Crypto.randomUUID(), question: q, createdAt: Date.now() };
     // Scope is always 'platform' here: the app has no on-device Mind yet, and a
     // personal-scope ask must never be queued (queue.ts refuses it).
     const r = enqueue(queueRef.current, ask, 'platform');
-    if (!r.ok) { push({ kind: 'note', id: ask.id, text: r.reason === 'queue_full' ? str.queueFull : str.tooLong }); return; }
+    if (!r.ok) { push({ kind: 'note', id: ask.id, msg: r.reason === 'queue_full' ? 'queueFull' : 'tooLong' }); return; }
     push({ kind: 'q', id: ask.id, text: q, pending: true });
     setDraft(''); persist(r.queue); void flush();
   };
 
   const render = ({ item }: { item: Item }) => {
     if (item.kind === 'q') return <View style={[s.bubble, s.mine]}><Text style={s.mineText}>{item.text}{item.pending ? `  ·  ${str.waiting}` : ''}</Text></View>;
-    if (item.kind === 'note') return <View style={s.note}><Text style={s.noteText} accessibilityRole="alert">{item.text}</Text></View>;
+    if (item.kind === 'note') return <View style={s.note}><Text style={s.noteText} accessibilityRole="alert">{msgText(str, item.msg)}</Text></View>;
     const a = item.answer;
     return (
       <View style={[s.bubble, s.theirs]}>
@@ -167,11 +165,10 @@ export default function App() {
               </Pressable>
             ))}
           </View>
-          {needsNativeReview ? <Text style={s.meta}>{str.reviewNote}</Text> : null}
           <Text style={s.text}>{str.signInSoon}</Text>
           <Text style={s.meta}>{key ? str.keySaved : str.noKeyYet}</Text>
           <TextInput style={s.input} value={keyDraft} onChangeText={setKeyDraft} placeholder={str.keyPlaceholder} placeholderTextColor={t.muted} autoCapitalize="none" autoCorrect={false} secureTextEntry />
-          <Pressable style={s.btn} onPress={() => { const k = keyDraft.trim(); setKeyDraft(''); setShowSettings(false); if (!k) return; keyRef.current = k; setKey(k); setStatus(null); void saveKey(k).catch(() => setStatus(str.saveKeyFailed)); void flush(); }} accessibilityRole="button">
+          <Pressable style={s.btn} onPress={() => { const k = keyDraft.trim(); setKeyDraft(''); setShowSettings(false); if (!k) return; keyRef.current = k; setKey(k); setStatus(null); void saveKey(k).catch(() => setStatus('saveKeyFailed')); void flush(); }} accessibilityRole="button">
             <Text style={s.btnText}>{str.save}</Text>
           </Pressable>
           {key ? (
@@ -179,11 +176,12 @@ export default function App() {
               <Text style={s.link}>{str.authDevClear}</Text>
             </Pressable>
           ) : null}
+          <Text style={s.meta}>{str.cloudNotice}</Text>
           <Text style={s.meta}>{str.footer}</Text>
-          <Text style={s.meta}>{str.scopePersonalBody}</Text>
         </View>
       ) : null}
-      {status ? <View style={s.note}><Text style={s.noteText} accessibilityRole="alert">{status}</Text></View> : null}
+      {needsNativeReview ? <View style={s.note}><Text style={s.meta}>{str.reviewNote}</Text></View> : null}
+      {status ? <View style={s.note}><Text style={s.noteText} accessibilityRole="alert">{msgText(str, status)}</Text></View> : null}
       <FlatList style={s.list} contentContainerStyle={{ padding: 12, gap: 8 }} data={items} keyExtractor={(i) => i.id} renderItem={render}
         ListEmptyComponent={<Text style={s.meta}>{str.tagline}</Text>} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
