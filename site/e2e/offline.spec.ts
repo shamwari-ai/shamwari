@@ -86,14 +86,14 @@ test('the shell opens from the service worker with no network at all', async ({ 
   await expect(page.locator('#offline')).toBeVisible();
 });
 
-test('the worker never caches the API and is scoped to /chat/', async ({ page }) => {
+test('the worker never caches the API and is scoped to /lite/', async ({ page }) => {
   await openChat(page);
   await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
   await ask(page, 'hello');
   await expect(page.locator('article.msg.bot').first()).toBeVisible();
 
-  const scope = await page.evaluate(() => navigator.serviceWorker.getRegistration('/chat/').then((r) => r?.scope));
-  expect(scope).toMatch(/\/chat\/$/);
+  const scope = await page.evaluate(() => navigator.serviceWorker.getRegistration('/lite/').then((r) => r?.scope));
+  expect(scope).toMatch(/\/lite\/$/);
   const cached = await page.evaluate(async () => {
     const out: string[] = [];
     for (const name of await caches.keys()) for (const req of await (await caches.open(name)).keys()) out.push(req.url);
@@ -101,7 +101,7 @@ test('the worker never caches the API and is scoped to /chat/', async ({ page })
   });
   expect(cached.length).toBeGreaterThan(3);
   expect(cached.some((u) => u.includes('8788') || u.includes('completions'))).toBe(false);
-  expect(cached.every((u) => /\/(chat|_astro)\/|favicon|apple-touch/.test(u))).toBe(true);
+  expect(cached.every((u) => /\/(lite|_astro)\/|favicon|apple-touch/.test(u))).toBe(true);
 });
 
 test('the content security policy holds: no violations while chatting', async ({ page }) => {
@@ -116,7 +116,7 @@ test('the content security policy holds: no violations while chatting', async ({
   await page.locator('#lang').selectOption('nd');
   expect(problems).toEqual([]);
 
-  const csp = (await page.request.get('/chat/')).headers()['content-security-policy'];
+  const csp = (await page.request.get('/lite/')).headers()['content-security-policy'];
   expect(csp).toContain("script-src 'self'");
   expect(csp).not.toMatch(/unsafe-/);
 });

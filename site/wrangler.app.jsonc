@@ -6,7 +6,7 @@
 
   // Shamwari Chat: the PWA, its service worker, manifest and headers. Static
   // output from `npm run build:app`; no Worker script, no bindings, no secrets.
-  // The root / answers with a 302 to /chat/ from app-public/_redirects.
+  // The root / answers with a 302 to /chat/ (the main Shamwari Chat) from app-public/_redirects.
   "assets": { "directory": "./dist-app" },
 
   // Reachable on https://shamwari-app.nyuchi.workers.dev as soon as it is deployed.

@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// PWA install icons for /chat/, made from the existing brand assets: 192 and
+// PWA install icons for /lite/, made from the existing brand assets: 192 and
 // 512 "any" icons from shamwari-icon.png, and a 512 maskable icon (the mark on
 // a full sodalite square, inside the 80% safe zone). Run once; the PNGs are
 // committed. They are fetched only at install time, never on first load.
 import sharp from 'sharp';
 
-const out = (n) => new URL(`../../public/chat/icons/${n}`, import.meta.url).pathname;
+const out = (n) => new URL(`../../app-public/lite/icons/${n}`, import.meta.url).pathname;
 const src = new URL('../../public/shamwari-icon.png', import.meta.url).pathname;
 const mark = new URL('../../public/shamwari-mark-cream.png', import.meta.url).pathname;
 const png = { compressionLevel: 9, palette: true };

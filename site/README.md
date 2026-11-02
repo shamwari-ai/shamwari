@@ -28,7 +28,7 @@ to switch it on: `docs/domains-and-deploy.md`.
 # The marketing site: https://www.shamwari.ai, Worker `shamwari-site`
 npm run dev | build | check | test:site | deploy
 
-# Shamwari Chat, the app: https://shamwari.ai/chat/, Worker `shamwari-app`
+# Shamwari Chat, the light edge app: https://shamwari.ai/lite/, Worker `shamwari-app`
 npm run dev:app | build:app | check:app | test:app | e2e | deploy:app
 ```
 
