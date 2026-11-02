@@ -9,6 +9,8 @@ import { en } from '../../chat/strings';
 
 // Fixed at build time and never read from the URL (see chat/main.ts).
 const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
+// Mukoko sign-in is built but OFF: only a build that sets PUBLIC_CHAT_AUTH=mukoko turns it on.
+const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'developer-key';
 ---
 <!doctype html>
 <html lang="en">
@@ -22,6 +24,7 @@ const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta name="theme-color" content="#283593" />
   <meta name="shamwari-api" content={api} />
+  <meta name="shamwari-auth" content={authMode} />
   <link rel="manifest" href="/chat/manifest.webmanifest" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Shamwari" />
@@ -66,9 +69,10 @@ const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
     <section id="auth" class="panel" aria-labelledby="auth-title" hidden>
       <h2 id="auth-title" data-i18n="authTitle">Sign in to ask</h2>
       <p>
-        <button type="button" class="btn" disabled aria-describedby="mukoko-soon" data-i18n="authMukoko">Sign in with Mukoko</button>
+        <button type="button" id="mukoko-signin" class="btn" disabled aria-describedby="mukoko-soon" data-i18n="authMukoko">Sign in with Mukoko</button>
       </p>
       <p id="mukoko-soon" class="small" data-i18n="authMukokoSoon">Mukoko sign-in is coming. For now, use a developer key.</p>
+      <div class="devkey">
       <h3 data-i18n="authDevTitle">Developer key (testing only)</h3>
       <p class="small" data-i18n="authDevHelp">Paste a Shamwari API key. It is kept on this device only and is sent only to the Shamwari API. Do not use this on a shared phone.</p>
       <form id="auth-form" class="row">
@@ -77,6 +81,7 @@ const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
         <button type="submit" class="btn primary" data-i18n="authDevSave">Use this key</button>
       </form>
       <p id="key-error" class="small bad" role="alert" hidden data-i18n="authKeyBad">That does not look like a Shamwari key. It starts with sk_shamwari_.</p>
+      </div>
     </section>
 
     <section class="ask" aria-labelledby="ask-title">
