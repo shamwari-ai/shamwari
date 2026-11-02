@@ -3,11 +3,10 @@
 iOS and Android app for Shamwari (R1 chat), per `docs/tiered-access-design.md`
 and issue #86. ArkTS for HarmonyOS is a separate app and not here.
 
-**Talks to the Shamwari API only** (`api.shamwari.ai`, `POST /v1/chat/completions`).
+**Signs in with Mukoko (WorkOS AuthKit, PKCE, no secret)** or, in Expo Go and for testing, a pasted developer key; see `docs/chat-signin.md` ("The mobile app"). **Talks to the Shamwari API only** (`api.shamwari.ai`, `POST /v1/chat/completions`).
 No database, no website server, no secrets in the bundle: `EXPO_PUBLIC_*` is
 public, so the only such variable is the base URL. The user's key is typed in
-Settings and kept in the OS keystore (`expo-secure-store`) until WorkOS sign-in
-is live (`docs/chat-signin.md`).
+Settings and kept in the OS keystore (`expo-secure-store`) as a fallback.
 
 ## Rules this app keeps
 
