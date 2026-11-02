@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ChatController, type ChatPorts, type ChatState } from '../src/chat/controller';
+import { ChatController, settle, type ChatPorts, type ChatState, type Item } from '../src/chat/controller';
 import { BUDGET } from '../src/lib/budget';
 import type { QueuedAsk } from '../src/lib/queue';
 import type { Answer, AskErrorKind, ChatRequest, Result } from '../src/lib/types';
@@ -192,7 +192,7 @@ describe('asking', () => {
     h.ctl.send('b'); // typed mid-flush
     first.resolve(answer('first'));
     await idle();
-    expect(texts(h.state())).toEqual(['q:a', 'q:b', 'a:first', 'a:second']);
+    expect(texts(h.state())).toEqual(['q:a', 'a:first', 'q:b', 'a:second']); // each answer directly under its question
     expect(h.savedQueues).toEqual([[], ['a'], ['a', 'b'], ['b'], []]); // start() saved [], then each step
     expect(h.state().queue).toEqual([]);
   });
@@ -204,8 +204,68 @@ describe('asking', () => {
     for (let i = 0; i < BUDGET.maxQueueBytes / BUDGET.maxQuestionBytes; i++) expect(h.ctl.send(String(i).padEnd(BUDGET.maxQuestionBytes, 'x'))).toBe(true);
     await idle();
     expect(h.ctl.send('one more')).toBe(false);
-    expect(h.state().items.at(-1)).toMatchObject({ kind: 'note', msg: 'queueFull' });
+    expect(h.state().items.at(-1)).toMatchObject({ kind: 'note', msg: 'queueFull', id: expect.stringMatching(/:e$/) });
     expect(h.state().queue).toHaveLength(BUDGET.maxQueueBytes / BUDGET.maxQuestionBytes);
+  });
+});
+
+describe('where answers appear', () => {
+  it('puts every answer directly under its own question, however many were typed while it loaded', async () => {
+    const h = make({ key: 'k' });
+    const gates = [deferred<Result<Answer>>(), deferred<Result<Answer>>(), deferred<Result<Answer>>()];
+    h.onAsk((n) => gates[n - 1].promise);
+    await h.ctl.start();
+    h.ctl.send('one');
+    await idle();
+    h.ctl.send('two'); h.ctl.send('three'); // typed while the first is still loading
+    gates[0].resolve(answer('A1'));
+    await idle();
+    gates[1].resolve(answer('A2'));
+    await idle();
+    gates[2].resolve(answer('A3'));
+    await idle();
+    expect(texts(h.state())).toEqual(['q:one', 'a:A1', 'q:two', 'a:A2', 'q:three', 'a:A3']);
+  });
+
+  it('a question dropped as unreadable keeps its note under it, and later questions keep their answers under them', async () => {
+    const h = make({ key: 'k' });
+    h.onAsk((n) => (n === 2 ? fail('bad_request') : answer(`A${n}`)));
+    await h.ctl.start();
+    h.ctl.send('one'); h.ctl.send('two'); h.ctl.send('three');
+    await idle();
+    expect(texts(h.state())).toEqual(['q:one', 'a:A1', 'q:two', 'n:bad_request', 'q:three', 'a:A3']);
+  });
+
+  it('a question that waited for a retry still gets its answer directly under it, not at the end', async () => {
+    const h = make({ key: 'k' });
+    h.onAsk((n) => (n <= 2 ? fail('offline') : answer(`A${n}`))); // 'one' fails twice: once alone, once when 'two' is typed
+    await h.ctl.start();
+    h.ctl.send('one');
+    await idle();
+    h.ctl.send('two');
+    await idle();
+    expect(texts(h.state())).toEqual(['q:one*', 'q:two*']);
+    h.live().at(-1)!.fn();
+    await idle();
+    expect(texts(h.state())).toEqual(['q:one', 'a:A3', 'q:two', 'a:A4']);
+  });
+});
+
+describe('settle (where a reply goes)', () => {
+  const q = (id: string, pending = true): Item => ({ kind: 'q', id, text: id, pending });
+  const a = (id: string): Item => ({ kind: 'note', id: id + ':e', msg: 'bad_request' });
+  it('puts the reply right after its own question, marks only that question done, and does not mutate the input', () => {
+    const before: Item[] = [q('1'), q('2'), q('3')];
+    const out = settle(before, '2', a('2'));
+    expect(out.map((i) => i.id)).toEqual(['1', '2', '2:e', '3']);
+    expect(out.map((i) => (i.kind === 'q' ? i.pending : null))).toEqual([true, false, null, true]);
+    expect(before.map((i) => i.id)).toEqual(['1', '2', '3']);
+    expect(before[1]).toMatchObject({ pending: true });
+  });
+  it('a missing question never loses the reply: it is kept at the end, other questions untouched', () => {
+    const out = settle([q('1'), q('2')], 'gone', a('gone'));
+    expect(out.map((i) => i.id)).toEqual(['1', '2', 'gone:e']);
+    expect(out.slice(0, 2).every((i) => i.kind === 'q' && i.pending)).toBe(true);
   });
 });
 
@@ -345,7 +405,7 @@ describe('when the person must act', () => {
     await h.ctl.start();
     h.ctl.send('a'); h.ctl.send('b');
     await idle();
-    expect(texts(h.state())).toEqual(['q:a', 'q:b', 'n:bad_request', 'a:b-ok']); // no stuck "waiting" star on the dropped one
+    expect(texts(h.state())).toEqual(['q:a', 'n:bad_request', 'q:b', 'a:b-ok']); // no stuck "waiting" star, and the note sits under its own question
     expect(h.state().queue).toEqual([]);
   });
 

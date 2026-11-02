@@ -70,7 +70,7 @@ export default function App() {
     if (item.kind === 'note') return <View style={s.note}><Text style={s.noteText} accessibilityRole="alert">{msgText(str, item.msg)}</Text></View>;
     const a = item.answer;
     return (
-      <View style={[s.bubble, s.theirs]}>
+      <View style={[s.bubble, s.theirs]} accessibilityLiveRegion="polite">
         <Text style={s.text}>{a.text}</Text>
         {a.inferencePath === 'extractive' || a.degraded ? <Text style={s.meta}>{str.closestSource}</Text> : null}
         {a.truncated ? <Text style={s.meta}>{str.shortened}</Text> : null}
