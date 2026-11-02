@@ -103,25 +103,41 @@ mode follows the device). Mzizi has no chat or citation component today.
 
 ## Sign-in
 
-Two modes behind one `AuthProvider` interface, so the second can replace the
-first without touching the chat:
+Two providers behind one `AuthProvider` interface (`site/src/chat/auth.ts`), so
+the second replaces the first without touching the chat:
 
 1. **Developer key (now, isolated).** The person pastes a `sk_shamwari_…` key.
    It is kept in `localStorage` on the device, sent only to the Shamwari API,
-   and the screen says it is for testing. Nothing else in the app reads it
-   except through the provider.
-2. **Mukoko Account (WorkOS AuthKit), not built.** The Console's own sign-in
-   code (`nyuchi/nyuchi-platform`, `console/backend`) could not be read from the
-   session that built this (access to that repository was denied by the
-   session's classifier), so this is a proposal to check against the Console,
-   not a description of it.
-
-### Sign-in: WorkOS access tokens (decided 2026-10-31)
-
-A signed-in person authenticates with their WorkOS access token as the Bearer credential, not a
-minted key. The gateway verifies it offline and meters per person; a thin session Worker holds
-the cookie and refresh token. The design, the revocation latency and what the owner must do are
-in `docs/chat-signin.md`. The `AuthProvider` seam above is where the second mode plugs in.
+   and the screen says it is for testing.
+2. **Mukoko Account (built, OFF).** Owner direction, 2026-10-31: a person signs
+   in with WorkOS AuthKit and the gateway verifies their **WorkOS access token**
+   (shamwari-ai/shamwari#130). **Nothing here mints or stores a per-user key.**
+   The page holds the short-lived access token **in memory only** (never
+   localStorage, sessionStorage, IndexedDB, a cookie or the Cache API), gets it
+   from the session Worker's cookie-authenticated `GET /chat/auth/token`, and
+   sends it as `Authorization: Bearer`. Renewals are serialised, because the
+   session behind it rotates single-use refresh tokens. A `401` from the gateway
+   triggers **one** silent renewal and one repeat of the ask under the same
+   `Idempotency-Key`; a second `401` goes to sign-in, never a loop. Sign-out
+   clears the token, asks the Worker to end the session, and does not sign back
+   in from the cookie. Being offline is not being signed out: a non-secret
+   "signed in before" yes/no (`shamwari.mukoko.hint`) is the only thing kept, so
+   an offline reload does not throw a signed-in person at the sign-in screen.
+   **The flag is a build setting, `PUBLIC_CHAT_AUTH=mukoko`, and is off.** The
+   session Worker itself (login, callback, cookie, refresh) is a design in
+   `docs/chat-signin.md` on #130, not code; the e2e tests run against a stand-in
+   for it (`e2e/serve.mjs --stub-auth`). A found-and-fixed detail: the service
+   worker passes `/chat/auth/*` and `/chat/callback` straight to the network, or
+   it would answer the sign-in redirect from the cached shell.
+   **Rollout note:** that pass-through is in the service worker, and a worker
+   update waits until every tab is closed. A returning installed-app user who
+   keeps the app open would still be served the cached shell for the sign-in
+   redirect until they close it. Turn the flag on only after a release has been
+   live long enough for workers to have updated (or add a "reload to update"
+   prompt first). Also: sign-out removes the chats from the device (a Mukoko
+   account belongs to a person, the phone may not), and a sign-out the session
+   Worker did not acknowledge is retried before anything else on the next visit,
+   so a surviving cookie cannot sign the previous person back in.
 
 ## Gateway changes this needs (not made here)
 
