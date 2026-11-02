@@ -10,6 +10,7 @@ import {
 import { BUDGET, byteLength, clampBytes } from './src/lib/budget';
 import { createClient } from './src/lib/client';
 import { LANGUAGES, isLanguage, pickLanguage } from './src/i18n/strings';
+import { authConfig, createNativeSession } from './src/auth/native';
 import { msgText, needsPerson, retryable, type MsgKey } from './src/lib/messages';
 import { dequeue, enqueue, type QueuedAsk } from './src/lib/queue';
 import { loadKey, loadLang, loadQueue, saveKey, saveLang, saveQueue } from './src/lib/storage';
@@ -36,12 +37,24 @@ export default function App() {
   // The queue's source of truth: flush() runs across awaits and must never write back a stale snapshot.
   const queueRef = useRef<QueuedAsk[]>([]);
   const [status, setStatus] = useState<MsgKey | null>(null);
+  const [signedIn, setSignedIn] = useState(false);
+  const session = useMemo(() => createNativeSession(authConfig(Constants.expoConfig?.extra)), []);
   const [lang, setLang] = useState<Language>(() => pickLanguage(getLocales().map((l) => l.languageTag)));
   const { strings: str, needsNativeReview } = LANGUAGES[lang];
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attempts = useRef(0);
   const busy = useRef(false);
-  const client = useMemo(() => createClient({ baseUrl: apiBase, getKey: () => keyRef.current }), []);
+  const client = useMemo(
+    () =>
+      createClient({
+        baseUrl: apiBase,
+        // The signed-in session first, the pasted developer key as the fallback (Expo Go, testing).
+        // getAccessToken THROWS when WorkOS is unreachable: the client treats that as offline, not signed out.
+        getKey: async () => (await session.getAccessToken()) ?? keyRef.current,
+        onUnauthorized: () => session.renewAfterRejection(),
+      }),
+    [session],
+  );
 
   const push = (i: Item) => setItems((p) => [...p, i]);
   const persist = (q: QueuedAsk[]) => {
@@ -77,6 +90,8 @@ export default function App() {
           // A bad key or a used-up plan is not the question's fault: keep every saved
           // question, say what to do, and resume when the person has done it.
           setStatus(r.error.kind);
+          // The session may have just ended (a terminal refusal): make the screen say so.
+          void session.isSignedIn().then(setSignedIn);
           if (r.error.kind === 'unauthorized') setShowSettings(true);
           break;
         } else {
@@ -87,7 +102,7 @@ export default function App() {
     } finally {
       busy.current = false;
     }
-  }, [client]);
+  }, [client, session]);
 
   useEffect(() => () => { if (retryTimer.current) clearTimeout(retryTimer.current); }, []);
 
@@ -99,7 +114,9 @@ export default function App() {
         if (isLanguage(savedLang)) setLang(savedLang);
         keyRef.current = k; setKey(k); persist(q);
         setItems(q.map((a) => ({ kind: 'q', id: a.id, text: a.question, pending: true })));
-        if (!k) setShowSettings(true);
+        const signed = await session.isSignedIn();
+        setSignedIn(signed);
+        if (!k && !signed) setShowSettings(true);
         else if (q.length) void flush();
       } catch {
         // Secure storage can fail (locked keystore, restore from backup). Start empty and let the person re-enter the key.
@@ -125,6 +142,26 @@ export default function App() {
     if (!r.ok) { push({ kind: 'note', id: ask.id, msg: r.reason === 'queue_full' ? 'queueFull' : 'tooLong' }); return; }
     push({ kind: 'q', id: ask.id, text: q, pending: true });
     setDraft(''); persist(r.queue); void flush();
+  };
+
+  const signIn = async () => {
+    setStatus(null);
+    const r = await session.signIn();
+    if (r === 'signed_in') {
+      setSignedIn(true);
+      setShowSettings(false);
+      void flush();
+    } else if (r === 'failed') setStatus('signInFailed');
+  };
+
+  const signOut = async () => {
+    await session.signOut();
+    // On a shared phone the next person must not send, or read, the previous person's questions.
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    persist([]);
+    setItems([]);
+    setSignedIn(false);
+    setStatus('signedOut');
   };
 
   const render = ({ item }: { item: Item }) => {
@@ -165,7 +202,19 @@ export default function App() {
               </Pressable>
             ))}
           </View>
-          <Text style={s.text}>{str.signInSoon}</Text>
+          {signedIn ? (
+            <>
+              <Text style={s.text}>{str.signedIn}</Text>
+              <Pressable onPress={() => void signOut()} accessibilityRole="button" accessibilityLabel={str.signOut}>
+                <Text style={s.link}>{str.signOut}</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable style={s.btn} onPress={() => void signIn()} accessibilityRole="button">
+              <Text style={s.btnText}>{str.authMukoko}</Text>
+            </Pressable>
+          )}
+          <Text style={s.text}>{str.authDevTitle}</Text>
           <Text style={s.meta}>{key ? str.keySaved : str.noKeyYet}</Text>
           <TextInput style={s.input} value={keyDraft} onChangeText={setKeyDraft} placeholder={str.keyPlaceholder} placeholderTextColor={t.muted} autoCapitalize="none" autoCorrect={false} secureTextEntry />
           <Pressable style={s.btn} onPress={() => { const k = keyDraft.trim(); setKeyDraft(''); setShowSettings(false); if (!k) return; keyRef.current = k; setKey(k); setStatus(null); void saveKey(k).catch(() => setStatus('saveKeyFailed')); void flush(); }} accessibilityRole="button">
@@ -186,8 +235,8 @@ export default function App() {
         ListEmptyComponent={<Text style={s.meta}>{str.tagline}</Text>} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={s.composer}>
-          <TextInput style={[s.input, { flex: 1 }]} value={draft} onChangeText={setDraft} placeholder={str.placeholder} placeholderTextColor={t.muted} multiline editable={!!key} />
-          <Pressable style={s.btn} onPress={send} disabled={!key} accessibilityRole="button" accessibilityLabel={str.send}><Text style={s.btnText}>{str.send}</Text></Pressable>
+          <TextInput style={[s.input, { flex: 1 }]} value={draft} onChangeText={setDraft} placeholder={str.placeholder} placeholderTextColor={t.muted} multiline editable={!!key || signedIn} />
+          <Pressable style={s.btn} onPress={send} disabled={!key && !signedIn} accessibilityRole="button" accessibilityLabel={str.send}><Text style={s.btnText}>{str.send}</Text></Pressable>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

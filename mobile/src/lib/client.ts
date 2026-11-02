@@ -3,8 +3,10 @@ import type { Answer, AskError, ChatRequest, ChatResponse, Citation, Result } fr
 export interface ClientConfig {
   /** e.g. https://api.shamwari.ai — no trailing slash needed. */
   baseUrl: string;
-  /** Read at call time, so signing in or out needs no new client. */
-  getKey: () => string | null;
+  /** Read at call time, so signing in or out needs no new client. May be async; throwing means "unavailable", not "signed out". */
+  getKey: () => string | null | Promise<string | null>;
+  /** Called once after a 401. Return true when a new credential is ready (the ask is then retried once). */
+  onUnauthorized?: () => Promise<boolean>;
   fetch?: typeof fetch;
   /** A slow network is not a broken one: 2G round trips are many seconds. */
   timeoutMs?: number;
@@ -122,9 +124,39 @@ export function createClient(config: ClientConfig) {
     // never rewritten to 'platform' (a silent downgrade answers confidently while
     // withholding the user's data) and never sent to Cloud.
     if (req.scope === 'personal') return fail('scope_requires_local_inference');
-    const key = config.getKey();
+    // A credential lookup that THROWS means "could not reach the sign-in service just now",
+    // which is not "signed out": the ask stays queued and is retried.
+    let key: string | null;
+    try {
+      key = await config.getKey();
+    } catch {
+      return fail('offline');
+    }
     if (!key) return fail('unauthorized');
 
+    const first = await askOnce(req, opts, key);
+    if (!first.ok && first.error.kind === 'unauthorized' && config.onUnauthorized) {
+      // The token was rejected. Renew once and retry once, with a DIFFERENT token. Never loop.
+      let renewed = false;
+      try {
+        renewed = await config.onUnauthorized();
+      } catch {
+        renewed = false;
+      }
+      if (renewed) {
+        let next: string | null;
+        try {
+          next = await config.getKey();
+        } catch {
+          return fail('offline');
+        }
+        if (next && next !== key) return askOnce(req, opts, next);
+      }
+    }
+    return first;
+  }
+
+  async function askOnce(req: ChatRequest, opts: AskOptions, key: string): Promise<Result<Answer>> {
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(), config.timeoutMs ?? 45_000);
     const onAbort = () => timeout.abort();

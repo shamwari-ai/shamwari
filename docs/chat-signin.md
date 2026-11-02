@@ -232,6 +232,63 @@ terminal refusal turns into a sign-out; and the SDK's refresh and error classifi
 against a fake, not against WorkOS. The Worker was run under the Workers runtime locally (the real SDK
 built the correct AuthKit URL and a bad cookie was refused), but no code exchange or refresh was run.
 
+## The mobile app (Expo): a public client, PKCE, no secret
+
+Built in `mobile/src/auth/`, tested without a phone (`mobile/test/auth.test.ts`). It signs in to the
+**same Shamwari Chat AuthKit application** as the web chat (client `client_01M68PCT0T5ECHKDYH45ECT0GV`),
+so the gateway verifies its tokens exactly as it does the chat's and nothing in the gateway changes.
+It differs from the web chat in one way that matters: a phone cannot keep a secret, so there is no
+session Worker. The app is a **public client** using the authorization code flow with **PKCE**
+(WorkOS: `code_verifier` is required when the client secret is absent).
+
+What the WorkOS documentation says, read 2026-11-02 (not exercised against a real tenant): authorize at
+`/user_management/authorize` with `provider=authkit`, `state`, `code_challenge` and
+`code_challenge_method=S256`; exchange and refresh at `POST /user_management/authenticate` (JSON);
+refresh tokens **rotate**; sign-out is `/user_management/sessions/logout?session_id=…&return_to=…`
+(read from the WorkOS Node SDK source). WorkOS's own Android SDK uses the same shape with a custom
+scheme redirect and tells native apps to keep the access token in memory and the refresh token in
+keystore-backed storage.
+
+Rules the code keeps, each pinned by a test that fails when it breaks:
+
+- **No secret in the bundle.** No `client_secret`, API key or `sk_` string in `mobile/src`. The exchange
+  and refresh requests carry `client_id` and `code_verifier` / `refresh_token` only.
+- **The verifier and state are saved before the browser opens** (the OS can kill the app while it is
+  up), the redirect's `state` must match (constant-time) or nothing is exchanged, and the record is
+  cleared whether or not the exchange worked. A cancel and `access_denied` are "cancelled", not errors.
+- **Tokens:** the access token is in memory only; the refresh token is in the OS keystore only
+  (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`). Nothing logs a token, a code or a verifier.
+- **Rotation is saved first.** The new refresh token is written before the new access token is used,
+  because the old one is already spent.
+- **Refresh is serialised.** Any number of concurrent callers cause one refresh.
+- **Only a terminal answer ends a session** (401 or `invalid_grant`). An outage, a 429 or a network
+  failure keeps the session; the ask stays queued and is retried (the client treats a throwing
+  credential lookup as offline, not as signed out).
+- **After a 401** the app renews once and retries once with a different token; it never loops.
+- **Sign-out** clears local state first (so dismissing the browser still signs the person out), opens
+  the WorkOS logout URL for the session, and clears the waiting questions and thread, so on a shared
+  phone the next person cannot send or read the last person's.
+- **Rule 1 is untouched:** sign-in grants nothing new. The gateway still gives a signed-in person only
+  the fixed `community` + `platform` grant, and the app still refuses a personal-scope ask on the phone.
+
+**Redirect scheme.** The app's own id, `ai.shamwari.app` (not a generic word: any other app can claim a
+generic scheme and intercept the redirect). Redirect `ai.shamwari.app://callback`, logout return
+`ai.shamwari.app://signed-out`. Expo Go cannot use this scheme, so Expo Go and tests use the pasted
+developer key; sign-in needs a development or preview build.
+
+**Not verified:** nothing here has met a real WorkOS tenant or a phone. In particular: that the
+Shamwari Chat application accepts a public-client exchange (no secret) and refresh; the exact error
+body WorkOS returns for a spent refresh token (the app treats 401 and `invalid_grant` as terminal);
+that `sid` is present in the token the app holds (it is needed to build the logout URL); and the
+keychain behaviour across an iOS reinstall (a keychain item can outlive the app).
+
+**Needs the owner (WorkOS production, Shamwari Chat application, Redirects tab):** add the redirect
+URI `ai.shamwari.app://callback` and the logout return `ai.shamwari.app://signed-out`. Custom-scheme
+redirects are accepted in this environment (it already holds `mukokolingo://auth/callback` and
+`mukoko://sign-in-callback`); the environment-level list was read on 2026-11-02 and holds no Shamwari
+entry. If the Shamwari Chat application does not allow a public client, say so: the alternative is a
+small token-exchange Worker, which would hold the secret instead of the phone.
+
 ## Revocation, stated plainly
 
 Revoking a session (sign-out, or an admin acting on `sid`) takes effect **when the access
