@@ -53,11 +53,18 @@ export interface ChatPorts {
  * directly UNDER it. Replies used to be appended at the end, so with two questions typed close together
  * an answer could appear below the wrong question.
  */
-function settle(items: Item[], askId: string, reply: Item): Item[] {
-  const at = items.findIndex((i) => i.kind === 'q' && i.id === askId);
-  if (at < 0) return [...items, reply]; // the question is not on screen (cannot happen today); never lose the reply
-  const done = items.map((i) => (i.kind === 'q' && i.id === askId ? { ...i, pending: false } : i));
-  return [...done.slice(0, at + 1), reply, ...done.slice(at + 1)];
+export function settle(items: Item[], askId: string, reply: Item): Item[] {
+  const out: Item[] = []; // one pass, one allocation: the thread only grows during a session
+  let placed = false;
+  for (const i of items) {
+    if (i.kind === 'q' && i.id === askId) {
+      out.push({ ...i, pending: false }, reply);
+      placed = true;
+    } else out.push(i);
+  }
+  // Defensive: no path reaches this today (sign-out and dispose drop the reply before it gets here), but if
+  // the question were ever missing, showing the reply at the end beats losing it. Pinned by a test.
+  return placed ? out : [...items, reply];
 }
 
 const RETRY_BASE_MS = 10_000;
@@ -170,7 +177,9 @@ export class ChatController {
     // never be queued (queue.ts refuses it).
     const r = enqueue(this.state.queue, ask, 'platform');
     if (!r.ok) {
-      this.setItems((p) => [...p, { kind: 'note', id: ask.id, msg: r.reason === 'queue_full' ? 'queueFull' : 'tooLong' }]);
+      // Refused before it was ever queued, so there is no question on screen to sit under: the one place a
+      // note legitimately goes at the end. (Everything that does have a question goes through settle().)
+      this.setItems((p) => [...p, { kind: 'note', id: ask.id + ':e', msg: r.reason === 'queue_full' ? 'queueFull' : 'tooLong' }]);
       return false;
     }
     this.setItems((p) => [...p, { kind: 'q', id: ask.id, text: q, pending: true }]);

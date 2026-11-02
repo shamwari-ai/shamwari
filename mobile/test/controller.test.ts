@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ChatController, type ChatPorts, type ChatState } from '../src/chat/controller';
+import { ChatController, settle, type ChatPorts, type ChatState, type Item } from '../src/chat/controller';
 import { BUDGET } from '../src/lib/budget';
 import type { QueuedAsk } from '../src/lib/queue';
 import type { Answer, AskErrorKind, ChatRequest, Result } from '../src/lib/types';
@@ -204,7 +204,7 @@ describe('asking', () => {
     for (let i = 0; i < BUDGET.maxQueueBytes / BUDGET.maxQuestionBytes; i++) expect(h.ctl.send(String(i).padEnd(BUDGET.maxQuestionBytes, 'x'))).toBe(true);
     await idle();
     expect(h.ctl.send('one more')).toBe(false);
-    expect(h.state().items.at(-1)).toMatchObject({ kind: 'note', msg: 'queueFull' });
+    expect(h.state().items.at(-1)).toMatchObject({ kind: 'note', msg: 'queueFull', id: expect.stringMatching(/:e$/) });
     expect(h.state().queue).toHaveLength(BUDGET.maxQueueBytes / BUDGET.maxQuestionBytes);
   });
 });
@@ -248,6 +248,24 @@ describe('where answers appear', () => {
     h.live().at(-1)!.fn();
     await idle();
     expect(texts(h.state())).toEqual(['q:one', 'a:A3', 'q:two', 'a:A4']);
+  });
+});
+
+describe('settle (where a reply goes)', () => {
+  const q = (id: string, pending = true): Item => ({ kind: 'q', id, text: id, pending });
+  const a = (id: string): Item => ({ kind: 'note', id: id + ':e', msg: 'bad_request' });
+  it('puts the reply right after its own question, marks only that question done, and does not mutate the input', () => {
+    const before: Item[] = [q('1'), q('2'), q('3')];
+    const out = settle(before, '2', a('2'));
+    expect(out.map((i) => i.id)).toEqual(['1', '2', '2:e', '3']);
+    expect(out.map((i) => (i.kind === 'q' ? i.pending : null))).toEqual([true, false, null, true]);
+    expect(before.map((i) => i.id)).toEqual(['1', '2', '3']);
+    expect(before[1]).toMatchObject({ pending: true });
+  });
+  it('a missing question never loses the reply: it is kept at the end, other questions untouched', () => {
+    const out = settle([q('1'), q('2')], 'gone', a('gone'));
+    expect(out.map((i) => i.id)).toEqual(['1', '2', 'gone:e']);
+    expect(out.slice(0, 2).every((i) => i.kind === 'q' && i.pending)).toBe(true);
   });
 });
 
