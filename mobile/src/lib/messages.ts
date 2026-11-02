@@ -15,5 +15,8 @@ export const errorText: Record<AskErrorKind, string> = {
   unknown: 'Something went wrong. Please try again.',
 };
 
+/** Failures that need the person to act (key, plan). The ask stays queued; nothing is discarded. */
+export const needsPerson = (k: AskErrorKind): boolean => k === 'unauthorized' || k === 'payment_required' || k === 'forbidden_scope';
+
 /** Failures where the ask should wait in the queue rather than be dropped. */
 export const retryable = (k: AskErrorKind): boolean => k === 'offline' || k === 'unavailable' || k === 'busy' || k === 'rate_limited';

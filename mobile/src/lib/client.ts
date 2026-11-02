@@ -118,6 +118,10 @@ export function createClient(config: ClientConfig) {
   const doFetch = config.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
 
   async function ask(req: ChatRequest, opts: AskOptions = {}): Promise<Result<Answer>> {
+    // Rule 1: a personal-scope ask is refused here, before any network call. It is
+    // never rewritten to 'platform' (a silent downgrade answers confidently while
+    // withholding the user's data) and never sent to Cloud.
+    if (req.scope === 'personal') return fail('scope_requires_local_inference');
     const key = config.getKey();
     if (!key) return fail('unauthorized');
 
@@ -140,7 +144,7 @@ export function createClient(config: ClientConfig) {
           'X-Shamwari-Channel': 'app',
           ...(opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {}),
         },
-        body: JSON.stringify({ reach: 'r1', ...req, scope: req.scope === 'community' ? 'community' : 'platform' }),
+        body: JSON.stringify({ reach: 'r1', ...req }),
       });
       const body: unknown = await res.json().catch(() => null);
       if (!res.ok) return classify(res.status, body, res.headers);

@@ -37,3 +37,10 @@ the GitHub repo `shamwari-ai/shamwari`, and add the project id as the repo/EAS
 variable `EAS_PROJECT_ID`. Then `.eas/workflows/publish-preview-update.yml`
 publishes every push to `staging` to the `preview` branch. Builds are
 separate and cost money: they need a usage budget first.
+
+## Known duplication
+
+`src/lib/client.ts` and `types.ts` are adapted from `site/src/chat/` (the gateway
+contract). They should become one shared package once the site and the app share
+a workspace; until then a contract change must be made in both (the gateway tests
+and `mobile/test/lib.test.ts` both pin it).

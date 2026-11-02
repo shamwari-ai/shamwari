@@ -12,7 +12,14 @@ export const BUDGET = {
   maxQueueBytes: 16 * 1024,
 } as const;
 
-export const byteLength = (s: string): number => new TextEncoder().encode(s).length;
+const cpBytes = (cp: number): number => (cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4);
+
+/** UTF-8 length without allocating an encoder per call (this runs on a low-end phone's JS thread). */
+export const byteLength = (s: string): number => {
+  let n = 0;
+  for (const ch of s) n += cpBytes(ch.codePointAt(0)!);
+  return n;
+};
 
 /** Cut on a character boundary so a multi-byte letter (Shona, Ndebele) is never split. */
 export function clampBytes(s: string, max: number): { text: string; clipped: boolean } {
@@ -20,7 +27,7 @@ export function clampBytes(s: string, max: number): { text: string; clipped: boo
   let out = '';
   let used = 0;
   for (const ch of s) {
-    const n = byteLength(ch);
+    const n = cpBytes(ch.codePointAt(0)!);
     if (used + n > max) break;
     out += ch;
     used += n;

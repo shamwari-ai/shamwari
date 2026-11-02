@@ -6,9 +6,9 @@ import {
   AppState, FlatList, KeyboardAvoidingView, Linking, Platform, Pressable, SafeAreaView,
   StyleSheet, Text, TextInput, View, useColorScheme,
 } from 'react-native';
-import { BUDGET, clampBytes } from './src/lib/budget';
+import { BUDGET, byteLength, clampBytes } from './src/lib/budget';
 import { createClient } from './src/lib/client';
-import { errorText, retryable } from './src/lib/messages';
+import { errorText, needsPerson, retryable } from './src/lib/messages';
 import { dequeue, enqueue, type QueuedAsk } from './src/lib/queue';
 import { loadKey, loadQueue, saveKey, saveQueue } from './src/lib/storage';
 import { dark, light } from './src/lib/theme';
@@ -33,11 +33,17 @@ export default function App() {
   const keyRef = useRef<string | null>(null);
   // The queue's source of truth: flush() runs across awaits and must never write back a stale snapshot.
   const queueRef = useRef<QueuedAsk[]>([]);
+  const [status, setStatus] = useState<string | null>(null);
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const attempts = useRef(0);
   const busy = useRef(false);
   const client = useMemo(() => createClient({ baseUrl: apiBase, getKey: () => keyRef.current }), []);
 
   const push = (i: Item) => setItems((p) => [...p, i]);
-  const persist = (q: QueuedAsk[]) => { queueRef.current = q; setQueue(q); void saveQueue(q); };
+  const persist = (q: QueuedAsk[]) => {
+    queueRef.current = q; setQueue(q);
+    saveQueue(q).catch(() => setStatus('Your phone could not save your waiting questions. Keep the app open until they are sent.'));
+  };
 
   const flush = useCallback(async () => {
     if (busy.current) return;
@@ -51,11 +57,24 @@ export default function App() {
         const r = await client.ask({ messages: [{ role: 'user', content: ask.question }], scope: 'platform' }, { idempotencyKey: ask.id });
         if (r.ok) {
           const text = clampBytes(r.value.text, BUDGET.maxAnswerBytes);
+          attempts.current = 0; setStatus(null);
           persist(dequeue(queueRef.current, ask.id));
           setItems((p) => [...p.map((i) => (i.kind === 'q' && i.id === ask.id ? { ...i, pending: false } : i)),
             { kind: 'a', id: ask.id + ':a', answer: { ...r.value, text: text.text, truncated: r.value.truncated || text.clipped } }]);
         } else if (retryable(r.error.kind)) {
-          break; // keep everything queued, in order
+          // Keep everything queued, in order, say why, and try again on a backoff
+          // (or the server's Retry-After) instead of waiting for the app to be reopened.
+          setStatus(errorText[r.error.kind]);
+          const wait = Math.max((r.error.retryAfterSec ?? 0) * 1000, Math.min(300_000, 10_000 * 2 ** attempts.current++));
+          if (retryTimer.current) clearTimeout(retryTimer.current);
+          retryTimer.current = setTimeout(() => { retryTimer.current = null; void flush(); }, wait);
+          break;
+        } else if (needsPerson(r.error.kind)) {
+          // A bad key or a used-up plan is not the question's fault: keep every saved
+          // question, say what to do, and resume when the person has done it.
+          setStatus(errorText[r.error.kind]);
+          if (r.error.kind === 'unauthorized') setShowSettings(true);
+          break;
         } else {
           persist(dequeue(queueRef.current, ask.id));
           setItems((p) => [...p, { kind: 'note', id: ask.id + ':e', text: errorText[r.error.kind] }]);
@@ -66,13 +85,21 @@ export default function App() {
     }
   }, [client]);
 
+  useEffect(() => () => { if (retryTimer.current) clearTimeout(retryTimer.current); }, []);
+
   useEffect(() => {
     void (async () => {
-      const [k, q] = await Promise.all([loadKey(), loadQueue()]);
-      keyRef.current = k; setKey(k); persist(q);
-      setItems(q.map((a) => ({ kind: 'q', id: a.id, text: a.question, pending: true })));
-      if (!k) setShowSettings(true);
-      else if (q.length) void flush();
+      try {
+        const [k, q] = await Promise.all([loadKey(), loadQueue()]);
+        keyRef.current = k; setKey(k); persist(q);
+        setItems(q.map((a) => ({ kind: 'q', id: a.id, text: a.question, pending: true })));
+        if (!k) setShowSettings(true);
+        else if (q.length) void flush();
+      } catch {
+        // Secure storage can fail (locked keystore, restore from backup). Start empty and let the person re-enter the key.
+        setStatus('Could not read your saved key or questions. Add your key in Settings to continue.');
+        setShowSettings(true);
+      }
     })();
     // Back in the foreground is the nearest thing to "network returned" without a native module.
     const sub = AppState.addEventListener('change', (st) => { if (st === 'active') void flush(); });
@@ -80,8 +107,11 @@ export default function App() {
   }, [flush]);
 
   const send = () => {
-    const q = clampBytes(draft.trim(), BUDGET.maxQuestionBytes).text;
+    const q = draft.trim();
     if (!q) return;
+    // Never cut a question short silently: a cut Shona sentence is a different question.
+    if (byteLength(q) > BUDGET.maxQuestionBytes) { setStatus('That question is too long to send. Please shorten it a little.'); return; }
+    setStatus(null);
     const ask: QueuedAsk = { id: Crypto.randomUUID(), question: q, createdAt: Date.now() };
     // Scope is always 'platform' here: the app has no on-device Mind yet, and a
     // personal-scope ask must never be queued (queue.ts refuses it).
@@ -121,13 +151,20 @@ export default function App() {
       {showSettings ? (
         <View style={s.panel}>
           <Text style={s.text}>Sign-in is coming. Until then, paste your Shamwari key. It stays in your phone's secure store.</Text>
+          <Text style={s.meta}>{key ? 'A key is saved. Leave this empty to keep it.' : 'No key saved yet.'}</Text>
           <TextInput style={s.input} value={keyDraft} onChangeText={setKeyDraft} placeholder="Shamwari key" placeholderTextColor={t.muted} autoCapitalize="none" autoCorrect={false} secureTextEntry />
-          <Pressable style={s.btn} onPress={() => { const k = keyDraft.trim() || null; keyRef.current = k; setKey(k); void saveKey(k ?? ''); setKeyDraft(''); setShowSettings(false); if (k) void flush(); }} accessibilityRole="button">
+          <Pressable style={s.btn} onPress={() => { const k = keyDraft.trim(); setKeyDraft(''); setShowSettings(false); if (!k) return; keyRef.current = k; setKey(k); setStatus(null); void saveKey(k).catch(() => setStatus('Could not save your key on this phone.')); void flush(); }} accessibilityRole="button">
             <Text style={s.btnText}>Save</Text>
           </Pressable>
-          <Text style={s.meta}>Personal questions are answered only on your device, never in the cloud.</Text>
+          {key ? (
+            <Pressable onPress={() => { keyRef.current = null; setKey(null); void saveKey('').catch(() => undefined); }} accessibilityRole="button" accessibilityLabel="Remove key">
+              <Text style={s.link}>Remove key</Text>
+            </Pressable>
+          ) : null}
+          <Text style={s.meta}>Questions you type here are answered in the cloud. Personal questions need Shamwari Mind on your own device, which is not available yet, so please keep private details out of what you ask.</Text>
         </View>
       ) : null}
+      {status ? <View style={s.note}><Text style={s.noteText} accessibilityRole="alert">{status}</Text></View> : null}
       <FlatList style={s.list} contentContainerStyle={{ padding: 12, gap: 8 }} data={items} keyExtractor={(i) => i.id} renderItem={render}
         ListEmptyComponent={<Text style={s.meta}>Ask about the Constitution, tax or your rights. Answers show where they come from.</Text>} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>

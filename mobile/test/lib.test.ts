@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BUDGET, byteLength, clampBytes } from '../src/lib/budget';
 import { createClient } from '../src/lib/client';
+import { needsPerson, retryable } from '../src/lib/messages';
 import { dequeue, enqueue, parseQueue } from '../src/lib/queue';
 
 const ask = (id: string, question: string) => ({ id, question, createdAt: 1 });
@@ -25,7 +26,17 @@ describe('queue', () => {
   });
 });
 
+describe('failure policy', () => {
+  it('keeps the ask when the person must act, retries on transient failures, never both', () => {
+    for (const k of ['unauthorized', 'payment_required', 'forbidden_scope'] as const) expect([needsPerson(k), retryable(k)]).toEqual([true, false]);
+    for (const k of ['offline', 'unavailable', 'busy', 'rate_limited'] as const) expect([needsPerson(k), retryable(k)]).toEqual([false, true]);
+  });
+});
+
 describe('budget', () => {
+  it('counts UTF-8 bytes like TextEncoder', () => {
+    for (const s of ['', 'abc', 'ndinokutendai ñ', '€', '😀', 'mhoro 😀 ñ €']) expect(byteLength(s)).toBe(new TextEncoder().encode(s).length);
+  });
   it('never splits a multi-byte character', () => {
     const r = clampBytes('ndinokutendai ñ'.repeat(400), 100);
     expect(byteLength(r.text)).toBeLessThanOrEqual(100);
@@ -40,10 +51,17 @@ describe('client contract', () => {
     let seen: { headers: Record<string, string>; body: string } | null = null;
     const c = createClient({ baseUrl: 'https://x.test/', getKey: () => 'k',
       fetch: (async (_u: unknown, init: { headers: Record<string, string>; body: string }) => { seen = init; return new Response(JSON.stringify(body)); }) as unknown as typeof fetch });
-    const r = await c.ask({ messages: [{ role: 'user', content: 'q' }], scope: 'personal' }, { idempotencyKey: 'abc' });
+    const r = await c.ask({ messages: [{ role: 'user', content: 'q' }], scope: 'community' }, { idempotencyKey: 'abc' });
     expect(seen!.headers['Idempotency-Key']).toBe('abc');
-    expect(JSON.parse(seen!.body).scope).toBe('platform');
+    expect(JSON.parse(seen!.body).scope).toBe('community'); // sent as declared, never rewritten
     expect(r.ok && r.value.citations[0]).toMatchObject({ title: 'Constitution', url: null });
+  });
+  it('refuses personal scope locally: no network call, no downgrade (Rule 1)', async () => {
+    let calls = 0;
+    const c = createClient({ baseUrl: 'https://x.test', getKey: () => 'k', fetch: (async () => { calls++; return new Response('{}'); }) as unknown as typeof fetch });
+    const r = await c.ask({ messages: [{ role: 'user', content: 'my payslip' }], scope: 'personal' });
+    expect(calls).toBe(0);
+    expect(!r.ok && r.error.kind).toBe('scope_requires_local_inference');
   });
   it('maps the Rule 1 refusal to its own kind and offline to offline', async () => {
     const mk = (f: typeof fetch) => createClient({ baseUrl: 'https://x.test', getKey: () => 'k', fetch: f });
