@@ -33,21 +33,39 @@ export interface MukokoOptions {
   /** Renew this long before expiry, so a request is never sent with a token about to lapse. */
   skewMs?: number;
   hintStorage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+  /** Give up on a request to the session Worker after this long. */
+  timeoutMs?: number;
 }
 
 const HINT = 'shamwari.mukoko.hint';
 const PENDING_LOGOUT = 'shamwari.mukoko.logout';
 
-/** Epoch seconds, epoch milliseconds, or an ISO date: whatever the Worker sends. */
+/**
+ * Epoch seconds, epoch milliseconds, or an ISO date: whatever the Worker sends.
+ * Anything that is not a real point in time (empty, zero, negative) is null, never "already expired".
+ */
 export function parseExpiry(v: unknown): number | null {
-  if (typeof v === 'number' && Number.isFinite(v)) return v < 1e12 ? v * 1000 : v;
+  if (typeof v === 'number' && Number.isFinite(v) && v > 0) return v < 1e12 ? v * 1000 : v;
   if (typeof v === 'string') {
-    const n = Number(v);
+    const s = v.trim();
+    if (!s) return null;
+    const n = Number(s);
     if (Number.isFinite(n)) return parseExpiry(n);
-    const t = Date.parse(v);
+    const t = Date.parse(s);
     return Number.isNaN(t) ? null : t;
   }
   return null;
+}
+
+/**
+ * A request deadline that works on every browser this is built for. `AbortSignal.timeout` does not
+ * exist before Chrome 103 / Safari 16 / many low-end WebViews, where using it throws and the
+ * request is never made; AbortController plus a timer works everywhere (client.ts does the same).
+ */
+function deadline(ms: number): { signal: AbortSignal; done: () => void } {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  return { signal: c.signal, done: () => clearTimeout(t) };
 }
 
 export function mukokoAuth(opts: MukokoOptions = {}): AuthProvider & { readonly loginUrl: string } {
@@ -57,6 +75,7 @@ export function mukokoAuth(opts: MukokoOptions = {}): AuthProvider & { readonly 
   const loginUrl = opts.loginUrl ?? '/chat/auth/login';
   const now = opts.now ?? Date.now;
   const skew = opts.skewMs ?? 30_000;
+  const timeoutMs = opts.timeoutMs ?? 10_000;
 
   let token: string | null = null;
   let expiresAt = 0;
@@ -90,11 +109,14 @@ export function mukokoAuth(opts: MukokoOptions = {}): AuthProvider & { readonly 
 
   /** Ask the Worker to end the session. True once it has acknowledged. */
   async function logoutRemote(): Promise<boolean> {
+    const d = deadline(timeoutMs);
     try {
-      const res = await doFetch(logoutUrl, { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+      const res = await doFetch(logoutUrl, { method: 'POST', credentials: 'same-origin', cache: 'no-store', signal: d.signal });
       return res.ok;
     } catch {
-      return false;
+      return false; // offline, or no answer in time: the pending marker keeps it from being forgotten
+    } finally {
+      d.done();
     }
   }
 
@@ -109,13 +131,14 @@ export function mukokoAuth(opts: MukokoOptions = {}): AuthProvider & { readonly 
       }
       pendingLogout.set(false);
     }
+    const d = deadline(timeoutMs);
     try {
       const res = await doFetch(tokenUrl, {
         method: 'GET',
         credentials: 'same-origin',
         cache: 'no-store',
         headers: { Accept: 'application/json' },
-        signal: AbortSignal.timeout(10_000),
+        signal: d.signal,
       });
       if (started !== generation) return false; // signed out while this was in flight
       if (res.status === 401) {
@@ -139,6 +162,8 @@ export function mukokoAuth(opts: MukokoOptions = {}): AuthProvider & { readonly 
       return true;
     } catch {
       return false; // offline or timed out: not the same as signed out
+    } finally {
+      d.done();
     }
   }
 
@@ -161,6 +186,14 @@ export function mukokoAuth(opts: MukokoOptions = {}): AuthProvider & { readonly 
       return token !== null && now() < expiresAt ? token : null;
     },
     refresh,
+    async prepareSignIn() {
+      // Signing in while the previous person's session may still be alive on the Worker would let
+      // that session be picked straight back up. Finish the sign-out first, or say it did not finish.
+      if (!pendingLogout.get()) return true;
+      if (!(await logoutRemote())) return false;
+      pendingLogout.set(false);
+      return true;
+    },
     invalidate() {
       generation += 1;
       token = null;

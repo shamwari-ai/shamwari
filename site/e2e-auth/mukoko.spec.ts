@@ -166,6 +166,27 @@ test('signing out removes the chats from this device, so the next person does no
   await expect(page.locator('#history')).toBeHidden();
 });
 
+test('signing out clears the chats at once even when the sign-out request hangs', async ({ page }) => {
+  await open(page);
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('.cite').first()).toBeVisible();
+  await steer(page, { session: true, logoutDelayMs: 30_000 }); // the Worker never answers in time
+  await page.getByText('Settings').click();
+  await page.locator('#signout').click();
+  // The chats are gone from the device without waiting for the network.
+  await expect(page.locator('#toast')).toContainText('removed from this device', { timeout: 3_000 });
+  await expect(page.locator('#log article')).toHaveCount(0);
+});
+
+test('a question sent while the start-up renewal is still in flight waits for it and is not dropped', async ({ page }) => {
+  await steer(page, { session: true, tokens: [VALID], tokenDelayMs: 1_500 });
+  await page.goto('/chat/');
+  await page.waitForSelector('html[data-ready="true"]'); // the renewal has been asked for, not answered
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('article.msg.bot:not(.pending) .cite').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('#auth')).toBeHidden();
+});
+
 test('a start-up renewal that fails on the network is not a sign-out: the question is kept and sent later', async ({ page }) => {
   await open(page); // signed in once, so the "signed in before" hint is set
   await steer(page, { session: true, tokenStatus: 503 }); // the Worker is unwell

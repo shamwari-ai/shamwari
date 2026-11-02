@@ -23,6 +23,11 @@ export interface AuthProvider {
   /** Developer key only. */
   setKey?(key: string): boolean;
   signOut(): void | Promise<void>;
+  /**
+   * Mukoko only. Before leaving for the sign-in page: finish any sign-out that never reached the
+   * session Worker. False means it could not be finished and sign-in should not start yet.
+   */
+  prepareSignIn?(): Promise<boolean>;
 }
 
 const STORAGE_KEY = 'shamwari.devkey';

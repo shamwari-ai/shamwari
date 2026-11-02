@@ -190,6 +190,26 @@ describe('a 401 and the silent renewal', () => {
     expect(calls).toBe(1);
   });
 
+  it('a renewal that failed is "no credential", not the final 401 that ends a session', async () => {
+    const c = createClient({
+      baseUrl: base,
+      getKey: () => 'tok',
+      onUnauthorized: async () => false,
+      fetch: (async () => new Response('{}', { status: 401 })) as typeof fetch,
+    });
+    // status 401 would make the app sign the person out; null makes it queue the question.
+    expect(await c.ask(q('hi'))).toMatchObject({ ok: false, error: { kind: 'unauthorized', status: null } });
+  });
+
+  it('without a renewal hook (developer key) the 401 stays a 401', async () => {
+    const c = createClient({
+      baseUrl: base,
+      getKey: () => 'tok',
+      fetch: (async () => new Response('{}', { status: 401 })) as typeof fetch,
+    });
+    expect(await c.ask(q('hi'))).toMatchObject({ ok: false, error: { kind: 'unauthorized', status: 401 } });
+  });
+
   it('a missing key is not a 401 and does not call renewal or the network', async () => {
     let renewals = 0;
     let calls = 0;

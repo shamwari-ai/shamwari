@@ -229,3 +229,72 @@ describe('mukoko auth', () => {
     expect(await auth.refresh()).toBe(false); // the Worker answered without a usable token
   });
 });
+
+describe('mukoko auth: the review fixes', () => {
+  it.each([['', null], ['   ', null], [0, null], [-5, null], ['0', null], [Number.NaN, null], [null, null]])(
+    'parseExpiry(%j) is not a point in time',
+    (v, want) => {
+      expect(parseExpiry(v)).toBe(want);
+    },
+  );
+  it('still reads seconds, milliseconds and ISO dates', () => {
+    expect(parseExpiry(1_800_000_000)).toBe(1_800_000_000_000);
+    expect(parseExpiry(1_800_000_000_000)).toBe(1_800_000_000_000);
+    expect(parseExpiry('1800000000')).toBe(1_800_000_000_000);
+    expect(parseExpiry('2027-01-15T08:00:00Z')).toBe(Date.parse('2027-01-15T08:00:00Z'));
+  });
+
+  it('a token response with an empty expiry is refused, not stored as already expired', async () => {
+    const res = new Response(JSON.stringify({ access_token: TOKEN, expires_at: '' }), { status: 200 });
+    const auth = mukokoAuth({ fetch: (async () => res) as typeof fetch, hintStorage: spyStorage() });
+    expect(await auth.refresh()).toBe(false);
+    expect(auth.getKey()).toBeNull();
+  });
+
+  it('renews on a browser with no AbortSignal.timeout (older Chrome, Safari, WebViews)', async () => {
+    const real = AbortSignal.timeout;
+    // @ts-expect-error simulate the old browser
+    AbortSignal.timeout = undefined;
+    try {
+      const fetchMock = vi.fn(async () => tokenResponse());
+      const auth = mukokoAuth({ fetch: fetchMock as unknown as typeof fetch, hintStorage: spyStorage() });
+      expect(await auth.refresh()).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      AbortSignal.timeout = real;
+    }
+  });
+
+  const hangs = ((_u: string, init: RequestInit) =>
+    new Promise((_r, reject) => init.signal?.addEventListener('abort', () => reject(new Error('aborted'))))) as unknown as typeof fetch;
+
+  it('a hung renewal gives up instead of holding the app forever', async () => {
+    const auth = mukokoAuth({ fetch: hangs, hintStorage: spyStorage(), timeoutMs: 20 });
+    expect(await auth.refresh()).toBe(false);
+  });
+
+  it('a hung sign-out request gives up, and the pending-logout marker is kept', async () => {
+    const hint = spyStorage();
+    const auth = mukokoAuth({ fetch: hangs, hintStorage: hint, timeoutMs: 20 });
+    await auth.signOut(); // must settle
+    expect(hint.data.get('shamwari.mukoko.logout')).toBe('1');
+    expect(auth.signedIn()).toBe(false);
+  });
+
+  it('prepareSignIn: nothing pending is fine; a pending sign-out must be acknowledged first', async () => {
+    const hint = spyStorage();
+    let ok = false;
+    const fetchMock = vi.fn(async () => new Response(null, { status: ok ? 204 : 503 }));
+    const auth = mukokoAuth({ fetch: fetchMock as unknown as typeof fetch, hintStorage: hint });
+    expect(await auth.prepareSignIn!()).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await auth.signOut(); // 503: not acknowledged
+    expect(hint.data.get('shamwari.mukoko.logout')).toBe('1');
+    expect(await auth.prepareSignIn!()).toBe(false); // still not acknowledged: do not navigate to sign-in
+    ok = true;
+    expect(await auth.prepareSignIn!()).toBe(true);
+    expect(hint.data.has('shamwari.mukoko.logout')).toBe(false);
+  });
+});
+

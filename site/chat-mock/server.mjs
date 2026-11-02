@@ -88,7 +88,7 @@ export function createMock() {
       return send(res, 404, { error: 'not_found' });
     }
     const key = (req.headers.authorization ?? '').replace(/^Bearer\s+/, '');
-    seen.push(key);
+    if (process.env.MOCK_RECORD) seen.push(key);
     // A WorkOS access token (three-segment JWT, shamwari-ai/shamwari#130). A token
     // whose payload part says "expired" stands in for one the gateway has refused.
     if (key.startsWith('eyJ')) {
