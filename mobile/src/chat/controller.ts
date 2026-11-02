@@ -48,6 +48,25 @@ export interface ChatPorts {
   now(): number;
 }
 
+/**
+ * Mark a question as no longer waiting and put its reply (an answer, or a note saying why there is none)
+ * directly UNDER it. Replies used to be appended at the end, so with two questions typed close together
+ * an answer could appear below the wrong question.
+ */
+export function settle(items: Item[], askId: string, reply: Item): Item[] {
+  const out: Item[] = []; // one pass, one allocation: the thread only grows during a session
+  let placed = false;
+  for (const i of items) {
+    if (i.kind === 'q' && i.id === askId) {
+      out.push({ ...i, pending: false }, reply);
+      placed = true;
+    } else out.push(i);
+  }
+  // Defensive: no path reaches this today (sign-out and dispose drop the reply before it gets here), but if
+  // the question were ever missing, showing the reply at the end beats losing it. Pinned by a test.
+  return placed ? out : [...items, reply];
+}
+
 const RETRY_BASE_MS = 10_000;
 const RETRY_MAX_MS = 300_000;
 
@@ -158,7 +177,9 @@ export class ChatController {
     // never be queued (queue.ts refuses it).
     const r = enqueue(this.state.queue, ask, 'platform');
     if (!r.ok) {
-      this.setItems((p) => [...p, { kind: 'note', id: ask.id, msg: r.reason === 'queue_full' ? 'queueFull' : 'tooLong' }]);
+      // Refused before it was ever queued, so there is no question on screen to sit under: the one place a
+      // note legitimately goes at the end. (Everything that does have a question goes through settle().)
+      this.setItems((p) => [...p, { kind: 'note', id: ask.id + ':e', msg: r.reason === 'queue_full' ? 'queueFull' : 'tooLong' }]);
       return false;
     }
     this.setItems((p) => [...p, { kind: 'q', id: ask.id, text: q, pending: true }]);
@@ -185,10 +206,9 @@ export class ChatController {
           this.attempts = 0;
           this.set({ status: null });
           this.persist(dequeue(this.state.queue, ask.id));
-          this.setItems((p) => [
-            ...p.map((i) => (i.kind === 'q' && i.id === ask.id ? { ...i, pending: false } : i)),
-            { kind: 'a', id: ask.id + ':a', answer: { ...r.value, text: text.text, truncated: r.value.truncated || text.clipped } },
-          ]);
+          this.setItems((p) =>
+            settle(p, ask.id, { kind: 'a', id: ask.id + ':a', answer: { ...r.value, text: text.text, truncated: r.value.truncated || text.clipped } }),
+          );
         } else if (retryable(r.error.kind)) {
           // Keep everything queued, in order, say why, and try again on a backoff (or the server's
           // Retry-After) instead of waiting for the app to be reopened.
@@ -211,10 +231,7 @@ export class ChatController {
         } else {
           // A question the service cannot answer is dropped: tell the person, and stop calling it "waiting".
           this.persist(dequeue(this.state.queue, ask.id));
-          this.setItems((p) => [
-            ...p.map((i) => (i.kind === 'q' && i.id === ask.id ? { ...i, pending: false } : i)),
-            { kind: 'note', id: ask.id + ':e', msg: r.error.kind },
-          ]);
+          this.setItems((p) => settle(p, ask.id, { kind: 'note', id: ask.id + ':e', msg: r.error.kind }));
         }
       }
     } finally {
