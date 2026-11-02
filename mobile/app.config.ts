@@ -13,7 +13,7 @@ const config: ExpoConfig = {
   slug: 'shamwari',
   owner: 'nyuchi-web-services',
   scheme: 'shamwari',
-  version: '0.1.0',
+  version: '0.2.0',
   orientation: 'portrait',
   icon: './assets/icon.png',
   userInterfaceStyle: 'automatic',
@@ -27,7 +27,7 @@ const config: ExpoConfig = {
       monochromeImage: './assets/android-icon-monochrome.png',
     },
   },
-  plugins: ['expo-secure-store', 'expo-updates'],
+  plugins: ['expo-secure-store', 'expo-localization', 'expo-updates'],
   // Same app version, same native runtime: updates only reach builds that can run them.
   runtimeVersion: { policy: 'appVersion' },
   ...(projectId ? { updates: { url: `https://u.expo.dev/${projectId}` } } : {}),
