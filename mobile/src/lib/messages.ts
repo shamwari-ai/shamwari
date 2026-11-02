@@ -1,19 +1,35 @@
 import type { AskErrorKind } from './types';
 
-/** Plain, kind wording per failure. The 409 is the product working, not breaking. */
-export const errorText: Record<AskErrorKind, string> = {
-  scope_requires_local_inference:
-    'This question is about your own data. That never leaves your phone, so I cannot answer it in the cloud. Personal answers arrive with Shamwari Mind on your device.',
-  unauthorized: 'Add your Shamwari key in Settings to ask questions.',
-  payment_required: 'Your plan is used up for now.',
-  forbidden_scope: 'This key cannot ask that kind of question.',
-  rate_limited: 'Lots of questions right now. Try again in a moment.',
-  unavailable: 'Shamwari is having trouble. Your question is saved and will be sent again.',
-  busy: 'Still answering that one. One moment.',
-  offline: 'No connection. Your question is saved and will be sent when you are back online.',
-  bad_request: 'That question could not be sent. Try rephrasing it.',
-  unknown: 'Something went wrong. Please try again.',
+/**
+ * Wording for a failure, in the person's language. The 409 is the product
+ * working, not breaking, so it gets the full explanation, not a generic error.
+ */
+export function errorMessage(
+  str: { scopePersonalTitle: string; scopePersonalBody: string; errors: Record<string, string> },
+  kind: AskErrorKind,
+): string {
+  if (kind === 'scope_requires_local_inference') return `${str.scopePersonalTitle}. ${str.scopePersonalBody}`;
+  return str.errors[kind] ?? str.errors.unknown ?? '';
+}
+
+/** Everything the app can tell the person besides an answer. Stored as a key, rendered in the current language. */
+export type MsgKey = AskErrorKind | 'tooLong' | 'queueFull' | 'readFailed' | 'saveKeyFailed' | 'saveQueueFailed';
+
+type Wording = Parameters<typeof errorMessage>[0] & {
+  tooLong: string; queueFull: string; readFailed: string; saveKeyFailed: string; saveQueueFailed: string; savedRetry: string;
 };
+
+/** Text for a message in the given language. Transient failures also say the question is saved, so nobody resubmits it. */
+export function msgText(str: Wording, key: MsgKey): string {
+  switch (key) {
+    case 'tooLong': return str.tooLong;
+    case 'queueFull': return str.queueFull;
+    case 'readFailed': return str.readFailed;
+    case 'saveKeyFailed': return str.saveKeyFailed;
+    case 'saveQueueFailed': return str.saveQueueFailed;
+    default: return retryable(key) ? `${errorMessage(str, key)} ${str.savedRetry}` : errorMessage(str, key);
+  }
+}
 
 /** Failures that need the person to act (key, plan). The ask stays queued; nothing is discarded. */
 export const needsPerson = (k: AskErrorKind): boolean => k === 'unauthorized' || k === 'payment_required' || k === 'forbidden_scope';

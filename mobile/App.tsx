@@ -1,6 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import * as Crypto from 'expo-crypto';
 import Constants from 'expo-constants';
+import { getLocales } from 'expo-localization';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState, FlatList, KeyboardAvoidingView, Linking, Platform, Pressable, SafeAreaView,
@@ -8,16 +9,17 @@ import {
 } from 'react-native';
 import { BUDGET, byteLength, clampBytes } from './src/lib/budget';
 import { createClient } from './src/lib/client';
-import { errorText, needsPerson, retryable } from './src/lib/messages';
+import { LANGUAGES, isLanguage, pickLanguage } from './src/i18n/strings';
+import { msgText, needsPerson, retryable, type MsgKey } from './src/lib/messages';
 import { dequeue, enqueue, type QueuedAsk } from './src/lib/queue';
-import { loadKey, loadQueue, saveKey, saveQueue } from './src/lib/storage';
+import { loadKey, loadLang, loadQueue, saveKey, saveLang, saveQueue } from './src/lib/storage';
 import { dark, light } from './src/lib/theme';
-import type { Answer } from './src/lib/types';
+import type { Answer, Language } from './src/lib/types';
 
 type Item =
   | { kind: 'q'; id: string; text: string; pending: boolean }
   | { kind: 'a'; id: string; answer: Answer }
-  | { kind: 'note'; id: string; text: string };
+  | { kind: 'note'; id: string; msg: MsgKey };
 
 const apiBase = (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ?? 'https://api.shamwari.ai';
 
@@ -33,7 +35,9 @@ export default function App() {
   const keyRef = useRef<string | null>(null);
   // The queue's source of truth: flush() runs across awaits and must never write back a stale snapshot.
   const queueRef = useRef<QueuedAsk[]>([]);
-  const [status, setStatus] = useState<string | null>(null);
+  const [status, setStatus] = useState<MsgKey | null>(null);
+  const [lang, setLang] = useState<Language>(() => pickLanguage(getLocales().map((l) => l.languageTag)));
+  const { strings: str, needsNativeReview } = LANGUAGES[lang];
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const attempts = useRef(0);
   const busy = useRef(false);
@@ -42,7 +46,7 @@ export default function App() {
   const push = (i: Item) => setItems((p) => [...p, i]);
   const persist = (q: QueuedAsk[]) => {
     queueRef.current = q; setQueue(q);
-    saveQueue(q).catch(() => setStatus('Your phone could not save your waiting questions. Keep the app open until they are sent.'));
+    saveQueue(q).catch(() => setStatus('saveQueueFailed'));
   };
 
   const flush = useCallback(async () => {
@@ -64,7 +68,7 @@ export default function App() {
         } else if (retryable(r.error.kind)) {
           // Keep everything queued, in order, say why, and try again on a backoff
           // (or the server's Retry-After) instead of waiting for the app to be reopened.
-          setStatus(errorText[r.error.kind]);
+          setStatus(r.error.kind);
           const wait = Math.max((r.error.retryAfterSec ?? 0) * 1000, Math.min(300_000, 10_000 * 2 ** attempts.current++));
           if (retryTimer.current) clearTimeout(retryTimer.current);
           retryTimer.current = setTimeout(() => { retryTimer.current = null; void flush(); }, wait);
@@ -72,12 +76,12 @@ export default function App() {
         } else if (needsPerson(r.error.kind)) {
           // A bad key or a used-up plan is not the question's fault: keep every saved
           // question, say what to do, and resume when the person has done it.
-          setStatus(errorText[r.error.kind]);
+          setStatus(r.error.kind);
           if (r.error.kind === 'unauthorized') setShowSettings(true);
           break;
         } else {
           persist(dequeue(queueRef.current, ask.id));
-          setItems((p) => [...p, { kind: 'note', id: ask.id + ':e', text: errorText[r.error.kind] }]);
+          setItems((p) => [...p, { kind: 'note', id: ask.id + ':e', msg: r.error.kind }]);
         }
       }
     } finally {
@@ -90,14 +94,16 @@ export default function App() {
   useEffect(() => {
     void (async () => {
       try {
-        const [k, q] = await Promise.all([loadKey(), loadQueue()]);
+        // The language is a preference: if reading it fails, the key and queue must still load.
+        const [k, q, savedLang] = await Promise.all([loadKey(), loadQueue(), loadLang().catch(() => null)]);
+        if (isLanguage(savedLang)) setLang(savedLang);
         keyRef.current = k; setKey(k); persist(q);
         setItems(q.map((a) => ({ kind: 'q', id: a.id, text: a.question, pending: true })));
         if (!k) setShowSettings(true);
         else if (q.length) void flush();
       } catch {
         // Secure storage can fail (locked keystore, restore from backup). Start empty and let the person re-enter the key.
-        setStatus('Could not read your saved key or questions. Add your key in Settings to continue.');
+        setStatus('readFailed');
         setShowSettings(true);
       }
     })();
@@ -110,33 +116,33 @@ export default function App() {
     const q = draft.trim();
     if (!q) return;
     // Never cut a question short silently: a cut Shona sentence is a different question.
-    if (byteLength(q) > BUDGET.maxQuestionBytes) { setStatus('That question is too long to send. Please shorten it a little.'); return; }
+    if (byteLength(q) > BUDGET.maxQuestionBytes) { setStatus('tooLong'); return; }
     setStatus(null);
     const ask: QueuedAsk = { id: Crypto.randomUUID(), question: q, createdAt: Date.now() };
     // Scope is always 'platform' here: the app has no on-device Mind yet, and a
     // personal-scope ask must never be queued (queue.ts refuses it).
     const r = enqueue(queueRef.current, ask, 'platform');
-    if (!r.ok) { push({ kind: 'note', id: ask.id, text: r.reason === 'queue_full' ? 'Too many questions waiting. Go online to send them first.' : 'That question is too long.' }); return; }
+    if (!r.ok) { push({ kind: 'note', id: ask.id, msg: r.reason === 'queue_full' ? 'queueFull' : 'tooLong' }); return; }
     push({ kind: 'q', id: ask.id, text: q, pending: true });
     setDraft(''); persist(r.queue); void flush();
   };
 
   const render = ({ item }: { item: Item }) => {
-    if (item.kind === 'q') return <View style={[s.bubble, s.mine]}><Text style={s.mineText}>{item.text}{item.pending ? '  ·  waiting' : ''}</Text></View>;
-    if (item.kind === 'note') return <View style={s.note}><Text style={s.noteText} accessibilityRole="alert">{item.text}</Text></View>;
+    if (item.kind === 'q') return <View style={[s.bubble, s.mine]}><Text style={s.mineText}>{item.text}{item.pending ? `  ·  ${str.waiting}` : ''}</Text></View>;
+    if (item.kind === 'note') return <View style={s.note}><Text style={s.noteText} accessibilityRole="alert">{msgText(str, item.msg)}</Text></View>;
     const a = item.answer;
     return (
       <View style={[s.bubble, s.theirs]}>
         <Text style={s.text}>{a.text}</Text>
-        {a.inferencePath === 'extractive' || a.degraded ? <Text style={s.meta}>Closest source, no generated answer.</Text> : null}
-        {a.truncated ? <Text style={s.meta}>Shortened to fit.</Text> : null}
+        {a.inferencePath === 'extractive' || a.degraded ? <Text style={s.meta}>{str.closestSource}</Text> : null}
+        {a.truncated ? <Text style={s.meta}>{str.shortened}</Text> : null}
         {a.citations.map((c, i) => (
           <Pressable key={i} disabled={!c.url} onPress={() => c.url && void Linking.openURL(c.url)} accessibilityRole={c.url ? 'link' : 'text'} style={s.cite}>
             <Text style={s.citeTitle}>[{i + 1}] {[c.title, c.heading].filter(Boolean).join(' - ')}</Text>
             <Text style={s.meta}>{[c.authority, c.effective_from].filter(Boolean).join(' · ')}</Text>
           </Pressable>
         ))}
-        {!a.grounded && !a.citations.length ? <Text style={s.meta}>No source found for this answer.</Text> : null}
+        {!a.grounded && !a.citations.length ? <Text style={s.meta}>{str.noSources}</Text> : null}
       </View>
     );
   };
@@ -146,31 +152,42 @@ export default function App() {
       <StatusBar style="auto" />
       <View style={s.bar}>
         <Text style={s.title}>Shamwari</Text>
-        <Pressable onPress={() => setShowSettings((v) => !v)} accessibilityRole="button" accessibilityLabel="Settings"><Text style={s.link}>Settings</Text></Pressable>
+        <Pressable onPress={() => setShowSettings((v) => !v)} accessibilityRole="button" accessibilityLabel={str.settings}><Text style={s.link}>{str.settings}</Text></Pressable>
       </View>
       {showSettings ? (
         <View style={s.panel}>
-          <Text style={s.text}>Sign-in is coming. Until then, paste your Shamwari key. It stays in your phone's secure store.</Text>
-          <Text style={s.meta}>{key ? 'A key is saved. Leave this empty to keep it.' : 'No key saved yet.'}</Text>
-          <TextInput style={s.input} value={keyDraft} onChangeText={setKeyDraft} placeholder="Shamwari key" placeholderTextColor={t.muted} autoCapitalize="none" autoCorrect={false} secureTextEntry />
-          <Pressable style={s.btn} onPress={() => { const k = keyDraft.trim(); setKeyDraft(''); setShowSettings(false); if (!k) return; keyRef.current = k; setKey(k); setStatus(null); void saveKey(k).catch(() => setStatus('Could not save your key on this phone.')); void flush(); }} accessibilityRole="button">
-            <Text style={s.btnText}>Save</Text>
+          <Text style={s.text}>{str.language}</Text>
+          <View style={s.langRow}>
+            {(Object.keys(LANGUAGES) as Language[]).map((l) => (
+              <Pressable key={l} style={[s.langBtn, l === lang && s.langOn]} accessibilityRole="button" accessibilityState={{ selected: l === lang }}
+                onPress={() => { setLang(l); void saveLang(l).catch(() => undefined); }}>
+                <Text style={l === lang ? s.btnText : s.link}>{LANGUAGES[l].label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={s.text}>{str.signInSoon}</Text>
+          <Text style={s.meta}>{key ? str.keySaved : str.noKeyYet}</Text>
+          <TextInput style={s.input} value={keyDraft} onChangeText={setKeyDraft} placeholder={str.keyPlaceholder} placeholderTextColor={t.muted} autoCapitalize="none" autoCorrect={false} secureTextEntry />
+          <Pressable style={s.btn} onPress={() => { const k = keyDraft.trim(); setKeyDraft(''); setShowSettings(false); if (!k) return; keyRef.current = k; setKey(k); setStatus(null); void saveKey(k).catch(() => setStatus('saveKeyFailed')); void flush(); }} accessibilityRole="button">
+            <Text style={s.btnText}>{str.save}</Text>
           </Pressable>
           {key ? (
-            <Pressable onPress={() => { keyRef.current = null; setKey(null); void saveKey('').catch(() => undefined); }} accessibilityRole="button" accessibilityLabel="Remove key">
-              <Text style={s.link}>Remove key</Text>
+            <Pressable onPress={() => { keyRef.current = null; setKey(null); void saveKey('').catch(() => undefined); }} accessibilityRole="button" accessibilityLabel={str.authDevClear}>
+              <Text style={s.link}>{str.authDevClear}</Text>
             </Pressable>
           ) : null}
-          <Text style={s.meta}>Questions you type here are answered in the cloud. Personal questions need Shamwari Mind on your own device, which is not available yet, so please keep private details out of what you ask.</Text>
+          <Text style={s.meta}>{str.cloudNotice}</Text>
+          <Text style={s.meta}>{str.footer}</Text>
         </View>
       ) : null}
-      {status ? <View style={s.note}><Text style={s.noteText} accessibilityRole="alert">{status}</Text></View> : null}
+      {needsNativeReview ? <View style={s.note}><Text style={s.meta}>{str.reviewNote}</Text></View> : null}
+      {status ? <View style={s.note}><Text style={s.noteText} accessibilityRole="alert">{msgText(str, status)}</Text></View> : null}
       <FlatList style={s.list} contentContainerStyle={{ padding: 12, gap: 8 }} data={items} keyExtractor={(i) => i.id} renderItem={render}
-        ListEmptyComponent={<Text style={s.meta}>Ask about the Constitution, tax or your rights. Answers show where they come from.</Text>} />
+        ListEmptyComponent={<Text style={s.meta}>{str.tagline}</Text>} />
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={s.composer}>
-          <TextInput style={[s.input, { flex: 1 }]} value={draft} onChangeText={setDraft} placeholder="Ask Shamwari" placeholderTextColor={t.muted} multiline editable={!!key} />
-          <Pressable style={s.btn} onPress={send} disabled={!key} accessibilityRole="button" accessibilityLabel="Send"><Text style={s.btnText}>Send</Text></Pressable>
+          <TextInput style={[s.input, { flex: 1 }]} value={draft} onChangeText={setDraft} placeholder={str.placeholder} placeholderTextColor={t.muted} multiline editable={!!key} />
+          <Pressable style={s.btn} onPress={send} disabled={!key} accessibilityRole="button" accessibilityLabel={str.send}><Text style={s.btnText}>{str.send}</Text></Pressable>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -192,5 +209,8 @@ const styles = (t: typeof light | typeof dark) => StyleSheet.create({
   composer: { flexDirection: 'row', gap: 8, padding: 12, alignItems: 'flex-end' },
   input: { backgroundColor: t.surface, color: t.text, borderRadius: 12, padding: 12, fontSize: 16, minHeight: 44 },
   btn: { backgroundColor: t.brand, borderRadius: 12, paddingHorizontal: 16, minHeight: 44, justifyContent: 'center' },
+  langRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap' },
+  langBtn: { borderRadius: 12, paddingHorizontal: 12, minHeight: 44, justifyContent: 'center', borderWidth: 1, borderColor: t.container },
+  langOn: { backgroundColor: t.brand, borderColor: t.brand },
   btnText: { color: t.onBrand, fontSize: 16, fontWeight: '600' },
 });
