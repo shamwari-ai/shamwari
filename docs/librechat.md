@@ -71,6 +71,50 @@ does not create. One step for the owner:
 The honest cost of B is recurring merge work; the ceiling on it is how much we
 change.
 
+#### Decision table: fork or stock
+
+Each change we need, and the lightest mechanism that can do it. **Config** means
+`librechat.yaml` or environment only. **Overlay** means a file added in the
+Dockerfile (no LibreChat source edited). **Patch** means a small edit to
+LibreChat source. **Fork-only** means a feature that needs real code.
+
+| #   | Change                                                               | Mechanism                                                                                                            | Why                                                                               |
+| --- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 1   | One endpoint, gateway only; provider keys absent; other features off | Config                                                                                                               | `endpoints.custom`, `ENDPOINTS=custom`, feature flags (this page, "One endpoint") |
+| 2   | Registration and email login off                                     | Config                                                                                                               | `ALLOW_REGISTRATION=false` and friends                                            |
+| 3   | Scope sent to the gateway                                            | Config for fixed scope per endpoint (`addParams`); **fork-only** for a per-message pill in the composer              | Config cannot put a per-message choice into the body                              |
+| 4   | Title generation off                                                 | Config                                                                                                               | `titleConvo: false`                                                               |
+| 5   | Ground citations visible                                             | Config plus a gateway parameter (inline sources list) for launch; **fork-only** for numbered chips and a source card | The gateway change needs no LibreChat edit                                        |
+| 6   | Plain 409 message                                                    | Config if LibreChat surfaces the gateway `message` (to test); otherwise Patch                                        | One error-mapper file                                                             |
+| 7   | Streaming against a non-streaming gateway                            | Config (`stream: false`, to test) or a gateway shim                                                                  | No LibreChat edit either way                                                      |
+| 8   | Theme and density (sodalite, shared tokens)                          | Overlay (one CSS file) for colours; Patch for density tokens that need new variables                                 | LibreChat has no theme key in YAML at this release                                |
+| 9   | Welcome text and the link to the light chat                          | Config                                                                                                               | `interface.customWelcome`                                                         |
+| 10  | Shona and isiNdebele interface text                                  | Patch (add locale files)                                                                                             | New locale, small and separable                                                   |
+| 11  | Servers API integration                                              | **Fork-only**                                                                                                        | New server code                                                                   |
+| 12  | Edge caching, routing, rate limits                                   | Neither: it lives in the Worker                                                                                      | Not LibreChat's code                                                              |
+
+Count: seven of twelve are config or overlay, two are small patches, two are
+fork-only, one is outside LibreChat.
+
+| Question                             | Stock plus patch set                                                                             | Fork at the pinned tag                                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Repo layout                          | `chat/librechat/` in this repo: Dockerfile, `librechat.yaml`, `theme/`, `patches/`, `PATCHES.md` | A repo under `shamwari-ai` with an `upstream` remote; this repo holds only deploy config and the guard test |
+| Upstream security release            | Bump the tag, patches reapply (or fail loudly)                                                   | Merge the tag; conflicts only where we changed code                                                         |
+| Cost while we change little          | Lowest                                                                                           | Same: an unchanged fork merges cleanly                                                                      |
+| Cost once rows 3, 5 and 11 are built | Patch set grows into a hidden fork                                                               | Honest and reviewable                                                                                       |
+| Licence                              | MIT notice kept in the image                                                                     | MIT notice kept in the repo and `NOTICE`                                                                    |
+| Guard test                           | Runs against `librechat.yaml` in this repo                                                       | Same test, run in this repo against the fork's config and in the fork's CI                                  |
+
+**Recommendation (for the owner to confirm):** fork at the pinned tag from the
+start, but **launch with rows 1, 2, 4, 5 (inline sources), 7 and 9 as config and
+row 8 as an overlay**, so the first release is a stock build with a theme. A fork
+costs nothing until it diverges, and rows 3 (pill), 5 (chips) and 11 are
+already planned, so a later re-platforming from a patch set is avoided. The
+rule that keeps merges cheap: no change to LibreChat source lands without a row
+in this table and a commit that touches only that row's files. If the owner
+prefers not to carry merge work yet, the stock option is the same launch with
+one fewer repository, and the fork can start the day row 3 or 11 does.
+
 ### 2. Edge optimisation (the tunnel is the origin path, the edge does the rest)
 
 Relayed: "by porting it through a tunnel we can optimize it at edge."
@@ -768,6 +812,13 @@ Fly's `fly secrets import` reads from stdin, so no secret touches a file.
 Region: pick the region of the existing Core app so the two are close.
 
 ## Decisions that are the owner's, not ours
+
+Recorded 2 Nov 2026 (relayed by orchestrator, awaiting owner confirmation in
+this session): title generation **off**, and Ground citations through the
+gateway's inline-sources parameter, so every model call stays gateway-only and
+sources render with no LibreChat change. The parameter still changes the
+gateway's response contract for one caller type and needs the owner's yes before
+it is written.
 
 - Whether title generation stays off (recommended: yes, until token quotas are
   observed).
