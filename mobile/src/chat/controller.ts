@@ -48,6 +48,18 @@ export interface ChatPorts {
   now(): number;
 }
 
+/**
+ * Mark a question as no longer waiting and put its reply (an answer, or a note saying why there is none)
+ * directly UNDER it. Replies used to be appended at the end, so with two questions typed close together
+ * an answer could appear below the wrong question.
+ */
+function settle(items: Item[], askId: string, reply: Item): Item[] {
+  const at = items.findIndex((i) => i.kind === 'q' && i.id === askId);
+  if (at < 0) return [...items, reply]; // the question is not on screen (cannot happen today); never lose the reply
+  const done = items.map((i) => (i.kind === 'q' && i.id === askId ? { ...i, pending: false } : i));
+  return [...done.slice(0, at + 1), reply, ...done.slice(at + 1)];
+}
+
 const RETRY_BASE_MS = 10_000;
 const RETRY_MAX_MS = 300_000;
 
@@ -185,10 +197,9 @@ export class ChatController {
           this.attempts = 0;
           this.set({ status: null });
           this.persist(dequeue(this.state.queue, ask.id));
-          this.setItems((p) => [
-            ...p.map((i) => (i.kind === 'q' && i.id === ask.id ? { ...i, pending: false } : i)),
-            { kind: 'a', id: ask.id + ':a', answer: { ...r.value, text: text.text, truncated: r.value.truncated || text.clipped } },
-          ]);
+          this.setItems((p) =>
+            settle(p, ask.id, { kind: 'a', id: ask.id + ':a', answer: { ...r.value, text: text.text, truncated: r.value.truncated || text.clipped } }),
+          );
         } else if (retryable(r.error.kind)) {
           // Keep everything queued, in order, say why, and try again on a backoff (or the server's
           // Retry-After) instead of waiting for the app to be reopened.
@@ -211,10 +222,7 @@ export class ChatController {
         } else {
           // A question the service cannot answer is dropped: tell the person, and stop calling it "waiting".
           this.persist(dequeue(this.state.queue, ask.id));
-          this.setItems((p) => [
-            ...p.map((i) => (i.kind === 'q' && i.id === ask.id ? { ...i, pending: false } : i)),
-            { kind: 'note', id: ask.id + ':e', msg: r.error.kind },
-          ]);
+          this.setItems((p) => settle(p, ask.id, { kind: 'note', id: ask.id + ':e', msg: r.error.kind }));
         }
       }
     } finally {

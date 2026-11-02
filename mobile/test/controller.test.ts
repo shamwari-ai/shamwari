@@ -192,7 +192,7 @@ describe('asking', () => {
     h.ctl.send('b'); // typed mid-flush
     first.resolve(answer('first'));
     await idle();
-    expect(texts(h.state())).toEqual(['q:a', 'q:b', 'a:first', 'a:second']);
+    expect(texts(h.state())).toEqual(['q:a', 'a:first', 'q:b', 'a:second']); // each answer directly under its question
     expect(h.savedQueues).toEqual([[], ['a'], ['a', 'b'], ['b'], []]); // start() saved [], then each step
     expect(h.state().queue).toEqual([]);
   });
@@ -206,6 +206,48 @@ describe('asking', () => {
     expect(h.ctl.send('one more')).toBe(false);
     expect(h.state().items.at(-1)).toMatchObject({ kind: 'note', msg: 'queueFull' });
     expect(h.state().queue).toHaveLength(BUDGET.maxQueueBytes / BUDGET.maxQuestionBytes);
+  });
+});
+
+describe('where answers appear', () => {
+  it('puts every answer directly under its own question, however many were typed while it loaded', async () => {
+    const h = make({ key: 'k' });
+    const gates = [deferred<Result<Answer>>(), deferred<Result<Answer>>(), deferred<Result<Answer>>()];
+    h.onAsk((n) => gates[n - 1].promise);
+    await h.ctl.start();
+    h.ctl.send('one');
+    await idle();
+    h.ctl.send('two'); h.ctl.send('three'); // typed while the first is still loading
+    gates[0].resolve(answer('A1'));
+    await idle();
+    gates[1].resolve(answer('A2'));
+    await idle();
+    gates[2].resolve(answer('A3'));
+    await idle();
+    expect(texts(h.state())).toEqual(['q:one', 'a:A1', 'q:two', 'a:A2', 'q:three', 'a:A3']);
+  });
+
+  it('a question dropped as unreadable keeps its note under it, and later questions keep their answers under them', async () => {
+    const h = make({ key: 'k' });
+    h.onAsk((n) => (n === 2 ? fail('bad_request') : answer(`A${n}`)));
+    await h.ctl.start();
+    h.ctl.send('one'); h.ctl.send('two'); h.ctl.send('three');
+    await idle();
+    expect(texts(h.state())).toEqual(['q:one', 'a:A1', 'q:two', 'n:bad_request', 'q:three', 'a:A3']);
+  });
+
+  it('a question that waited for a retry still gets its answer directly under it, not at the end', async () => {
+    const h = make({ key: 'k' });
+    h.onAsk((n) => (n <= 2 ? fail('offline') : answer(`A${n}`))); // 'one' fails twice: once alone, once when 'two' is typed
+    await h.ctl.start();
+    h.ctl.send('one');
+    await idle();
+    h.ctl.send('two');
+    await idle();
+    expect(texts(h.state())).toEqual(['q:one*', 'q:two*']);
+    h.live().at(-1)!.fn();
+    await idle();
+    expect(texts(h.state())).toEqual(['q:one', 'a:A3', 'q:two', 'a:A4']);
   });
 });
 
@@ -345,7 +387,7 @@ describe('when the person must act', () => {
     await h.ctl.start();
     h.ctl.send('a'); h.ctl.send('b');
     await idle();
-    expect(texts(h.state())).toEqual(['q:a', 'q:b', 'n:bad_request', 'a:b-ok']); // no stuck "waiting" star on the dropped one
+    expect(texts(h.state())).toEqual(['q:a', 'n:bad_request', 'q:b', 'a:b-ok']); // no stuck "waiting" star, and the note sits under its own question
     expect(h.state().queue).toEqual([]);
   });
 
