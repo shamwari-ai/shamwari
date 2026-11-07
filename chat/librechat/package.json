@@ -1,0 +1,14 @@
+{
+  "name": "shamwari-chat-guard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Rule 1 guard for the LibreChat deployment config",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "dependencies": {
+    "yaml": "2.8.1"
+  }
+}
