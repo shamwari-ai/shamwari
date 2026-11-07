@@ -93,8 +93,10 @@ LibreChat source. **Fork-only** means a feature that needs real code.
 | 11  | Servers API integration                                              | **Fork-only**                                                                                                        | New server code                                                                   |
 | 12  | Edge caching, routing, rate limits                                   | Neither: it lives in the Worker                                                                                      | Not LibreChat's code                                                              |
 
-Count: seven of twelve are config or overlay, two are small patches, two are
-fork-only, one is outside LibreChat.
+Count by the lightest mechanism that can do the whole row: pure config rows 1,
+2, 4, 7 and 9 (five); overlay or patch row 8; mixed rows 3, 5 and 6 (config
+for launch, patch or fork-only for the full version); patch row 10; fork-only
+row 11; outside LibreChat row 12.
 
 | Question                             | Stock plus patch set                                                                             | Fork at the pinned tag                                                                                      |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
@@ -204,7 +206,11 @@ signals, with a manual switch remembered on the device.
 Thresholds are **proposed, not measured**: send to `/lite` only when Save-Data is
 on, or the edge-measured round trip is high enough to suggest a weak link (a
 number chosen from real traffic, not from this page). Unknown or missing signals
-default to **full**. The routing function is pure and unit-tested: laptop on
+default to **full**. The redirect or HTML chosen from these signals is sent with
+`Cache-Control: private, no-store` and `Vary: Save-Data`, so a shared cache
+cannot serve a Save-Data phone's choice to a laptop. The manual choice is a
+first-party cookie with `Path=/` (not under LibreChat's rewritten `Path=/chat`),
+and a test asserts the two do not collide. The routing function is pure and unit-tested: laptop on
 wifi gets full; Save-Data phone gets edge; unknown signals get full; a manual
 choice wins.
 
@@ -277,8 +283,8 @@ person ──► shamwari.ai/chat/*
               │
               ▼
         edge Worker  (route table, see "Sub-path hosting")
-          /chat/lite*  ──► shamwari-app  (the old R2 page, unchanged)
-          /chat*       ──► LibreChat proxy path
+          /chat/lite, /chat/lite/*  ──► shamwari-app  (the old R2 page, unchanged)
+          /chat, /chat/*  ──► LibreChat proxy path
               │  private connection (Workers VPC service, or Access-gated hostname)
               ▼
         cloudflared  ──► LibreChat on Fly   (no public IP)
@@ -337,10 +343,10 @@ the three options in the brief:
 Cloudflare picks the most specific route. Today the existing app Worker is
 planned for `shamwari.ai/chat/` (draft #134). After this change:
 
-| Pattern                  | Worker                                                | Serves      |
-| ------------------------ | ----------------------------------------------------- | ----------- |
-| `shamwari.ai/chat/lite*` | `shamwari-app` (existing, rebased onto `/chat/lite/`) | the R2 page |
-| `shamwari.ai/chat*`      | the new proxy Worker                                  | LibreChat   |
+| Pattern                                               | Worker                                                                      | Serves      |
+| ----------------------------------------------------- | --------------------------------------------------------------------------- | ----------- |
+| `shamwari.ai/chat/lite` and `shamwari.ai/chat/lite/*` | `shamwari-app` (existing, rebased onto `/chat/lite/`; `/lite` if confirmed) | the R2 page |
+| `shamwari.ai/chat` and `shamwari.ai/chat/*`           | the new proxy Worker                                                        | LibreChat   |
 
 `#134` and the chat-app Worker need their path moved from `/chat/` to
 `/chat/lite/` first. That is a change to open PRs, so it is sequenced in the
@@ -384,7 +390,7 @@ version: 1.3.17   # the pinned librechat.example.yaml's own version (Read, line 
 endpoints:
   custom:
     - name: "Shamwari"
-      apiKey: "user_provided"
+      apiKey: "${SHAMWARI_CHAT_PLACEHOLDER_KEY}"   # non-secret; see guard item 5
       baseURL: "https://api.shamwari.ai/v1"
       models:
         default: ["shamwari-economy"]
@@ -416,7 +422,9 @@ comment, not a control.
   the environment, because each is a second route out that bypasses the
   endpoint list: agents and tools, web search, code execution, artifacts, image
   generation, speech-to-text and text-to-speech, file-search/RAG (its default
-  embeddings go to OpenAI), MCP servers, and conversation **title generation**
+  embeddings go to OpenAI), MCP servers, memory, prompt suggestions,
+  summarization and any agent or helper that makes its own model call (the
+  full list is read from the pinned `librechat.example.yaml` in the build step), and conversation **title generation**
   (a second model call per chat, which also spends the person's token quota; the
   sidebar title falls back to the first words of the first message).
 - Meilisearch and the RAG API sidecar are **not deployed**.
@@ -430,13 +438,22 @@ comment, not a control.
 2. any key other than `endpoints.custom` is present under `endpoints`;
 3. `ENDPOINTS` is not exactly `custom`;
 4. a provider key variable (list above) appears anywhere in those files;
-5. an `apiKey` is a literal rather than `user_provided` or an environment
-   reference;
+5. an `apiKey` is `user_provided` (that mode shows every person a key dialog
+   that nothing can satisfy, because no customer key is accepted today) or a
+   real-looking secret; it must be an environment reference or a fixed
+   non-secret placeholder that the `Authorization` header from the person's
+   sign-in overrides (to test);
 6. the image reference is not pinned by tag and digest;
 7. any `mcpServers`, `webSearch`, `ocr`, `speech` or `fileConfig` block routes to
    a host other than the gateway;
 8. `ALLOW_REGISTRATION`, `ALLOW_EMAIL_LOGIN` or `ALLOW_SOCIAL_LOGIN` is anything
-   but `false` while sign-in is blocked.
+   but `false` while sign-in is blocked;
+9. any top-level `librechat.yaml` key is not on an explicit allowlist, so a
+   feature that calls a model and is not named here fails the build instead of
+   passing silently;
+10. production `addParams.scope` is anything outside an explicit allowlist
+    (`platform`, plus `community` only once confirmed). `personal` appears only
+    in the test configuration.
 
 The test also runs a mutation check: it feeds itself a copy of the config with a
 provider `baseURL` and asserts it fails, so the guard cannot rot into a test
@@ -457,7 +474,7 @@ its own fixed value:
 | Endpoint name shown  | `addParams.scope` | Enabled in production             |
 | -------------------- | ----------------- | --------------------------------- |
 | Shamwari             | `platform`        | yes                               |
-| Shamwari (community) | `community`       | yes, once the owner wants it      |
+| Shamwari (community) | `community`       | only once the owner confirms it   |
 | Shamwari (personal)  | `personal`        | **no** until Shamwari Mind exists |
 
 Why not one endpoint with a selector: LibreChat has no per-message field the
@@ -661,7 +678,9 @@ no-database-login rule (#127), or the Ground store.
 
 ### What is stored, and the rule about it
 
-The owner accepted that personal-scope conversation text may be stored here.
+Relayed (awaiting owner confirmation in this session): the owner accepts that
+personal-scope conversation text may be stored here, in line with the verbatim
+decision recorded in #146.
 Two things follow and are written down so they are not rediscovered:
 
 1. **It is allowed because of where it is stored, not because of where it is
@@ -774,13 +793,19 @@ not know to disable.
    Reach it only through the tunnel, from a test route on a preview hostname.
 4. Ship a release of the old page whose service worker retires itself, and move
    the old page to `/chat/lite/`. Leave `/chat/` serving the old page until
-   step 6.
+   step 7. Keep the retiring worker script's own path served by `shamwari-app`
+   (a dedicated route for that one path) after the flip, so phones that did not
+   visit during the soak still fetch the retiring script. Soak at least 14 days
+   and read the remaining installs from the old page's own usage before step 7.
 5. Owner reads this page's _To test_ results and the weight number.
-6. Owner flips the route so `/chat*` goes to LibreChat. The old page stays at
-   `/chat/lite/`.
-7. WorkOS sign-in is finished separately, and only then turned on in LibreChat.
+6. WorkOS sign-in is finished and **turned on in LibreChat first** (a real token's
+   `iss` checked, one real signed-in question answered through the gateway).
+   The route flip is gated on this: flipping it before sign-in works replaces
+   a working page with one that cannot authenticate.
+7. Owner flips the route so `/chat` and `/chat/*` go to LibreChat. The old page
+   stays at `/chat/lite/`.
 
-Rollback at any step after 6 is one route change back to the old page.
+Rollback at any step after 7 is one route change back to the old page.
 
 ## Owner runbook (drafts, finalised with real names in the build step)
 
@@ -788,25 +813,30 @@ Written for a phone: each step is one screen of work. **Nothing here is done by
 the session.** Secrets go in by stdin or the vendor's secret field, never in
 chat, a file or an issue.
 
-1. **Atlas.** In the Atlas app: New project "shamwari-chat" → Create a Flex
+1. **Fly app first, for its egress addresses.** From a terminal:
+   `fly apps create shamwari-chat`, then allocate static egress IPs for it
+   (the command, believed to be `fly ips allocate-egress`, is confirmed against
+   Fly's current docs in the build step; machines have no stable egress address
+   without it) and note the addresses.
+2. **Atlas.** In the Atlas app: New project "shamwari-chat" → Create a Flex
    database → Database Access → Add user, "Specific privileges" →
    `readWrite` on database `librechat` only → Network Access → add the Fly
-   egress addresses (given in step 3). Copy the connection string; do not paste
+   egress addresses from step 1, never `0.0.0.0/0`. Copy the connection string; do not paste
    it anywhere except the next step.
-2. **Fly app.** From a terminal: `fly apps create shamwari-chat`. Then, with the
-   connection string on the clipboard, `fly secrets import --app shamwari-chat`
+3. **Fly secrets.** With the connection string on the clipboard, `fly secrets import --app shamwari-chat`
    and paste `MONGO_URI=...` plus four generated values: `CREDS_KEY`
    (`openssl rand -hex 32`), `CREDS_IV` (`openssl rand -hex 16`),
    `JWT_SECRET` and `JWT_REFRESH_SECRET` (`openssl rand -hex 32` each).
-3. **Tunnel.** In the Cloudflare dashboard: Networks → Tunnels → Create →
+4. **Tunnel.** In the Cloudflare dashboard: Networks → Tunnels → Create →
    name "shamwari-chat". Put its token in with
    `fly secrets set TUNNEL_TOKEN --app shamwari-chat` (value via stdin).
    Add the private service to `localhost:3080`.
-4. **Worker route.** Merge the Worker PR. In Workers → Routes, add
-   `shamwari.ai/chat*` to the proxy Worker and `shamwari.ai/chat/lite*` to
-   `shamwari-app`. Do not remove the old route until step 6 of the cutover.
-5. **Flags.** Leave sign-in off. The chat flag (its name is fixed in the build
-   step) stays off until step 6 of the cutover.
+5. **Worker route.** Merge the Worker PR. In Workers → Routes, add
+   `shamwari.ai/chat` and `shamwari.ai/chat/*` to the proxy Worker and
+   `shamwari.ai/chat/lite` and `shamwari.ai/chat/lite/*` to `shamwari-app`. Never
+   use a bare `*` suffix: it also matches `/chatter` and `/chat/literature`. Do not remove the old route until step 7 of the cutover.
+6. **Flags.** Leave sign-in off. The chat flag (its name is fixed in the build
+   step) stays off until step 7 of the cutover.
 
 Fly's `fly secrets import` reads from stdin, so no secret touches a file.
 Region: pick the region of the existing Core app so the two are close.
