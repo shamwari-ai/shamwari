@@ -19,7 +19,8 @@
  */
 import type { Env } from './types';
 
-export const DEFAULT_CORS_ORIGINS = ['https://shamwari.ai', 'https://www.shamwari.ai'];
+// The app origin only. The marketing site (www) makes no API calls, so it is not listed.
+export const DEFAULT_CORS_ORIGINS = ['https://shamwari.ai'];
 
 /**
  * Request headers a browser may send. `x-shamwari-channel` marks traffic that is

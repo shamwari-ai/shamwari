@@ -40,10 +40,10 @@ say the chat is ready when it is not. Do not set the variable before `/chat/` an
 - **CSP** on the app (`site/scripts/post-build.mjs`): `script-src 'self'` (the app origin
   itself), `connect-src 'self' https://api.shamwari.ai`. The API origin is read from the
   built page, so the policy and the app cannot disagree, and `check.mjs` verifies it.
-- **CORS** on the gateway (`CORS_ORIGINS`) already allows `https://shamwari.ai`, the app
-  origin, so the chat works the day it is deployed. It also still allows `www`, which the
-  marketing site never needs (it makes no API calls); a small follow-up PR tightens it to
-  the app origin only. That tightening is hygiene, not a dependency of the move.
+- **CORS** on the gateway (`CORS_ORIGINS`) allows only `https://shamwari.ai`, the app
+  origin, so the chat works the day the gateway with this change is deployed. `www` is not
+  listed: the marketing site makes no API calls. Until that deploy, the deployed gateway
+  still lists both origins, which is harmless.
 - **Service worker** scope `/lite/` on the app origin; it passes `/lite/auth/*` and
   `/lite/callback` straight to the network.
 - **WorkOS redirect URI**: `https://shamwari.ai/lite/callback` (moved from `/chat/callback` on
