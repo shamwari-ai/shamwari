@@ -50,6 +50,29 @@ jobs:
         run: npm test
         working-directory: gateway
 
+  chat-guard:
+    name: LibreChat guard (Rule 1)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: chat/librechat/package-lock.json
+
+      - run: npm ci
+        working-directory: chat/librechat
+
+      # LibreChat may talk only to the gateway. This fails the build if any
+      # endpoint points elsewhere, a provider key appears, registration is on, a
+      # public port is added or the pin stops being an exact commit. Includes
+      # mutation checks, so the guard cannot rot into a test that always passes.
+      - name: Guard tests
+        run: npm test
+        working-directory: chat/librechat
+
   core:
     name: Core (imports, syntax)
     runs-on: ubuntu-latest
