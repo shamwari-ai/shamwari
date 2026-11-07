@@ -314,8 +314,13 @@ Note: `api.shamwari.ai` is the owner's decision of 2026-10-28 but no route or cu
 domain is in `wrangler.jsonc`; binding it is a separate owner step (zone route, then
 re-run the smoke test against it).
 
-**C. The Constitution (#17).** Needs the four ingest credentials above, not a key. The
-text file is not in the repo (`constitution-2013.txt`): obtain the official text from
+**C. The Constitution (#17).** `core/ingest_ground.py` still writes with its own four
+credentials (`SUPABASE_DB_URL`, `MONGODB_URI`, `CF_ACCOUNT_ID`, `CF_API_TOKEN`), so the
+command below is the direct path. _Owner statement, not verifiable here:_ the first
+ingest goes through the Nyuchi API's locked ingest route instead (live since v0.48.0),
+which uses the existing WorkOS `data:admin` permission, so there is no ingest key to
+mint; the caller path (Option A or B in nyuchi-api's `docs/architecture/shamwari.md`)
+is the owner's. The text file is not in the repo (`constitution-2013.txt`): obtain the official text from
 a source whose terms have been read (the Constitution row is approved), keep it out of
 git unless the licence allows it, and check the section count against the published
 document before ingesting.
