@@ -1,0 +1,39 @@
+# Test-only configuration, used with the stub gateway in CI. The only place a
+# personal-scope endpoint may exist (docs/librechat.md). Never deployed.
+version: 1.3.17
+cache: true
+
+interface:
+  modelSelect: false
+  agents:
+    use: false
+    create: false
+    share: false
+    public: false
+
+endpoints:
+  custom:
+    - name: 'Shamwari'
+      apiKey: '${SHAMWARI_CHAT_PLACEHOLDER_KEY}'
+      baseURL: 'http://127.0.0.1:8787/v1'
+      models:
+        default: ['shamwari-economy']
+        fetch: false
+      titleConvo: false
+      addParams:
+        scope: 'platform'
+        stream: false
+      headers:
+        X-Shamwari-Channel: 'pwa'
+    - name: 'Shamwari (personal)'
+      apiKey: '${SHAMWARI_CHAT_PLACEHOLDER_KEY}'
+      baseURL: 'http://127.0.0.1:8787/v1'
+      models:
+        default: ['shamwari-economy']
+        fetch: false
+      titleConvo: false
+      addParams:
+        scope: 'personal'
+        stream: false
+      headers:
+        X-Shamwari-Channel: 'pwa'
