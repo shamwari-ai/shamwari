@@ -18,3 +18,11 @@ owner steps in the runbook.
 Not in this change, and tracked in #146: the stub-gateway tests (409, citations,
 streaming), the Worker route and its tests, tunnel packaging, the theme overlay,
 the first-load weight job.
+
+## Deploying the image (owner steps, after the runbook)
+
+`fly.toml` has no build section. Build with `chat/librechat/build.sh`, then push
+the image to Fly's registry and deploy it by reference (`fly auth docker`,
+`docker tag`, `docker push registry.fly.io/shamwari-chat:<commit>`,
+`fly deploy --image registry.fly.io/shamwari-chat:<commit>`). Nothing here has
+been run.

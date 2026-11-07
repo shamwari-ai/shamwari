@@ -237,6 +237,134 @@ const mutants = [
     }),
     /is not the gateway/,
   ],
+  [
+    "a deleted agents block",
+    (f) => ({
+      ...f,
+      production: f.production.replace(/  agents:\n(    .*\n){4}/, ""),
+    }),
+    /interface\.agents must be present/,
+  ],
+  [
+    "a deleted prompts block",
+    (f) => ({
+      ...f,
+      production: f.production.replace(/  prompts:\n(    .*\n){4}/, ""),
+    }),
+    /interface\.prompts must be present/,
+  ],
+  [
+    "file search omitted",
+    (f) => ({
+      ...f,
+      production: f.production.replace("  fileSearch: false\n", ""),
+    }),
+    /interface\.fileSearch/,
+  ],
+  [
+    "parameters UI on",
+    (f) => ({
+      ...f,
+      production: f.production.replace("parameters: false", "parameters: true"),
+    }),
+    /interface\.parameters/,
+  ],
+  [
+    "a provider reverse proxy var",
+    (f) => ({
+      ...f,
+      fly: f.fly.replace(
+        "[[vm]]",
+        'OPENAI_REVERSE_PROXY = "https://x"\n[[vm]]',
+      ),
+    }),
+    /OPENAI_REVERSE_PROXY|not on the allowlist/,
+  ],
+  [
+    "an unlisted env var",
+    (f) => ({
+      ...f,
+      fly: f.fly.replace("[[vm]]", 'NEW_FEATURE = "on"\n[[vm]]'),
+    }),
+    /env var "NEW_FEATURE"/,
+  ],
+  [
+    "a Z.ai credential var",
+    (f) => ({ ...f, fly: f.fly.replace("[[vm]]", 'ZAI_TOKEN = "x"\n[[vm]]') }),
+    /ZAI_|allowlist/,
+  ],
+  [
+    "a single-quoted flag that was ignored before",
+    (f) => ({
+      ...f,
+      fly: f.fly.replace('SEARCH = "false"', "SEARCH = 'true'"),
+    }),
+    /SEARCH/,
+  ],
+  [
+    "an env value with a hash in it",
+    (f) => ({
+      ...f,
+      fly: f.fly.replace('ENDPOINTS = "custom"', 'ENDPOINTS = "custom#openAI"'),
+    }),
+    /ENDPOINTS/,
+  ],
+  [
+    "an extra request header",
+    (f) => ({
+      ...f,
+      production: f.production.replace(
+        "X-Shamwari-Channel: 'pwa'",
+        "X-Shamwari-Channel: 'pwa'\n        Authorization: 'Bearer x'",
+      ),
+    }),
+    /header "Authorization"/,
+  ],
+  [
+    "an extra addParams key",
+    (f) => ({
+      ...f,
+      production: f.production.replace(
+        "stream: false",
+        "stream: false\n        model: 'gpt-5'",
+      ),
+    }),
+    /addParams key "model"/,
+  ],
+  [
+    "an extra endpoint option",
+    (f) => ({
+      ...f,
+      production: f.production.replace(
+        "titleConvo: false",
+        "titleConvo: false\n      directEndpoint: true",
+      ),
+    }),
+    /option "directEndpoint"/,
+  ],
+  [
+    "model fetch on",
+    (f) => ({
+      ...f,
+      production: f.production.replace("fetch: false", "fetch: true"),
+    }),
+    /models\.fetch/,
+  ],
+  [
+    "a Dockerfile ENV",
+    (f) => ({ ...f, dockerfile: f.dockerfile + "\nENV FOO=bar\n" }),
+    /ENV is not allowed/,
+  ],
+  [
+    "a fly build section",
+    (f) => ({ ...f, fly: f.fly + '\n[build]\n  dockerfile = "Dockerfile"\n' }),
+    /no \[build\]/,
+  ],
+  [
+    "a build.sh that skips the tag check",
+    (f) => ({ ...f, buildSh: f.buildSh.replace(/refs\/tags/g, "refs/heads") }),
+    /tag in PIN resolves/,
+  ],
 ];
 
 for (const [name, mutate, expected] of mutants) {

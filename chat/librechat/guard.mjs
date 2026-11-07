@@ -8,26 +8,68 @@ export const PRODUCTION_SCOPES = ["platform"];
 export const TEST_SCOPES = ["platform", "community", "personal"];
 const TOP_LEVEL = ["version", "cache", "interface", "endpoints"];
 const PLACEHOLDER_KEY = "SHAMWARI_CHAT_PLACEHOLDER_KEY";
-// Any model-provider credential name, wherever it appears in our files.
+const ENDPOINT_OPTIONS = [
+  "name",
+  "apiKey",
+  "baseURL",
+  "models",
+  "modelDisplayLabel",
+  "titleConvo",
+  "addParams",
+  "headers",
+];
+// Model-provider credential or routing names, wherever they appear in our files.
 const PROVIDER_KEY =
-  /(OPENAI|ANTHROPIC|GOOGLE|GEMINI|GROQ|MISTRAL|OPENROUTER|XAI|DEEPSEEK|MOONSHOT|COHERE|PERPLEXITY|AZURE|BEDROCK|TOGETHER|FIREWORKS)[A-Z_]*(KEY|TOKEN|SECRET)|\b[A-Z_]*API_KEY\b/g;
+  /(OPENAI|ANTHROPIC|GOOGLE|GEMINI|GROQ|MISTRAL|OPENROUTER|XAI|DEEPSEEK|MOONSHOT|COHERE|PERPLEXITY|AZURE|BEDROCK|TOGETHER|FIREWORKS)[A-Z_]*(KEY|TOKEN|SECRET)|\b[A-Z_]*API_KEY\b|ZAI_|Z_AI_|REVERSE_PROXY|_BASE_URL|CLOUDFLARE_[A-Z_]*TOKEN/g;
+// LibreChat turns these on by default, so a block that is missing is NOT off.
 const OFF_BLOCKS = ["agents", "prompts", "marketplace"];
+const OFF_FLAGS = ["fileSearch", "parameters"];
+// The only variables fly.toml [env] may set. Anything else (a provider base URL, a
+// reverse proxy, a new feature flag) is a deliberate change that edits this list.
+export const ALLOWED_ENV = [
+  "ENDPOINTS",
+  "ALLOW_EMAIL_LOGIN",
+  "ALLOW_REGISTRATION",
+  "ALLOW_SOCIAL_LOGIN",
+  "ALLOW_SOCIAL_REGISTRATION",
+  "SEARCH",
+  "NO_INDEX",
+  "DOMAIN_CLIENT",
+  "DOMAIN_SERVER",
+  PLACEHOLDER_KEY,
+  "CONFIG_PATH",
+];
+
+/** Drop a trailing # comment, but not a # inside a quoted string. */
+function stripComment(line) {
+  let q = "";
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) {
+      if (c === q) q = "";
+    } else if (c === '"' || c === "'") q = c;
+    else if (c === "#") return line.slice(0, i);
+  }
+  return line;
+}
 
 /** Minimal TOML reader: [section] headers and key = "string" lines. Enough for fly.toml. */
 export function parseToml(text) {
-  const out = { sections: new Set(), env: {} };
+  const out = { sections: new Set(), env: {}, unparsed: [] };
   let section = "";
   for (const raw of text.split("\n")) {
-    const line = raw.replace(/\s+#.*$/, "").trim();
-    if (!line || line.startsWith("#")) continue;
+    const line = stripComment(raw).trim();
+    if (!line) continue;
     const h = line.match(/^\[{1,2}([^\]]+)\]{1,2}$/);
     if (h) {
       section = h[1];
       out.sections.add(section);
       continue;
     }
-    const kv = line.match(/^([A-Za-z0-9_]+)\s*=\s*"(.*)"$/);
-    if (kv && section === "env") out.env[kv[1]] = kv[2];
+    if (section !== "env") continue;
+    const kv = line.match(/^([A-Za-z0-9_]+)\s*=\s*(?:"(.*)"|'(.*)')$/);
+    if (kv) out.env[kv[1]] = kv[2] ?? kv[3];
+    else out.unparsed.push(line);
   }
   return out;
 }
@@ -36,7 +78,7 @@ function checkConfig(name, yamlText, { allowedScopes, allowedBaseURLs }, v) {
   let cfg;
   try {
     cfg = parse(yamlText);
-  } catch (e) {
+  } catch {
     v.push(`${name}: not valid YAML`);
     return;
   }
@@ -51,6 +93,8 @@ function checkConfig(name, yamlText, { allowedScopes, allowedBaseURLs }, v) {
   }
   const custom = Array.isArray(eps.custom) ? eps.custom : [];
   if (custom.length === 0) v.push(`${name}: no custom endpoint defined`);
+  const extra = (obj, ok) =>
+    Object.keys(obj ?? {}).filter((k) => !ok.includes(k));
   for (const e of custom) {
     const label = `${name}: endpoint "${e?.name}"`;
     if (!allowedBaseURLs.includes(e?.baseURL))
@@ -67,14 +111,26 @@ function checkConfig(name, yamlText, { allowedScopes, allowedBaseURLs }, v) {
       v.push(`${label} must set stream: false`);
     if (e?.headers?.["X-Shamwari-Channel"] !== "pwa")
       v.push(`${label} must send X-Shamwari-Channel: pwa`);
+    for (const k of extra(e?.headers, ["X-Shamwari-Channel"]))
+      v.push(`${label} header "${k}" is not allowed`);
+    for (const k of extra(e?.addParams, ["scope", "stream"]))
+      v.push(`${label} addParams key "${k}" is not allowed`);
+    for (const k of extra(e, ENDPOINT_OPTIONS))
+      v.push(`${label} option "${k}" is not allowed`);
+    if (e?.models?.fetch !== false)
+      v.push(`${label} models.fetch must be false`);
   }
   for (const b of OFF_BLOCKS) {
     const blk = cfg?.interface?.[b];
-    if (blk && Object.values(blk).some((x) => x === true))
-      v.push(`${name}: interface.${b} must be off`);
+    const values = blk && typeof blk === "object" ? Object.values(blk) : [];
+    if (values.length === 0 || values.some((x) => x !== false)) {
+      v.push(`${name}: interface.${b} must be present and explicitly off`);
+    }
   }
-  if (cfg?.interface?.fileSearch === true)
-    v.push(`${name}: interface.fileSearch must be off`);
+  for (const k of OFF_FLAGS) {
+    if (cfg?.interface?.[k] !== false)
+      v.push(`${name}: interface.${k} must be present and false`);
+  }
 }
 
 export function check({ production, test, fly, dockerfile, buildSh, pin }) {
@@ -107,6 +163,12 @@ export function check({ production, test, fly, dockerfile, buildSh, pin }) {
   }
   if (env.SEARCH !== "false")
     v.push('fly.toml: SEARCH (Meilisearch) must be "false"');
+  for (const k of Object.keys(env)) {
+    if (!ALLOWED_ENV.includes(k))
+      v.push(`fly.toml: env var "${k}" is not on the allowlist`);
+  }
+  for (const l of toml.unparsed)
+    v.push(`fly.toml: could not parse [env] line "${l}"`);
   for (const s of toml.sections) {
     if (
       s === "http_service" ||
@@ -117,22 +179,27 @@ export function check({ production, test, fly, dockerfile, buildSh, pin }) {
       v.push(`fly.toml: [${s}] would expose a public port`);
     }
   }
+  if (toml.sections.has("build"))
+    v.push(
+      "fly.toml: no [build]; deploy a pushed image by reference (see README)",
+    );
 
-  for (const [file, text] of Object.entries({
+  const scanned = {
     "fly.toml": fly,
     Dockerfile: dockerfile,
     "build.sh": buildSh,
     "librechat.yaml": production,
     "librechat.test.yaml": test,
-  })) {
-    for (const m of text.match(PROVIDER_KEY) ?? []) {
-      if (m !== PLACEHOLDER_KEY)
-        v.push(`${file}: provider credential name "${m}"`);
-    }
+  };
+  for (const [file, text] of Object.entries(scanned)) {
+    for (const m of text.match(PROVIDER_KEY) ?? [])
+      v.push(`${file}: provider credential name "${m}"`);
   }
 
   if (/^ARG\s+BASE_IMAGE\s*=/m.test(dockerfile))
     v.push("Dockerfile: BASE_IMAGE must have no default");
+  if (/^\s*ENV\s/m.test(dockerfile))
+    v.push("Dockerfile: ENV is not allowed (settings live in fly.toml [env])");
   for (const line of dockerfile.split("\n")) {
     if (/^FROM\s/i.test(line) && !/\$\{BASE_IMAGE\}/.test(line))
       v.push(`Dockerfile: FROM must be \${BASE_IMAGE}, got "${line.trim()}"`);
@@ -144,5 +211,9 @@ export function check({ production, test, fly, dockerfile, buildSh, pin }) {
   if (!tag) v.push("PIN: tag must be an exact release tag (no rc, no latest)");
   if (!/rev-parse HEAD/.test(buildSh) || !/PIN/.test(buildSh))
     v.push("build.sh: must verify the checked-out commit against PIN");
+  if (!/refs\/tags/.test(buildSh))
+    v.push(
+      "build.sh: must verify that the tag in PIN resolves to the pinned commit",
+    );
   return v;
 }

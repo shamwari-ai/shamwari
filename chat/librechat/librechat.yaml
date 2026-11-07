@@ -5,7 +5,7 @@ version: 1.3.17
 cache: true
 
 interface:
-  customWelcome: 'Welcome to Shamwari. A friend that serves. On a slow connection? Use the lightweight chat at shamwari.ai/chat/lite.'
+  customWelcome: 'Welcome to Shamwari. A friend that serves.'
   modelSelect: false
   parameters: false
   presets: false

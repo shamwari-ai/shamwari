@@ -5,6 +5,12 @@ cache: true
 
 interface:
   modelSelect: false
+  parameters: false
+  fileSearch: false
+  prompts:
+    use: false
+  marketplace:
+    use: false
   agents:
     use: false
     create: false

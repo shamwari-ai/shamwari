@@ -14,5 +14,10 @@ git -C "$work/src" checkout -q FETCH_HEAD
 got="$(git -C "$work/src" rev-parse HEAD)"
 [ "$got" = "$commit" ] || { echo "pinned commit mismatch: $got != $commit" >&2; exit 1; }
 
-docker build -q -t librechat-base:pinned "$work/src"
-docker build -t "$tag" --build-arg BASE_IMAGE=librechat-base:pinned "$here"
+# The tag in PIN is a label; make sure it names this commit.
+rel="$(sed -n 's/^tag=//p' "$here/PIN")"
+tagged="$(git ls-remote https://github.com/danny-avila/LibreChat "refs/tags/$rel^{}" "refs/tags/$rel" | tail -1 | cut -f1)"
+[ "$tagged" = "$commit" ] || { echo "tag $rel resolves to $tagged, not $commit" >&2; exit 1; }
+
+docker build -q -t "librechat-base:$commit" "$work/src"
+docker build -t "$tag" --build-arg BASE_IMAGE="librechat-base:$commit" "$here"
