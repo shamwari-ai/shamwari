@@ -452,6 +452,15 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   });
   const mukokoBtn = $<HTMLButtonElement>('#mukoko-signin');
   if (auth.kind === 'mukoko') {
+    // The session Worker sends a failed sign-in back here as /lite/?signin=failed. Say so kindly, and
+    // drop the parameter so a reload does not say it again.
+    const params = new URLSearchParams(location.search);
+    if (params.get('signin') === 'failed') {
+      $('#toast').textContent = strings().signInFailed;
+      params.delete('signin');
+      const rest = params.toString();
+      history.replaceState(null, '', location.pathname + (rest ? `?${rest}` : '') + location.hash);
+    }
     mukokoBtn.disabled = false;
     $('#mukoko-soon').hidden = true;
     mukokoBtn.removeAttribute('aria-describedby'); // it pointed at the "coming soon" text

@@ -202,6 +202,17 @@ test('a start-up renewal that fails on the network is not a sign-out: the questi
   await expect(page.locator('article.msg.bot:not(.pending) .cite').first()).toBeVisible({ timeout: 15_000 });
 });
 
+test('a failed sign-in sends the person back with a kind message, once', async ({ page }) => {
+  await steer(page, { session: false });
+  await page.goto('/lite/?signin=failed');
+  await page.waitForSelector('html[data-ready="true"]');
+  await expect(page.locator('#toast')).toContainText('could not sign you in');
+  expect(new URL(page.url()).search).toBe(''); // the parameter is gone, so a reload does not repeat it
+  await page.reload();
+  await page.waitForSelector('html[data-ready="true"]');
+  await expect(page.locator('#toast')).not.toContainText('could not sign you in');
+});
+
 test('the enabled Mukoko button no longer points at the "coming soon" text', async ({ page }) => {
   await steer(page, { session: false });
   await open(page);
