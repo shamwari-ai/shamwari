@@ -14,6 +14,45 @@ Console) are the owner's statement of 2026-10-31; this session has no access to 
 and has not verified them. Numbers marked _assumed_ or _unmeasured_ stay that way until measured.
 Nothing in this plan is deployed, released or paid for by writing it.
 
+## Decisions (2026-11-07)
+
+On 2026-11-07 the orchestrator relayed the owner's instruction that every open decision
+in this plan is approved, and to use the recommended option for each. These are the
+decisions as recorded here; the owner's own wording is not in this repo, so the owner
+should correct any that differ. Each states what was chosen and what it does not settle.
+
+1. **Core path: B.** Core reaches data only through the Nyuchi API (built, #127). No
+   Mongo or Supabase login on the running Core. Ingest goes through the Nyuchi API's
+   locked Ground-ingest route (merged to `nyuchi-api` staging, not deployed), not a
+   direct database login.
+2. **Acquisition order: agriculture is phase 1, law is phase 2.** Phase 1 is
+   AgriConnect and Nyuchi-owned open data with no PII (#87): weather, market prices,
+   extension material that is licence-clean. The Constitution is the second demo.
+   Phase 2 is law and tax: the Acts need a usable licence first (below). The earlier
+   "law first" order in `docs/architecture-and-gtm.md` and issue #17 is superseded.
+3. **ZIMRA and ZimLII.** The ZIMRA approval covers only what its row's terms cover
+   (typed `tariff`) until someone reads the Income Tax and VAT terms. ZimLII is not
+   ingested into the commercial Ground on its default CC BY-NC 4.0 licence; it waits
+   for per-collection licences or a written agreement. Veritas is approached as a
+   partner, not scraped. ZIMSEC is never scraped.
+4. **Chat sign-in: the gateway verifies Mukoko Account (WorkOS) tokens**, no
+   per-user keys, on Mukoko's WorkOS application (#105, #126, #130).
+5. **Free-tier cap and extractive turns.** No cap number is set. It is set after the
+   first two weeks of measured pilot usage, from `costUsdEstimate`, with economy-tier
+   traffic as the default. An extractive turn counts as one request against a
+   per-person request cap, not as tokens, because it makes no model call but still
+   costs one embedding and one search.
+6. **Reviewers are a gate, not a name.** A practitioner and a Shona and a Ndebele
+   speaker must review before the law or tax label or any Shona/Ndebele claim ships.
+   Who they are is the owner's to name.
+7. **Fly, DNS, secrets and ledger deploy are approved to proceed in the order in §8.**
+   Each step is run by whoever holds that credential; approval here is not access.
+
+**Consequences.** The v1 headline becomes cited farming answers from Nyuchi-owned data,
+with the Constitution second. "Zimbabwean tax" stays off every label until phase 2 has
+a licensed source and the eval (#107) passes. Compliance-firm pilots (§6) start on the
+Constitution and ZIMRA material that is actually approved, and say so.
+
 ## 1. Where things stand
 
 | Piece                                                                             | State                                                                                                                                                                                                                                            | Source                    |
@@ -187,19 +226,19 @@ Factory stay in the "deliberately not in this phase" list.
 
 ## 5. Dependency map
 
-| Repo / system                                                         | Live                                            | Merged, not deployed                                                                                                           | Missing                                                                                                       |
-| --------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| `shamwari` (this repo): gateway                                       | Worker deployed (`/health` checked 2026-10-31)  | seam, scopes, cost estimate, replay, CORS (#124), no-content chat channel (#125)                                               | error shape, `/v1/models`, `/v1/usage`; deploy the WorkOS path (#130 merged, off until its variables are set) |
-| `shamwari` core/                                                      | no                                              | Dockerfile, fly.toml, replay, nyuchi-api client (#127), runbook (#117)                                                         | image never built; Fly app and secrets (owner); deploy                                                        |
-| `shamwari` site/                                                      | `www.shamwari.ai` (app: `shamwari.ai/chat`)     | Chat shell, thread, citations (#116, #119)                                                                                     | Chat release; WorkOS redirect; status page                                                                    |
-| `shamwari-core`, `-gateway`, `-platform`, `-sandbox`, `-mind`, `-web` | empty scaffolds (per #61, #66)                  |                                                                                                                                | decide which are real; Rust (#66)                                                                             |
-| `nyuchi-api`                                                          | `/v1/shamwari`, Console, WorkOS sign-in (owner) |                                                                                                                                | internal key for Core; Shamwari key issue/revoke UI                                                           |
-| `nyuchi-servers-api`                                                  |                                                 | merged to staging, in-memory KeyStore (owner)                                                                                  | durable ledger stores (being built, owner); first Fly app                                                     |
-| `data-infra` ledger                                                   |                                                 | code, bring-up and restore-drill scripts on `data-infra` main (owner); `nyuchi-ledger` Fly app pending, not deployed (checked) | **deploy** (about $49.62 a month, owner figure); key migration phases                                         |
-| Atlas `shamwari.knowledgeBase`                                        | indexes READY                                   |                                                                                                                                | content (count 0, checked 2026-10-31)                                                                         |
-| Supabase `shamwari_ai_db`                                             | schema, 22 sources seeded                       |                                                                                                                                | long-term move to ledger `shamwari` schema                                                                    |
-| Workers AI / AI Gateway route                                         | GLM-5.3 and Flash                               |                                                                                                                                | #53 drift check; remove stray Anthropic key (#78)                                                             |
-| WorkOS (Mukoko Account)                                               | live (owner)                                    |                                                                                                                                | `iss` off a real token, gateway variables (owner)                                                             |
+| Repo / system                                                         | Live                                               | Merged, not deployed                                                                                                           | Missing                                                                                                       |
+| --------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| `shamwari` (this repo): gateway                                       | Worker deployed (`/health` checked 2026-10-31)     | seam, scopes, cost estimate, replay, CORS (#124), no-content chat channel (#125)                                               | error shape, `/v1/models`, `/v1/usage`; deploy the WorkOS path (#130 merged, off until its variables are set) |
+| `shamwari` core/                                                      | no                                                 | Dockerfile, fly.toml, replay, nyuchi-api client (#127), runbook (#117)                                                         | image never built; Fly app and secrets (owner); deploy                                                        |
+| `shamwari` site/                                                      | `www.shamwari.ai` (light chat: `shamwari.ai/lite`) | Chat shell, thread, citations (#116, #119)                                                                                     | Chat release; WorkOS redirect; status page                                                                    |
+| `shamwari-core`, `-gateway`, `-platform`, `-sandbox`, `-mind`, `-web` | empty scaffolds (per #61, #66)                     |                                                                                                                                | decide which are real; Rust (#66)                                                                             |
+| `nyuchi-api`                                                          | `/v1/shamwari`, Console, WorkOS sign-in (owner)    |                                                                                                                                | internal key for Core; Shamwari key issue/revoke UI                                                           |
+| `nyuchi-servers-api`                                                  |                                                    | merged to staging, in-memory KeyStore (owner)                                                                                  | durable ledger stores (being built, owner); first Fly app                                                     |
+| `data-infra` ledger                                                   |                                                    | code, bring-up and restore-drill scripts on `data-infra` main (owner); `nyuchi-ledger` Fly app pending, not deployed (checked) | **deploy** (about $49.62 a month, owner figure); key migration phases                                         |
+| Atlas `shamwari.knowledgeBase`                                        | indexes READY                                      |                                                                                                                                | content (count 0, checked 2026-10-31)                                                                         |
+| Supabase `shamwari_ai_db`                                             | schema, 22 sources seeded                          |                                                                                                                                | long-term move to ledger `shamwari` schema                                                                    |
+| Workers AI / AI Gateway route                                         | GLM-5.3 and Flash                                  |                                                                                                                                | #53 drift check; remove stray Anthropic key (#78)                                                             |
+| WorkOS (Mukoko Account)                                               | live (owner)                                       |                                                                                                                                | `iss` off a real token, gateway variables (owner)                                                             |
 
 ## 6. Revenue path (owner's terms)
 
@@ -314,8 +353,13 @@ Note: `api.shamwari.ai` is the owner's decision of 2026-10-28 but no route or cu
 domain is in `wrangler.jsonc`; binding it is a separate owner step (zone route, then
 re-run the smoke test against it).
 
-**C. The Constitution (#17).** Needs the four ingest credentials above, not a key. The
-text file is not in the repo (`constitution-2013.txt`): obtain the official text from
+**C. The Constitution (#17).** `core/ingest_ground.py` still writes with its own four
+credentials (`SUPABASE_DB_URL`, `MONGODB_URI`, `CF_ACCOUNT_ID`, `CF_API_TOKEN`), so the
+command below is the direct path. _Owner statement, not verifiable here:_ the first
+ingest goes through the Nyuchi API's locked ingest route instead (live since v0.48.0),
+which uses the existing WorkOS `data:admin` permission, so there is no ingest key to
+mint; the caller path (Option A or B in nyuchi-api's `docs/architecture/shamwari.md`)
+is the owner's. The text file is not in the repo (`constitution-2013.txt`): obtain the official text from
 a source whose terms have been read (the Constitution row is approved), keep it out of
 git unless the licence allows it, and check the section count against the published
 document before ingesting.
@@ -341,10 +385,11 @@ npx wrangler secret put SERVERS_API_INTERNAL_KEY
 Core usage replay: `SHAMWARI_OPS_TOKEN`, `SERVERS_API_URL`, `SERVERS_API_TOKEN`,
 `SERVERS_API_INTERNAL_KEY` on Fly, the Mongo replay index (`docs/usage-replay.md`),
 and a schedule for `/replay/usage`.
-**E. Decisions only the owner can make**: Core path (A or B); Chat auth option (#105);
-what the ZIMRA approval covers; ZimLII permission (default licence is non-commercial); free-tier cap; extractive-turn metering;
-WorkOS app; Shona/Ndebele reviewers and a practitioner reviewer; operator for
-USSD/SMS; tagline; who the first ten are.
+**E. Decided on 2026-11-07** (see "Decisions" above): Core path B, agriculture first,
+ZIMRA/ZimLII scope, gateway WorkOS sign-in, cap and extractive metering, the reviewer
+gate, and the order of this section. **Still the owner's alone**: the names of the
+reviewers; the operator for USSD/SMS; the tagline; who the first ten are; and any
+price.
 
 ## 9. Sprint 1 (this plan's first moves)
 
@@ -363,9 +408,12 @@ USSD/SMS; tagline; who the first ten are.
 | #113     | Legal-answer policy + strings     | open                 |
 | #114     | Story kit + claims                | open, owner approves |
 
+Phase 1 data moves up: the AgriConnect first dataset (#87) is now the first Ground
+content after the Constitution, ahead of ZIMRA and any law or tax source.
+
 Sprint 2: CLI, MCP server, Expo spike and shell (#86), Ground packs and PWA offline
 (#83.5), channel-webhook findings from #83's design review (chunked-body size bypass
-first), AgriConnect first dataset (#87), key-migration phases.
+first), key-migration phases.
 
 Rules the loop keeps: Rule 1 and 2 on every endpoint; no claim without a
 measurement; ticks never publish, merge or deploy without a named yes; each report

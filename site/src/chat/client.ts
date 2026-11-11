@@ -3,8 +3,14 @@ import type { Answer, AskError, ChatRequest, ChatResponse, Citation, Result } fr
 export interface ClientConfig {
   /** e.g. https://api.shamwari.ai — no trailing slash needed. */
   baseUrl: string;
-  /** Read at call time, so signing in or out needs no new client. */
-  getKey: () => string | null;
+  /** Read at call time, so signing in or out needs no new client. May renew an expired credential. */
+  getKey: () => string | null | Promise<string | null>;
+  /**
+   * Called once when the gateway answers 401. Return true if a fresh credential is
+   * now available: the ask is then repeated, once, under the same Idempotency-Key.
+   * A second 401 is final. Never loops.
+   */
+  onUnauthorized?: () => Promise<boolean>;
   fetch?: typeof fetch;
   /** A slow network is not a broken one: 2G round trips are many seconds. */
   timeoutMs?: number;
@@ -117,8 +123,8 @@ export function createClient(config: ClientConfig) {
   const base = config.baseUrl.replace(/\/+$/, '');
   const doFetch = config.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
 
-  async function ask(req: ChatRequest, opts: AskOptions = {}): Promise<Result<Answer>> {
-    const key = config.getKey();
+  async function once(req: ChatRequest, opts: AskOptions): Promise<Result<Answer>> {
+    const key = await config.getKey();
     if (!key) return fail('unauthorized');
 
     const timeout = new AbortController();
@@ -154,6 +160,20 @@ export function createClient(config: ClientConfig) {
       clearTimeout(timer);
       opts.signal?.removeEventListener('abort', onAbort);
     }
+  }
+
+  async function ask(req: ChatRequest, opts: AskOptions = {}): Promise<Result<Answer>> {
+    const first = await once(req, opts);
+    if (first.ok || first.error.kind !== 'unauthorized' || first.error.status !== 401) return first;
+    // A 401 from the gateway (not a missing key): one silent renewal, one more try.
+    if (!config.onUnauthorized) return first;
+    if (!(await config.onUnauthorized())) {
+      // The renewal did not produce a fresh credential (offline, a 5xx, a firewall). The gateway
+      // did reject the old one, but nothing was repeated, so this is not the final 401 that ends
+      // a session: report "no credential" and let the caller treat it as "did not arrive".
+      return { ok: false, error: { ...first.error, status: null } };
+    }
+    return once(req, opts);
   }
 
   return { ask };

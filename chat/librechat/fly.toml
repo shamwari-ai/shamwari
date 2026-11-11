@@ -1,0 +1,31 @@
+# Shamwari Chat (LibreChat) on Fly. NOT created yet: the app, its secrets and
+# its region are owner steps (docs/librechat.md, "Owner runbook").
+#
+# No [http_service] and no [[services]]: the machine has no public port. It is
+# reached only through the Cloudflare tunnel.
+app = "shamwari-chat"
+
+# No [build]: the image is built by build.sh from the pinned commit, pushed, and
+# deployed by reference (README). Fly's remote builder cannot see a local image.
+
+# Sign-in is OFF on purpose: every login path is disabled until the WorkOS issuer
+# is verified (docs/librechat.md). Turning sign-in on edits these flags and the
+# guard together, in one reviewed change.
+# Non-secret settings only. MONGO_URI, CREDS_KEY, CREDS_IV, JWT_SECRET and
+# JWT_REFRESH_SECRET are Fly secrets, set by stdin, never in this file.
+[env]
+  ENDPOINTS = "custom"
+  ALLOW_EMAIL_LOGIN = "false"
+  ALLOW_REGISTRATION = "false"
+  ALLOW_SOCIAL_LOGIN = "false"
+  ALLOW_SOCIAL_REGISTRATION = "false"
+  SEARCH = "false"
+  NO_INDEX = "true"
+  DOMAIN_CLIENT = "https://shamwari.ai/chat"
+  DOMAIN_SERVER = "https://shamwari.ai/chat"
+  SHAMWARI_CHAT_PLACEHOLDER_KEY = "not-a-secret"
+  CONFIG_PATH = "/app/librechat.yaml"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "1gb"

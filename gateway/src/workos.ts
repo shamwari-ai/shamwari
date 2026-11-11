@@ -68,7 +68,8 @@ export function workosEnabled(env: Env): boolean {
 
 interface Config {
   clientId: string;
-  issuer: string;
+  /** The configured `iss`, and the same with a trailing slash added or removed. */
+  issuers: [string, string];
   /** Absent means the `aud` claim is not checked: `iss`, `client_id` and `exp` carry the isolation. */
   audience: string | undefined;
   jwksUrl: URL;
@@ -100,7 +101,16 @@ function config(env: Env): Config | null {
     return null;
   }
   if (jwksUrl.protocol !== 'https:') return null;
-  return { clientId, issuer, audience, jwksUrl, monthlyTokenCap: cap, maxTokenAgeSeconds: maxAge };
+  // WorkOS's own documentation shows the issuer both with and without a trailing slash, so a
+  // value copied from either form must work. Only that one character is tolerated: any other
+  // difference is a different issuer and is refused.
+  // Trailing slashes are stripped with a loop, not a regex: `/\/+$/` backtracks quadratically
+  // on a long run of slashes (CodeQL js/polynomial-redos).
+  let end = issuer.length;
+  while (end > 0 && issuer.charCodeAt(end - 1) === 47) end--;
+  const bare = issuer.slice(0, end);
+  if (bare === '') return null;
+  return { clientId, issuers: [bare, `${bare}/`], audience, jwksUrl, monthlyTokenCap: cap, maxTokenAgeSeconds: maxAge };
 }
 
 // One JWKS set per URL per isolate. jose caches the keys, re-fetches on an
@@ -156,7 +166,7 @@ export async function verifyWorkosToken(token: string, env: Env): Promise<Workos
   try {
     ({ payload } = await jwtVerify(token, jwksFor(cfg.jwksUrl), {
       algorithms: ['RS256'],
-      issuer: cfg.issuer,
+      issuer: cfg.issuers,
       ...(cfg.audience === undefined ? {} : { audience: cfg.audience }),
       requiredClaims: ['exp', 'iat', 'sub'],
       maxTokenAge: cfg.maxTokenAgeSeconds,

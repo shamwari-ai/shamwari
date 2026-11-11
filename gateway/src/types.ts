@@ -44,7 +44,7 @@ export interface Env {
 
   /**
    * Browser origins allowed to call the chat endpoint, comma separated, exact
-   * match (src/cors.ts). Absent means https://shamwari.ai and https://www.shamwari.ai.
+   * match (src/cors.ts). Absent means https://shamwari.ai (the app origin; the marketing site on www makes no API calls).
    */
   CORS_ORIGINS?: string;
 

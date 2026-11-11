@@ -26,8 +26,8 @@ const preflight = (origin: string | null, path = '/v1/chat/completions', e: Env 
   );
 
 describe('preflight', () => {
-  it('lets the Shamwari sites send the headers the chat app sends', async () => {
-    for (const origin of ['https://shamwari.ai', 'https://www.shamwari.ai']) {
+  it('lets the app origin send the headers the chat app sends', async () => {
+    for (const origin of ['https://shamwari.ai']) {
       const res = await preflight(origin);
       expect(res.status).toBe(204);
       expect(res.headers.get('Access-Control-Allow-Origin')).toBe(origin);
@@ -159,7 +159,9 @@ describe('configuration', () => {
   it('set but empty switches CORS off; only unset means the defaults', () => {
     expect(allowedOrigins({ CORS_ORIGINS: '' })).toEqual([]);
     expect(allowedOrigins({ CORS_ORIGINS: '  ,  ' })).toEqual([]);
-    expect(allowedOrigins({})).toEqual(['https://shamwari.ai', 'https://www.shamwari.ai']);
+    expect(allowedOrigins({})).toEqual(['https://shamwari.ai']);
+    // The marketing site makes no API calls, so www is not an allowed origin by default.
+    expect(allowedOrigins({})).not.toContain('https://www.shamwari.ai');
   });
 
   it('never allows the null origin, even if configured', () => {
