@@ -229,6 +229,11 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     drawerToggle?.setAttribute('aria-expanded', String(open));
     if (pageFrame) pageFrame.inert = open;
   });
+  // From 64rem the drawer is a permanent column, not a popover: if the screen grows while it is open (a tablet turned
+  // sideways), close it so the page is not left inert.
+  window.matchMedia('(min-width: 64rem)').addEventListener('change', (e) => {
+    if (e.matches && drawer?.matches(':popover-open')) (drawer as HTMLElement & { hidePopover(): void }).hidePopover();
+  });
   drawer?.addEventListener('toggle', (e) => {
     if ((e as Event & { newState?: string }).newState === 'open') {
       drawer.querySelector<HTMLElement>('button[popovertargetaction="hide"]')?.focus();
