@@ -1,9 +1,16 @@
 # Two Workers, two hostnames: the app and the marketing site
 
 Owner decision, 2026-10-31. Tracking: #83. This is the map of what lives where and the
-exact order to switch it on. **Nothing here has been done in Cloudflare.** The code is
-built so that each step below is a click in the dashboard, in this order, and the root
-is never dead.
+exact order to switch it on.
+
+**Status, 2026-11-11:** `shamwari-app` is deployed (created with Wrangler from `staging`, not yet
+connected to GitHub as a Workers Build, so it is redeployed by hand with
+`npx wrangler deploy --config wrangler.app.jsonc` from `site/`). The apex `shamwari.ai` was moved to it
+with the Workers custom-domains API (`override_existing_origin`), `www.shamwari.ai` stays on
+`shamwari-site`, and `api.shamwari.ai` is the gateway. The root `/` sends visitors to `/lite/` for now
+(`CHAT_LIVE` is `false`). The sign-in secrets are not bound yet, so sign-in answers 503 and the chat
+stays in developer-key mode. To undo the apex move, point `shamwari.ai` back at `shamwari-site` with the
+same API call and restore the apex line in `site/wrangler.jsonc`.
 
 ## What lives where
 
