@@ -281,13 +281,13 @@ for (const page of pages) {
   // No client JavaScript anywhere except the chat app. @bundu/ui's React
   // primitives render server-side with no client:* directive, so the
   // marketing pages ship none. The chat page is the one exception, and it may
-  // load only its own bundled module from /_astro/ (no third-party script, no
+  // load only its own bundled module from /lite/_astro/ (no third-party script, no
   // inline script), whose size is held to the budget below.
   const scripts = [...html.matchAll(/<script\b([^>]*)>/gi)].filter((m) => !/type="application\/ld\+json"/i.test(m[1]));
   if (where === 'lite/index.html') {
     for (const [, attrs] of scripts) {
       const src = attrs.match(/\bsrc="([^"]+)"/)?.[1];
-      if (!src || !src.startsWith('/_astro/')) fail.push(`${where}: script is not a bundled /_astro/ module (${attrs.trim().slice(0, 60)})`);
+      if (!src || !src.startsWith('/lite/_astro/')) fail.push(`${where}: script is not a bundled /lite/_astro/ module (${attrs.trim().slice(0, 60)})`);
       else chatScripts.add(src);
     }
     if (!scripts.length) fail.push(`${where}: the chat page ships no script`);
@@ -311,7 +311,7 @@ const visit = (src) => {
   if (closure.has(src)) return;
   closure.add(src);
   const code = readFileSync(DIST + src, 'utf8');
-  for (const [, dep] of code.matchAll(/(?:^|[;}\s])(?:import|export)[^'"`;]*?from\s*["']\.\/([^"']+)["']/g)) visit('/_astro/' + dep);
+  for (const [, dep] of code.matchAll(/(?:^|[;}\s])(?:import|export)[^'"`;]*?from\s*["']\.\/([^"']+)["']/g)) visit('/lite/_astro/' + dep);
 };
 for (const src of chatScripts) if (assets.has(src)) visit(src);
 const chatJs = [...closure].reduce((n, src) => n + gz(DIST + src), 0);

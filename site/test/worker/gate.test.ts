@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import worker from '../../worker/index';
 import { PUBLIC_EXACT, gate, isGated, isPublic, type GateDeps } from '../../worker/gate';
-import { SESSION_COOKIE, type CheckResult } from '../../worker/session';
+import { COOKIE_PATH, SESSION_COOKIE, type CheckResult } from '../../worker/session';
 
 const HOST = 'https://shamwari.ai';
 const req = (path: string, cookie?: string, method = 'GET') =>
@@ -26,7 +26,7 @@ function deps(result: CheckResult | 'throws' = { status: 'invalid' }) {
 }
 
 /** Every route the app serves, from the real build if there is one, plus the ones that matter. */
-const ROUTES = ['/lite/', '/lite/index.html', '/_astro/index.astro_astro_type_script_index_0_lang.Abc123.js', '/lite/anything', '/lite/auth/other'];
+const ROUTES = ['/lite/', '/lite/index.html', '/lite/_astro/index.astro_astro_type_script_index_0_lang.Abc123.js', '/lite/anything', '/lite/auth/other'];
 
 describe('the gate: no session, no app', () => {
   it('sends an unauthenticated page request straight to the hosted sign-in, and serves nothing', async () => {
@@ -74,7 +74,7 @@ describe('the gate: no session, no app', () => {
 
   it('lets the browser keep a hashed script for good, but never a shared cache, and revalidates the page every time', async () => {
     const session = { status: 'valid', accessToken: 't', sid: 's' } as CheckResult;
-    const script = await gate(req('/_astro/index.astro_astro_type_script_index_0_lang.BwXFjztz.js', 'GOOD'), deps(session).d);
+    const script = await gate(req('/lite/_astro/index.astro_astro_type_script_index_0_lang.BwXFjztz.js', 'GOOD'), deps(session).d);
     expect(script.headers.get('Cache-Control')).toBe('private, max-age=31536000, immutable');
     const page = await gate(req('/lite/', 'GOOD'), deps(session).d);
     expect(page.headers.get('Cache-Control')).toBe('private, no-cache');
@@ -132,14 +132,14 @@ describe('what is public', () => {
         '/lite/icons/maskable-512.png',
       ].sort(),
     );
-    expect(isPublic('/_astro/index.D2XOePsR.css')).toBe(true);
-    for (const p of ['/lite/', '/lite/index.html', '/_astro/app.Abc.js', '/_astro/x.css.map', '/_astro/sub/x.css', '/lite/disclaimer/extra', '/lite/icons/', '/lite/auth/token']) {
+    expect(isPublic('/lite/_astro/index.D2XOePsR.css')).toBe(true);
+    for (const p of ['/lite/', '/lite/index.html', '/lite/_astro/app.Abc.js', '/lite/_astro/x.css.map', '/lite/_astro/sub/x.css', '/_astro/index.D2XOePsR.css', '/lite/disclaimer/extra', '/lite/icons/', '/lite/auth/token']) {
       expect(isPublic(p), p).toBe(false);
     }
   });
 
   it('is served without a session and without asking for one', async () => {
-    for (const path of [...PUBLIC_EXACT, '/_astro/index.D2XOePsR.css']) {
+    for (const path of [...PUBLIC_EXACT, '/lite/_astro/index.D2XOePsR.css']) {
       const { d, log } = deps();
       const res = await gate(req(path), d);
       expect(res.status, path).toBe(200);
@@ -171,6 +171,45 @@ describe('what is public', () => {
   });
 });
 
+/** RFC 6265 5.1.4: would a browser send a cookie with this Path on a request for this path? */
+const cookieSentTo = (cookiePath: string, requestPath: string) =>
+  requestPath === cookiePath || (requestPath.startsWith(cookiePath) && (cookiePath.endsWith('/') || requestPath[cookiePath.length] === '/'));
+
+describe('the session cookie reaches everything the gate protects (the production bug: scripts at /_astro/ were gated but outside the cookie Path)', () => {
+  it('every gated path starts with the cookie Path, so the browser sends the cookie on it', () => {
+    for (const p of [...ROUTES, '/lite/_astro/x.Abc123.js', '/lite/_astro/y.Abc123.css', '/lite/icons/x.png']) {
+      if (!isGated(p)) continue;
+      expect(cookieSentTo(COOKIE_PATH, p), p).toBe(true);
+    }
+    // And nothing outside the cookie Path is gated: a gated path the cookie cannot reach is a page that never loads.
+    for (const p of ['/_astro/index.Abc123.js', '/assets/x.js', '/index.html', '/favicon.ico']) expect(isGated(p), p).toBe(false);
+  });
+
+  it('with the cookie a browser would really hold (Path=/lite/), the real build loads: the page and every script and stylesheet it names answer 200', async () => {
+    let dist: string;
+    try {
+      dist = join(__dirname, '../../dist-app');
+      statSync(dist);
+    } catch {
+      return; // no build here (the CI job that runs this has just built one)
+    }
+    const html = readFileSync(join(dist, 'lite/index.html'), 'utf8');
+    const refs = [...html.matchAll(/(?:src|href)="(\/lite\/_astro\/[^"]+)"/g)].map((m) => m[1]!);
+    expect(refs.some((r) => r.endsWith('.js')), 'the page names a script under /lite/_astro/').toBe(true);
+    // Every script and stylesheet the page names, wherever it is: if any is outside the cookie Path, the page breaks.
+    const named = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"|<link\b[^>]*\brel="stylesheet"[^>]*\bhref="([^"]+)"/g)].map((m) => (m[1] ?? m[2])!);
+    expect(named.length).toBeGreaterThan(0);
+    const session = { status: 'valid', accessToken: 't', sid: 's' } as CheckResult;
+    for (const path of ['/lite/', ...named]) {
+      const sent = cookieSentTo(COOKIE_PATH, path);
+      expect(sent, `${path} is inside the session cookie's Path`).toBe(true);
+      const { d } = deps(session);
+      const res = await gate(req(path, sent ? 'GOOD' : undefined), d);
+      expect(res.status, path).toBe(200);
+    }
+  });
+});
+
 describe('the Worker in front of the gate', () => {
   const ctx = { waitUntil: () => {} };
   const assets = { fetch: async (r: Request) => new Response('APP-CONTENT:' + new URL(r.url).pathname) };
@@ -190,6 +229,8 @@ describe('the Worker in front of the gate', () => {
     expect(res.status).toBe(301);
     expect(res.headers.get('Location')).toBe('https://shamwari.ai/lite/');
     expect((await worker.fetch(req('/_astro'), { ASSETS: assets }, ctx)).status).toBe(404);
+    // The old build-output path is not the app's any more: nothing is served there.
+    expect((await worker.fetch(req('/_astro/index.Abc123.js'), { ASSETS: assets }, ctx)).status).toBe(404);
   });
 
   it('serves nothing at all if the assets binding is missing', async () => {
@@ -209,6 +250,6 @@ describe('the Worker in front of the gate', () => {
 
   it('keeps app/wrangler.jsonc routing the gated area to the Worker', () => {
     const text = readFileSync(join(__dirname, '../../app/wrangler.jsonc'), 'utf8');
-    expect(text).toContain('"run_worker_first": ["/", "/lite/*", "/_astro/*"]');
+    expect(text).toContain('"run_worker_first": ["/", "/lite/*"]');
   });
 });

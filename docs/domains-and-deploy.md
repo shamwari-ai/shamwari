@@ -145,7 +145,7 @@ as it does today.
 ## Before sign-in can work, and what the gate does
 
 The session Worker (`site/worker/`, see `docs/chat-signin.md`) ships inside `shamwari-app`, and it is also
-the **gate** in front of the light chat: it runs first for `/lite/*` and `/_astro/*`
+the **gate** in front of the light chat: it runs first for `/lite/*` (the build output is under `/lite/_astro/`, inside the session cookie's Path)
 (`assets.run_worker_first`), and serves the page and its scripts only to someone with a session. An
 unauthenticated request for `/lite/` is sent straight to the AuthKit hosted sign-in. The only things served
 without a session are the privacy page (`/lite/disclaimer/`), the manifest, the three install icons, the
@@ -176,7 +176,7 @@ variables and the Durable Object), so check these against `https://shamwari.ai` 
       `site/app/wrangler.jsonc`: it will answer `503` to every page until it is redeployed with them. Then the Secrets Store
       must hold `CONSOLE_WORKOS_API_KEY` and `SESSION_SECRET` (it did when this was written; names only, never values).
 - [ ] `GET /lite/` with no cookie answers `302` to `/lite/auth/login`, not `503`, and not the page.
-- [ ] `GET /_astro/<any script>.js` with no cookie answers `401`.
+- [ ] `GET /lite/_astro/<any script>.js` with no cookie answers `401`.
 - [ ] `GET /lite/disclaimer/`, `/lite/manifest.webmanifest` and `/lite/sw.js` answer `200` with no cookie.
 - [ ] Signing in from `/lite/auth/login` lands on `/lite/` and the chat loads; `/lite/auth/token` answers `200`.
 - [ ] `https://shamwari.ai/lite/callback` completes (it is the registered redirect URI).
@@ -219,7 +219,7 @@ version is gated; it is never automatic.
    `shamwari-app` (once the owner connects it in the Cloudflare dashboard).
 5. **Smoke:** `smoke-production.yml` checks production for up to 18 minutes: `/lite/`
    unauthenticated is a 302 to `/lite/auth/login`; `/lite/disclaimer/`,
-   `/lite/manifest.webmanifest` and `/lite/sw.js` are 200; an `/_astro/*.js` script named in
+   `/lite/manifest.webmanifest` and `/lite/sw.js` are 200; a `/lite/_astro/*.js` script named in
    `sw.js` is 401 without a session; `www.shamwari.ai` is 200. On failure it opens an issue.
 
 **Rollback:** Cloudflare dashboard, Workers & Pages, the Worker, Deployments, roll back to the

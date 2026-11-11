@@ -38,8 +38,8 @@ jobs:
               c=$(code "https://shamwari.ai$p"); [ "$c" = 200 ] || { echo "$p: got $c, want 200"; failed=1; }
             done
             # A script asset needs a session: take one named in the public service worker.
-            js=$(curl -s --max-time 20 https://shamwari.ai/lite/sw.js | grep -o '/_astro/[A-Za-z0-9._-]*\.js' | head -1)
-            if [ -z "$js" ]; then echo "no /_astro script named in sw.js"; failed=1
+            js=$(curl -s --max-time 20 https://shamwari.ai/lite/sw.js | grep -o '/lite/_astro/[A-Za-z0-9._-]*\.js' | head -1)
+            if [ -z "$js" ]; then echo "no /lite/_astro script named in sw.js"; failed=1
             else
               c=$(code "https://shamwari.ai$js")
               [ "$c" = 401 ] || { echo "$js without a session: got $c, want 401"; failed=1; }

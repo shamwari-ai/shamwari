@@ -1,4 +1,4 @@
-import { SESSION_COOKIE, readCookie, type CheckResult } from './session';
+import { COOKIE_PATH, SESSION_COOKIE, readCookie, type CheckResult } from './session';
 
 /**
  * The gate in front of the light chat.
@@ -31,16 +31,20 @@ export const PUBLIC_EXACT: readonly string[] = [
   '/lite/icons/icon-512.png',
   '/lite/icons/maskable-512.png',
 ];
-/** Build output stylesheets: /_astro/<name>.<hash>.css and nothing else under /_astro/. */
-const PUBLIC_STYLESHEET = /^\/_astro\/[A-Za-z0-9._-]+\.css$/;
+/** Build output stylesheets: /lite/_astro/<name>.<hash>.css and nothing else under /lite/_astro/ (scripts there are gated). */
+const PUBLIC_STYLESHEET = /^\/lite\/_astro\/[A-Za-z0-9._-]+\.css$/;
 
 export const isPublic = (pathname: string): boolean => PUBLIC_EXACT.includes(pathname) || PUBLIC_STYLESHEET.test(pathname);
 
-/** Everything this Worker gates: the light chat and the build output its page loads. */
-export const isGated = (pathname: string): boolean => pathname.startsWith('/lite/') || pathname.startsWith('/_astro/');
+/**
+ * Everything this Worker gates: the light chat and the build output its page loads. All of it is under /lite/, because
+ * the session cookie is scoped to /lite/ (COOKIE_PATH): a gated path outside it would never be sent the cookie.
+ * (A test walks every gated path and file of the real build and fails on one outside COOKIE_PATH.)
+ */
+export const isGated = (pathname: string): boolean => pathname.startsWith(COOKIE_PATH);
 
-/** Build output, named by content hash: /_astro/<name>.<hash>.<ext>. */
-const HASHED = /^\/_astro\/[A-Za-z0-9._-]+\.[A-Za-z0-9_-]{6,}\.(js|css)$/;
+/** Build output, named by content hash: /lite/_astro/<name>.<hash>.<ext>. */
+const HASHED = /^\/lite\/_astro\/[A-Za-z0-9._-]+\.[A-Za-z0-9_-]{6,}\.(js|css)$/;
 
 const SHELL = new Set(['/lite/', '/lite/index.html']);
 
@@ -117,7 +121,7 @@ export async function gate(req: Request, deps: GateDeps): Promise<Response> {
   const res = await deps.asset(req);
   const out = new Response(res.body, res);
   // Never kept by a shared cache. The page is revalidated every time; a build-output file has a content hash in
-  // its name, so the browser may keep it for good (the policy _headers sets for /_astro/, minus `public`).
+  // its name, so the browser may keep it for good (the policy _headers sets for /lite/_astro/, minus `public`).
   out.headers.set(
     'Cache-Control',
     HASHED.test(url.pathname) ? 'private, max-age=31536000, immutable' : 'private, no-cache',
