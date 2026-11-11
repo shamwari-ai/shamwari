@@ -194,6 +194,7 @@ test('Shona is offered, shown as a draft, and Enter sends', async ({ page }) => 
   await openAccount(page);
   await page.locator('#lang').selectOption('sn');
   await expect(page.locator('html')).toHaveAttribute('lang', 'sn');
+  await closeChats(page); // the page behind an open drawer is inert
   // The draft notice is a banner in the page, not inside the menu: it shows with the menu closed.
   await page.locator('details.account summary').click();
   await expect(page.locator('details.account')).not.toHaveAttribute('open', '');

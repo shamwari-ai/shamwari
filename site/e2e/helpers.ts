@@ -40,6 +40,24 @@ export async function openSection(page: Page, name: 'Chat' | 'Projects' | 'Artif
 export async function openChats(page: Page) {
   const open = await page.locator('#chat-sidebar').evaluate((el) => el.matches(':popover-open'));
   if (!open) await page.getByRole('button', { name: /open chats/i }).click();
+  // Wait for the page to finish sliding aside, so what a test measures or clicks is where it will stay.
+  await page.waitForFunction(() => {
+    const el = document.querySelector('#chat-sidebar') as HTMLElement | null;
+    const main = document.querySelector('[data-slot="app-main"]') as HTMLElement | null;
+    if (!el || !main || document.documentElement.dataset.drawer !== 'open') return false;
+    const w = el.getBoundingClientRect().width;
+    return Math.round(el.getBoundingClientRect().left) === 0 && Math.round(main.getBoundingClientRect().x) === Math.round(w);
+  });
+}
+
+/** Close the drawer (Escape) and wait for the page to slide back and become reachable again. */
+export async function closeChats(page: Page) {
+  const open = await page.locator('#chat-sidebar').evaluate((el) => el.matches(':popover-open'));
+  if (open) await page.keyboard.press('Escape');
+  await page.waitForFunction(() => {
+    const main = document.querySelector('[data-slot="app-main"]') as HTMLElement | null;
+    return !!main && !main.inert && Math.round(main.getBoundingClientRect().x) === 0 && !document.documentElement.dataset.drawer;
+  });
 }
 
 /** Start a new chat from the drawer's foot (the top bar has no room for it on a small screen). */
