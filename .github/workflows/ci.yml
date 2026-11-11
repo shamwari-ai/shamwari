@@ -132,6 +132,8 @@ jobs:
 
   chat-e2e:
     name: LibreChat stub-gateway e2e
+    needs: changes
+    if: needs.changes.outputs.chat_guard == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
