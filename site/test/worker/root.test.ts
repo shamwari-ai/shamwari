@@ -89,6 +89,14 @@ describe('the Worker', () => {
     }
   });
 
+  it('answers a path with no asset and no route with a plain 404, never a 503 from sign-in', async () => {
+    for (const path of ['/chat/', '/chat', '/nope', '/lite/auth/other']) {
+      const res = await worker.fetch(new Request(`https://shamwari.ai${path}`), {}, ctx);
+      expect(res.status, path).toBe(404);
+      expect(res.headers.get('Retry-After'), path).toBeNull();
+    }
+  });
+
   it('answers HEAD like GET, and refuses other methods without reaching sign-in', async () => {
     const head = await worker.fetch(new Request('https://shamwari.ai/', { method: 'HEAD' }), {}, ctx);
     expect(head.status).toBe(302);

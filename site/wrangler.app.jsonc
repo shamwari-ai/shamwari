@@ -50,10 +50,8 @@
   // Reachable on https://shamwari-app.nyuchi.workers.dev as soon as it is deployed.
   "workers_dev": true,
 
-  // DELIBERATELY NO "routes" YET. The apex https://shamwari.ai is attached to
-  // `shamwari-site` today; declaring it here would make a deploy fight for it.
-  // The owner attaches shamwari.ai to this Worker in the dashboard, in the order
-  // given in docs/domains-and-deploy.md, after this Worker is verified on its
-  // workers.dev address. Once it is attached, add:
-  //   "routes": [{ "pattern": "shamwari.ai", "custom_domain": true }]
+  // The apex https://shamwari.ai is this Worker's (moved from `shamwari-site` on 2026-11-11 with the
+  // Workers custom-domains API, override_existing_origin). It is declared here so a deploy keeps it
+  // rather than releasing it; `shamwari-site` no longer declares it.
+  "routes": [{ "pattern": "shamwari.ai", "custom_domain": true }],
 }
