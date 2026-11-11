@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import { ask, openChat, openChats } from './helpers';
 
-// The shell never scrolls. Exactly two regions do: the messages (#thread) and the drawer's list of chats
-// (.side-scroll). The top bar, the composer with its divider, and the drawer's head and foot stay where they are.
+// The shell never scrolls. Exactly two regions do: the messages (#thread) and the drawer's column (.chats: sections,
+// list and foot together). The top bar, the composer with its divider, and the drawer's head stay where they are.
 
 const rect = (page: Page, sel: string) =>
   page.evaluate((s) => {
@@ -15,7 +15,7 @@ const scrollTops = (page: Page) =>
     doc: document.scrollingElement!.scrollTop,
     main: (document.querySelector('[data-slot="app-main"]') as HTMLElement).scrollTop,
     thread: (document.querySelector('#thread') as HTMLElement).scrollTop,
-    side: (document.querySelector('.side-scroll') as HTMLElement | null)?.scrollTop ?? 0,
+    side: (document.querySelector('.chats') as HTMLElement | null)?.scrollTop ?? 0,
   }));
 
 /** The page scrolls smoothly: wait until the given scroller has stopped. */
@@ -150,7 +150,7 @@ test('focusing a control never scrolls the shell off its place', async ({ page }
   expect(moved).toBe(0);
 });
 
-test('the drawer: the list of chats scrolls while the foot rows stay pinned, and its end does not scroll the page behind', async ({ page }) => {
+test('the drawer: its column scrolls (sections, list and foot together), the foot is reachable at the end, and the end does not scroll the page behind', async ({ page }) => {
   await openChat(page);
   await openChats(page);
   // Forty chats, written straight into the list: this is a layout test, not a storage test.
@@ -166,16 +166,21 @@ test('the drawer: the list of chats scrolls while the foot rows stay pinned, and
     }
     (document.querySelector('#side-chats') as HTMLElement).hidden = false;
   });
-  const foot = await rect(page, '.side-foot');
   const head = await rect(page, '[data-slot="sidebar-head"]');
-  const scroller = (await page.locator('.side-scroll').boundingBox())!;
+  const scroller = (await page.locator('.chats').boundingBox())!;
   await page.mouse.move(scroller.x + scroller.width / 2, scroller.y + scroller.height / 2);
   await page.mouse.wheel(0, 100000);
-  await settled(page, '.side-scroll');
+  await settled(page, '.chats');
   const tops = await scrollTops(page);
   expect(tops.side).toBeGreaterThan(0);
-  expect(await rect(page, '.side-foot')).toEqual(foot);
-  expect(await rect(page, '[data-slot="sidebar-head"]')).toEqual(head);
+  expect(await rect(page, '[data-slot="sidebar-head"]'), 'the drawer\'s head stays where it is').toEqual(head);
+  // At the end of the column the last foot row is inside the drawer: Settings can always be reached.
+  const reach = await page.evaluate(() => {
+    const col = document.querySelector('.chats')!.getBoundingClientRect();
+    const last = document.querySelector('.side-foot')!.getBoundingClientRect();
+    return { colBottom: col.bottom, footBottom: last.bottom };
+  });
+  expect(reach.footBottom).toBeLessThanOrEqual(reach.colBottom + 1);
   // At the end of the list, more wheel does not reach the page behind the drawer.
   await page.mouse.wheel(0, 4000);
   await page.waitForTimeout(300);
