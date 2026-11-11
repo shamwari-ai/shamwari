@@ -171,14 +171,29 @@ test('the bell says there is nothing new, and the avatar opens sign-in when ther
 
   await page.getByRole('button', { name: 'Notifications' }).click();
   await expect(page.locator('#toast')).toHaveText('No new notifications');
+  // A second tap says it again (the line is cleared first so a screen reader announces it) and it
+  // clears itself, so it does not sit next to unrelated state.
+  await page.getByRole('button', { name: 'Notifications' }).click();
+  await expect(page.locator('#toast')).toHaveText('No new notifications');
+  await expect(page.locator('#toast')).toHaveText('', { timeout: 6000 });
 
   // Signed in, the avatar opens Settings, where the person can remove the key.
   await page.getByRole('button', { name: 'Account' }).click();
   await expect(page.locator('details.more')).toHaveAttribute('open', '');
+  await expect(page.locator('details.more summary')).toBeFocused();
   await page.locator('#signout').click();
   await expect(page.locator('#auth')).toBeVisible();
   // Signed out, the avatar brings the sign-in panel back after it was dismissed.
-  await page.locator('#auth').evaluate((el) => (el.hidden = true));
+  await page.locator('#auth').evaluate((el) => ((el as HTMLElement).hidden = true));
   await page.getByRole('button', { name: 'Account' }).click();
   await expect(page.locator('#auth')).toBeVisible();
+});
+
+test('the icon buttons keep an accessible name in Shona, and Install stays visible after a question', async ({ page }) => {
+  await openChat(page);
+  await page.locator('#lang').selectOption('sn');
+  await expect(page.getByRole('button', { name: 'Zviziviso' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Akaunti' })).toBeVisible();
+  // The install button lives outside the greeting, so asking a question (which hides the greeting) does not take it away.
+  await expect(page.locator('#install').locator('xpath=ancestor::*[@id="empty"]')).toHaveCount(0);
 });
