@@ -365,6 +365,25 @@ const mutants = [
     (f) => ({ ...f, buildSh: f.buildSh.replace(/refs\/tags/g, "refs/heads") }),
     /tag in PIN resolves/,
   ],
+  [
+    "a private address allowed in production",
+    (f) => ({
+      ...f,
+      production: f.production.replace(
+        "endpoints:\n",
+        "endpoints:\n  allowedAddresses: ['127.0.0.1:8787']\n",
+      ),
+    }),
+    /endpoint type "allowedAddresses"/,
+  ],
+  [
+    "a wider allowed address in the test config",
+    (f) => ({
+      ...f,
+      test: f.test.replace("['127.0.0.1:8787']", "['10.0.0.5:443']"),
+    }),
+    /allowedAddresses must be exactly/,
+  ],
 ];
 
 for (const [name, mutate, expected] of mutants) {

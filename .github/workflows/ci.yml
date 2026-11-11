@@ -130,6 +130,35 @@ jobs:
         run: npm test
         working-directory: chat/librechat
 
+  chat-e2e:
+    name: LibreChat stub-gateway e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
+
+      # Builds LibreChat from the commit pinned in chat/librechat/PIN (the Shamwari
+      # fork) and checks the checkout equals the pin before building.
+      - name: Build the pinned image
+        run: chat/librechat/build.sh shamwari-chat:ci
+
+      # The whole stack runs on a network with no route out. Secrets are generated
+      # for this run only and never written to a file.
+      - name: Run LibreChat against the stub gateway
+        run: |
+          export CREDS_KEY="$(openssl rand -hex 32)" CREDS_IV="$(openssl rand -hex 16)"
+          export JWT_SECRET="$(openssl rand -hex 32)" JWT_REFRESH_SECRET="$(openssl rand -hex 32)"
+          docker compose -f chat/librechat/e2e/compose.yml up \
+            --abort-on-container-exit --exit-code-from driver
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f chat/librechat/e2e/compose.yml logs --no-color --tail 200 || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f chat/librechat/e2e/compose.yml down -v || true
+
   core:
     name: Core (imports, syntax)
     needs: changes

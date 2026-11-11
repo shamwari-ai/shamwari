@@ -18,6 +18,8 @@ interface:
     public: false
 
 endpoints:
+  # LibreChat refuses private addresses unless listed. Test only: the stub gateway.
+  allowedAddresses: ['127.0.0.1:8787']
   custom:
     - name: 'Shamwari'
       apiKey: '${SHAMWARI_CHAT_PLACEHOLDER_KEY}'

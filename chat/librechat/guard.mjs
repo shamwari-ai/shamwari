@@ -74,7 +74,12 @@ export function parseToml(text) {
   return out;
 }
 
-function checkConfig(name, yamlText, { allowedScopes, allowedBaseURLs }, v) {
+function checkConfig(
+  name,
+  yamlText,
+  { allowedScopes, allowedBaseURLs, allowedAddresses },
+  v,
+) {
   let cfg;
   try {
     cfg = parse(yamlText);
@@ -88,8 +93,15 @@ function checkConfig(name, yamlText, { allowedScopes, allowedBaseURLs }, v) {
   }
   const eps = cfg?.endpoints ?? {};
   for (const k of Object.keys(eps)) {
-    if (k !== "custom")
+    if (k === "allowedAddresses" && allowedAddresses) {
+      const got = JSON.stringify(eps[k]);
+      if (got !== JSON.stringify(allowedAddresses))
+        v.push(
+          `${name}: allowedAddresses must be exactly ${JSON.stringify(allowedAddresses)}, got ${got}`,
+        );
+    } else if (k !== "custom") {
       v.push(`${name}: endpoint type "${k}" is not allowed (only custom)`);
+    }
   }
   const custom = Array.isArray(eps.custom) ? eps.custom : [];
   if (custom.length === 0) v.push(`${name}: no custom endpoint defined`);
@@ -144,7 +156,11 @@ export function check({ production, test, fly, dockerfile, buildSh, pin }) {
   checkConfig(
     "librechat.test.yaml",
     test,
-    { allowedScopes: TEST_SCOPES, allowedBaseURLs: [GATEWAY, STUB] },
+    {
+      allowedScopes: TEST_SCOPES,
+      allowedBaseURLs: [GATEWAY, STUB],
+      allowedAddresses: ["127.0.0.1:8787"],
+    },
     v,
   );
 
