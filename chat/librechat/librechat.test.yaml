@@ -31,6 +31,8 @@ endpoints:
       addParams:
         scope: 'platform'
         stream: false
+        streaming: false
+        disableStreaming: true
       headers:
         X-Shamwari-Channel: 'pwa'
     - name: 'Shamwari (personal)'
@@ -43,5 +45,7 @@ endpoints:
       addParams:
         scope: 'personal'
         stream: false
+        streaming: false
+        disableStreaming: true
       headers:
         X-Shamwari-Channel: 'pwa'

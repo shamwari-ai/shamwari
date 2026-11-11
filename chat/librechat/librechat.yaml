@@ -40,8 +40,11 @@ endpoints:
       titleConvo: false
       addParams:
         scope: 'platform'
-        # The gateway does not stream. To test against the stub gateway.
+        # The gateway does not stream. LibreChat's model layer takes `streaming` and
+        # `disableStreaming` as its own options; a bare `stream` only reaches the body.
         stream: false
+        streaming: false
+        disableStreaming: true
       headers:
         # "The web chat": the gateway keeps no content copy and never trains on it.
         X-Shamwari-Channel: 'pwa'

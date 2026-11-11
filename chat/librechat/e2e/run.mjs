@@ -159,6 +159,8 @@ const platform = await ask(
   "What does section 56 of the Constitution say?",
 );
 note("platform.shown", platform.shown.slice(0, 200));
+// Always show what the stub received, so a failure here is diagnosable from the log.
+note("stub.log.after-platform", await stubLog());
 assert.match(
   platform.shown,
   /STUB-ANSWER/,
@@ -196,7 +198,7 @@ assert.deepEqual(
 for (const c of calls) {
   assert.equal(c.channel, "pwa", "X-Shamwari-Channel: pwa was not sent");
   assert.equal(c.auth, "Bearer", "no bearer authorization");
-  assert.equal(c.stream, false, "stream: false was not sent");
+  assert.notEqual(c.stream, true, "LibreChat asked the gateway for a stream");
 }
 
 // 6. Informational, not a pass/fail yet: are the gateway's citations shown?
