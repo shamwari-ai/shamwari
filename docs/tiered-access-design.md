@@ -108,6 +108,41 @@ them may carry personal scope. They answer from Platform and Community scope
 and say plainly that personal questions need the app with Mind. That is the
 design, not a gap: the tier ladder is also the privacy ladder.
 
+### Who decides the scope (#81)
+
+**The system decides, never the user.** No client has a scope control. The
+gateway (`src/scope.ts` `resolveScope`) and Core (`resolve_scope`, authoritative)
+decide from the question and the signed-in caller's grants:
+
+| Input                                                                | Effective scope, on a Cloud endpoint                                       |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Body `scope` is `community`, `platform`, anything else, or absent    | Not read. `platform` if the key holds it, else `community`                 |
+| Body `scope` is exactly `personal`                                   | **409 `scope_requires_local_inference`**; nothing is called                |
+| A question that looks like it needs the person's own information     | Same cloud-safe scope as any other, **plus the notice** (below)            |
+
+A WorkOS person is only ever granted `community` and `platform`. `personal` is
+never grantable to a person for Cloud.
+
+**Cloud-only mode, and the notice.** When the question looks like it needs the
+person's own information, Cloud answers from community and platform knowledge
+only, and the response says so: `shamwari.answered_without_own_information: true`
+and `shamwari.notice` (`code: answered_without_your_own_information`, a message
+that says on-device Shamwari Mind will use your own information). It is never a
+silent downgrade, never a retry that hides it, and never a personal-scope request
+to a provider. The same holds when `MIND_AVAILABLE` is true: Mind runs on the
+device, so no Worker variable changes what a Cloud completion may see.
+
+The first version of "looks like it needs the person's own information" is a
+short list of deterministic rules, no model (`gateway/src/personal.ts`,
+`core/personal.py`, shared cases in `core/scope_cases.json`). It is conservative
+in the sense of leaning towards yes, and it is an honesty control, not the
+privacy control: a miss costs the notice on one answer and cannot send personal
+content anywhere, because the scope on the wire is cloud-safe whatever it says.
+The Shona and Ndebele rules have had no native-speaker review. The scope
+decision is passed into `ground()` and `infer()` and checked again at each
+provider call (`providerScope`), and the tests count provider calls
+(`gateway/test/scope-decision.test.ts`, `core/test_scope_decision.py`).
+
 ### Device tiers for R3 (Mind)
 
 Proposed, _unmeasured_: pick by RAM and storage at install, never by guesswork.

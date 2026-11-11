@@ -77,7 +77,7 @@ function setup() {
     if (u.includes('/rollup')) return Response.json({ total_tokens: 0 });
     if (u.includes('/ground/search')) {
       seen.ground += 1;
-      return Response.json({ chunks: [CHUNK], hit: true });
+      return Response.json({ chunks: [CHUNK], hit: true, scope: 'platform' });
     }
     seen.inference.push({
       body: JSON.parse(String(init?.body)),
@@ -271,8 +271,8 @@ describe('the token cap at the inference steps', () => {
 
   it('the Workers AI step sends max_tokens only when a reach asks for less', async () => {
     const e = env();
-    await viaWorkersAI(e, targets(e).economy, messages);
-    await viaWorkersAI(e, targets(e).economy, messages, 200);
+    await viaWorkersAI(e, targets(e).economy, messages, 'platform');
+    await viaWorkersAI(e, targets(e).economy, messages, 'platform', 200);
     const calls = (e.AI.run as unknown as { mock: { calls: unknown[][] } }).mock.calls;
     expect(calls[0]![1]).not.toHaveProperty('max_tokens');
     expect(calls[1]![1]).toMatchObject({ max_tokens: 200 });
@@ -297,7 +297,7 @@ describe('what the review of this change found', () => {
     vi.stubGlobal('fetch', async (url: string) => {
       const u = String(url);
       if (u.includes('/rollup')) return Response.json({ total_tokens: 0 });
-      if (u.includes('/ground/search')) return Response.json({ chunks: [CHUNK], hit: true });
+      if (u.includes('/ground/search')) return Response.json({ chunks: [CHUNK], hit: true, scope: 'platform' });
       return Response.json({
         choices: [{ message: { content: 'cut off mid' }, finish_reason: 'length' }],
       });
@@ -323,7 +323,7 @@ describe('what the review of this change found', () => {
     vi.stubGlobal('fetch', async (url: string) => {
       const u = String(url);
       if (u.includes('/rollup')) return Response.json({ total_tokens: 0 });
-      return Response.json({ chunks: [fancy], hit: true });
+      return Response.json({ chunks: [fancy], hit: true, scope: 'platform' });
     });
     const r0 = (await (
       await worker.fetch(ask({ reach: 'r0', mode: 'extractive' }), env, ctx)

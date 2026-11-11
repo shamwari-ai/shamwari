@@ -48,6 +48,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
 from nyuchi_api import DataApi, DataApiRefusal, DataApiUnavailable
+from personal import needs_own_information
 
 log = logging.getLogger("shamwari.core")
 
@@ -178,6 +179,13 @@ class GroundQuery(BaseModel):
     destination: Literal["cloud", "mind"] = "cloud"
     language: str | None = Field(default=None, max_length=20)
     top_k: int = Field(default=6, ge=1, le=20)
+    #: What the signed-in caller may hold, as the gateway saw it. Only ever narrows: a scope
+    #: outside it is refused (403), a scope inside it is still subject to resolve_scope. Absent
+    #: means the caller did not say, and nothing is narrowed.
+    granted_scopes: list[Scope] | None = None
+    #: The gateway's own view of the question. Core never trusts a `false`: it decides again
+    #: (personal.needs_own_information) and answers with whichever is true.
+    needs_own_information: bool = False
 
 
 @app.post("/ground/search", dependencies=[Depends(require_token)])
@@ -191,6 +199,17 @@ async def ground_search(body: GroundQuery) -> dict[str, Any]:
     retrieval pipelines are tested in nyuchi-api (tests/test_shamwari.py), not here.
     """
     scope = resolve_scope(body.scope, body.destination)
+
+    # A key may only ask for what it holds. Checked before any call, like the rule above.
+    if body.granted_scopes is not None and scope not in body.granted_scopes:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "scope_not_granted",
+                "scope": scope.value,
+                "granted_scopes": [g.value for g in body.granted_scopes],
+            },
+        )
 
     # RULE 1, AUTHORITATIVELY, IN THE LEAK PATH.
     #
@@ -240,7 +259,17 @@ async def ground_search(body: GroundQuery) -> dict[str, Any]:
         log.error("data api answered with a scope other than the one asked for")
         raise _unavailable()
 
-    return {"scope": scope.value, "hit": bool(out["chunks"]), "chunks": out["chunks"]}
+    # Whether the question needs the person's own information (shamwari-ai/shamwari#81). The
+    # gateway shows "answered without your own information" when this is true; it can add the
+    # notice on its own account but can never remove one Core asked for. It cannot change the
+    # scope above: a cloud request is cloud-safe whatever this says.
+    needs_own = body.needs_own_information or needs_own_information(body.query)
+    return {
+        "scope": scope.value,
+        "hit": bool(out["chunks"]),
+        "chunks": out["chunks"],
+        "needs_own_information": needs_own,
+    }
 
 
 # ---------------------------------------------------------------------------

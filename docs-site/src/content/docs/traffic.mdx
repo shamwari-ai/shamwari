@@ -27,12 +27,18 @@ is empty.
 
 ## Three shapes a request can take
 
-**Refused at the gate.** A `personal`-scope question — someone asking about
-their own payslip — stops at stage two with **409
+**Refused at the gate.** A request explicitly marked `personal` — the device
+asking Cloud to work on someone's own payslip — stops at stage two with **409
 `scope_requires_local_inference`**, two stages before anything is embedded and
 four before anything is generated. It is not downgraded to a general answer.
 A downgrade would answer confidently while withholding the user's own data,
 giving no signal that anything was missing.
+
+A person typing a question that only *looks* personal is a different case, and
+nobody picks a scope for it: the service decides. It is answered from community
+and platform knowledge, and the answer carries a visible line saying it was
+answered without your own information. The request that reaches any provider is
+never `personal`.
 
 **Served without a provider.** With Shamwari Mind available, the same question
 takes a shorter path rather than a longer one: authenticate, scope, Ground,

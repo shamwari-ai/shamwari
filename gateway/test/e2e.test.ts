@@ -324,6 +324,29 @@ describe.skipIf(!CORE)('gateway -> Core -> Ground -> answer (real HTTP, fake mod
     });
   });
 
+  describe('the system decides the scope (#81): a personal-looking question, Cloud-only mode', () => {
+    it('is answered from platform knowledge with the notice, and no provider or data call carries a personal scope', async () => {
+      const w = world();
+      const r = await w.call('/v1/chat/completions', ask('what is on my payslip? section 56 equality', { scope: 'community' }));
+
+      expect(r.status).toBe(200);
+      // The client asked for community; nobody's request decides the scope.
+      expect(r.body.shamwari.scope).toBe('platform');
+      expect(r.body.shamwari.answered_without_own_information).toBe(true);
+      expect(r.body.shamwari.notice.code).toBe('answered_without_your_own_information');
+
+      // Counted: one embedding, one completion, one Core search, one data-API search, all platform.
+      expect(w.wire.ai).toHaveLength(1);
+      expect(w.wire.inference).toHaveLength(1);
+      const search = w.wire.core.filter((c) => c.path === '/ground/search');
+      expect(search).toHaveLength(1);
+      expect(search[0]!.body).toMatchObject({ scope: 'platform', destination: 'cloud' });
+      const calls = (await coreState()).api.filter((c) => c.path === '/v1/shamwari/ground/search');
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.summary).toMatchObject({ scope: 'platform', destination: 'cloud' });
+    });
+  });
+
   describe('rule 1: personal scope never reaches a provider or an embedder', () => {
     const personal = { scope: 'personal' };
 

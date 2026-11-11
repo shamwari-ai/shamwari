@@ -88,7 +88,7 @@ function setup(opts: { answer?: string; chunks?: GroundChunk[]; overQuota?: bool
     if (u.includes('/ground/search')) {
       w.ground += 1;
       const chunks = opts.chunks ?? [CHUNK];
-      return Response.json({ chunks, hit: chunks.length > 0 });
+      return Response.json({ chunks, hit: chunks.length > 0, scope: 'platform' });
     }
     w.inference += 1;
     return Response.json({

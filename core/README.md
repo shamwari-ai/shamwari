@@ -30,6 +30,15 @@ A personal-scope request bound for an external provider returns **409
 scope — that would leak by omission and produce a confidently wrong answer
 with no signal that anything was withheld.
 
+The system decides the scope, not the user (#81). `/ground/search` also takes
+`granted_scopes` (what the caller holds; a scope outside it is a 403
+`scope_not_granted`, before any data call) and `needs_own_information` (the
+gateway's view). Core never trusts a `false`: `personal.py` decides again from the
+question, and the response carries `needs_own_information` so the gateway shows
+"answered without your own information". The cloud scope itself is unaffected by
+it. `core/scope_cases.json` is run by both Core's and the gateway's tests so the
+two copies of the rules cannot drift.
+
 This is what makes "sovereign AI companion" a technical fact rather than a
 marketing line. It also makes Shamwari Mind load-bearing: if Personal cannot
 go to Cloud, and Personal is what makes a companion a companion, then Mind is

@@ -1,6 +1,7 @@
 import { decideDestination, parseScope, ScopeRefusal } from '../scope';
 import { sha256Hex } from '../idempotency';
 import { plain, clip } from '../extractive';
+import { OWN_INFORMATION_NOTICE_SHORT } from '../personal';
 import type { Reach } from '../router';
 import type { Env, Scope } from '../types';
 
@@ -116,6 +117,8 @@ export function compose(
   cites: { label: string }[],
   maxChars: number,
   via?: string,
+  /** Present when the answer was given without the person's own information. */
+  notice?: string,
 ): string {
   let body = answer;
   let source = '';
@@ -134,9 +137,11 @@ export function compose(
   }
   source = gsm7(source);
   const src = source ? clip(source, Math.floor(maxChars * 0.4), '...').text : '';
-  const room = Math.max(20, maxChars - (src ? src.length + 1 : 0));
+  // The notice is never the part that gets clipped away: the body gives up room for it.
+  const note = notice ? gsm7(OWN_INFORMATION_NOTICE_SHORT) : '';
+  const room = Math.max(20, maxChars - (src ? src.length + 1 : 0) - (note ? note.length + 1 : 0));
   const text = clip(gsm7(body), room, '...').text;
-  return src ? `${text}\n${src}` : text;
+  return [text, src, note].filter(Boolean).join('\n');
 }
 
 const json = (body: unknown, status = 200) =>
@@ -242,7 +247,8 @@ export async function handleChannel(
     answer?: string;
     cites?: { label: string }[];
     via?: string;
+    notice?: string;
   };
   if (!out.answer) return reply(MESSAGES.busy);
-  return reply(compose(out.answer, out.cites ?? [], adapter.maxChars, out.via));
+  return reply(compose(out.answer, out.cites ?? [], adapter.maxChars, out.via, out.notice));
 }
