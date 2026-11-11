@@ -562,7 +562,16 @@ input:not([type='checkbox']):not([type='radio']) {
   margin: 0;
   padding: 0;
   display: grid;
+  /* One column that may shrink below its content: a long chat title wraps instead of widening the whole drawer. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--gap-floor);
+}
+.side-list .btn.link {
+  max-width: 100%;
+  justify-content: flex-start;
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .side-form {
   margin-top: var(--gap-floor);

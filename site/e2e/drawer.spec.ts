@@ -97,3 +97,27 @@ test('muted text on the drawer surface keeps its contrast, in light and in dark,
     expect(parseFloat(await r.evaluate((el) => getComputedStyle(el).outlineWidth))).toBeGreaterThanOrEqual(2);
   }
 });
+
+test('a long chat title wraps inside the drawer instead of widening it', async ({ page }) => {
+  await openChat(page);
+  await openChats(page);
+  await page.evaluate(() => {
+    const list = document.querySelector('#history-list')!;
+    for (const title of ['An extremely long chat title that goes on and on about the Constitution and the rights of every person in Zimbabwe', 'Unbroken' + 'x'.repeat(80)]) {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.className = 'btn link';
+      b.textContent = title;
+      li.append(b);
+      list.append(li);
+    }
+    (document.querySelector('#side-chats') as HTMLElement).hidden = false;
+  });
+  const m = await page.evaluate(() => {
+    const el = document.querySelector('.chats') as HTMLElement;
+    const side = document.querySelector('#chat-sidebar') as HTMLElement;
+    return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth, sideRight: side.getBoundingClientRect().right, maxRight: Math.max(...[...document.querySelectorAll('#history-list button')].map((b) => b.getBoundingClientRect().right)) };
+  });
+  expect(m.scrollWidth, 'nothing in the drawer scrolls sideways').toBeLessThanOrEqual(m.clientWidth);
+  expect(m.maxRight, 'every title ends inside the drawer').toBeLessThanOrEqual(m.sideRight);
+});
