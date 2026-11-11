@@ -59,24 +59,22 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
       <section aria-labelledby="projects-title">
         <h2 id="projects-title" class="chats-title" data-i18n="projects">Projects</h2>
         <ul id="project-list" class="side-list"></ul>
-        <p id="project-empty" class="chats-empty" data-i18n="noProjects">No projects yet.</p>
-        <form id="project-form" class="row side-form" autocomplete="off">
+        <button type="button" id="new-project" class="btn link" aria-expanded="false" aria-controls="project-form" data-i18n="newProject">New project</button>
+        <form id="project-form" class="row side-form" autocomplete="off" hidden>
           <label class="sr-only" for="project-name" data-i18n="projectName">Project name</label>
           <input id="project-name" maxlength="60" data-i18n-attr="placeholder:projectName" placeholder="Project name" />
           <button type="submit" class="btn" data-i18n="createProject">Create project</button>
         </form>
       </section>
-      <section aria-labelledby="chats-title">
+      <section id="side-chats" aria-labelledby="chats-title" hidden>
         <h2 id="chats-title" class="chats-title" data-i18n="earlierChats">Earlier chats</h2>
-        <div id="history" hidden>
+        <div id="history">
           <ul id="history-list" class="side-list"></ul>
         </div>
-        <p id="history-empty" class="chats-empty" data-i18n="noEarlierChats">No earlier chats on this device yet.</p>
       </section>
-      <section aria-labelledby="artifacts-title">
+      <section id="side-artifacts" aria-labelledby="artifacts-title" hidden>
         <h2 id="artifacts-title" class="chats-title" data-i18n="artifacts">Artifacts</h2>
         <ul id="artifact-list" class="side-list"></ul>
-        <p id="artifact-empty" class="chats-empty" data-i18n="noArtifacts">Answers you save appear here.</p>
       </section>
 
       <!-- Pinned to the bottom of the drawer: a new version, when there is one, then New chat and the account. -->
@@ -89,51 +87,34 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
           <button type="button" id="side-new" class="btn primary" data-i18n="newChat">New chat</button>
         </div>
         <!-- Keys are not asked for here: "Use the API" goes to the Nyuchi platform, where they are issued.
-             Settings opens the account menu (language, sign-in, delete history). -->
+             Settings holds language, delete history and sign out: the account menu, folded into the drawer. -->
         <nav class="side-nav" aria-label={en.settings} data-i18n-attr="aria-label:settings">
           <a class="btn side-link" href="https://platform.nyuchi.com" target="_blank" rel="noopener" data-i18n="useApi">Use the API</a>
-          <button type="button" id="side-account" class="btn side-link" data-i18n="settings">Settings</button>
+          <details class="account side-settings" data-slot="account-menu">
+            <summary class="btn side-link" data-i18n="settings">Settings</summary>
+            <div class="settings-panel" data-slot="account-menu-panel">
+              <div class="account-row">
+                <label for="lang" data-i18n="language">Language</label>
+                <select id="lang" aria-describedby="review"></select>
+              </div>
+              <div class="account-row">
+                <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
+                <button type="button" id="signout" class="btn" hidden data-i18n="authDevClear">Remove key</button>
+              </div>
+            </div>
+          </details>
         </nav>
         <p class="version-line" data-current-version-line hidden><span data-i18n="version">Version</span> <span data-current-version></span></p>
       </div>
     </div>
 
-    <!-- The top bar's actions: a new chat and the bell. #new-chat and #bell are wrappers the script listens on. -->
+    <!-- The top bar's actions: a new chat. #new-chat is a wrapper the script listens on. -->
     <span slot="actions" id="new-chat" class="contents">
       <button type="button" class="bar-action">
         <Icon name="plus" class="h-5 w-5" />
         <span class="sr-only sm:not-sr-only" data-i18n="newChat">New chat</span>
       </button>
     </span>
-    <span slot="actions" id="bell" class="contents">
-      <!-- The icon set has no bell yet; this one is drawn in the set's stroke style. TopBarAction's classes. -->
-      <button type="button" class="bar-action" aria-label={en.notifications} data-i18n-attr="aria-label:notifications">
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
-      </button>
-    </span>
-
-    <!-- The account menu. Mzizi's AccountMenu names a signed-in person; this chat has no name to show until
-         Mukoko sign-in is switched on, so it is the same disclosure with a person icon, not initials. -->
-    <details slot="account" class="account" data-slot="account-menu">
-      <summary class="bar-action" aria-label={en.avatar} data-i18n-attr="aria-label:avatar">
-        <Icon name="user" class="h-5 w-5" />
-      </summary>
-      <div class="account-panel" data-slot="account-menu-panel">
-        <p class="account-title" data-i18n="accountTitle">Your account</p>
-        <p class="account-row">
-          <button type="button" id="open-signin" class="btn" data-i18n="authTitle">Sign in to ask</button>
-        </p>
-        <div class="account-row">
-          <label for="lang" data-i18n="language">Language</label>
-          <select id="lang" aria-describedby="review"></select>
-        </div>
-        <p class="account-note" data-i18n="privacyDetail">{en.privacyDetail}</p>
-        <div class="account-row">
-          <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
-          <button type="button" id="signout" class="btn" hidden data-i18n="authDevClear">Remove key</button>
-        </div>
-      </div>
-    </details>
 
     <h1 class="sr-only" data-i18n="appName">Shamwari Chat</h1>
     <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">

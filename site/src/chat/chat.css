@@ -554,6 +554,26 @@ input:not([type='checkbox']):not([type='radio']) {
   text-underline-offset: 3px;
 }
 
+/* Sign-in is not on yet in a developer-key build: a button that cannot be pressed is not shown. */
+[data-auth='developer-key'] #mukoko-signin {
+  display: none;
+}
+#new-project {
+  margin-block-start: var(--gap-floor);
+}
+.settings-panel {
+  display: grid;
+  gap: var(--gap-floor);
+  padding-block: var(--gap-floor);
+}
+.side-settings > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.side-settings > summary::-webkit-details-marker {
+  display: none;
+}
+
 /* The drawer's lists: pinned, projects, loose chats, saved answers. */
 .side-list {
   list-style: none;
