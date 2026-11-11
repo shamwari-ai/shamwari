@@ -27,8 +27,16 @@ async function until(label, fn, ms = 120_000) {
   );
 }
 
-const json = async (path, init) => {
-  const res = await fetch(APP + path, init);
+// LibreChat refuses requests whose User-Agent is not a recognised browser ("Illegal
+// request", api/server/middleware/uaParser.js), so the driver presents as one.
+const UA =
+  "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+const json = async (path, init = {}) => {
+  const res = await fetch(APP + path, {
+    ...init,
+    headers: { "user-agent": UA, ...init.headers },
+  });
   const text = await res.text();
   let body = null;
   try {
@@ -84,6 +92,7 @@ assert.ok(token, "no token");
 const auth = {
   authorization: `Bearer ${token}`,
   "content-type": "application/json",
+  "user-agent": UA,
 };
 
 // 2. Ask a question through one endpoint; return what the person would be shown.
