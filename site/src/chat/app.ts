@@ -136,7 +136,11 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
 
   /** Every stored thread, newest first; a failing store reads as empty, never as a crash. */
   const listThreads = async (): Promise<Thread[]> => {
+    const gen = store.generation;
     const stored = await store.list().catch(() => [] as Thread[]);
+    // The store was switched (to another person, or to nobody) while this read was out: what it returned belongs to the
+    // store it began on, and must reach neither the screen nor the in-memory threads of whoever is there now.
+    if (gen !== store.generation) return [];
     return stored.map((t) => {
       const known = live.get(t.id);
       if (known) return known;
@@ -303,9 +307,11 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
 
   const renderHistory = async () => {
     const s = strings();
+    const gen = store.generation;
     const all = (await listThreads()).filter((t) => t.messages.length);
     projectsNow = await store.projects().catch(() => [] as Project[]);
     const artifacts = await store.artifacts().catch(() => [] as Artifact[]);
+    if (gen !== store.generation) return; // a switch happened while this was reading: the next render is the right one
 
     // Pinned: pinned projects, then pinned chats that are not already inside a project.
     const pinnedProjects = projectsNow.filter((p) => p.pinned);
@@ -742,29 +748,25 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   const signOutDialog = $<HTMLDialogElement>('#signout-dialog');
   async function finishSignOut(alsoDelete: boolean) {
     const ended = Promise.resolve(auth.signOut());
-    if (alsoDelete) await deleteMessagesFromDevice();
-    else {
-      // Kept on the device: stop everything that could still write, empty the screen, and let go of this person's store.
-      epoch += 1;
-      clearTimeout(retryTimer);
-      live.clear();
-      saved.splice(0, saved.length);
-      thread = fresh();
-      rebuild();
-      showSection('chat');
-      void renderHistory();
-    }
-    rememberUser(null);
-    await store.switchTo(null);
-    if (!alsoDelete) {
-      live.clear();
-      void renderHistory();
-    }
+    // The screen leaves the chat FIRST, whatever happens to the storage below: a failure there must never leave the
+    // previous person's chat showing on a phone that is being handed over.
+    epoch += 1;
+    clearTimeout(retryTimer);
+    live.clear();
+    thread = fresh();
+    rebuild();
     syncAuth();
     showAuth();
     const note = $('#signin-note');
     note.textContent = alsoDelete ? strings().signedOutCleared : strings().signedOutKeptNote;
     note.hidden = false;
+    try {
+      // Delete clears the person's own store (the one delete function); either way the app then lets go of it.
+      if (alsoDelete) await deleteMessagesFromDevice();
+      await releaseStore();
+    } catch {
+      /* the screen is already clear; a storage fault does not bring the chat back */
+    }
     await ended;
     syncAuth();
   }
@@ -878,6 +880,24 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     saved.splice(0, saved.length, ...all);
     thread = all.find((t) => t.messages.length) ?? fresh();
     rebuild();
+    void renderHistory();
+  }
+
+  /**
+   * Let go of the current person: stop everything that could still write for them, empty the screen and the memory, and
+   * point at the unowned store (empty once chats have been adopted). Their messages stay in their own store, on the device.
+   */
+  async function releaseStore(): Promise<void> {
+    epoch += 1;
+    clearTimeout(retryTimer);
+    live.clear();
+    saved.splice(0, saved.length);
+    thread = fresh();
+    rebuild();
+    showSection('chat');
+    rememberUser(null);
+    await store.switchTo(null);
+    live.clear();
     void renderHistory();
   }
 
@@ -1001,7 +1021,11 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
         } catch {
           /* nothing to clear */
         }
-      } else showAuth(true);
+      } else {
+        // The session is gone: whoever's store this device had open is let go of before the sign-in is shown.
+        if (store.key) await releaseStore().catch(() => undefined);
+        showAuth(true);
+      }
       syncAuth();
       afterAuth();
     });

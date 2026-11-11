@@ -244,6 +244,22 @@ test('chats from before stores were per person go to the first person who signs 
   await expect(page.getByText('Old question')).toHaveCount(0);
 });
 
+test('when the session has ended by the time the page loads, the previous person\'s chats are not left on the page', async ({ page }) => {
+  await steer(page, { session: true, tokens: [tokenFor('user-A')] });
+  await open(page);
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('.cite').first()).toBeVisible();
+  await steer(page, { session: false, tokenStatus: 401 }); // the session ended while the page was closed
+  await page.goto('/lite/?signin=failed'); // stay on the sign-in screen, no redirect
+  await page.waitForSelector('html[data-auth-ready="true"]');
+  await expect(page.locator('#auth')).toBeVisible();
+  await expect(page.getByText('Is everyone equal')).toHaveCount(0); // not even hidden in the page
+  await steer(page, { session: true, tokens: [tokenFor('user-A')] });
+  await page.goto('/lite/');
+  await page.waitForSelector('html[data-auth-ready="true"]');
+  await expect(page.locator('article.msg.user')).toContainText('Is everyone equal'); // still theirs, on the device
+});
+
 test('"Also delete messages from this device" removes them, and signing in again finds nothing', async ({ page }) => {
   await steer(page, { session: true, tokens: [tokenFor('user-A')] });
   await open(page);
