@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shamwari-chat-proxy",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-01",
+  "observability": { "enabled": true },
+
+  // The reverse proxy for https://shamwari.ai/chat (docs/librechat.md, "Sub-path hosting").
+  //
+  // Deliberately NOT here, because each is an owner step with a named yes:
+  //  - `routes`: attaching shamwari.ai/chat and shamwari.ai/chat/* is cutover step 7. A test
+  //    fails if a route, custom domain or workers.dev toggle appears in this file.
+  //  - the `CHAT_ORIGIN` binding to the LibreChat origin (a Workers VPC service or a service
+  //    binding) needs an id that exists only after the Fly app and the tunnel do. Until it is
+  //    added the Worker answers 503 and contacts nothing.
+  "workers_dev": false,
+  "preview_urls": false,
+}

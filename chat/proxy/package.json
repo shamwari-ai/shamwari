@@ -1,0 +1,11 @@
+{
+  "name": "shamwari-chat-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/proxy.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

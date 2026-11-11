@@ -130,6 +130,12 @@ jobs:
         run: npm test
         working-directory: chat/librechat
 
+      # The /chat reverse proxy has no dependencies. Its tests include one that fails if
+      # its config declares a route or a binding, so merging it cannot switch anything on.
+      - name: Proxy Worker tests
+        run: npm test
+        working-directory: chat/proxy
+
   chat-e2e:
     name: LibreChat stub-gateway e2e
     needs: changes
