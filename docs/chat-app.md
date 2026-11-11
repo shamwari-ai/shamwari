@@ -117,6 +117,20 @@ account menu open and the drawer open. A control that falls under it fails the b
   10 minutes and then deletes it. The footer says exactly this and nothing more.
   Until #125 is deployed the older gateway still stores the conversation, so
   **this wording is only true once that change is deployed**.
+- **The drawer is local too: pinned, projects, chats, artifacts.** A *project* is a
+  named group of chats; a chat is in at most one. *Pinned* is a shortcut to a chat
+  or project, not a move. An *artifact* is one answer the person chose to keep (its
+  text and sources), kept apart from the chat so deleting the chat does not lose
+  it. All three live in the same IndexedDB (`projects`, `artifacts` beside
+  `threads`, database version 2) and go with "Delete history". Nothing about them
+  is sent anywhere. These are defaults, chosen so the drawer could ship; they are
+  cheap to change while the data is only on the device.
+- **A messages API would reverse the local-only decision above.** Syncing chats,
+  projects and artifacts to a server (the Rust messages API on #66) means the
+  server holds message text, which the 2026-10-31 owner decision rules out for the
+  `pwa` channel and which Rule 1 limits for `personal` scope. It needs a new owner
+  decision first: opt-in sync only, `personal`-scope chats never leave the device,
+  and the footer wording changes with it.
 - **Offline queue.** A question written offline is stored on the device and sent
   when the network returns, with one `Idempotency-Key` per message so a retry
   after a dropped connection is replayed by the gateway instead of answered and

@@ -134,7 +134,7 @@ test('discarding the only question leaves nothing behind after a reload', async 
       page.evaluate(
         () =>
           new Promise<number>((done) => {
-            const open = indexedDB.open('shamwari-chat', 1);
+            const open = indexedDB.open('shamwari-chat');
             open.onsuccess = () => {
               const all = open.result.transaction('threads').objectStore('threads').getAll();
               all.onsuccess = () => done(all.result.length);
@@ -215,7 +215,7 @@ test('an interrupted question in an older chat is recovered and answered, not ju
   await page.evaluate(
     () =>
       new Promise<void>((done, fail) => {
-        const open = indexedDB.open('shamwari-chat', 1);
+        const open = indexedDB.open('shamwari-chat');
         open.onerror = () => fail(open.error);
         open.onsuccess = () => {
           const tx = open.result.transaction('threads', 'readwrite');
