@@ -412,6 +412,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   const authPanel = $('#auth');
   const syncAuth = () => {
     $('#signout').hidden = !auth.signedIn();
+    $('#open-signin').hidden = auth.signedIn(); // "Sign in" is for someone who is not
   };
   function showAuth() {
     authPanel.hidden = false;
@@ -500,14 +501,12 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     b.addEventListener('click', () => void ask(b.textContent ?? '')),
   );
 
-  // The two icons at the top right. The avatar opens sign-in, or Settings once signed in. There are
-  // no notifications to show yet, and the bell says so rather than doing nothing.
-  $('#avatar').addEventListener('click', () => {
-    if (!auth.signedIn()) return showAuth();
-    const more = $<HTMLDetailsElement>('details.more');
-    more.open = true;
-    more.scrollIntoView({ block: 'nearest' });
-    more.querySelector<HTMLElement>('summary')?.focus();
+  // The top bar's icons. The account menu is Mzizi's disclosure pattern and opens by itself; "Sign in" inside
+  // it brings the sign-in panel up. There are no notifications to show yet, and the bell says so rather
+  // than doing nothing.
+  $('#open-signin').addEventListener('click', () => {
+    document.querySelector<HTMLDetailsElement>('details.account')?.removeAttribute('open');
+    showAuth();
   });
   let bellTimer: ReturnType<typeof setTimeout> | undefined;
   $('#bell').addEventListener('click', () => {
