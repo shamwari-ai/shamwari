@@ -39,10 +39,13 @@ const json = async (path, init) => {
   return { status: res.status, body, text };
 };
 
+// Loopback inside an isolated container network, no TLS by design; the React rule does not apply to this Node script.
+// nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
 const stubLog = async () => (await fetch(`${STUB}/__log`)).json();
 
 await until(
   "LibreChat to be up",
+  // nosemgrep: typescript.react.security.react-insecure-request.react-insecure-request
   async () => (await fetch(`${APP}/health`)).ok,
 );
 console.log("LibreChat is up");
