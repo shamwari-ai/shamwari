@@ -550,13 +550,6 @@ input:not([type='checkbox']):not([type='radio']) {
   gap: var(--gap-floor);
   padding-block: var(--gap-floor);
 }
-.side-settings > summary {
-  list-style: none;
-  cursor: pointer;
-}
-.side-settings > summary::-webkit-details-marker {
-  display: none;
-}
 
 /* The drawer's lists: pinned, projects, loose chats, saved answers. */
 .side-list {
@@ -579,11 +572,6 @@ input:not([type='checkbox']):not([type='radio']) {
 .side-nav {
   display: grid;
   gap: var(--gap-floor);
-}
-.side-link {
-  justify-content: flex-start;
-  width: 100%;
-  text-decoration: none;
 }
 .project > summary {
   display: flex;
@@ -863,4 +851,48 @@ html[data-view='pending'] dialog {
 }
 .signin-screen p {
   margin: 0;
+}
+
+/* ---- the drawer's foot rows ---------------------------------------------------------------------------------
+   Use the API, Disclaimer and privacy, Settings: quiet rows, not buttons. No fill and no outline; muted text with a
+   muted leading icon from the Mzizi set (the label carries the meaning, so the icon is decorative). The hit region is
+   the Bundu floor, hover adds a soft fill and the text steps up to full strength, and the focus ring is the page's. */
+.side-row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
+  width: 100%;
+  min-height: var(--target-floor);
+  padding-inline: var(--inset-floor);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  /* Muted, but not the muted token: that one is 6:1 on this surface, under the Bundu floor's 7:1 for body-size text.
+     This is the foreground eased toward the surface, built from the two tokens (no colour of its own), so it follows
+     light and dark and stays above the floor. */
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  list-style: none;
+}
+.side-row::-webkit-details-marker {
+  display: none;
+}
+.side-row:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.side-row .side-icon {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.side-row .side-external {
+  margin-inline-start: auto;
+  width: 1rem;
+  height: 1rem;
+}
+.side-settings[open] > .side-row {
+  color: var(--foreground);
 }
