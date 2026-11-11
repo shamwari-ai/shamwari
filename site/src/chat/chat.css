@@ -977,6 +977,7 @@ html[data-view='pending'] dialog {
 .side-tabs [role='tab']:hover {
   background: var(--muted);
   color: var(--foreground);
+}
 
 /* ---- the page slides aside to open the drawer ------------------------------------------------------------------
    Below 64rem the drawer is a popover (Mzizi's AppShell). Opening it also slides the PAGE sideways by the drawer's
