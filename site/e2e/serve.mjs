@@ -95,8 +95,17 @@ const headersFor = (p) => {
   return out;
 };
 
+// A test hook: each GET /__sw/bump makes /lite/sw.js a different file (a comment line is added), which is exactly what a
+// new release is to a browser, so a test can drive a real service worker update.
+let swBump = 0;
+
 createServer(async (req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '');
+  if (path === '/__sw/bump') {
+    swBump += 1;
+    res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
+    return res.end(String(swBump));
+  }
   const redirect = redirectFor(path);
   if (redirect) {
     res.writeHead(redirect.status, { Location: redirect.location });
@@ -115,7 +124,8 @@ createServer(async (req, res) => {
   let file = join(root, path);
   try {
     if ((await stat(file)).isDirectory()) file = join(file, 'index.html');
-    const body = await readFile(file);
+    let body = await readFile(file);
+    if (path === '/lite/sw.js' && swBump) body = Buffer.concat([body, Buffer.from(`\n// e2e bump ${swBump}\n`)]);
     res.writeHead(200, { 'Content-Type': types[extname(file)] ?? 'application/octet-stream', ...headersFor(new URL(req.url, 'http://x').pathname) });
     res.end(body);
   } catch {
