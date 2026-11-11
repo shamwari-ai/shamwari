@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import worker from '../../worker/index';
+import worker, { SESSION_PATHS } from '../../worker/index';
 import { CHAT, LITE, chooseDestination, rootResponse } from '../../worker/root';
 
 const get = (headers: Record<string, string> = {}, cf?: { clientTcpRtt?: number }) => {
@@ -90,11 +91,41 @@ describe('the Worker', () => {
   });
 
   it('answers a path with no asset and no route with a plain 404, never a 503 from sign-in', async () => {
-    for (const path of ['/chat/', '/chat', '/nope', '/lite/auth/other']) {
-      const res = await worker.fetch(new Request(`https://shamwari.ai${path}`), {}, ctx);
-      expect(res.status, path).toBe(404);
-      expect(res.headers.get('Retry-After'), path).toBeNull();
+    for (const path of ['/chat/', '/chat', '/nope', '/lite/auth/other', '/lite/auth/token/']) {
+      for (const method of ['GET', 'HEAD', 'POST']) {
+        const res = await worker.fetch(new Request(`https://shamwari.ai${path}`, { method }), {}, ctx);
+        expect(res.status, `${method} ${path}`).toBe(404);
+        expect(res.headers.get('Retry-After'), `${method} ${path}`).toBeNull();
+        expect(res.headers.get('Cache-Control'), `${method} ${path}`).toBe('no-store');
+      }
     }
+    const body = await (await worker.fetch(new Request('https://shamwari.ai/nope'), {}, ctx)).text();
+    expect(body).toBe('Not found');
+  });
+
+  it('still hands each of the four sign-in routes to sign-in, not the 404', async () => {
+    // With nothing configured, sign-in cannot work: a navigation lands back on the app with a
+    // reason (302) and the two JSON routes say "unavailable" (503). Neither is the 404.
+    for (const path of ['/lite/auth/login', '/lite/callback']) {
+      const res = await worker.fetch(new Request(`https://shamwari.ai${path}`), {}, ctx);
+      expect(res.status, path).toBe(302);
+    }
+    for (const path of ['/lite/auth/token', '/lite/auth/logout']) {
+      const res = await worker.fetch(new Request(`https://shamwari.ai${path}`), {}, ctx);
+      expect(res.status, path).toBe(503);
+    }
+  });
+
+  it('keeps its list of Worker-only paths in step with wrangler.app.jsonc', () => {
+    // The same comment-line and trailing-comma stripping check.mjs uses: the file is JSONC.
+    const text = readFileSync(new URL('../../wrangler.app.jsonc', import.meta.url), 'utf8')
+      .split('\n')
+      .filter((l) => !/^\s*\/\//.test(l))
+      .join('\n')
+      .replace(/,(\s*[}\]])/g, '$1');
+    const first: string[] = JSON.parse(text).assets.run_worker_first;
+    expect(first).toContain('/');
+    expect([...first].filter((p) => p !== '/').sort()).toEqual([...SESSION_PATHS].sort());
   });
 
   it('answers HEAD like GET, and refuses other methods without reaching sign-in', async () => {

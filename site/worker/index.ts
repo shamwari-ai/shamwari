@@ -13,8 +13,9 @@ interface Ctx {
   waitUntil(p: Promise<unknown>): void;
 }
 
-/** The only paths (besides the root) that reach this Worker on purpose: `assets.run_worker_first`. */
-const SESSION_PATHS = new Set(['/lite/auth/login', '/lite/auth/token', '/lite/auth/logout', '/lite/callback']);
+/** The only paths (besides the root) that reach this Worker on purpose: `assets.run_worker_first`.
+ *  test/worker/root.test.ts fails if this and wrangler.app.jsonc disagree. */
+export const SESSION_PATHS = new Set(['/lite/auth/login', '/lite/auth/token', '/lite/auth/logout', '/lite/callback']);
 
 function randomState(): string {
   const b = crypto.getRandomValues(new Uint8Array(32));
@@ -57,9 +58,8 @@ export default {
       // Misconfiguration (a secret not bound yet) or an unexpected fault. Say so in the logs, with
       // the message only (never the request, cookies or tokens), and do not touch the cookie.
       console.error('session worker failed:', err instanceof Error ? err.message : 'unknown error');
-      const path = pathname;
       // A browser navigating to sign-in lands back on the app with a reason, not on a JSON blob.
-      if (req.method === 'GET' && (path === '/lite/auth/login' || path === '/lite/callback')) {
+      if (req.method === 'GET' && (pathname === '/lite/auth/login' || pathname === '/lite/callback')) {
         return new Response(null, {
           status: 302,
           headers: { Location: '/lite/?signin=failed', 'Cache-Control': 'no-store' },
