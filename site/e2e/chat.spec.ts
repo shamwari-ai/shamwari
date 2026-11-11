@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, openChat } from './helpers';
+import { ask, openAccount, openChat, openChats } from './helpers';
 
 test('asks a question and renders the answer with its citation card', async ({ page }) => {
   await openChat(page);
@@ -108,11 +108,11 @@ test('history stays on the device across reloads, new chat starts clean, delete 
   await page.getByRole('button', { name: 'New chat' }).click();
   await expect(page.locator('#log article')).toHaveCount(0);
   await expect(page.locator('#q')).toBeFocused();
-  await page.locator('#history summary').click();
+  await openChats(page);
   await expect(page.locator('#history-list button')).toContainText('Is everyone equal');
 
   page.once('dialog', (d) => d.accept());
-  await page.getByText('Settings').click();
+  await openAccount(page);
   await page.getByRole('button', { name: 'Delete history' }).click();
   await expect(page.locator('#toast')).toContainText('History deleted');
   await expect(page.locator('#history')).toBeHidden();
@@ -142,6 +142,7 @@ test('nothing is sent to a server except the ask itself', async ({ page }) => {
 test('Shona is offered, shown as a draft, and Enter sends', async ({ page }) => {
   await openChat(page);
   await expect(page.locator('#review')).toBeHidden();
+  await openAccount(page);
   await page.locator('#lang').selectOption('sn');
   await expect(page.locator('html')).toHaveAttribute('lang', 'sn');
   await expect(page.locator('#review')).toBeVisible();
@@ -162,7 +163,7 @@ test('the home screen greets, offers suggested prompts, and the chips ask the qu
   await expect(page.locator('#empty')).toBeHidden();
 });
 
-test('the bell says there is nothing new, and the avatar opens sign-in when there is no key', async ({ page }) => {
+test('the bell says there is nothing new, and the account menu holds sign-in and settings', async ({ page }) => {
   await openChat(page, null);
   await page.locator('#auth').waitFor();
   await page.locator('#key').fill('sk_shamwari_mock_ok');
@@ -177,23 +178,26 @@ test('the bell says there is nothing new, and the avatar opens sign-in when ther
   await expect(page.locator('#toast')).toHaveText('No new notifications');
   await expect(page.locator('#toast')).toHaveText('', { timeout: 6000 });
 
-  // Signed in, the avatar opens Settings, where the person can remove the key.
-  await page.getByRole('button', { name: 'Account' }).click();
-  await expect(page.locator('details.more')).toHaveAttribute('open', '');
-  await expect(page.locator('details.more summary')).toBeFocused();
+  // Signed in, the account menu holds Settings, where the person can remove the key.
+  await openAccount(page);
+  await expect(page.locator('#signout')).toBeVisible();
+  await expect(page.locator('#open-signin')).toBeHidden(); // signed in, so no "Sign in"
   await page.locator('#signout').click();
   await expect(page.locator('#auth')).toBeVisible();
-  // Signed out, the avatar brings the sign-in panel back after it was dismissed.
+  // Signed out, "Sign in" in the account menu brings the sign-in panel back after it was dismissed.
   await page.locator('#auth').evaluate((el) => ((el as HTMLElement).hidden = true));
-  await page.getByRole('button', { name: 'Account' }).click();
+  await openAccount(page);
+  await page.locator('#open-signin').click();
   await expect(page.locator('#auth')).toBeVisible();
 });
 
 test('the icon buttons keep an accessible name in Shona, and Install stays visible after a question', async ({ page }) => {
   await openChat(page);
+  await openAccount(page);
   await page.locator('#lang').selectOption('sn');
   await expect(page.getByRole('button', { name: 'Zviziviso' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Akaunti' })).toBeVisible();
+  // The account icon is a disclosure (<summary>), so it is found by its accessible name directly.
+  await expect(page.locator('details.account summary')).toHaveAttribute('aria-label', 'Akaunti');
   // The install button lives outside the greeting, so asking a question (which hides the greeting) does not take it away.
   await expect(page.locator('#install').locator('xpath=ancestor::*[@id="empty"]')).toHaveCount(0);
 });

@@ -13,3 +13,14 @@ export async function ask(page: Page, text: string) {
   await page.locator('#q').fill(text);
   await page.locator('#send').click();
 }
+
+/** Open the account menu (language, settings, sign-in), the way a person does: tap the account icon. */
+export async function openAccount(page: Page) {
+  const menu = page.locator('details.account');
+  if ((await menu.getAttribute('open')) === null) await menu.locator('summary').click();
+}
+
+/** Open the drawer that lists the chats kept on this device. */
+export async function openChats(page: Page) {
+  await page.getByRole('button', { name: /open chats/i }).click();
+}

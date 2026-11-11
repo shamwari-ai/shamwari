@@ -5,11 +5,15 @@
 // built by astro.app.config.mjs from app-src/. The marketing Worker
 // (shamwari-site, https://www.shamwari.ai) never contains it.
 //
-// Its own tiny layout, not Layout.astro: no web fonts, no marketing header,
-// and the only client JS on the site. The page is complete English HTML
-// without JavaScript; the script translates it and runs the chat.
+// Its frame is Mzizi's AppShell (the standard app chrome, mounted once): the brand and the two icons in
+// the top bar, the chat history in the drawer, a quiet footer. No web fonts and no marketing header, and
+// the only client JS on the site. The page is complete English HTML without JavaScript; the script
+// translates it and runs the chat.
 import '../../../src/chat/chat.css';
 import { en } from '../../../src/chat/strings';
+import AppShell from '@bundu/ui/app/AppShell.astro';
+import TopBarAction from '@bundu/ui/app/TopBarAction.astro';
+import Icon from '@bundu/ui/Icon.astro';
 
 // Fixed at build time and never read from the URL (see chat/main.ts).
 const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
@@ -33,103 +37,133 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Shamwari" />
 </head>
-<body>
+<body class="text-base">
   <a class="skip" href="#q" data-i18n="skipToQuestion">Skip to the question box</a>
-  <div class="app">
-    <header>
-      <div class="bar">
-        <h1 data-i18n="appName">Shamwari Chat</h1>
-        <label class="sr-only" for="lang" data-i18n="language">Language</label>
-        <select id="lang" aria-describedby="review"></select>
-        <button type="button" id="new-chat" class="btn" data-i18n="newChat">New chat</button>
-        <div class="actions">
-          <button type="button" id="bell" class="btn icon" aria-label={en.notifications} data-i18n-attr="aria-label:notifications">
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
-          </button>
-          <button type="button" id="avatar" class="btn icon" aria-label={en.avatar} data-i18n-attr="aria-label:avatar">
-            <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-          </button>
+  <AppShell id="chat" accent="sodalite" navLabel="Chats" sidebarLabel="Your chats">
+    <!-- The brand, in the drawer's head and (below 64rem) in the top bar. Lower-case: a wordmark is. -->
+    <a slot="workspace" href="/lite/" class="brand" aria-label="shamwari">
+      <img src="/apple-touch-icon.png" alt="" width="28" height="28" />
+      <span class="wordmark">shamwari</span>
+    </a>
+    <a slot="brand" href="/lite/" class="brand" aria-label="shamwari">
+      <img src="/apple-touch-icon.png" alt="" width="28" height="28" />
+      <span class="wordmark">shamwari</span>
+    </a>
+
+    <!-- The drawer: the chats kept on this device. The script fills #history-list. -->
+    <div slot="nav" class="chats">
+      <h2 class="chats-title" data-i18n="earlierChats">Earlier chats</h2>
+      <div id="history" hidden>
+        <ul id="history-list"></ul>
+      </div>
+      <p id="history-empty" class="chats-empty" data-i18n="noEarlierChats">No earlier chats on this device yet.</p>
+    </div>
+
+    <!-- The top bar's actions: a new chat and the bell. #new-chat and #bell are wrappers the script listens on. -->
+    <span slot="actions" id="new-chat" class="contents">
+      <TopBarAction label={en.newChat} icon="plus" />
+    </span>
+    <span slot="actions" id="bell" class="contents">
+      <!-- The icon set has no bell yet; this one is drawn in the set's stroke style. TopBarAction's classes. -->
+      <button type="button" class="bar-action" aria-label={en.notifications} data-i18n-attr="aria-label:notifications">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
+      </button>
+    </span>
+
+    <!-- The account menu. Mzizi's AccountMenu names a signed-in person; this chat has no name to show until
+         Mukoko sign-in is switched on, so it is the same disclosure with a person icon, not initials. -->
+    <details slot="account" class="account" data-slot="account-menu">
+      <summary class="bar-action" aria-label={en.avatar} data-i18n-attr="aria-label:avatar">
+        <Icon name="user" class="h-5 w-5" />
+      </summary>
+      <div class="account-panel" data-slot="account-menu-panel">
+        <p class="account-title" data-i18n="accountTitle">Your account</p>
+        <p class="account-row">
+          <button type="button" id="open-signin" class="btn" data-i18n="authTitle">Sign in to ask</button>
+        </p>
+        <div class="account-row">
+          <label for="lang" data-i18n="language">Language</label>
+          <select id="lang" aria-describedby="review"></select>
+        </div>
+        <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
+          This language is a draft and still needs review by a native speaker.
+        </p>
+        <p class="account-note" data-i18n="privacyDetail">{en.privacyDetail}</p>
+        <div class="account-row">
+          <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
+          <button type="button" id="signout" class="btn" hidden data-i18n="authDevClear">Remove key</button>
         </div>
       </div>
-      <p id="offline" class="notice" role="status" hidden data-i18n="offlineBanner">
-        You are offline. You can still write questions; they will be sent later.
-      </p>
-      <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
-        This language is a draft and still needs review by a native speaker.
-      </p>
-    </header>
+    </details>
 
-    <main id="thread" tabindex="-1">
+    <h1 class="sr-only" data-i18n="appName">Shamwari Chat</h1>
+    <p id="offline" class="notice" role="status" hidden data-i18n="offlineBanner">
+      You are offline. You can still write questions; they will be sent later.
+    </p>
+
+    <div id="thread" tabindex="-1" class="thread">
       <section id="empty" aria-labelledby="greeting">
         <img class="mark" src="/apple-touch-icon.png" alt="" width="56" height="56" />
         <h2 id="greeting" data-i18n="greeting">Hello, friend</h2>
         <p class="lead" data-i18n="tagline">Ask a question. Get the answer with the section it came from.</p>
-        <h3 id="try" class="small" data-i18n="tryAsking">Try asking</h3>
+        <h3 id="try" class="try" data-i18n="tryAsking">Try asking</h3>
         <ul class="examples">
           <li><button type="button" class="btn chip" data-example data-i18n="example1">What does the Constitution say about equality?</button></li>
           <li><button type="button" class="btn chip" data-example data-i18n="example2">What are my rights if I am arrested?</button></li>
-          <li><button type="button" class="btn chip" data-example data-i18n="example3">Who must pay income tax in Zimbabwe?</button></li>
+          <li><button type="button" class="btn chip" data-example data-i18n="example3">What does the Constitution say about education?</button></li>
         </ul>
       </section>
       <p class="install"><button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button></p>
+      <section id="auth" class="panel" aria-labelledby="auth-title" hidden>
+        <h2 id="auth-title" data-i18n="authTitle">Sign in to ask</h2>
+        <p>
+          <button type="button" id="mukoko-signin" class="btn" disabled aria-describedby="mukoko-soon" data-i18n="authMukoko">Sign in with Mukoko</button>
+        </p>
+        <p id="mukoko-soon" class="small" data-i18n="authMukokoSoon">Mukoko sign-in is coming. For now, use a developer key.</p>
+        <div class="devkey">
+          <h3 data-i18n="authDevTitle">Developer key (testing only)</h3>
+          <p class="small" data-i18n="authDevHelp">Paste a Shamwari API key. It is kept on this device only and is sent only to the Shamwari API. Do not use this on a shared phone.</p>
+          <form id="auth-form" class="row">
+            <label class="sr-only" for="key" data-i18n="authDevTitle">Developer key (testing only)</label>
+            <input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk_shamwari_…" />
+            <button type="submit" class="btn primary" data-i18n="authDevSave">Use this key</button>
+          </form>
+          <p id="key-error" class="small bad" role="alert" hidden data-i18n="authKeyBad">That does not look like a Shamwari key. It starts with sk_shamwari_.</p>
+        </div>
+      </section>
+
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
-      <details id="history" hidden>
-        <summary data-i18n="earlierChats">Earlier chats</summary>
-        <ul id="history-list"></ul>
-      </details>
       <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>
-    </main>
-
-    <section id="auth" class="panel" aria-labelledby="auth-title" hidden>
-      <h2 id="auth-title" data-i18n="authTitle">Sign in to ask</h2>
-      <p>
-        <button type="button" id="mukoko-signin" class="btn" disabled aria-describedby="mukoko-soon" data-i18n="authMukoko">Sign in with Mukoko</button>
-      </p>
-      <p id="mukoko-soon" class="small" data-i18n="authMukokoSoon">Mukoko sign-in is coming. For now, use a developer key.</p>
-      <div class="devkey">
-      <h3 data-i18n="authDevTitle">Developer key (testing only)</h3>
-      <p class="small" data-i18n="authDevHelp">Paste a Shamwari API key. It is kept on this device only and is sent only to the Shamwari API. Do not use this on a shared phone.</p>
-      <form id="auth-form" class="row">
-        <label class="sr-only" for="key" data-i18n="authDevTitle">Developer key (testing only)</label>
-        <input id="key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk_shamwari_…" />
-        <button type="submit" class="btn primary" data-i18n="authDevSave">Use this key</button>
-      </form>
-      <p id="key-error" class="small bad" role="alert" hidden data-i18n="authKeyBad">That does not look like a Shamwari key. It starts with sk_shamwari_.</p>
-      </div>
-    </section>
-
-    <section class="ask" aria-labelledby="ask-title">
-      <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
-    <div class="scope">
-      <label for="scope" data-i18n="scopeLabel">Asking about</label>
-      <select id="scope">
-        <option value="platform" data-i18n="scope.platform">General knowledge</option>
-        <option value="community" data-i18n="scope.community">Community knowledge</option>
-        <option value="personal" data-i18n="scope.personal">My own information</option>
-      </select>
     </div>
 
-    <form id="composer" class="composer" autocomplete="off">
-      <label class="sr-only" for="q" data-i18n="placeholder">Ask about law or tax</label>
-      <textarea id="q" rows="1" enterkeyhint="send" data-i18n-attr="placeholder:placeholder" placeholder="Ask about law or tax"></textarea>
-      <button type="submit" id="send" class="btn primary" data-i18n="send">Send</button>
-    </form>
-    </section>
+    <!-- The dock: the composer, pinned to the bottom of the screen. (Sign-in, when it is needed, is in the page above
+         it, not in the dock: a pinned panel would cover what a person is reading.) -->
+    <div class="dock">
+      <section class="ask" aria-labelledby="ask-title">
+        <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
+        <div class="scope">
+          <label for="scope" data-i18n="scopeLabel">Asking about</label>
+          <select id="scope">
+            <option value="platform" data-i18n="scope.platform">General knowledge</option>
+            <option value="community" data-i18n="scope.community">Community knowledge</option>
+            <option value="personal" data-i18n="scope.personal">My own information</option>
+          </select>
+        </div>
+        <form id="composer" class="composer" autocomplete="off">
+          <label class="sr-only" for="q" data-i18n="placeholder">Ask a question</label>
+          <textarea id="q" rows="1" enterkeyhint="send" data-i18n-attr="placeholder:placeholder" placeholder="Ask a question"></textarea>
+          <button type="submit" id="send" class="btn primary" data-i18n="send">Send</button>
+        </form>
+        <p id="toast" class="toast" role="status"></p>
+      </section>
+    </div>
 
-    <footer>
+    <!-- The quiet footer. -->
+    <div slot="footer" class="footer-text">
       <p data-i18n="footer">{en.footer}</p>
       <p data-i18n="storedHere">Your chat history is saved on this device only. Shamwari keeps a record of each question it answers, to run the service. Questions are not used to train Shamwari Mind.</p>
-      <details class="more">
-        <summary data-i18n="settings">Settings</summary>
-        <p class="small" data-i18n="privacyDetail">{en.privacyDetail}</p>
-        <p class="row">
-          <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
-          <button type="button" id="signout" class="btn" hidden data-i18n="authDevClear">Remove key</button>
-        </p>
-      </details>
-      <p id="toast" class="small" role="status"></p>
-    </footer>
-  </div>
+    </div>
+  </AppShell>
   <script>
     import '../../../src/chat/main';
   </script>
