@@ -137,20 +137,46 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
 `shamwari-site` add `shamwari.ai` back. The marketing site serves both hostnames again,
 as it does today.
 
-## Before sign-in can work (owner steps; all in the dashboard)
+## Before sign-in can work, and what the gate does
 
-The session Worker (`site/worker/`, see `docs/chat-signin.md`) ships inside `shamwari-app`. It is
-inert until these are done, and the page keeps using developer-key mode (`PUBLIC_CHAT_AUTH` is off):
+The session Worker (`site/worker/`, see `docs/chat-signin.md`) ships inside `shamwari-app`, and it is also
+the **gate** in front of the light chat: it runs first for `/lite/*` and `/_astro/*`
+(`assets.run_worker_first`), and serves the page and its scripts only to someone with a session. An
+unauthenticated request for `/lite/` is sent straight to the AuthKit hosted sign-in. The only things served
+without a session are the privacy page (`/lite/disclaimer/`), the manifest, the three install icons, the
+service worker and the stylesheets (the list is in `site/worker/gate.ts` and is asserted exactly by
+`site/test/worker/gate.test.ts`), plus the two root icons (`/favicon.png`, `/apple-touch-icon.png`), which the
+Worker does not see.
 
-1. In Cloudflare, open **Secrets Store** and create two secrets: the WorkOS **API key** for the
-   Shamwari Chat environment, and a **cookie password** (32 or more random characters).
-2. Tell the next session the store id and the two secret names. They go into
-   `secrets_store_secrets` in `site/wrangler.app.jsonc` (the commented block). Nothing else is
-   needed from you: no value is ever put in git.
+1. **The two secrets are bound by name, with no values in git.** `site/wrangler.app.jsonc` binds
+   `WORKOS_API_KEY` to the Secrets Store secret `CONSOLE_WORKOS_API_KEY` and `COOKIE_PASSWORD` to
+   `SESSION_SECRET` (store `56f84bfa8a564c54a95dbf4f4b4281b4`). Both are the shared Mukoko secrets.
+   Nothing is created by hand for them.
+2. The gate **fails closed**. If either secret does not resolve, a request for the page is a `503` with a
+   `Retry-After`, never the page; the public pages above still answer.
 3. The first deploy of `shamwari-app` also creates the `SessionRefresh` Durable Object (a migration
    in the same file). It shows up under Workers & Pages > shamwari-app > Bindings.
 4. Sign-in cannot be tried on the `workers.dev` address: WorkOS accepts only
    `https://shamwari.ai/lite/callback`. Test it after the apex is attached to `shamwari-app`.
+
+### Verify after deploy
+
+The deploy is a separate, manual step. Nothing in the repository can show that the deployed Worker has the
+latest config (when this was written, `shamwari-app` as deployed listed no secret bindings, only its plain
+variables and the Durable Object), so check these against `https://shamwari.ai` after deploying:
+
+- [ ] **First, redeploy `shamwari-app` from this change, then look at the dashboard.** Workers & Pages > `shamwari-app` >
+      Settings > **Bindings** must list `WORKOS_API_KEY` and `COOKIE_PASSWORD` (Secrets Store), `SESSION_REFRESH` (Durable
+      Object) and `ASSETS` (Assets). A Worker that lists none of the secrets was deployed before they were added to
+      `wrangler.app.jsonc`: it will answer `503` to every page until it is redeployed with them. Then the Secrets Store
+      must hold `CONSOLE_WORKOS_API_KEY` and `SESSION_SECRET` (it did when this was written; names only, never values).
+- [ ] `GET /lite/` with no cookie answers `302` to `/lite/auth/login`, not `503`, and not the page.
+- [ ] `GET /_astro/<any script>.js` with no cookie answers `401`.
+- [ ] `GET /lite/disclaimer/`, `/lite/manifest.webmanifest` and `/lite/sw.js` answer `200` with no cookie.
+- [ ] Signing in from `/lite/auth/login` lands on `/lite/` and the chat loads; `/lite/auth/token` answers `200`.
+- [ ] `https://shamwari.ai/lite/callback` completes (it is the registered redirect URI).
+- [ ] With the cookie cleared, `/lite/` is a `302` to sign-in again.
+- [ ] Bindings for `WORKOS_API_KEY`, `COOKIE_PASSWORD`, `SESSION_REFRESH` and `ASSETS` are listed on the Worker.
 
 ## Things this has not verified
 
@@ -171,3 +197,32 @@ inert until these are done, and the page keeps using developer-key mode (`PUBLIC
 `npm run deploy:app` from `site/`, which builds with `PUBLIC_CHAT_AUTH=mukoko` and then runs `wrangler deploy`.
 After a deploy, `GET /lite/auth/login` should answer 302 to the Mukoko Account sign-in page; a real sign-in
 needs a person and a registered redirect URI (`https://shamwari.ai/lite/callback`).
+
+## Automatic release to production (shamwari-ai/shamwari#201)
+
+Every merge to `staging` is released to `main` and production without a manual step. Only a major
+version is gated; it is never automatic.
+
+1. A PR merges to `staging` through the queue.
+2. **Verify:** `release-to-main.yml` runs when CI finishes on the staging head. A red head
+   releases nothing, and a head that has since been replaced is left to the newer run.
+3. **Release PR:** it keeps one branch, `release/staging-to-main`, whose tree equals staging's
+   (branch from `main`, `git read-tree -u --reset origin/staging`, commit), opens or updates the
+   PR `chore: release staging to main, DATE+n`, labels it `forward-ported`, and turns on
+   auto-merge. It moves `main` only: the gateway and Core are not deployed by this.
+4. **Deploy:** when `main` updates, Workers Builds deploys `shamwari-site` (connected) and
+   `shamwari-app` (once the owner connects it in the Cloudflare dashboard).
+5. **Smoke:** `smoke-production.yml` checks production for up to 18 minutes: `/lite/`
+   unauthenticated is a 302 to `/lite/auth/login`; `/lite/disclaimer/`,
+   `/lite/manifest.webmanifest` and `/lite/sw.js` are 200; an `/_astro/*.js` script named in
+   `sw.js` is 401 without a session; `www.shamwari.ai` is 200. On failure it opens an issue.
+
+**Rollback:** Cloudflare dashboard, Workers & Pages, the Worker, Deployments, roll back to the
+previous version (a deploy keeps the previous version ids), then fix forward on `staging`.
+
+**Needs the owner:** a GitHub App (or token) the release workflow can use, stored as the
+repository secrets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`, installed on this repository
+with Contents, Pull requests and Issues write. The built-in `GITHUB_TOKEN` is not enough: a PR it
+opens does not start the pull-request workflows, so the required checks would never run.
+Both workflows must also be on `main` before they run (`workflow_run` uses the default branch's
+copy), so the first release is cut by hand.

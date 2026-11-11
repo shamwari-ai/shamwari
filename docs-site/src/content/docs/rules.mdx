@@ -21,6 +21,14 @@ answer confidently while withholding the very data the question was about,
 and the person asking would have no way to know something was missing. An
 error is worse service and better faith.
 
+Nobody chooses a scope in Shamwari. The service decides it, from the question
+and what the signed-in person is allowed. When a question looks like it needs
+your own information and only Cloud is available, Shamwari answers from
+community and platform knowledge alone and **says so**, in a line on the
+answer: it was answered without your own information, and on-device Shamwari
+Mind will use it. Your own information is never sent to Cloud to make that
+possible.
+
 The check runs twice on purpose: once at the edge, so a refused request costs
 nothing, and once inside the service that owns the database, where the edge
 cannot overrule it. Two implementations, in two languages, deliberately not

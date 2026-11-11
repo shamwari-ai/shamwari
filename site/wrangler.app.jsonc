@@ -2,23 +2,34 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "shamwari-app",
   "compatibility_date": "2026-08-01",
-  "observability": { "enabled": true },
+  // Query strings are redacted: /lite/callback carries the OAuth code and state, and
+  // /lite/?signin=failed carries a reason; persisted invocation logs must never store them.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true,
+    },
+    "traces": { "enabled": false, "head_sampling_rate": 1, "persist": true },
+    "issue_detection": { "enabled": true },
+  },
 
   // Shamwari Chat: the PWA, its service worker, manifest and headers (static
   // output of `npm run build:app`), plus the SESSION WORKER (worker/) that does
-  // sign-in. Static assets answer everything except the four routes below, which
-  // run the Worker first. The root / is answered by the Worker (worker/root.ts): a 302 to /chat/ or /lite/
+  // sign-in and the gate in front of the chat. The root / is answered by the Worker (worker/root.ts): a 302 to /chat/ or /lite/
   // by connection quality, never a static redirect.
   "main": "worker/index.ts",
   "assets": {
     "directory": "./dist-app",
-    "run_worker_first": [
-      "/",
-      "/lite/auth/login",
-      "/lite/auth/token",
-      "/lite/auth/logout",
-      "/lite/callback",
-    ],
+    // The Worker is the gate: it runs first for the root, everything under /lite/ and the build output in
+    // /_astro/, and serves the static asset only to someone signed in (worker/gate.ts). The ASSETS binding
+    // is how it reads them. Only the favicon and apple-touch icon are served without it.
+    "binding": "ASSETS",
+    "run_worker_first": ["/", "/lite/*", "/_astro/*"],
   },
 
   // Public configuration, safe in git. The client id is NOT a secret.

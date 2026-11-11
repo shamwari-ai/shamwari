@@ -143,8 +143,9 @@ body {
   flex-direction: column;
   gap: var(--gap-floor);
   min-width: 0;
-  /* Tall enough that the foot (update card, New chat, account) sits at the bottom of the drawer. */
-  min-height: calc(100dvh - 5rem);
+  /* The drawer's body is a column of fixed height: the list scrolls (.side-scroll), the foot does not. */
+  flex: 1 1 0;
+  min-height: 0;
   padding-inline: var(--gap-floor);
 }
 .chats > * {
@@ -328,9 +329,10 @@ input:not([type='checkbox']):not([type='radio']) {
 /* ---- the dock: sign-in when needed, then the composer, pinned above the device's own bottom bar ------- */
 
 .dock {
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
+  flex: none;
+  /* The divider between the messages and the composer: the canonical hairline token, so it moves with the dock and
+     never scrolls away. Raised to a full pixel in high-contrast and forced-colors modes. */
+  border-top: 0.5px solid var(--border);
   display: grid;
   gap: var(--gap-floor);
   padding-block: var(--gap-floor) max(var(--gap-floor), env(safe-area-inset-bottom));
@@ -358,18 +360,6 @@ input:not([type='checkbox']):not([type='radio']) {
   flex: 1;
   min-width: 12rem;
 }
-.scope {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-floor);
-  font-size: var(--fs-caption);
-  color: var(--muted-foreground);
-}
-.scope select {
-  flex: 1 1 0;
-  width: 0;
-  min-width: 0;
-}
 .composer {
   display: flex;
   align-items: flex-end;
@@ -396,14 +386,35 @@ input:not([type='checkbox']):not([type='radio']) {
   font-size: var(--fs-caption);
   color: var(--muted-foreground);
 }
-.footer-text {
-  font-size: var(--fs-caption);
-  line-height: var(--leading-floor);
-  color: var(--muted-foreground);
-  text-align: left;
+.footer-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-floor);
+  color: inherit;
+  text-underline-offset: 3px;
 }
-.footer-text p {
-  margin: var(--gap-floor) 0;
+.legal h1 {
+  margin: 0;
+  font: inherit;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.legal p {
+  margin: 0;
+}
+.legal section {
+  display: grid;
+  gap: var(--gap-floor);
+  padding-block-end: var(--inset-floor);
+  border-bottom: 1px solid var(--border);
+}
+.legal {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--inset-floor);
+  display: grid;
+  gap: var(--gap-floor);
 }
 
 /* ---- messages ---------------------------------------------------------------------------------------- */
@@ -527,8 +538,23 @@ input:not([type='checkbox']):not([type='radio']) {
   text-underline-offset: 3px;
 }
 
-/* Developer-key panel belongs to the developer-key provider only. */
-[data-auth='mukoko'] .devkey {
+/* Sign-in is not on yet in a developer-key build: a button that cannot be pressed is not shown. */
+[data-auth='developer-key'] #mukoko-signin {
+  display: none;
+}
+#new-project {
+  margin-block-start: var(--gap-floor);
+}
+.settings-panel {
+  display: grid;
+  gap: var(--gap-floor);
+  padding-block: var(--gap-floor);
+}
+.side-settings > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.side-settings > summary::-webkit-details-marker {
   display: none;
 }
 
@@ -550,10 +576,14 @@ input:not([type='checkbox']):not([type='radio']) {
   flex: 1 1 8rem;
   min-width: 0;
 }
-.side-account {
-  padding: 0;
-  width: var(--target-floor);
-  flex: none;
+.side-nav {
+  display: grid;
+  gap: var(--gap-floor);
+}
+.side-link {
+  justify-content: flex-start;
+  width: 100%;
+  text-decoration: none;
 }
 .project > summary {
   display: flex;
@@ -627,17 +657,14 @@ input:not([type='checkbox']):not([type='radio']) {
   margin: 0;
 }
 .update-popup {
-  position: fixed;
-  inset-inline: var(--inset-floor);
-  bottom: calc(9rem + env(safe-area-inset-bottom));
-  z-index: 20;
+  /* In the column, directly above the composer: it takes its room from the messages, never covers them. */
+  flex: none;
+  width: 100%;
   max-width: 28rem;
   margin-inline: auto;
 }
 .side-foot {
-  margin-top: auto;
-  position: sticky;
-  bottom: 0;
+  flex: none;
   display: grid;
   gap: var(--gap-floor);
   padding-block: var(--gap-floor) max(var(--gap-floor), env(safe-area-inset-bottom));
@@ -720,4 +747,120 @@ main#main :where(.thread, .dock, .ask, #empty, .panel, .chat-tools) {
   font-size: var(--fs-caption);
   color: var(--muted-foreground);
   text-align: center;
+}
+
+/* ---- the shell never scrolls -----------------------------------------------------------------------------
+   On the chat page (html.app) the document does not scroll and neither does the app area. Exactly two regions
+   scroll: the MESSAGES (#thread) and, in the drawer, the list of chats (.side-scroll). The top bar, the
+   composer with its divider, and the drawer's head and foot are fixed in the column around them, so there is
+   nothing pinned over a scroller and nothing for a scroll to slide under. Every other page (the disclaimer)
+   is an ordinary scrolling document, so none of this applies to it. Each scroller has overscroll-behavior:
+   contain, so the end of one never moves the page behind it or the other region. The regions that must not
+   scroll are `overflow: clip`, not `hidden`: a clipped box cannot be scrolled by a script or by focus, so a
+   focused control can never drift the top bar off the screen. (`hidden` is kept first, for old browsers.) */
+html.app,
+html.app body {
+  height: 100%;
+  overflow: hidden;
+}
+html.app [data-slot='app-main'] {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  overflow: clip;
+}
+html.app main#main {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overflow: clip;
+}
+html.app main#main > .grid {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+html.app #thread {
+  flex: 1 1 0;
+  /* Never squeezed to nothing by the things around it, whatever they add. */
+  min-height: 6rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  /* A reply scrolled to the top, or the thinking bubble to the bottom, keeps the Bundu 7px from the edge. The
+     last message does not end flush against the composer either. */
+  scroll-padding-block: var(--gap-floor);
+  padding-block-end: var(--gap-floor);
+}
+/* The drawer: head and foot stay, the list between them scrolls. */
+[data-slot='sidebar-body'] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overflow: clip;
+}
+.side-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+}
+
+@media (prefers-contrast: more), (forced-colors: active) {
+  .dock {
+    border-top-width: 1px;
+    border-top-color: var(--border-control, CanvasText);
+  }
+}
+
+/* ---- signed out: a whole screen ---------------------------------------------------------------------------
+   The sign-in is a view of its own, not a card on the chat. While it shows, the chat (and the dialog) is not
+   in the page at all, so there is no thread, no composer and no picker behind it. */
+html[data-view='signin'] [data-slot='app-shell'],
+html[data-view='pending'] [data-slot='app-shell'],
+html[data-view='signin'] dialog,
+html[data-view='pending'] dialog {
+  display: none;
+}
+.signin-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow-y: auto;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--inset-floor);
+  padding: var(--inset-floor) var(--page-inset);
+  padding-block-end: max(var(--inset-floor), env(safe-area-inset-bottom));
+  text-align: center;
+  background: var(--background);
+  color: var(--foreground);
+}
+.signin-screen[hidden] {
+  display: none;
+}
+.signin-screen .mark {
+  border-radius: var(--radius-lg);
+}
+.signin-screen h1 {
+  margin: 0;
+  font-family: inherit;
+  font-size: 1.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  outline: none;
+}
+.signin-screen .btn.primary {
+  width: 100%;
+  max-width: 24rem;
+}
+.signin-screen p {
+  margin: 0;
 }

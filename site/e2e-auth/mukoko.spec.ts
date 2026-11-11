@@ -23,18 +23,29 @@ const ask = async (page: Page, text: string) => {
   await page.locator('#send').click();
 };
 
+/** As if the page had just been sent to the hosted sign-in and come back without a session: the sign-in screen stays. */
+const justSentToSignIn = (page: Page) => page.addInitScript(() => sessionStorage.setItem('shamwari.signin.hop', String(Date.now())));
+const SIGNIN_SCREEN_ONLY = async (page: Page) => {
+  await expect(page.locator('#auth')).toBeVisible();
+  for (const sel of ['#thread', '#q', '#send', '#scope', '#log', '[data-slot="app-topbar"]', '.dock']) await expect(page.locator(sel), sel).toBeHidden();
+  await expect(page.getByText('Sign in to ask')).toHaveCount(0);
+  expect(await page.getByRole('button').filter({ visible: true }).count()).toBe(1); // one primary button, nothing else to press
+};
+
 test.beforeEach(async ({ page }) => {
   await reset(page);
   await steer(page, { session: true, tokens: [VALID] });
 });
 
-test('the flag changes the sign-in screen: Mukoko is real, the developer key is gone', async ({ page }) => {
+test('the flag changes the sign-in screen: Mukoko is real, the developer key is gone, and it is a whole screen', async ({ page }) => {
   await steer(page, { session: false });
+  await justSentToSignIn(page);
   await open(page);
   await expect(page.locator('html')).toHaveAttribute('data-auth', 'mukoko');
-  await expect(page.locator('#auth')).toBeVisible();
+  await SIGNIN_SCREEN_ONLY(page);
+  expect(await page.locator('#auth').boundingBox()).toMatchObject({ x: 0, y: 0, width: 360, height: 640 });
   await expect(page.getByRole('button', { name: 'Sign in with Mukoko' })).toBeEnabled();
-  await expect(page.locator('#key')).toBeHidden();
+  await expect(page.locator('#key')).toHaveCount(0);
   await expect(page.locator('#mukoko-soon')).toBeHidden();
 });
 
@@ -99,12 +110,10 @@ test('sign-out clears the token, ends the session, and the next ask needs a sign
   await expect(page.locator('#signout')).toHaveText('Sign out');
   await page.locator('#signout').click();
 
-  await expect(page.locator('#auth')).toBeVisible();
+  await SIGNIN_SCREEN_ONLY(page);
+  await expect(page.locator('#signin-note')).toContainText('Signed out'); // said on the sign-in screen, where the person is looking
   expect((await state(page)).logoutCalls).toBe(1);
-  await reset(page);
-  await ask(page, 'hello');
-  // Nothing was sent, and it did not quietly sign itself back in from the old cookie.
-  await expect(page.locator('#auth')).toBeVisible();
+  // Nothing was sent, there is no chat left to type in, and it did not quietly sign itself back in from the old cookie.
   expect(await seen(page)).toEqual([]);
   expect((await state(page)).session).toBe(false);
 });
@@ -141,6 +150,7 @@ test('if the refresh is refused too, it goes to sign-in and does not loop', asyn
 
 test('the Mukoko button starts sign-in on the Worker, which the service worker must not answer from cache', async ({ page }) => {
   await steer(page, { session: false });
+  await justSentToSignIn(page);
   await open(page);
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   await steer(page, { session: false });
@@ -159,7 +169,7 @@ test('signing out removes the chats from this device, so the next person does no
   await expect(page.locator('.cite').first()).toBeVisible();
   await openAccount(page);
   await page.locator('#signout').click();
-  await expect(page.locator('#toast')).toContainText('removed from this device');
+  await expect(page.locator('#signin-note')).toContainText('removed from this device');
   await expect(page.locator('#log article')).toHaveCount(0);
   await page.reload();
   await page.waitForSelector('html[data-auth-ready="true"]');
@@ -175,7 +185,7 @@ test('signing out clears the chats at once even when the sign-out request hangs'
   await openAccount(page);
   await page.locator('#signout').click();
   // The chats are gone from the device without waiting for the network.
-  await expect(page.locator('#toast')).toContainText('removed from this device', { timeout: 3_000 });
+  await expect(page.locator('#signin-note')).toContainText('removed from this device', { timeout: 3_000 });
   await expect(page.locator('#log article')).toHaveCount(0);
 });
 
@@ -203,15 +213,66 @@ test('a start-up renewal that fails on the network is not a sign-out: the questi
   await expect(page.locator('article.msg.bot:not(.pending) .cite').first()).toBeVisible({ timeout: 15_000 });
 });
 
-test('a failed sign-in sends the person back with a kind message, once', async ({ page }) => {
+test('a failed sign-in sends the person back with a kind message on the sign-in screen, once', async ({ page }) => {
   await steer(page, { session: false });
   await page.goto('/lite/?signin=failed');
   await page.waitForSelector('html[data-ready="true"]');
-  await expect(page.locator('#toast')).toContainText('could not sign you in');
-  expect(new URL(page.url()).search).toBe(''); // the parameter is gone, so a reload does not repeat it
+  await expect(page.locator('#signin-failed')).toContainText('could not sign you in');
+  await SIGNIN_SCREEN_ONLY(page); // and it does not bounce straight back to sign-in
+  expect(new URL(page.url()).search).toBe(''); // the parameter is gone, so the message is said once
+  // A reload is a new try: it goes to the hosted sign-in again, and does not repeat the old failure on the way.
+  await page.route('**/lite/auth/login', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><p id="hosted">HOSTED</p>' }));
+  await page.reload();
+  await expect(page.locator('#hosted')).toBeVisible();
+});
+
+test('a device whose session has ended goes straight to the hosted sign-in: no chat and no card on the way', async ({ page }) => {
+  await steer(page, { session: false });
+  // The hosted sign-in, stood in for: it records that it was reached and shows only itself.
+  let reached = 0;
+  await page.route('**/lite/auth/login', (route) => {
+    reached += 1;
+    return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>hosted</title><p id="hosted">HOSTED SIGN-IN</p>' });
+  });
+  await page.goto('/lite/');
+  await expect(page.locator('#hosted')).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe('/lite/auth/login');
+  expect(reached).toBe(1);
+});
+
+test('if that sign-in comes straight back signed out, it stops on the sign-in screen and does not loop', async ({ page }) => {
+  await steer(page, { session: false });
+  let reached = 0;
+  await page.route('**/lite/auth/login', (route) => {
+    reached += 1;
+    return route.fulfill({ status: 302, headers: { Location: '/lite/' } }); // back, still no session
+  });
+  await page.goto('/lite/');
+  await page.waitForSelector('html[data-ready="true"]');
+  await page.waitForSelector('html[data-auth-ready="true"]');
+  await SIGNIN_SCREEN_ONLY(page);
+  await page.waitForTimeout(800);
+  expect(reached).toBe(1); // once, not forever
+});
+
+test('offline: a device that held a session opens the chat; one that did not sees the sign-in screen and says it is offline', async ({ page, context }) => {
+  await page.goto('/lite/');
+  await page.waitForSelector('html[data-auth-ready="true"]'); // signed in (the beforeEach session): the hint is set
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await context.setOffline(true);
   await page.reload();
   await page.waitForSelector('html[data-ready="true"]');
-  await expect(page.locator('#toast')).not.toContainText('could not sign you in');
+  await expect(page.locator('#auth')).toBeHidden();
+  await expect(page.locator('#q')).toBeVisible();
+
+  // No hint (never signed in on this device, or signed out): offline there is nothing to open, so the sign-in screen says so.
+  await page.evaluate(() => localStorage.removeItem('shamwari.mukoko.hint'));
+  await page.reload();
+  await page.waitForSelector('html[data-ready="true"]');
+  await expect(page.locator('#auth')).toBeVisible();
+  await expect(page.locator('#signin-offline')).toBeVisible();
+  await expect(page.locator('#q')).toBeHidden();
+  expect(new URL(page.url()).pathname).toBe('/lite/'); // it did not try to leave for a page it cannot reach
 });
 
 test('the enabled Mukoko button no longer points at the "coming soon" text', async ({ page }) => {
@@ -220,3 +281,16 @@ test('the enabled Mukoko button no longer points at the "coming soon" text', asy
   await expect(page.locator('#mukoko-signin')).not.toHaveAttribute('aria-describedby', /.+/);
 });
 
+
+test('while the first answer from the session is awaited, neither the sign-in nor the chat flashes', async ({ page }) => {
+  await steer(page, { session: true, tokens: [VALID], tokenDelayMs: 1500 }); // a session, but no hint on this device
+  await page.goto('/lite/');
+  await page.waitForSelector('html[data-ready="true"]');
+  await expect(page.locator('html')).toHaveAttribute('data-view', 'pending');
+  await expect(page.locator('#auth')).toBeHidden();
+  await expect(page.locator('#q')).toBeHidden();
+  await page.waitForSelector('html[data-auth-ready="true"]');
+  await expect(page.locator('html')).toHaveAttribute('data-view', 'app');
+  await expect(page.locator('#q')).toBeVisible();
+  await expect(page.locator('#auth')).toBeHidden();
+});

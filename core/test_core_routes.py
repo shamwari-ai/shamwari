@@ -116,7 +116,9 @@ class GroundRule1(Base):
 
     def test_the_answer_carries_the_chunks_the_api_returned(self):
         r = self.search()
-        self.assertEqual(r.json(), {"scope": "platform", "hit": True, "chunks": [CHUNK]})
+        self.assertEqual(
+            r.json(), {"scope": "platform", "hit": True, "chunks": [CHUNK], "needs_own_information": False}
+        )
 
     def test_a_miss_is_reported_as_a_miss(self):
         self.api.answers["ground_search"] = {"scope": "platform", "hit": False, "chunks": []}

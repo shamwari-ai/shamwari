@@ -1,4 +1,5 @@
-import type { Env, Scope } from './types';
+import type { Env, Message, Scope } from './types';
+import { conversationNeedsOwnInformation } from './personal';
 
 /**
  * THE LOAD-BEARING RULE
@@ -67,6 +68,81 @@ export function decideDestination(
   // would answer confidently while withholding the user's own data, with
   // no signal that anything was missing — worse than an error.
   throw new ScopeRefusal(scope, 'retrieval_only');
+}
+
+/**
+ * A scope decision made by the SERVER (shamwari-ai/shamwari#81): the scope and
+ * destination, plus the two facts every later step is obliged to carry.
+ *
+ * `grants` is what the signed-in caller may hold, passed on to Core so Core
+ * decides again from the same facts. `withoutOwnInformation` is true when the
+ * question looks like it needs the person's own information but this answer
+ * can only come from community and platform knowledge: it becomes the notice
+ * the client renders, and it is never dropped.
+ */
+export interface ScopeResolution extends ScopeDecision {
+  grants: readonly Scope[];
+  withoutOwnInformation: boolean;
+}
+
+/**
+ * The only place the effective scope of a request is decided.
+ *
+ * The client does not choose. The one thing a client-sent `scope` can still
+ * do is ASK for personal, explicitly, and that is answered exactly as before:
+ * a 409 on Cloud endpoints, Mind on the retrieval endpoint. Any other value
+ * ("community", "platform", garbage, absent) is not read. The scope is then
+ * the narrowest-data cloud-safe scope the caller's grants hold (platform,
+ * else community), and a question that looks like it needs the person's own
+ * information is flagged, never silently answered as if it did not.
+ *
+ * Cloud-only mode (MIND_AVAILABLE=false) and Mind-available mode resolve the
+ * same way on the Cloud endpoints, because Mind runs on the device: no value
+ * of a Worker variable can make a Cloud completion of personal content
+ * permissible.
+ */
+export function resolveScope(input: {
+  messages: Message[];
+  requested: unknown;
+  grants: readonly Scope[];
+  env: Env;
+  capability: Capability;
+}): ScopeResolution {
+  const { messages, requested, grants, env, capability } = input;
+
+  if (requested === 'personal') {
+    // Explicit personal: unchanged. Throws ScopeRefusal for Cloud inference.
+    const d = decideDestination('personal', env, capability);
+    return { ...d, grants, withoutOwnInformation: false };
+  }
+
+  // Not the client's to pick. If the caller holds neither cloud-safe scope the
+  // answer is `platform`, and the caller's grant check turns that into a 403.
+  // First version: retrieval is from one scope per request. Community-only keys get
+  // community; everything else platform (Ground today is platform content).
+  const scope: Scope =
+    grants.includes('community') && !grants.includes('platform') ? 'community' : 'platform';
+  return {
+    scope,
+    destination: 'cloud',
+    grants,
+    withoutOwnInformation: conversationNeedsOwnInformation(messages),
+  };
+}
+
+/**
+ * Called immediately before every provider call (an embedding, a completion).
+ *
+ * A scope decision no downstream function is obliged to read is a comment, not
+ * a control. This is what makes it a control: ground() and infer() both call
+ * it, so a personal scope or a Mind destination that reaches a provider-bound
+ * function stops there, whatever a caller upstream decided or forgot to check.
+ */
+export function providerScope(d: Pick<ScopeDecision, 'scope' | 'destination'>): 'community' | 'platform' {
+  if (d.destination !== 'cloud' || !CLOUD_SAFE.has(d.scope)) {
+    throw new ScopeRefusal(d.scope, 'cloud_inference');
+  }
+  return d.scope as 'community' | 'platform';
 }
 
 export class ScopeRefusal extends Error {

@@ -40,7 +40,7 @@ class Image(unittest.TestCase):
 
     def test_the_image_ships_only_what_serving_needs(self):
         """No parked or operator-only module: dead code in the image is attack surface."""
-        self.assertEqual({n for n in self.copied() if n.endswith(".py")}, {"main.py", "nyuchi_api.py"})
+        self.assertEqual({n for n in self.copied() if n.endswith(".py")}, {"main.py", "nyuchi_api.py", "personal.py"})
 
     def test_every_base_image_is_pinned_by_digest(self):
         froms = [
@@ -77,7 +77,7 @@ class LeastPrivilege(unittest.TestCase):
 
     def test_core_holds_no_database_driver_or_login(self):
         """The owner's rule: only the Nyuchi API talks to databases."""
-        for py in ("main.py", "nyuchi_api.py"):
+        for py in ("main.py", "nyuchi_api.py", "personal.py"):
             src = (HERE / py).read_text()
             for word in ("motor", "pymongo", "asyncpg", "MONGODB", "SUPABASE"):
                 self.assertNotIn(word, src, f"{py} mentions {word}")

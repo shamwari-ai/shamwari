@@ -3,7 +3,21 @@
   "name": "shamwari-gateway",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
-  "observability": { "enabled": true },
+  // Query strings are redacted: /lite/callback carries the OAuth code and state, and
+  // /lite/?signin=failed carries a reason; persisted invocation logs must never store them.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true,
+    },
+    "traces": { "enabled": false, "head_sampling_rate": 1, "persist": true },
+    "issue_detection": { "enabled": true },
+  },
 
   // Embeddings only. Also the last-resort inference fallback.
   "ai": { "binding": "AI" },
