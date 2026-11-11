@@ -7,12 +7,13 @@
   // Shamwari Chat: the PWA, its service worker, manifest and headers (static
   // output of `npm run build:app`), plus the SESSION WORKER (worker/) that does
   // sign-in. Static assets answer everything except the four routes below, which
-  // run the Worker first. The root / answers with a 302 to /chat/ (the main Shamwari Chat) from
-  // app-public/_redirects.
+  // run the Worker first. The root / is answered by the Worker (worker/root.ts): a 302 to /chat/ or /lite/
+  // by connection quality, never a static redirect.
   "main": "worker/index.ts",
   "assets": {
     "directory": "./dist-app",
     "run_worker_first": [
+      "/",
       "/lite/auth/login",
       "/lite/auth/token",
       "/lite/auth/logout",
@@ -24,6 +25,9 @@
   "vars": {
     "WORKOS_CLIENT_ID": "client_01M68PCT0T5ECHKDYH45ECT0GV",
     "WORKOS_REDIRECT_URI": "https://shamwari.ai/lite/callback",
+    // The root sends everyone to /lite/ until the main chat answers at /chat/ (worker/root.ts).
+    // Set to "true" in the same change that makes /chat/ live.
+    "CHAT_LIVE": "false",
   },
 
   // One instance per WorkOS session id. Refresh tokens are single-use, so every
@@ -46,10 +50,8 @@
   // Reachable on https://shamwari-app.nyuchi.workers.dev as soon as it is deployed.
   "workers_dev": true,
 
-  // DELIBERATELY NO "routes" YET. The apex https://shamwari.ai is attached to
-  // `shamwari-site` today; declaring it here would make a deploy fight for it.
-  // The owner attaches shamwari.ai to this Worker in the dashboard, in the order
-  // given in docs/domains-and-deploy.md, after this Worker is verified on its
-  // workers.dev address. Once it is attached, add:
-  //   "routes": [{ "pattern": "shamwari.ai", "custom_domain": true }]
+  // The apex https://shamwari.ai is this Worker's (moved from `shamwari-site` on 2026-11-11 with the
+  // Workers custom-domains API, override_existing_origin). It is declared here so a deploy keeps it
+  // rather than releasing it; `shamwari-site` no longer declares it.
+  "routes": [{ "pattern": "shamwari.ai", "custom_domain": true }],
 }

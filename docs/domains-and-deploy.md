@@ -1,9 +1,17 @@
 # Two Workers, two hostnames: the app and the marketing site
 
 Owner decision, 2026-10-31. Tracking: #83. This is the map of what lives where and the
-exact order to switch it on. **Nothing here has been done in Cloudflare.** The code is
-built so that each step below is a click in the dashboard, in this order, and the root
-is never dead.
+exact order to switch it on.
+
+**Status, 2026-11-11:** `shamwari-app` is deployed (created with Wrangler from `staging`, not yet
+connected to GitHub as a Workers Build, so it is redeployed by hand with
+`npx wrangler deploy --config wrangler.app.jsonc` from `site/`). The apex `shamwari.ai` was moved to it
+with the Workers custom-domains API (`override_existing_origin`), `www.shamwari.ai` stays on
+`shamwari-site`, and `api.shamwari.ai` is the gateway. The root `/` sends visitors to `/lite/` for now
+(`CHAT_LIVE` is `false`). The sign-in secrets are not bound yet, so sign-in answers 503 and the chat
+stays in developer-key mode. To undo the apex move, point `shamwari.ai` back at `shamwari-site` with the
+same API call, restore the apex line in `site/wrangler.jsonc` and **remove it from
+`site/wrangler.app.jsonc`** (otherwise the next hand deploy of `shamwari-app` takes the apex back).
 
 ## What lives where
 
@@ -53,6 +61,12 @@ say the chat is ready when it is not. Do not set the variable before `/chat/` an
 - **The shared brand overlay** `site/src/styles/brand-shamwari.css` is imported by both.
 
 ## Switching it on: the order matters
+
+_Done on 2026-11-11, in a different way from the steps below:_ the app Worker was created with Wrangler
+rather than from GitHub (step 2), and the apex was moved with the Workers custom-domains API rather than
+two dashboard taps (step 5). The step 6 file change is in the repo. Steps 1, 3, 4 and 6 stand as written;
+what is still open is the sign-in section below, connecting `shamwari-app` to GitHub so it deploys itself,
+and step 7 (`CHAT_LIVE`).
 
 Everything below is done in the Cloudflare dashboard, on a phone is fine. Do the steps in
 this order; each one is safe to stop after.
@@ -109,7 +123,13 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
    Whether `wrangler deploy` removes a custom domain that is missing from the file is
    **not verified**, which is the reason to keep the two in step. Watch the first deploy
    of each Worker after this change and confirm the hostnames are still attached.
-7. **Later, not now:** register the WorkOS redirect URI `https://shamwari.ai/lite/callback`;
+7. **When the main chat answers at `/chat/`:** set `CHAT_LIVE` to `"true"` in `site/wrangler.app.jsonc`
+   and deploy `shamwari-app`. Until then the root `https://shamwari.ai/` sends everyone to `/lite/`
+   (`site/worker/root.ts`): by connection quality it would otherwise send fast visitors to `/chat/`.
+   Nothing in this build can check that `/chat/` is served by another build, so confirm
+   `https://shamwari.ai/chat/` answers 200 first; flipping the switch early turns the root into a 404
+   for fast connections.
+8. **Later, not now:** register the WorkOS redirect URI `https://shamwari.ai/lite/callback`;
    set `PUBLIC_CHAT_AUTH=mukoko` on the app build only when the session Worker exists; set
    `PUBLIC_CHAT_LIVE=true` on the marketing build when the app is released.
 

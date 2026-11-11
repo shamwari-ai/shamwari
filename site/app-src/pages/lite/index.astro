@@ -42,6 +42,14 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
         <label class="sr-only" for="lang" data-i18n="language">Language</label>
         <select id="lang" aria-describedby="review"></select>
         <button type="button" id="new-chat" class="btn" data-i18n="newChat">New chat</button>
+        <div class="actions">
+          <button type="button" id="bell" class="btn icon" aria-label={en.notifications} data-i18n-attr="aria-label:notifications">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9a6 6 0 1 1 12 0c0 6 2.5 7.5 2.5 7.5h-17S6 15 6 9Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
+          </button>
+          <button type="button" id="avatar" class="btn icon" aria-label={en.avatar} data-i18n-attr="aria-label:avatar">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+          </button>
+        </div>
       </div>
       <p id="offline" class="notice" role="status" hidden data-i18n="offlineBanner">
         You are offline. You can still write questions; they will be sent later.
@@ -52,16 +60,18 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
     </header>
 
     <main id="thread" tabindex="-1">
-      <p class="lead" data-i18n="tagline">Ask a question. Get the answer with the section it came from.</p>
-      <p><button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button></p>
-      <section id="empty" aria-labelledby="try">
-        <h2 id="try" class="small" data-i18n="tryAsking">Try asking</h2>
+      <section id="empty" aria-labelledby="greeting">
+        <img class="mark" src="/apple-touch-icon.png" alt="" width="56" height="56" />
+        <h2 id="greeting" data-i18n="greeting">Hello, friend</h2>
+        <p class="lead" data-i18n="tagline">Ask a question. Get the answer with the section it came from.</p>
+        <h3 id="try" class="small" data-i18n="tryAsking">Try asking</h3>
         <ul class="examples">
           <li><button type="button" class="btn chip" data-example data-i18n="example1">What does the Constitution say about equality?</button></li>
           <li><button type="button" class="btn chip" data-example data-i18n="example2">What are my rights if I am arrested?</button></li>
           <li><button type="button" class="btn chip" data-example data-i18n="example3">Who must pay income tax in Zimbabwe?</button></li>
         </ul>
       </section>
+      <p class="install"><button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button></p>
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
       <details id="history" hidden>
         <summary data-i18n="earlierChats">Earlier chats</summary>
