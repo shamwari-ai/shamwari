@@ -92,6 +92,7 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
              Settings holds language, delete history and sign out: the account menu, folded into the drawer. -->
         <nav class="side-nav" aria-label={en.settings} data-i18n-attr="aria-label:settings">
           <a class="btn side-link" href="https://platform.nyuchi.com" target="_blank" rel="noopener" data-i18n="useApi">Use the API</a>
+          <a class="btn side-link" href="/lite/disclaimer/" data-i18n="disclaimerLink">{en.disclaimerLink}</a>
           <details class="account side-settings" data-slot="account-menu">
             <summary class="btn side-link" data-i18n="settings">Settings</summary>
             <div class="settings-panel" data-slot="account-menu-panel">
@@ -167,14 +168,6 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
     <div class="dock">
       <section class="ask" aria-labelledby="ask-title">
         <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
-        <div class="scope">
-          <label for="scope" data-i18n="scopeLabel">Asking about</label>
-          <select id="scope">
-            <option value="platform" data-i18n="scope.platform">General knowledge</option>
-            <option value="community" data-i18n="scope.community">Community knowledge</option>
-            <option value="personal" data-i18n="scope.personal">My own information</option>
-          </select>
-        </div>
         <form id="composer" class="composer" autocomplete="off">
           <label class="sr-only" for="q" data-i18n="placeholder">Ask a question</label>
           <textarea id="q" rows="1" enterkeyhint="send" data-i18n-attr="placeholder:placeholder" placeholder="Ask a question"></textarea>
@@ -184,10 +177,6 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
       </section>
     </div>
 
-    <!-- The quiet footer: one link. The disclaimer and the privacy statement live on their own page. -->
-    <div slot="footer" class="footer-text">
-      <a class="footer-link" href="/lite/disclaimer/" data-i18n="disclaimerLink">{en.disclaimerLink}</a>
-    </div>
   </AppShell>
   <!-- Signed out: a whole screen, and nothing else. No chat is shown behind it, and no prompt sits on top of one. With a
        session the page never shows this; the Worker sends a request with none to the hosted sign-in, and the app goes

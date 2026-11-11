@@ -16,6 +16,12 @@ import { newId, openStore, titleOf, type Artifact, type Project, type StoredMess
 import { LANGUAGES, isLanguage } from './strings';
 import type { AskErrorKind, ChatMessage, Scope } from './types';
 
+/**
+ * The only scope this client asks with. There is no control for it anywhere: the person is never asked which kind of
+ * knowledge they mean. (Deciding it from the person and the question is a server-side change.) It is a constant, so
+ * `personal` can never be sent from here, and a question saved under any other scope is never sent by itself (see deliver).
+ */
+const GENERAL: Scope = 'platform';
 const RETRY_FIRST_MS = 15_000;
 const RETRY_MAX_MS = 5 * 60_000;
 /** Unanswered tries, while the browser reports online, before it stops retrying quietly. */
@@ -50,7 +56,6 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   document.documentElement.dataset.auth = auth.kind;
 
   let lang = currentLanguage();
-  let scope: Scope = 'platform';
   /** Messages with a request in flight. Replaces one global lock, so asking and the queue never block each other. */
   const inflight = new Set<string>();
   let flushing = false;
@@ -134,7 +139,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   // ---- rendering -----------------------------------------------------------
   const actionsFor = (m: StoredMessage): ErrorActions => ({
     retry: () => void deliver(thread, m),
-    askGeneral: () => void ask(m.text, 'platform'),
+    askGeneral: () => void ask(m.text),
     signIn: () => showAuth(),
   });
 
@@ -414,6 +419,17 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
       showAuth();
       return;
     }
+    // A question saved from before there was one scope: `community` was allowed to reach the cloud, so it is sent as
+    // it was saved. Anything else (`personal`, or a scope this version does not know) is not sent by itself, now or
+    // later: nothing goes to the network. It is shown with the honest explanation and a button that asks it as a
+    // general question, which is the person's own choice and a new question, never a quiet downgrade of this one.
+    if (m.scope && m.scope !== GENERAL && m.scope !== 'community') {
+      m.status = 'failed';
+      m.error = { kind: 'scope_requires_local_inference', retryAfterSec: null, upgradeUrl: null };
+      await save(th);
+      if (th === thread) mount(m); // mount draws the error under the question
+      return;
+    }
     const shown = () => th === thread;
     const startedIn = epoch;
     inflight.add(m.id);
@@ -446,7 +462,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
       }
 
       let res = await client.ask(
-        { messages: contextFor(th, m), scope: m.scope ?? 'platform' },
+        { messages: contextFor(th, m), scope: m.scope === 'community' ? 'community' : GENERAL },
         { idempotencyKey: m.id },
       );
       // No credential could be obtained (the renewal failed on the network, say) for
@@ -559,7 +575,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     retryMs = Math.min(retryMs * 2, RETRY_MAX_MS);
   }
 
-  async function ask(text: string, withScope: Scope = scope): Promise<void> {
+  async function ask(text: string): Promise<void> {
     const clean = text.trim();
     if (!clean) return;
     // Straight after the sign-in redirect the cookie has not been turned into a token yet. A
@@ -570,7 +586,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
       showAuth();
       return;
     }
-    const m: StoredMessage = { id: newId(), role: 'user', text: clean, at: Date.now(), scope: withScope, status: 'sent' };
+    const m: StoredMessage = { id: newId(), role: 'user', text: clean, at: Date.now(), scope: GENERAL, status: 'sent' };
     if (!thread.messages.length) thread.title = titleOf(clean);
     thread.messages.push(m);
     syncEmpty();
@@ -706,12 +722,16 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     void ask(input.value);
   });
 
-  const scopeSelect = $<HTMLSelectElement>('#scope');
-  scopeSelect.addEventListener('change', () => {
-    scope = scopeSelect.value as Scope;
-  });
+  // The three suggested prompts fill the box and put the cursor in it: one tap less than typing, and nothing is sent
+  // until the person presses send (a prompt tapped by accident on a phone must not become a question).
   document.querySelectorAll<HTMLButtonElement>('[data-example]').forEach((b) =>
-    b.addEventListener('click', () => void ask(b.textContent ?? '')),
+    b.addEventListener('click', () => {
+      const text = (b.textContent ?? '').trim();
+      // Never over a draft: what the person already typed is kept, and the prompt goes after it.
+      input.value = input.value.trim() ? `${input.value.trimEnd()}\n${text}` : text;
+      autosize();
+      input.focus();
+    }),
   );
 
   // The drawer's foot: New chat, as in the top bar. Settings is a disclosure and opens by itself.

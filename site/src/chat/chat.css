@@ -330,6 +330,9 @@ input:not([type='checkbox']):not([type='radio']) {
 
 .dock {
   flex: none;
+  /* The divider between the messages and the composer: the canonical hairline token, so it moves with the dock and
+     never scrolls away. Raised to a full pixel in high-contrast and forced-colors modes. */
+  border-top: 0.5px solid var(--border);
   display: grid;
   gap: var(--gap-floor);
   padding-block: var(--gap-floor) max(var(--gap-floor), env(safe-area-inset-bottom));
@@ -357,18 +360,6 @@ input:not([type='checkbox']):not([type='radio']) {
   flex: 1;
   min-width: 12rem;
 }
-.scope {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-floor);
-  font-size: var(--fs-caption);
-  color: var(--muted-foreground);
-}
-.scope select {
-  flex: 1 1 0;
-  width: 0;
-  min-width: 0;
-}
 .composer {
   display: flex;
   align-items: flex-end;
@@ -394,12 +385,6 @@ input:not([type='checkbox']):not([type='radio']) {
   min-height: 0;
   font-size: var(--fs-caption);
   color: var(--muted-foreground);
-}
-.footer-text {
-  font-size: var(--fs-caption);
-  line-height: var(--leading-floor);
-  color: var(--muted-foreground);
-  text-align: left;
 }
 .footer-link {
   display: inline-flex;
@@ -826,12 +811,11 @@ html.app #thread {
   flex-direction: column;
   gap: var(--gap-floor);
 }
-/* A short screen (a phone on its side, or with the keyboard up): the messages keep their room, so the things
-   that are only context give it up first. */
-@media (max-height: 32rem) {
-  .scope,
-  .footer-text {
-    display: none;
+
+@media (prefers-contrast: more), (forced-colors: active) {
+  .dock {
+    border-top-width: 1px;
+    border-top-color: var(--border-control, CanvasText);
   }
 }
 

@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { ask, makeProject, newChat, openAccount, openChat, openChats } from './helpers';
+import { ask, makeProject, newChat, openAccount, openChat, openChats, seedLegacyQuestion } from './helpers';
 
 const scan = async (page: Page) =>
   (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze()).violations;
@@ -25,8 +25,7 @@ for (const scheme of ['light', 'dark'] as const) {
 
     test('personal-scope explanation and an error have no violations', async ({ page }) => {
       await openChat(page);
-      await page.getByLabel('Asking about').selectOption('personal');
-      await ask(page, 'How much do I earn?');
+      await seedLegacyQuestion(page, 'How much do I earn?', 'personal');
       await expect(page.locator('article.refusal')).toBeVisible();
       expect(summary(await scan(page))).toEqual([]);
     });

@@ -134,7 +134,7 @@ test('focusing a control never scrolls the shell off its place', async ({ page }
   await fillThread(page, 2);
   const bar = await rect(page, '[data-slot="app-topbar"]');
   // Every focusable thing in the page, one after the other: none of them may move the app area or the document.
-  for (const sel of ['#q', '#send', '#scope', '#new-chat button', '#thread', 'a.skip']) {
+  for (const sel of ['#q', '#send', '#new-chat button', '#thread', 'a.skip']) {
     await page.locator(sel).first().focus();
     const tops = await scrollTops(page);
     expect(tops.doc, sel).toBe(0);

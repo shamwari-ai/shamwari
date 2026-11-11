@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, makeProject, openAccount, openChat, openChats, newChat } from './helpers';
+import { ask, makeProject, openAccount, openChat, openChats, newChat, seedLegacyQuestion } from './helpers';
 
 test('asks a question and renders the answer with its citation card', async ({ page }) => {
   await openChat(page);
@@ -28,21 +28,65 @@ test('an answer with no source says so instead of implying one', async ({ page }
   await expect(page.locator('.cite')).toHaveCount(0);
 });
 
-test('a personal question gets the Shamwari Mind explanation, not a generic error', async ({ page }) => {
-  await openChat(page);
-  await page.getByLabel('Asking about').selectOption('personal');
-  await ask(page, 'How much do I earn?');
+const completions = (page: import('@playwright/test').Page) => {
+  const bodies: Array<{ scope?: string }> = [];
+  page.on('request', (r) => {
+    if (r.method() === 'POST' && r.url().includes('/v1/chat/completions')) bodies.push(JSON.parse(r.postData() ?? '{}'));
+  });
+  return bodies;
+};
 
+test('there is no scope picker, and every question is asked as a general one, never as personal', async ({ page }) => {
+  const bodies = completions(page);
+  await openChat(page);
+  // Nothing in the page asks which kind of knowledge is meant.
+  await expect(page.locator('#scope')).toHaveCount(0);
+  await expect(page.getByLabel('Asking about')).toHaveCount(0);
+  await expect(page.locator('.dock select')).toHaveCount(0);
+  for (let i = 0; i < 3; i++) await ask(page, `Is everyone equal under the law? ${i}`);
+  await expect(page.locator('article.msg.bot:not(.pending) .cite')).toHaveCount(3, { timeout: 30_000 });
+  expect(bodies).toHaveLength(3);
+  for (const b of bodies) expect(b.scope).toBe('platform');
+});
+
+test('a personal question saved by an earlier version is never sent by itself: the Shamwari Mind explanation and a general-question button', async ({ page }) => {
+  const bodies = completions(page);
+  await openChat(page);
+  await seedLegacyQuestion(page, 'How much do I earn?', 'personal');
+  // The explanation appears only once the app has dealt with the saved question, so when it is on screen the automatic
+  // send (on opening, and whenever the network returns) has already had its chance: nothing went out.
   const refusal = page.locator('article.refusal');
   await expect(refusal).toBeVisible();
+  expect(bodies).toHaveLength(0);
   await expect(refusal).toContainText('Shamwari Mind');
   await expect(refusal).toContainText('not available yet');
-  await expect(page.locator('article.error')).toHaveCount(0);
   await expect(page.locator('[role="alert"]:visible')).toHaveCount(0);
 
-  // The kind way out: ask it as a general question instead.
+  // The kind way out is the person's own choice, and a new question, asked as a general one.
   await refusal.getByRole('button', { name: 'Ask a general question instead' }).click();
   await expect(page.locator('article.msg.bot', { hasText: 'right to life' })).toBeVisible();
+  expect(bodies).toHaveLength(1);
+  expect(bodies[0].scope).toBe('platform');
+});
+
+test('a half-sent personal question is held the same way, and a community one saved earlier (allowed to reach the cloud) is sent as it was saved', async ({ page }) => {
+  const bodies = completions(page);
+  await openChat(page);
+  await seedLegacyQuestion(page, 'What does my pay slip say?', 'personal', 'sent');
+  await expect(page.locator('article.refusal')).toBeVisible();
+  expect(bodies).toHaveLength(0);
+
+  await seedLegacyQuestion(page, 'What does the community say?', 'community');
+  await expect(page.locator('article.msg.bot', { hasText: 'right to life' })).toBeVisible({ timeout: 15_000 });
+  expect(bodies.map((b) => b.scope)).toEqual(['community']); // never 'personal', and nothing for the held one
+});
+
+test('a suggested prompt never replaces what the person already typed', async ({ page }) => {
+  await openChat(page);
+  await page.locator('#q').fill('My own half-written question');
+  await page.locator('#empty [data-example]').first().click();
+  await expect(page.locator('#q')).toHaveValue(/^My own half-written question\nWhat does the Constitution say about equality\?$/);
+  await expect(page.locator('article.msg.user')).toHaveCount(0);
 });
 
 const FAILURES = [
@@ -160,15 +204,63 @@ test('Shona is offered, shown as a draft, and Enter sends', async ({ page }) => 
   await expect(page.locator('article.msg.bot').first()).toBeVisible();
 });
 
-test('the home screen greets, offers suggested prompts, and the chips ask the question', async ({ page }) => {
+test('the home screen greets and offers exactly three suggested prompts; a tap fills the box and sends nothing', async ({ page }) => {
+  const requests: string[] = [];
+  page.on('request', (r) => {
+    if (['fetch', 'xhr'].includes(r.resourceType())) requests.push(r.url());
+  });
   await openChat(page);
   await expect(page.getByRole('heading', { name: 'Hello, friend' })).toBeVisible();
-  const chips = page.locator('#empty [data-example]');
-  await expect(chips).toHaveCount(3);
-  // A chip is a question the person did not have to type: it asks, and the greeting steps aside.
+  const chips = page.locator('[data-example]');
+  await expect(chips).toHaveCount(3); // exactly three, and nothing else to choose from
+  await expect(page.locator('#empty [data-example]')).toHaveCount(3);
+  // Rendering them made no network request: they are in the app, so they are there offline too.
+  expect(requests.filter((u) => !u.includes('/lite/auth/'))).toEqual([]);
+
+  // A tap fills the box and puts the cursor in it. Nothing is sent until the person presses send.
   await chips.first().click();
+  await expect(page.locator('#q')).toHaveValue(/Constitution/);
+  await expect(page.locator('#q')).toBeFocused();
+  await expect(page.locator('article.msg.user')).toHaveCount(0);
+  expect(requests.filter((u) => u.includes('/v1/chat/completions'))).toEqual([]);
+
+  await page.locator('#send').click();
   await expect(page.locator('article.msg.user')).toContainText('Constitution');
+  // Once a conversation exists, the prompts are gone.
   await expect(page.locator('#empty')).toBeHidden();
+  await expect(page.locator('[data-example]:visible')).toHaveCount(0);
+});
+
+test('the prompts are in the page with no network, and in Shona they are Shona', async ({ page, context }) => {
+  await openChat(page);
+  await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+  await context.setOffline(true);
+  await page.reload();
+  await page.waitForSelector('html[data-ready="true"]');
+  await expect(page.locator('#empty [data-example]')).toHaveCount(3);
+  await openAccount(page);
+  await page.locator('#lang').selectOption('sn');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#empty [data-example]').first()).toContainText('Bumbiro');
+});
+
+test('a divider sits directly above the composer and moves with it, using the hairline token', async ({ page }) => {
+  await openChat(page);
+  const dock = page.locator('.dock');
+  const style = await dock.evaluate((el) => {
+    const c = getComputedStyle(el);
+    return { style: c.borderTopStyle, width: c.borderTopWidth, color: c.borderTopColor, token: c.getPropertyValue('--border').trim() };
+  });
+  expect(style.style).toBe('solid');
+  expect(parseFloat(style.width)).toBeGreaterThan(0);
+  expect(parseFloat(style.width)).toBeLessThanOrEqual(1);
+  expect(style.color).not.toBe('rgba(0, 0, 0, 0)');
+  // It is the top edge of the composer's own box, so it can never be left behind when the composer moves.
+  const box = await dock.evaluate((el) => ({ top: el.getBoundingClientRect().top, thread: document.querySelector('#thread')!.getBoundingClientRect().bottom }));
+  expect(box.top).toBeGreaterThanOrEqual(box.thread - 1);
+  // Raised, not dropped, for people who ask for more contrast.
+  await page.emulateMedia({ forcedColors: 'active' });
+  expect(parseFloat(await dock.evaluate((el) => getComputedStyle(el).borderTopWidth))).toBe(1);
 });
 
 test('Settings is in the drawer, there is no bell, and signing out brings the sign-in panel back', async ({ page }) => {
@@ -220,8 +312,11 @@ test('picking an earlier chat closes the drawer, so the chat is not left covered
 });
 
 test('the chat has no small print under it: a link opens the disclaimer and privacy page', async ({ page }) => {
-  await page.goto('/lite/');
+  await openChat(page);
   await expect(page.locator('[data-i18n="storedHere"]')).toHaveCount(0);
+  // Not under the chat: no footer is left on the page, and the link is a row in the drawer.
+  await expect(page.locator('[data-slot="app-footer"]')).toHaveCount(0);
+  await openChats(page);
   await page.getByRole('link', { name: 'Disclaimer and privacy' }).click();
   await expect(page).toHaveURL(/\/lite\/disclaimer\/$/);
   await expect(page.getByText('not the text of your question or its answer')).toBeVisible();
