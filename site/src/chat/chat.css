@@ -402,8 +402,35 @@ input:not([type='checkbox']):not([type='radio']) {
   color: var(--muted-foreground);
   text-align: left;
 }
-.footer-text p {
-  margin: var(--gap-floor) 0;
+.footer-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target-floor);
+  color: inherit;
+  text-underline-offset: 3px;
+}
+.legal h1 {
+  margin: 0;
+  font: inherit;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.legal p {
+  margin: 0;
+}
+.legal section {
+  display: grid;
+  gap: var(--gap-floor);
+  padding-block-end: var(--inset-floor);
+  border-bottom: 1px solid var(--border);
+}
+.legal {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--inset-floor);
+  display: grid;
+  gap: var(--gap-floor);
 }
 
 /* ---- messages ---------------------------------------------------------------------------------------- */
@@ -527,8 +554,23 @@ input:not([type='checkbox']):not([type='radio']) {
   text-underline-offset: 3px;
 }
 
-/* Developer-key panel belongs to the developer-key provider only. */
-[data-auth='mukoko'] .devkey {
+/* Sign-in is not on yet in a developer-key build: a button that cannot be pressed is not shown. */
+[data-auth='developer-key'] #mukoko-signin {
+  display: none;
+}
+#new-project {
+  margin-block-start: var(--gap-floor);
+}
+.settings-panel {
+  display: grid;
+  gap: var(--gap-floor);
+  padding-block: var(--gap-floor);
+}
+.side-settings > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.side-settings > summary::-webkit-details-marker {
   display: none;
 }
 
@@ -550,10 +592,14 @@ input:not([type='checkbox']):not([type='radio']) {
   flex: 1 1 8rem;
   min-width: 0;
 }
-.side-account {
-  padding: 0;
-  width: var(--target-floor);
-  flex: none;
+.side-nav {
+  display: grid;
+  gap: var(--gap-floor);
+}
+.side-link {
+  justify-content: flex-start;
+  width: 100%;
+  text-decoration: none;
 }
 .project > summary {
   display: flex;
@@ -720,4 +766,22 @@ main#main :where(.thread, .dock, .ask, #empty, .panel, .chat-tools) {
   font-size: var(--fs-caption);
   color: var(--muted-foreground);
   text-align: center;
+}
+
+/* ---- one scroller -------------------------------------------------------------------------------------
+   On the chat page (html.app) the page itself does not scroll; every other page, the disclaimer, scrolls as a document. The app area is a box exactly as tall as the screen and it is the only
+   thing that scrolls, so the top bar (sticky) and the composer (sticky) stay where they are on a phone,
+   whatever Chrome does with its own address bar. Scrolling the document with sticky bars inside it left the
+   bar floating below the address bar with the page scrolling past above it. */
+html.app,
+html.app body {
+  height: 100%;
+  overflow: hidden;
+}
+[data-slot='app-main'] {
+  height: 100dvh;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }

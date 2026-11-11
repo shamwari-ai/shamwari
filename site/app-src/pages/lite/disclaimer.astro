@@ -1,0 +1,36 @@
+---
+// The disclaimer and the privacy statement, on their own page so the chat has no small print under it.
+// No script (only the chat page ships one): all three languages are on the page, English first, each marked
+// with its own lang so a screen reader and a person find theirs.
+import '../../../src/chat/chat.css';
+import { en, sn, nd } from '../../../src/chat/strings';
+const versions = [
+  { lang: 'en', s: en },
+  { lang: 'sn', s: sn },
+  { lang: 'nd', s: nd },
+];
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Disclaimer and privacy - Shamwari</title>
+  <link rel="canonical" href="https://shamwari.ai/lite/disclaimer/" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <meta name="theme-color" content="#283593" />
+</head>
+<body class="text-base">
+  <main class="legal">
+    {versions.map(({ lang, s }) => (
+      <section lang={lang} aria-labelledby={`legal-${lang}`}>
+        <h1 id={`legal-${lang}`}>{s.disclaimerTitle}</h1>
+        <p>{s.footer}</p>
+        <p>{s.storedHere}</p>
+        <p>{s.privacyDetail}</p>
+      </section>
+    ))}
+    <p><a class="btn" href="/lite/">{en.backToChat}</a></p>
+  </main>
+</body>
+</html>
