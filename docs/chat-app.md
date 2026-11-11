@@ -84,7 +84,7 @@ account menu open and the drawer open. A control that falls under it fails the b
   `site/scripts/post-build.mjs` with the exact hashed files of that build).
   The shell opens from cache first and refreshes in the background, so it paints
   at once on a bad connection. It answers only same-origin GETs under `/lite/`
-  and `/_astro/`; the API is another origin and a POST, so a question and its
+  and `/lite/_astro/`; the API is another origin and a POST, so a question and its
   answer never enter a cache. `check.mjs` fails the build if a precached file
   is missing or the worker could touch API traffic.
 - **Offline queue.** Offline, or when an answer does not arrive (a timeout on

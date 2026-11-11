@@ -122,7 +122,7 @@ describe('the Worker', () => {
     const assets = JSON.parse(text).assets;
     // The Worker is the gate: it runs first for the root, the whole of /lite/ (which includes the sign-in routes
     // in SESSION_PATHS) and the build output, and reads the static files through the ASSETS binding.
-    expect(assets.run_worker_first).toEqual(['/', '/lite/*', '/_astro/*']);
+    expect(assets.run_worker_first).toEqual(['/', '/lite/*']);
     expect(assets.binding).toBe('ASSETS');
     for (const p of SESSION_PATHS) expect(p.startsWith('/lite/')).toBe(true);
   });
