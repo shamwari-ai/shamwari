@@ -977,6 +977,49 @@ html[data-view='pending'] dialog {
 .side-tabs [role='tab']:hover {
   background: var(--muted);
   color: var(--foreground);
+
+/* ---- the page slides aside to open the drawer ------------------------------------------------------------------
+   Below 64rem the drawer is a popover (Mzizi's AppShell). Opening it also slides the PAGE sideways by the drawer's
+   width, so the drawer is revealed rather than laid over it; a slice of the page stays visible, and a tap on it
+   closes the drawer. ONE variable sets the direction: --drawer-shift is 1 when the page moves toward the inline end
+   (to the right, away from a drawer at the left, as shipped) and -1 for the other way. Only `transform` animates,
+   and with reduced motion the change is instant. The page is `inert` while the drawer is open (script). */
+:root {
+  --drawer-shift: 1;
+  --drawer-w: min(18rem, 86vw);
+}
+@media (max-width: 63.999rem) {
+  [data-slot='app-sidebar'] {
+    width: var(--drawer-w);
+    /* The page's own slide is the dimming; no scrim over it. The ::backdrop still takes the tap that closes. */
+    transform: translateX(-100%);
+  }
+  [data-slot='app-sidebar']:popover-open {
+    transform: none;
+  }
+  [data-slot='app-sidebar']::backdrop {
+    background: transparent;
+  }
+  html[data-drawer='open'] [data-slot='app-main'] {
+    transform: translateX(calc(var(--drawer-shift) * var(--drawer-w)));
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot='app-main'] {
+      transition: transform 220ms ease;
+    }
+    /* The drawer also keeps `display` and `overlay` for the length of the slide out, so it is not cut off mid-way. */
+    [data-slot='app-sidebar'] {
+      transition:
+        transform 220ms ease,
+        display 220ms allow-discrete,
+        overlay 220ms allow-discrete;
+    }
+    @starting-style {
+      [data-slot='app-sidebar']:popover-open {
+        transform: translateX(-100%);
+      }
+    }
+  }
 }
 
 /* ---- the OFFLINE MODE switch, top right ----------------------------------------------------------------------

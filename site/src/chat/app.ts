@@ -211,6 +211,30 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   /** Close the chats drawer (a popover below 64rem) and the account menu: after an action they must not stay over the page. */
   const closeDrawer = () => (document.getElementById('chat-sidebar') as (HTMLElement & { hidePopover?: () => void }) | null)?.hidePopover?.();
   const closeAccount = () => document.querySelector('details.account')?.removeAttribute('open');
+  /**
+   * The drawer is a popover below 64rem. While it is open the page slides aside (CSS, on html[data-drawer]), is inert so
+   * nothing behind the drawer can be reached by keyboard or screen reader, the opening button says it is expanded, and
+   * focus goes into the drawer and comes back to that button when it closes.
+   */
+  const drawer = document.getElementById('chat-sidebar') as HTMLElement | null;
+  const drawerToggle = document.querySelector<HTMLElement>('[data-slot="app-topbar"] > button[popovertarget]');
+  const pageFrame = document.querySelector<HTMLElement>('[data-slot="app-main"]');
+  drawerToggle?.setAttribute('aria-expanded', 'false');
+  drawer?.addEventListener('toggle', (e) => {
+    const open = (e as Event & { newState?: string }).newState === 'open';
+    if (open) document.documentElement.setAttribute('data-drawer', 'open');
+    else document.documentElement.removeAttribute('data-drawer');
+    drawerToggle?.setAttribute('aria-expanded', String(open));
+    if (open) {
+      if (pageFrame) pageFrame.inert = true;
+      drawer.querySelector<HTMLElement>('button[popovertargetaction="hide"]')?.focus();
+    } else {
+      if (pageFrame) pageFrame.inert = false;
+      // Back to the button that opened it, unless the person already moved on to something else.
+      if (!document.activeElement || document.activeElement === document.body || drawer.contains(document.activeElement)) drawerToggle?.focus();
+    }
+  });
+
   /** Mzizi's AppShell names its menu and close buttons in English; name them in the chosen language. */
   const labelShell = () => {
     const s = strings();
