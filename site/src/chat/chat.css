@@ -121,3 +121,31 @@ footer .small { margin: 2px 0; }
 
 /* Developer-key panel belongs to the developer-key provider only. */
 [data-auth="mukoko"] .devkey { display: none; }
+
+/* Home screen: a centred greeting with suggested prompts under it, a pill composer, and the
+   account and notification icons at the top right. */
+.bar { background: transparent; }
+.app > header { border-bottom: 0; }
+/* The greeting is the visible title; the app name stays in the page for screen readers. */
+.bar h1 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.bar .actions { margin-left: auto; display: flex; gap: 8px; }
+.btn.icon { padding: 0; display: inline-flex; align-items: center; justify-content: center; width: var(--tap); }
+
+main { display: flex; flex-direction: column; }
+#empty { margin: auto; text-align: center; max-width: 34rem; padding: 16px 0; }
+#empty .mark { border-radius: 14px; }
+#empty h2 { margin: 12px 0 4px; font-size: 1.75rem; font-weight: 500; letter-spacing: -0.01em; }
+#empty .lead { margin: 0 0 12px; font-size: 0.9375rem; }
+#empty h3.small { margin: 16px 0 8px; font-weight: 600; }
+#empty .examples { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+#empty .btn.chip { width: auto; max-width: 100%; white-space: normal; text-align: center; border-radius: 9999px; }
+
+.composer {
+  margin: 4px 12px 8px; padding: 6px 6px 6px 16px; align-items: center; gap: 8px;
+  border: 1px solid var(--border-control, var(--border)); border-radius: 9999px; background: var(--card);
+}
+.composer textarea { border: 0; background: transparent; padding: 12px 14px; min-height: var(--tap); border-radius: 9999px; }
+
+/* The sign-in panel never pushes the greeting and the suggestions off the screen. */
+main { min-height: 40dvh; }
+.panel { max-height: 45dvh; overflow-y: auto; }
