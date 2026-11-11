@@ -1,41 +1,149 @@
 {
   "_comment": "Cases both suites run against the 'does this question need the user's own information' rules: core/personal.py and gateway/src/personal.ts. Edit the rules in one place and not the other and a test fails. A false negative here only costs the notice on one answer (nothing personal can reach a provider either way), so the rules lean towards true. Shona and Ndebele rows have had no native-speaker review.",
   "cases": [
-    { "text": "What is my tax for this month?", "needs_own_information": true },
-    { "text": "MY SALARY after PAYE", "needs_own_information": true },
-    { "text": "How do I read this payslip?", "needs_own_information": true },
-    { "text": "Explain this bank statement", "needs_own_information": true },
-    { "text": "I earn $400 a month, how much PAYE do I pay?", "needs_own_information": true },
-    { "text": "I owe ZIMRA, what are my options?", "needs_own_information": true },
-    { "text": "I'm a landlord, what must I register?", "needs_own_information": true },
-    { "text": "I’m a landlord, what must I register?", "needs_own_information": true },
-    { "text": "Tell me about me", "needs_own_information": true },
-    { "text": "m​y salary", "needs_own_information": true },
-    { "text": "ｍy salary", "needs_own_information": true },
-    { "text": "Mari yangu iri kupi?", "needs_own_information": true },
-    { "text": "Ndiri kuda kuziva mutero wangu", "needs_own_information": true },
-    { "text": "Ndakabhadhara mutero here?", "needs_own_information": true },
-    { "text": "ndakabhadhara\u00e9", "needs_own_information": true },
-    { "text": "I have 3 rental properties, how much tax do I owe?", "needs_own_information": true },
-    { "text": "I make $900 a month, what is my PAYE band?", "needs_own_information": true },
-    { "text": "I get paid weekly, is that taxable?", "needs_own_information": true },
-    { "text": "I work at a bank, what is the minimum wage?", "needs_own_information": true },
-    { "text": "Imali yami ikuphi?", "needs_own_information": true },
-    { "text": "Ngine imali encane", "needs_own_information": true },
-    { "text": "What does section 56 of the Constitution say?", "needs_own_information": false },
-    { "text": "Can I vote?", "needs_own_information": false },
-    { "text": "Do I have a right to life?", "needs_own_information": false },
-    { "text": "Do I need a lawyer to register a company?", "needs_own_information": false },
-    { "text": "Can I work in another country?", "needs_own_information": false },
-    { "text": "What is the VAT rate in Zimbabwe?", "needs_own_information": false },
-    { "text": "Tell me the VAT rate", "needs_own_information": false },
-    { "text": "Who may stand for president?", "needs_own_information": false },
-    { "text": "Ndeipi mitemo yekubhadhara mutero?", "needs_own_information": false },
-    { "text": "Imithetho yelizwe isithini?", "needs_own_information": false },
-    { "text": "mystery novel", "needs_own_information": false },
-    { "text": "immigration policy", "needs_own_information": false },
-    { "text": "common law marriage", "needs_own_information": false },
-    { "text": "Chinese investment law", "needs_own_information": false },
-    { "text": "", "needs_own_information": false }
+    {
+      "text": "What is my tax for this month?",
+      "needs_own_information": true
+    },
+    {
+      "text": "MY SALARY after PAYE",
+      "needs_own_information": true
+    },
+    {
+      "text": "How do I read this payslip?",
+      "needs_own_information": true
+    },
+    {
+      "text": "Explain this bank statement",
+      "needs_own_information": true
+    },
+    {
+      "text": "I earn $400 a month, how much PAYE do I pay?",
+      "needs_own_information": true
+    },
+    {
+      "text": "I owe ZIMRA, what are my options?",
+      "needs_own_information": true
+    },
+    {
+      "text": "I'm a landlord, what must I register?",
+      "needs_own_information": true
+    },
+    {
+      "text": "I\u2019m a landlord, what must I register?",
+      "needs_own_information": true
+    },
+    {
+      "text": "Tell me about me",
+      "needs_own_information": true
+    },
+    {
+      "text": "m\u200by salary",
+      "needs_own_information": true
+    },
+    {
+      "text": "\uff4dy salary",
+      "needs_own_information": true
+    },
+    {
+      "text": "Mari yangu iri kupi?",
+      "needs_own_information": true
+    },
+    {
+      "text": "Ndiri kuda kuziva mutero wangu",
+      "needs_own_information": true
+    },
+    {
+      "text": "Ndakabhadhara mutero here?",
+      "needs_own_information": true
+    },
+    {
+      "text": "ndakabhadhara\u00e9",
+      "needs_own_information": true
+    },
+    {
+      "text": "I have 3 rental properties, how much tax do I owe?",
+      "needs_own_information": true
+    },
+    {
+      "text": "I make $900 a month, what is my PAYE band?",
+      "needs_own_information": true
+    },
+    {
+      "text": "I get paid weekly, is that taxable?",
+      "needs_own_information": true
+    },
+    {
+      "text": "I work at a bank, what is the minimum wage?",
+      "needs_own_information": true
+    },
+    {
+      "text": "Imali yami ikuphi?",
+      "needs_own_information": true
+    },
+    {
+      "text": "Ngine imali encane",
+      "needs_own_information": true
+    },
+    {
+      "text": "What does section 56 of the Constitution say?",
+      "needs_own_information": false
+    },
+    {
+      "text": "Can I vote?",
+      "needs_own_information": false
+    },
+    {
+      "text": "Do I have a right to life?",
+      "needs_own_information": false
+    },
+    {
+      "text": "Do I need a lawyer to register a company?",
+      "needs_own_information": false
+    },
+    {
+      "text": "Can I work in another country?",
+      "needs_own_information": false
+    },
+    {
+      "text": "What is the VAT rate in Zimbabwe?",
+      "needs_own_information": false
+    },
+    {
+      "text": "Tell me the VAT rate",
+      "needs_own_information": false
+    },
+    {
+      "text": "Who may stand for president?",
+      "needs_own_information": false
+    },
+    {
+      "text": "Ndeipi mitemo yekubhadhara mutero?",
+      "needs_own_information": false
+    },
+    {
+      "text": "Imithetho yelizwe isithini?",
+      "needs_own_information": false
+    },
+    {
+      "text": "mystery novel",
+      "needs_own_information": false
+    },
+    {
+      "text": "immigration policy",
+      "needs_own_information": false
+    },
+    {
+      "text": "common law marriage",
+      "needs_own_information": false
+    },
+    {
+      "text": "Chinese investment law",
+      "needs_own_information": false
+    },
+    {
+      "text": "",
+      "needs_own_information": false
+    }
   ]
 }

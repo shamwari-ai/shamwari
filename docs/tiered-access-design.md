@@ -114,11 +114,11 @@ design, not a gap: the tier ladder is also the privacy ladder.
 gateway (`src/scope.ts` `resolveScope`) and Core (`resolve_scope`, authoritative)
 decide from the question and the signed-in caller's grants:
 
-| Input                                                                | Effective scope, on a Cloud endpoint                                       |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Body `scope` is `community`, `platform`, anything else, or absent    | Not read. `platform` if the key holds it, else `community`                 |
-| Body `scope` is exactly `personal`                                   | **409 `scope_requires_local_inference`**; nothing is called                |
-| A question that looks like it needs the person's own information     | Same cloud-safe scope as any other, **plus the notice** (below)            |
+| Input                                                             | Effective scope, on a Cloud endpoint                            |
+| ----------------------------------------------------------------- | --------------------------------------------------------------- |
+| Body `scope` is `community`, `platform`, anything else, or absent | Not read. `platform` if the key holds it, else `community`      |
+| Body `scope` is exactly `personal`                                | **409 `scope_requires_local_inference`**; nothing is called     |
+| A question that looks like it needs the person's own information  | Same cloud-safe scope as any other, **plus the notice** (below) |
 
 A WorkOS person is only ever granted `community` and `platform`. `personal` is
 never grantable to a person for Cloud.
