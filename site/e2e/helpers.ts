@@ -40,3 +40,40 @@ export async function newChat(page: Page) {
   await openChats(page);
   await page.locator('#side-new').click();
 }
+
+/**
+ * Put a question on the device that an earlier version saved under another scope (a picker used to choose it), then
+ * reload so the app reads it, as it would after an update.
+ */
+export async function seedLegacyQuestion(
+  page: Page,
+  text: string,
+  scope: 'personal' | 'community',
+  status: 'queued' | 'sent' = 'queued',
+) {
+  await page.evaluate(
+    async ({ text, scope, status }) => {
+      const db = await new Promise<IDBDatabase>((ok, no) => {
+        const open = indexedDB.open('shamwari-chat', 2);
+        open.onsuccess = () => ok(open.result);
+        open.onerror = () => no(open.error);
+      });
+      const thread = {
+        id: 'legacy-thread',
+        title: text,
+        updatedAt: Date.now() + 1000,
+        messages: [{ id: 'legacy-q', role: 'user', text, at: Date.now(), scope, status }],
+      };
+      await new Promise<void>((ok, no) => {
+        const tx = db.transaction('threads', 'readwrite');
+        tx.objectStore('threads').put(thread);
+        tx.oncomplete = () => ok();
+        tx.onerror = () => no(tx.error);
+      });
+      db.close();
+    },
+    { text, scope, status },
+  );
+  await page.reload();
+  await page.waitForSelector('html[data-ready="true"]');
+}
