@@ -211,6 +211,38 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   /** Close the chats drawer (a popover below 64rem) and the account menu: after an action they must not stay over the page. */
   const closeDrawer = () => (document.getElementById('chat-sidebar') as (HTMLElement & { hidePopover?: () => void }) | null)?.hidePopover?.();
   const closeAccount = () => document.querySelector('details.account')?.removeAttribute('open');
+  /**
+   * The drawer is a popover below 64rem. While it is open the page slides aside (CSS, on html[data-drawer]), is inert so
+   * nothing behind the drawer can be reached by keyboard or screen reader, the opening button says it is expanded, and
+   * focus goes into the drawer and comes back to that button when it closes.
+   */
+  const drawer = document.getElementById('chat-sidebar') as HTMLElement | null;
+  const drawerToggle = document.querySelector<HTMLElement>('[data-slot="app-topbar"] > button[popovertarget]');
+  const pageFrame = document.querySelector<HTMLElement>('[data-slot="app-main"]');
+  drawerToggle?.setAttribute('aria-expanded', 'false');
+  // `beforetoggle` runs synchronously inside show/hidePopover(), so a caller that closes the drawer and then focuses the
+  // question box (New chat) finds the page already reachable again. `toggle` runs after, for focus.
+  drawer?.addEventListener('beforetoggle', (e) => {
+    const open = (e as Event & { newState?: string }).newState === 'open';
+    if (open) document.documentElement.setAttribute('data-drawer', 'open');
+    else document.documentElement.removeAttribute('data-drawer');
+    drawerToggle?.setAttribute('aria-expanded', String(open));
+    if (pageFrame) pageFrame.inert = open;
+  });
+  // From 64rem the drawer is a permanent column, not a popover: if the screen grows while it is open (a tablet turned
+  // sideways), close it so the page is not left inert.
+  window.matchMedia('(min-width: 64rem)').addEventListener('change', (e) => {
+    if (e.matches && drawer?.matches(':popover-open')) (drawer as HTMLElement & { hidePopover(): void }).hidePopover();
+  });
+  drawer?.addEventListener('toggle', (e) => {
+    if ((e as Event & { newState?: string }).newState === 'open') {
+      drawer.querySelector<HTMLElement>('button[popovertargetaction="hide"]')?.focus();
+    } else if (!document.activeElement || document.activeElement === document.body || drawer.contains(document.activeElement)) {
+      // Back to the button that opened it, unless the person already moved on to something else.
+      drawerToggle?.focus();
+    }
+  });
+
   /** Mzizi's AppShell names its menu and close buttons in English; name them in the chosen language. */
   const labelShell = () => {
     const s = strings();

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, makeProject, openAccount, openChat, openChats, openSection, newChat, seedLegacyQuestion } from './helpers';
+import { ask, makeProject, openAccount, openChat, openChats, openSection, closeChats, newChat, seedLegacyQuestion } from './helpers';
 
 test('asks a question and renders the answer with its citation card', async ({ page }) => {
   await openChat(page);
@@ -194,9 +194,8 @@ test('Shona is offered, shown as a draft, and Enter sends', async ({ page }) => 
   await openAccount(page);
   await page.locator('#lang').selectOption('sn');
   await expect(page.locator('html')).toHaveAttribute('lang', 'sn');
-  // The draft notice is a banner in the page, not inside the menu: it shows with the menu closed.
-  await page.locator('details.account summary').click();
-  await expect(page.locator('details.account')).not.toHaveAttribute('open', '');
+  await closeChats(page); // the page behind an open drawer is inert
+  // The draft notice is a banner in the page, not inside the drawer: it shows with the drawer closed.
   await expect(page.locator('#review')).toBeVisible();
   await expect(page.locator('#send')).toHaveText('Tumira');
   await page.locator('#q').fill('hello');
@@ -359,7 +358,7 @@ test('the drawer pins a chat, files it in a project, keeps a saved answer, and d
   await page.locator('#artifact-list button').first().click();
   await expect(page.locator('#artifact-view')).toBeVisible();
   await expect(page.locator('#artifact-cites li').first()).toBeVisible();
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
 
   // It all survives a reload (it is on the device) and goes with Delete history.
   await page.reload();
