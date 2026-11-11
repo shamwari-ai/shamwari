@@ -9,9 +9,14 @@
     "enabled": true,
     "head_sampling_rate": 1,
     "redact_query_string": true,
-    "logs": { "enabled": true, "head_sampling_rate": 1, "invocation_logs": true, "persist": true },
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true,
+    },
     "traces": { "enabled": false, "head_sampling_rate": 1, "persist": true },
-    "issue_detection": { "enabled": true }
+    "issue_detection": { "enabled": true },
   },
 
   // Embeddings only. Also the last-resort inference fallback.
