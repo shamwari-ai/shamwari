@@ -235,3 +235,51 @@ test('the privacy sentence is the same before the script runs and after (English
   expect(staticText).toContain('not the text of your question or its answer');
   expect(staticText).not.toContain('a record of each question it answers');
 });
+
+test('the drawer pins a chat, files it in a project, keeps a saved answer, and deleting history clears all of it', async ({ page }) => {
+  await openChat(page);
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('article.msg.bot .cite').first()).toBeVisible();
+
+  // A project, made from the drawer, and the open chat filed in it.
+  await openChats(page);
+  await page.locator('#project-name').fill('Know my rights');
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await expect(page.locator('#project-list summary')).toContainText('Know my rights (0)');
+  await page.keyboard.press('Escape');
+  await page.locator('#chat-project').selectOption({ label: 'Know my rights' });
+  await openChats(page);
+  await expect(page.locator('#project-list summary')).toContainText('Know my rights (1)');
+
+  // Pin the chat: it is listed under Pinned.
+  await page.keyboard.press('Escape');
+  await page.locator('#pin-chat').click();
+  await expect(page.locator('#pin-chat')).toHaveAttribute('aria-pressed', 'true');
+  await openChats(page);
+  await expect(page.locator('#side-pinned')).toBeVisible();
+  await expect(page.locator('#pinned-list')).toContainText('Is everyone equal');
+  await page.keyboard.press('Escape');
+
+  // Keep the answer: it appears under Artifacts and opens in a dialog with its source.
+  await page.getByRole('button', { name: 'Save answer' }).click();
+  await expect(page.locator('#toast')).toContainText('Saved to Artifacts');
+  await openChats(page);
+  await page.locator('#artifact-list button').first().click();
+  await expect(page.locator('#artifact-view')).toBeVisible();
+  await expect(page.locator('#artifact-cites li').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+
+  // It all survives a reload (it is on the device) and goes with Delete history.
+  await page.reload();
+  await page.waitForSelector('html[data-ready="true"]');
+  await openChats(page);
+  await expect(page.locator('#artifact-list button')).toHaveCount(1);
+  await expect(page.locator('#project-list summary')).toContainText('Know my rights');
+  await page.keyboard.press('Escape');
+  page.once('dialog', (d) => d.accept());
+  await openAccount(page);
+  await page.getByRole('button', { name: 'Delete history' }).click();
+  await openChats(page);
+  await expect(page.locator('#artifact-list button')).toHaveCount(0);
+  await expect(page.locator('#project-list li')).toHaveCount(0);
+});

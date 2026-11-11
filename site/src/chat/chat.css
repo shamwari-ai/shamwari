@@ -523,3 +523,72 @@ input:not([type='checkbox']):not([type='radio']) {
 [data-auth='mukoko'] .devkey {
   display: none;
 }
+
+/* The drawer's lists: pinned, projects, loose chats, saved answers. */
+.side-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--gap-floor);
+}
+.side-form {
+  margin-top: var(--gap-floor);
+}
+.side-form input {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.project > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--target-floor);
+  padding-inline: var(--inset-floor);
+  cursor: pointer;
+  border-radius: 9999px;
+}
+.project > .side-list,
+.project > .row {
+  padding-inline-start: var(--inset-floor);
+  padding-block: var(--gap-floor);
+}
+[aria-current='true'] {
+  font-weight: 600;
+}
+
+/* The open chat's tools, above the thread. */
+.chat-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor) var(--inset-floor);
+}
+.chat-tools[hidden] {
+  display: none;
+}
+.chat-tools select {
+  max-width: 100%;
+}
+.save-answer {
+  margin-top: var(--gap-floor);
+}
+
+/* A saved answer, in a native dialog. */
+.artifact-view {
+  width: min(40rem, calc(100vw - 2 * var(--inset-floor)));
+  max-height: 85vh;
+  overflow: auto;
+  padding: var(--inset-floor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 1rem);
+  background: var(--card);
+  color: var(--foreground);
+}
+.artifact-view::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+.artifact-text {
+  white-space: pre-wrap;
+  line-height: var(--leading-floor);
+}

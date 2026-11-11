@@ -88,10 +88,22 @@ async function underTheFloor(page: Page) {
     }
 
     // Only controls a person can actually reach: one covered by an open menu or drawer is not their neighbour.
+    // Every probe point (the centre and the four corners, inset 2px) must land on the control itself: one that an
+    // open menu or drawer covers even in part is not a neighbour of what is on top of it.
     const onTop = (el: Element) => {
       const r = el.getBoundingClientRect();
-      const hit = document.elementFromPoint(Math.min(Math.max(r.left + r.width / 2, 0), innerWidth - 1), Math.min(Math.max(r.top + r.height / 2, 0), innerHeight - 1));
-      return !!hit && (hit === el || el.contains(hit) || hit.contains(el));
+      const clamp = (v: number, max: number) => Math.min(Math.max(v, 0), max - 1);
+      const points: [number, number][] = [
+        [r.left + r.width / 2, r.top + r.height / 2],
+        [r.left + 2, r.top + 2],
+        [r.right - 2, r.top + 2],
+        [r.left + 2, r.bottom - 2],
+        [r.right - 2, r.bottom - 2],
+      ];
+      return points.every(([x, y]) => {
+        const hit = document.elementFromPoint(clamp(x, innerWidth), clamp(y, innerHeight));
+        return !!hit && (hit === el || el.contains(hit) || hit.contains(el));
+      });
     };
     const controls = [...document.querySelectorAll<HTMLElement>('a[href], button, select, textarea, summary, input:not([type="hidden"])')].filter(seen).filter(onTop);
     for (const el of controls) {
@@ -143,6 +155,24 @@ test('the account menu and the chats drawer meet the Bundu floor', async ({ page
   await openChats(page);
   await expect(page.locator('#history-list button').first()).toBeVisible();
   expect(await underTheFloor(page), 'drawer open').toEqual([]);
+});
+
+test('the drawer with a project, a pinned chat and a saved answer meets the Bundu floor', async ({ page }) => {
+  await openChat(page);
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('.cite-link').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Save answer' }).click();
+  await openChats(page);
+  await page.locator('#project-name').fill('Know my rights');
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await page.keyboard.press('Escape');
+  await page.locator('#chat-project').selectOption({ label: 'Know my rights' });
+  await page.locator('#pin-chat').click();
+  await expect(page.locator('#chat-tools')).toBeVisible();
+  expect(await underTheFloor(page), 'chat tools').toEqual([]);
+  await openChats(page);
+  await page.locator('#project-list summary').click();
+  expect(await underTheFloor(page), 'drawer with a project open').toEqual([]);
 });
 
 test('works with the keyboard alone and keeps a visible focus ring', async ({ page }) => {
