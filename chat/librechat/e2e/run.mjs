@@ -88,20 +88,28 @@ const auth = {
 
 // 2. Ask a question through one endpoint; return what the person would be shown.
 async function ask(endpoint, text) {
-  const res = await json(`/api/agents/chat/${encodeURIComponent(endpoint)}`, {
-    method: "POST",
-    headers: auth,
-    body: JSON.stringify({
-      text,
-      endpoint,
-      endpointType: "custom",
-      model: "shamwari-economy",
-      messageId: randomUUID(),
-      parentMessageId: NIL,
-      isCreatedByUser: true,
-      sender: "User",
-    }),
+  const payload = JSON.stringify({
+    text,
+    endpoint,
+    endpointType: "custom",
+    model: "shamwari-economy",
+    messageId: randomUUID(),
+    parentMessageId: NIL,
+    isCreatedByUser: true,
+    sender: "User",
   });
+  // LibreChat answers 503 SERVER_NOT_READY for a short window after /health is green
+  // (first run, CI). Wait it out; any other status is a real answer.
+  let res;
+  for (let i = 0; i < 40; i++) {
+    res = await json(`/api/agents/chat/${encodeURIComponent(endpoint)}`, {
+      method: "POST",
+      headers: auth,
+      body: payload,
+    });
+    if (res.body?.code !== "SERVER_NOT_READY") break;
+    await sleep(3000);
+  }
   note(`ask(${endpoint}).status`, res.status);
   assert.ok(
     res.status < 300,
