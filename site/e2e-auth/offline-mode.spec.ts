@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test';
 
 // With a session behind it (the Mukoko build), offline mode must not even renew the session: no request to the Worker at all.
-const STUB = 'http://127.0.0.1:4323/__stub/auth';
+// The gate-emulating server (4324) has its own stub, so this test shares nothing with the serial tests on 4323 and
+// never touches any stub state: the hint of a past sign-in is all the page needs while offline mode is on.
+test.use({ baseURL: 'http://127.0.0.1:4324' });
 
 test('with offline mode on, the page loads from the hint of a past sign-in and makes no session request', async ({ page, context }) => {
-  await page.request.post(STUB, { data: { session: true } });
+  await context.addCookies([{ name: 'stub_session', value: '1', url: 'http://127.0.0.1:4324/lite/' }]); // what the gate emulation asks for
   await page.addInitScript(() => {
     localStorage.setItem('shamwari.mukoko.hint', '1');
     localStorage.setItem('shamwari.offlineMode', '1');
@@ -32,5 +34,4 @@ test('with offline mode on, the page loads from the hint of a past sign-in and m
   await page.waitForTimeout(1000);
   expect(seen).toEqual([]);
   expect(toWorker, 'nothing asked the session Worker for anything').toEqual([]);
-  await page.request.post(STUB, { data: {} }); // leave the shared stub as it was found (signed out, counters at zero)
 });
