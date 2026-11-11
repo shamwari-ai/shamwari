@@ -395,6 +395,17 @@ const mutants = [
     }),
     /disableStreaming: true/,
   ],
+  [
+    "the user id no longer dropped",
+    (f) => ({
+      ...f,
+      production: f.production.replace(
+        "dropParams: ['user']",
+        "dropParams: []",
+      ),
+    }),
+    /dropParams must be exactly/,
+  ],
 ];
 
 for (const [name, mutate, expected] of mutants) {
