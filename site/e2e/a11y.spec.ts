@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { ask, makeProject, newChat, openAccount, openChat, openChats, seedLegacyQuestion, openSection } from './helpers';
+import { ask, makeProject, newChat, openAccount, openChat, openChats, seedLegacyQuestion, openSection, closeChats } from './helpers';
 
 const scan = async (page: Page) =>
   (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze()).violations;

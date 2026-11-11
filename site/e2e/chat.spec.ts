@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, makeProject, openAccount, openChat, openChats, openSection, newChat, seedLegacyQuestion } from './helpers';
+import { ask, makeProject, openAccount, openChat, openChats, openSection, closeChats, newChat, seedLegacyQuestion } from './helpers';
 
 test('asks a question and renders the answer with its citation card', async ({ page }) => {
   await openChat(page);
