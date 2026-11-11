@@ -243,12 +243,11 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
 
     // Projects (the pinned ones are listed again here: Pinned is a shortcut, not a move).
     $('#project-list').replaceChildren(...projectsNow.map((p) => projectItem(p, all, s)));
-    $('#project-empty').hidden = projectsNow.length > 0;
 
     // Loose chats: not pinned, not in a project, not the one on screen.
     const loose = all.filter((t) => t.id !== thread.id && !t.pinned && !t.projectId);
     $('#history-list').replaceChildren(...loose.map(threadButton));
-    $('#history').hidden = loose.length === 0;
+    $('#side-chats').hidden = loose.length === 0;
 
     $('#artifact-list').replaceChildren(
       ...artifacts.map((a) => {
@@ -257,7 +256,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
         return h('li', {}, b);
       }),
     );
-    $('#artifact-empty').hidden = artifacts.length > 0;
+    $('#side-artifacts').hidden = artifacts.length === 0;
 
     syncChatTools();
   };
@@ -325,13 +324,22 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     void renderHistory();
     input.focus();
   });
-  $<HTMLFormElement>('#project-form').addEventListener('submit', async (e) => {
+  const projectForm = $<HTMLFormElement>('#project-form');
+  const newProjectButton = $('#new-project');
+  newProjectButton.addEventListener('click', () => {
+    projectForm.hidden = !projectForm.hidden;
+    newProjectButton.setAttribute('aria-expanded', String(!projectForm.hidden));
+    if (!projectForm.hidden) $<HTMLInputElement>('#project-name').focus();
+  });
+  projectForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const field = $<HTMLInputElement>('#project-name');
     const name = field.value.trim().replace(/\s+/g, ' ').slice(0, 60);
     if (!name) return;
     await saveProject({ id: newId(), name, updatedAt: Date.now() });
     field.value = '';
+    projectForm.hidden = true;
+    newProjectButton.setAttribute('aria-expanded', 'false');
     void renderHistory();
   });
 
@@ -586,7 +594,6 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   const authPanel = $('#auth');
   const syncAuth = () => {
     $('#signout').hidden = !auth.signedIn();
-    $('#open-signin').hidden = auth.signedIn(); // "Sign in" is for someone who is not
   };
   function showAuth() {
     authPanel.hidden = false;
@@ -660,38 +667,11 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     b.addEventListener('click', () => void ask(b.textContent ?? '')),
   );
 
-  // The top bar's icons. The account menu is Mzizi's disclosure pattern and opens by itself; "Sign in" inside
-  // it brings the sign-in panel up. There are no notifications to show yet, and the bell says so rather
-  // than doing nothing.
-  $('#open-signin').addEventListener('click', () => {
-    closeAccount();
-    showAuth();
-  });
-  let bellTimer: ReturnType<typeof setTimeout> | undefined;
-  $('#bell').addEventListener('click', () => {
-    // Clear first so a second tap is announced again, and clear after a few seconds so the line
-    // does not sit next to unrelated state.
-    const toast = $('#toast');
-    clearTimeout(bellTimer);
-    toast.textContent = '';
-    setTimeout(() => (toast.textContent = strings().noNotifications), 50);
-    bellTimer = setTimeout(() => {
-      if (toast.textContent === strings().noNotifications) toast.textContent = '';
-    }, 4000);
-  });
-
-  // The drawer's foot: New chat and the account, as in the top bar.
+  // The drawer's foot: New chat, as in the top bar. Settings is a disclosure and opens by itself.
   $('#side-new').addEventListener('click', () => {
     closeDrawer();
     document.querySelector<HTMLButtonElement>('#new-chat button')?.click();
   });
-  $('#side-account').addEventListener('click', () => {
-    closeDrawer();
-    const menu = document.querySelector<HTMLDetailsElement>('details.account');
-    if (menu) menu.open = true;
-    menu?.querySelector('summary')?.focus();
-  });
-
   $('#new-chat').addEventListener('click', () => {
     if (thread.messages.length) {
       thread = fresh();
