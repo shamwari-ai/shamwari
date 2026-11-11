@@ -368,8 +368,9 @@ sees the path; `Location` is re-prefixed unless it is already ours or points at
 another host; every `Set-Cookie` is scoped to `Path=/chat`, loses its `Domain`,
 and a `__Host-` cookie (which must be `Path=/`) is dropped; the visitor's
 `X-Forwarded-*` are replaced by the proxy's own; only content-hashed assets are
-`immutable`, the API is `no-store`; the same-origin CSP limits and
-`nosniff`/`DENY` are set; an unreachable origin is a 502 with no detail.
+`immutable`, the API is `no-store`; the same-origin CSP limits
+(framing is refused by `frame-ancestors`) and `nosniff` are set; an unreachable origin is a 502
+with no detail.
 
 **Not yet in the proxy, and why:** `script-src` in the CSP (LibreChat's build has
 inline scripts that have to be read first), edge caching of hashed assets

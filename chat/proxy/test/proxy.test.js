@@ -206,7 +206,6 @@ test("response: Location, every Set-Cookie, security headers, no framework banne
   ]);
   assert.equal(r.headers.get("content-security-policy"), CSP);
   assert.equal(r.headers.get("x-content-type-options"), "nosniff");
-  assert.equal(r.headers.get("x-frame-options"), "DENY");
   assert.equal(r.headers.get("x-powered-by"), null);
   assert.equal(r.headers.get("server"), null);
 });
