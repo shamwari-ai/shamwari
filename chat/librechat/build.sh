@@ -13,8 +13,9 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 git init -q "$work/src"
-# Deep enough to reach the upstream base under our fork commits.
-git -C "$work/src" fetch -q --depth 100 "$repo" "$commit"
+# Full history without file contents, so the upstream base is always reachable however many
+# fork commits sit above it; file contents are fetched on checkout.
+git -C "$work/src" fetch -q --filter=blob:none "$repo" "$commit"
 git -C "$work/src" checkout -q FETCH_HEAD
 got="$(git -C "$work/src" rev-parse HEAD)"
 [ "$got" = "$commit" ] || { echo "pinned commit mismatch: $got != $commit" >&2; exit 1; }

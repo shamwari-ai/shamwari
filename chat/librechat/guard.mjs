@@ -251,13 +251,30 @@ export function check({ production, test, fly, dockerfile, buildSh, pin }) {
     v.push(
       "build.sh: the source repository must be the Shamwari fork, with no override",
     );
-  if (!/merge-base --is-ancestor/.test(buildSh))
+  const live = buildSh
+    .split("\n")
+    .filter((l) => !/^\s*#/.test(l))
+    .join("\n");
+  if (
+    !/merge-base --is-ancestor "\$base" HEAD\s*\\?\n?\s*\|\|\s*\{[^}]*exit 1/.test(
+      live,
+    )
+  )
     v.push(
-      "build.sh: must verify the fork commit is built on the upstream base",
+      "build.sh: must verify the fork commit is built on the upstream base and exit 1 if not",
     );
-  if (!/refs\/tags/.test(buildSh))
+  if (
+    !/refs\/tags/.test(live) ||
+    !/\[ "\$tagged" = "\$base" \]\s*\|\|\s*\{[^}]*exit 1/.test(live)
+  )
     v.push(
-      "build.sh: must verify that the tag in PIN resolves to the pinned commit",
+      "build.sh: must verify that the tag in PIN resolves to the upstream base and exit 1 if not",
+    );
+  if (/\|\|\s*(true|:)\b/.test(live))
+    v.push("build.sh: no `|| true` or `|| :` escapes");
+  if (base && commit && base === commit)
+    v.push(
+      "PIN: commit must be a Shamwari commit above base, not the stock upstream commit",
     );
   return v;
 }
