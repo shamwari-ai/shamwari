@@ -146,8 +146,11 @@ jobs:
       # for this run only and never written to a file.
       - name: Run LibreChat against the stub gateway
         run: |
-          export CREDS_KEY="$(openssl rand -hex 32)" CREDS_IV="$(openssl rand -hex 16)"
-          export JWT_SECRET="$(openssl rand -hex 32)" JWT_REFRESH_SECRET="$(openssl rand -hex 32)"
+          CREDS_KEY="$(openssl rand -hex 32)"
+          CREDS_IV="$(openssl rand -hex 16)"
+          JWT_SECRET="$(openssl rand -hex 32)"
+          JWT_REFRESH_SECRET="$(openssl rand -hex 32)"
+          export CREDS_KEY CREDS_IV JWT_SECRET JWT_REFRESH_SECRET
           docker compose -f chat/librechat/e2e/compose.yml up \
             --abort-on-container-exit --exit-code-from driver
 
