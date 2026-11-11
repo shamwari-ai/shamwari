@@ -72,6 +72,12 @@ export const MAX_COOKIE_VALUE = 3800;
 /** Renew when the token has less than this left, so the page never holds one about to lapse. */
 export const RENEW_BELOW_SECONDS = 60;
 /**
+ * Renew when the token is older than this, whatever `exp` says. The gateway refuses any token issued more than
+ * an hour ago (WORKOS_MAX_TOKEN_AGE_SECONDS, 3600), and the Mukoko Account application's access tokens live for
+ * hours, so a token handed out at minute 59 of a five-hour lifetime would be refused at once.
+ */
+export const RENEW_AFTER_AGE_SECONDS = 30 * 60;
+/**
  * How long the browser keeps the cookie. The refresh token's own lifetime is
  * WorkOS's to enforce (a terminal refusal clears the cookie), so this is only
  * an upper bound for an installed app that is opened rarely.
@@ -182,7 +188,9 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
 
     if (checked.status === 'valid') {
       const exp = jwtExp(checked.accessToken);
-      if (exp !== null && exp - deps.now() / 1000 > RENEW_BELOW_SECONDS) {
+      const iat = jwtClaims(checked.accessToken)?.iat;
+      const young = typeof iat !== 'number' || deps.now() / 1000 - iat < RENEW_AFTER_AGE_SECONDS;
+      if (exp !== null && young && exp - deps.now() / 1000 > RENEW_BELOW_SECONDS) {
         return json(200, { access_token: checked.accessToken, expires_at: exp }, { Vary: 'Cookie' });
       }
     }
