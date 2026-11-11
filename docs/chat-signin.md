@@ -353,9 +353,12 @@ owning-entity key.
   Anyone without one is refused until they are linked.
 - **Set in `gateway/wrangler.jsonc` (production vars), not yet read off a real token:**
   `WORKOS_CLIENT_ID` is the Shamwari Chat client above. `WORKOS_ISSUER` is
-  `https://accounts.mukoko.com`, the `issuer` of the Mukoko Account custom domain's OIDC discovery
-  document (`https://accounts.mukoko.com/.well-known/openid-configuration`); the issuer is per
-  environment, not per app. (An earlier version of this file named `auth.mukoko.com`, which is not the
+  two comma-separated values: `https://accounts.mukoko.com`, the `issuer` of the Mukoko Account custom
+  domain's OIDC discovery document (`https://accounts.mukoko.com/.well-known/openid-configuration`), and
+  the per-client form `https://accounts.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0` that
+  WorkOS user-management tokens have carried. Which one `iss` really is cannot be told without a real
+  signed-in token, so both are accepted and anything else is refused; the issuer is per environment, not
+  per app. (An earlier version of this file named `auth.mukoko.com`, which is not the
   Mukoko Account domain.) WorkOS advises copying `iss` from a decoded
   token because the documented form varies (a trailing slash is tolerated here). If this is
   wrong, every WorkOS token is refused with 401 and `sk_shamwari_` keys are unaffected.

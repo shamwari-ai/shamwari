@@ -362,6 +362,19 @@ describe('audience is optional by config, required when configured', () => {
   });
 });
 
+describe('a comma-separated issuer list', () => {
+  const OTHER = 'https://other-issuer.example.test';
+  it('accepts a token from any listed issuer and refuses one from none', async () => {
+    const env = makeEnv({ WORKOS_ISSUER: `${OTHER},${ISSUER}` });
+    expect(await verify(await token({ iss: ISSUER }), env)).toBe('ok');
+    expect(await verify(await token({ iss: `${OTHER}/` }), env)).toBe('ok');
+    expect(await verify(await token({ iss: 'https://evil.example' }), env)).toBe('invalid');
+  });
+  it('is unavailable, not permissive, when any entry is empty', async () => {
+    expect(await verify(await token(), makeEnv({ WORKOS_ISSUER: `${ISSUER},` }))).toBe('unavailable');
+  });
+});
+
 describe('the issuer is matched exactly, except for one trailing slash', () => {
   it.each([
     ['configured bare, token with a slash', ISSUER, `${ISSUER}/`],

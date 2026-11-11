@@ -91,10 +91,10 @@
     // keeps tokens minted for any other Mukoko app out; `aud` is deliberately NOT set (the
     // production JWT template carries none; setting it would make every token without it fail).
     "WORKOS_CLIENT_ID": "client_01M68PCT0T5ECHKDYH45ECT0GV",
-    // From the OIDC discovery document of the Mukoko Account custom domain (accounts.mukoko.com), NOT yet read off a real access token
+    // Mukoko Account custom domain (accounts.mukoko.com). Two issuers are listed because the OIDC discovery document and WorkOS's user-management tokens disagree on the form; NOT yet read off a real access token
     // (WorkOS advises copying `iss` from a decoded token; a trailing slash is tolerated). If it
     // is wrong every WorkOS token is refused with 401 and `sk_shamwari_` keys are unaffected.
-    "WORKOS_ISSUER": "https://accounts.mukoko.com",
+    "WORKOS_ISSUER": "https://accounts.mukoko.com,https://accounts.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0",
     // Tokens per person per month. About $0.20 at the economy model's blended price (pricing.json:
     // 85% input at $0.15/M, 15% output at $0.50/M is about $0.20/M, so 1M tokens), the unit-cost
     // target in docs/tiered-access-design.md. An estimate; the owner's number replaces it.
