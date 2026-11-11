@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openAccount, openChats } from '../e2e/helpers';
+import { closeChats, openAccount, openChats } from '../e2e/helpers';
 
 // Mukoko sign-in (WorkOS access token) against a STAND-IN for the session Worker and
 // the mock gateway. The flag is a build setting and is off in the normal build.
@@ -215,6 +215,7 @@ test('another person signing in on the same device does not read them; the first
   await openChats(page);
   await expect(page.locator('#history-list button')).toHaveCount(0);
   await expect(page.getByText('Is everyone equal')).toHaveCount(0);
+  await closeChats(page); // the page behind an open drawer is inert
   await ask(page, 'Question from B');
   await expect(page.locator('.cite').first()).toBeVisible();
   await signOut(page);
