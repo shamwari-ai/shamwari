@@ -219,6 +219,11 @@ test('the chat has no small print under it: a link opens the disclaimer and priv
   await expect(page.getByText('not the text of your question or its answer')).toBeVisible();
   await expect(page.getByText('This is not legal advice')).toBeVisible();
   await expect(page.locator('script')).toHaveCount(0); // only the chat page ships a script
+  // It is a document, not the chat's one scroller: the other languages and the way back can be reached on a phone.
+  const back = page.getByRole('link', { name: 'Back to the chat' });
+  await back.scrollIntoViewIfNeeded();
+  await expect(back).toBeInViewport();
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe('hidden');
 });
 
 test('the drawer pins a chat, files it in a project, keeps a saved answer, and deleting history clears all of it', async ({ page }) => {

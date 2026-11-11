@@ -769,12 +769,12 @@ main#main :where(.thread, .dock, .ask, #empty, .panel, .chat-tools) {
 }
 
 /* ---- one scroller -------------------------------------------------------------------------------------
-   The page itself does not scroll. The app area is a box exactly as tall as the screen and it is the only
+   On the chat page (html.app) the page itself does not scroll; every other page, the disclaimer, scrolls as a document. The app area is a box exactly as tall as the screen and it is the only
    thing that scrolls, so the top bar (sticky) and the composer (sticky) stay where they are on a phone,
    whatever Chrome does with its own address bar. Scrolling the document with sticky bars inside it left the
    bar floating below the address bar with the page scrolling past above it. */
-html,
-body {
+html.app,
+html.app body {
   height: 100%;
   overflow: hidden;
 }
