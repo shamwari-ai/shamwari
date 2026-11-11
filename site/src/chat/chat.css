@@ -896,3 +896,71 @@ html[data-view='pending'] dialog {
 .side-settings[open] > .side-row {
   color: var(--foreground);
 }
+
+/* ---- the drawer's sections ---------------------------------------------------------------------------------
+   Chat, Projects, Factory, Artifacts, Plugins: the same quiet rows as the foot, at the top. The open one is full
+   strength with the soft fill and aria-current; Factory is a planned product, so it is plain text with a chip, no
+   hover, no pointer and not focusable. */
+.side-primary {
+  flex: none;
+  padding-block-end: var(--gap-floor);
+}
+.side-primary .side-list {
+  display: grid;
+  gap: var(--gap-floor);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.side-primary .side-row {
+  border: 0;
+}
+.side-row[aria-current='page'] {
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 600;
+}
+.side-row.side-disabled {
+  cursor: default;
+}
+.side-row.side-disabled:hover {
+  background: transparent;
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+}
+.side-chip {
+  margin-inline-start: auto;
+  padding: 0 var(--gap-floor);
+  border: 0.5px solid var(--border-control, var(--border));
+  border-radius: 999px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+.side-empty {
+  margin: 0;
+  padding: var(--gap-floor) var(--inset-floor);
+}
+.side-tabs {
+  display: flex;
+  gap: var(--gap-floor);
+  padding-inline: var(--inset-floor);
+  padding-block-end: var(--gap-floor);
+}
+.side-tabs [role='tab'] {
+  min-height: var(--target-floor);
+  padding-inline: var(--inset-floor);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  font: inherit;
+  cursor: pointer;
+}
+.side-tabs [role='tab'][aria-selected='true'] {
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 600;
+}
+.side-tabs [role='tab']:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}

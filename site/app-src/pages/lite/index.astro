@@ -53,11 +53,31 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
     <!-- The drawer: what is kept on this device. Pinned chats and projects, then projects, loose chats and saved
          answers. The script fills the lists; with no script the page is just the empty states. -->
     <div slot="nav" class="chats">
+      <!-- The sections of the drawer, at the top. Each opens its own list below; the script switches them. Factory
+           is a planned product, so it is a row that says so and is not a link or a button. -->
+      <nav class="side-primary" aria-label={en.sections} data-i18n-attr="aria-label:sections">
+        <ul class="side-list">
+          <li><button type="button" class="side-row" data-section="chat" aria-current="page"><Icon name="message" class="side-icon" /><span data-i18n="navChat">{en.navChat}</span></button></li>
+          <li><button type="button" class="side-row" data-section="projects"><Icon name="layers" class="side-icon" /><span data-i18n="projects">{en.projects}</span></button></li>
+          <li><span class="side-row side-disabled" aria-disabled="true"><Icon name="workflow" class="side-icon" /><span data-i18n="navFactory">{en.navFactory}</span><span class="side-chip" data-i18n="comingSoon">{en.comingSoon}</span></span></li>
+          <li><button type="button" class="side-row" data-section="artifacts"><Icon name="clipboard" class="side-icon" /><span data-i18n="artifacts">{en.artifacts}</span></button></li>
+          <li><button type="button" class="side-row" data-section="plugins"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span></button></li>
+        </ul>
+      </nav>
       <div class="side-scroll">
+      <div data-panel="chat">
       <section id="side-pinned" aria-labelledby="pinned-title" hidden>
         <h2 id="pinned-title" class="chats-title" data-i18n="pinned">Pinned</h2>
         <ul id="pinned-list" class="side-list"></ul>
       </section>
+      <section id="side-chats" aria-labelledby="chats-title" hidden>
+        <h2 id="chats-title" class="chats-title" data-i18n="earlierChats">Earlier chats</h2>
+        <div id="history">
+          <ul id="history-list" class="side-list"></ul>
+        </div>
+      </section>
+      </div>
+      <div data-panel="projects" hidden>
       <section aria-labelledby="projects-title">
         <h2 id="projects-title" class="chats-title" data-i18n="projects">Projects</h2>
         <ul id="project-list" class="side-list"></ul>
@@ -68,16 +88,27 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
           <button type="submit" class="btn" data-i18n="createProject">Create project</button>
         </form>
       </section>
-      <section id="side-chats" aria-labelledby="chats-title" hidden>
-        <h2 id="chats-title" class="chats-title" data-i18n="earlierChats">Earlier chats</h2>
-        <div id="history">
-          <ul id="history-list" class="side-list"></ul>
-        </div>
-      </section>
+      </div>
+      <div data-panel="artifacts" hidden>
       <section id="side-artifacts" aria-labelledby="artifacts-title" hidden>
         <h2 id="artifacts-title" class="chats-title" data-i18n="artifacts">Artifacts</h2>
         <ul id="artifact-list" class="side-list"></ul>
       </section>
+      <p id="artifacts-empty" class="side-empty" data-i18n="artifactsEmpty">{en.artifactsEmpty}</p>
+      </div>
+      <!-- Plugins, Skills and MCP: nothing exists behind them yet, so each says so. Its script loads only when this
+           panel is first opened. -->
+      <div data-panel="plugins" hidden>
+        <div role="tablist" class="side-tabs" aria-label={en.navPlugins} data-i18n-attr="aria-label:navPlugins">
+          <button type="button" role="tab" id="tab-plugins" aria-controls="tabpanel-plugins" aria-selected="true" data-i18n="pluginsTab">{en.pluginsTab}</button>
+          <button type="button" role="tab" id="tab-skills" aria-controls="tabpanel-skills" aria-selected="false" tabindex="-1" data-i18n="skillsTab">{en.skillsTab}</button>
+          <button type="button" role="tab" id="tab-mcp" aria-controls="tabpanel-mcp" aria-selected="false" tabindex="-1" data-i18n="mcpTab">{en.mcpTab}</button>
+        </div>
+        <div role="tabpanel" id="tabpanel-plugins" aria-labelledby="tab-plugins"><p class="side-empty" data-i18n="pluginsEmpty">{en.pluginsEmpty}</p></div>
+        <div role="tabpanel" id="tabpanel-skills" aria-labelledby="tab-skills" hidden><p class="side-empty" data-i18n="skillsEmpty">{en.skillsEmpty}</p></div>
+        <div role="tabpanel" id="tabpanel-mcp" aria-labelledby="tab-mcp" hidden><p class="side-empty" data-i18n="mcpEmpty">{en.mcpEmpty}</p></div>
+        <p class="side-empty" data-i18n="thirdPartyNote">{en.thirdPartyNote}</p>
+      </div>
       </div>
 
       <!-- Pinned to the bottom of the drawer: a new version, when there is one, then New chat and the account. -->

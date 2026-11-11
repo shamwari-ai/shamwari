@@ -24,9 +24,16 @@ export async function openAccount(page: Page) {
 
 /** Reveal the new-project form in the drawer and make a project. */
 export async function makeProject(page: Page, name: string) {
+  await openSection(page, 'Projects');
   await page.getByRole('button', { name: 'New project' }).click();
   await page.locator('#project-name').fill(name);
   await page.getByRole('button', { name: 'Create project' }).click();
+}
+
+/** Open one section of the drawer (Chat, Projects, Artifacts, Plugins) from its row at the top. */
+export async function openSection(page: Page, name: 'Chat' | 'Projects' | 'Artifacts' | 'Plugins') {
+  await openChats(page);
+  await page.locator('.side-primary').getByRole('button', { name }).click();
 }
 
 /** Open the drawer that lists the chats kept on this device. */
