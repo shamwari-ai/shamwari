@@ -462,7 +462,10 @@ const mutants = [
     "a tag compared against the fork commit",
     (f) => ({
       ...f,
-      buildSh: f.buildSh.replace('"$tagged" = "$base"', '"$tagged" = "$commit"'),
+      buildSh: f.buildSh.replace(
+        '"$tagged" = "$base"',
+        '"$tagged" = "$commit"',
+      ),
     }),
     /resolves to the upstream base/,
   ],
