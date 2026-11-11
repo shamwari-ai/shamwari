@@ -27,10 +27,15 @@ spelled `...SECRET-1`, `...SECRET-2`, `...SECRET-3`; a real credential is random
 and never contains that.
 """
 regexTarget = "line"
-regexes = ['''Bearer sk_shamwari_\.\.\.''', '''SECRET-\d''']
+regexes = ['''Bearer sk_shamwari_\.\.\.''', '''SECRET-\d''', '''sk_shamwari_e2e_0123456789abcdef''']
 
-# The one historical commit that still trips the history scan. It introduced the
-# obviously fake end-to-end key `sk_shamwari_e2e_0123...` in core/e2e_app.py; #128
-# builds that value at runtime, so no current file carries it. The entry covers only that
-# commit; every other commit is still scanned.
+# The obviously fake end-to-end key `sk_shamwari_e2e_0123456789abcdef` that #122 put in
+# core/e2e_app.py. #128 builds that value at runtime, so no current file carries it, but
+# the history scan still reads it in the #122 commits (f4976d8, the squash, and its
+# pre-squash twin b3c0945). It is allowlisted as the literal
+# string (the `regexes` entry above), not by commit, so a real credential committed in
+# those same commits is still reported. A random key never equals this value.
+#
+# e85168e is the one older commit that tripped the scan before the literal entry existed.
+# It is kept as it was; it is the only commit-level entry, and it covers only that commit.
 commits = ["e85168eeac54ca8918143b45b910766d7776e37c"]

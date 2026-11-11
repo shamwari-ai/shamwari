@@ -16,15 +16,17 @@ if (select) {
     select.append(o);
   }
 }
+// Off unless the build says otherwise (PUBLIC_CHAT_AUTH=mukoko).
+const authMode = document.querySelector<HTMLMetaElement>('meta[name="shamwari-auth"]')?.content === 'mukoko' ? 'mukoko' : 'developer-key';
 if (apiBase) {
-  void startApp({ apiBase });
+  void startApp({ apiBase, authMode });
 }
 
 // Offline shell. Registered after load so it never competes with the first paint,
-// and scoped to /chat/ so the marketing pages are never served from it.
+// and scoped to /lite/ so the marketing pages are never served from it.
 if ('serviceWorker' in navigator) {
   addEventListener('load', () => {
-    void navigator.serviceWorker.register('/chat/sw.js', { scope: '/chat/' }).catch(() => {
+    void navigator.serviceWorker.register('/lite/sw.js', { scope: '/lite/' }).catch(() => {
       /* no service worker (private mode, old WebView): the app still works online */
     });
   });

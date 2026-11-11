@@ -1,0 +1,47 @@
+# Production configuration. Rule 1 (CLAUDE.md): LibreChat talks ONLY to the
+# Shamwari gateway. test/guard.test.mjs fails the build if anything here points
+# elsewhere. Keys are limited to those in the pinned release's example file.
+version: 1.3.17
+cache: true
+
+interface:
+  customWelcome: 'Welcome to Shamwari. A friend that serves.'
+  modelSelect: false
+  parameters: false
+  presets: false
+  multiConvo: false
+  fileSearch: false
+  prompts:
+    use: false
+    create: false
+    share: false
+    public: false
+  agents:
+    use: false
+    create: false
+    share: false
+    public: false
+  marketplace:
+    use: false
+
+endpoints:
+  custom:
+    - name: 'Shamwari'
+      # Not a secret and not a customer key. The gateway accepts no customer key
+      # today and sign-in is off; once sign-in is on, the person's token goes in
+      # the Authorization header (docs/librechat.md, "Sign-in").
+      apiKey: '${SHAMWARI_CHAT_PLACEHOLDER_KEY}'
+      baseURL: 'https://api.shamwari.ai/v1'
+      models:
+        default: ['shamwari-economy']
+        fetch: false
+      modelDisplayLabel: 'Shamwari'
+      # One extra model call per chat, spending the person's quota. Off.
+      titleConvo: false
+      addParams:
+        scope: 'platform'
+        # The gateway does not stream. To test against the stub gateway.
+        stream: false
+      headers:
+        # "The web chat": the gateway keeps no content copy and never trains on it.
+        X-Shamwari-Channel: 'pwa'

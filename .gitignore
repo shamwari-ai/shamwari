@@ -14,3 +14,5 @@ __pycache__/
 dist-e2e/
 test-results/
 playwright-report/
+dist-e2e-mukoko/
+dist-app/

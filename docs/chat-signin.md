@@ -152,39 +152,151 @@ through the custom domain `auth.mukoko.com` (app **Mukoko Account**), and whethe
 enforced`. Whether people should instead fail closed is a policy choice that depends on the API
   accepting person ids (G6); it is not changed here.
 
-## The chat: a thin session Worker (design, not built)
+## The chat: a thin session Worker (built, not deployed)
 
 The chat page is static. A browser that held a WorkOS refresh token itself would store it
 where page script can read it, and a single-use refresh token raced by two tabs signs the
 person out. So the part that holds the session is a server.
 
-**Proposal: one small Worker (`chat-auth`) on `https://shamwari.ai/chat/auth/*`**, a
-backend-for-frontend that reuses **the WorkOS SDK and the Console's session pattern**
-(`nyuchi/nyuchi-platform`, `console/backend`; this session could not read it, so confirm the
-SDK and pattern there). It writes no PKCE, refresh or locking code of its own beyond what the
-SDK provides.
+**Built in `site/worker/`, as part of the `shamwari-app` Worker** (not a third Worker): static
+assets answer everything, and `assets.run_worker_first` in `site/wrangler.app.jsonc` sends only
+`/lite/auth/login`, `/lite/auth/token`, `/lite/auth/logout` and `/lite/callback` to the script.
+It uses the **WorkOS SDK** (`@workos-inc/node`, its `workerd` build) for the authorization URL,
+the code exchange, cookie sealing, JWT verification, refresh and session revocation. There is no
+PKCE, sealing or token-refresh code of our own. (The Console's own pattern in
+`nyuchi/nyuchi-platform` was not readable from this session, so nothing here was checked against it.)
 
 ```
-browser                    chat-auth Worker                     WorkOS
-  │ GET /chat/auth/login ───►│ SDK: authorization URL (PKCE, state)
-  │◄── 302 to WorkOS ────────│
-  │ …person signs in…        │
-  │ GET /chat/callback?code ─►│ SDK: exchange the code; seal the session
-  │◄── Set-Cookie (HttpOnly, Secure, SameSite=Lax, Path=/chat/), 302 /chat/
-  │ GET /chat/auth/token ───►│ cookie → SDK refreshes if needed (server side only)
-  │◄── { access_token, expires_at }   Cache-Control: no-store
-  │ POST api.shamwari.ai/v1/chat/completions   Authorization: Bearer <access_token>
+browser                    shamwari-app Worker (worker/)         WorkOS
+  | GET /lite/auth/login --->| state (random, one-time cookie); SDK authorization URL
+  |<-- 302 to WorkOS --------|
+  | ...person signs in...    |
+  | GET /lite/callback?code ->| state checked; SDK exchanges the code and SEALS the session
+  |<-- Set-Cookie __Secure-shamwari_session (Path=/lite/) (HttpOnly, Secure, SameSite=Lax), 302 /lite/
+  | GET /lite/auth/token --->| SDK verifies; refreshes if < 60 s left (one at a time per session)
+  |<-- { access_token, expires_at }   Cache-Control: no-store, Vary: Cookie
+  | POST api.shamwari.ai/v1/chat/completions   Authorization: Bearer <access_token>
 ```
 
-- The **refresh token never leaves the Worker.** The page gets only the short-lived access
-  token, keeps it in memory, and asks again on expiry or reload.
-- The CSP in `site/scripts/post-build.mjs` already restricts `connect-src` to the site and the
-  API origin and `script-src` to `'self'`, which is what protects an in-memory token from
-  injected script.
-- The chat's `AuthProvider` seam (`site/src/chat/auth.ts`) gains a `mukoko` provider whose
-  `getKey()` calls `/chat/auth/token`. The developer-key panel stays until this ships, then is
-  hidden outside development builds.
-- Sign-out is `POST /chat/auth/logout`: it clears the cookie and revokes the WorkOS session.
+- The **refresh token never leaves the Worker**: it exists only inside the sealed cookie. The page
+  gets the short-lived access token, keeps it in memory, and asks again on expiry or reload.
+- **What the page expects** (`site/src/chat/auth-mukoko.ts`): `GET /lite/auth/token` returns
+  `{ "access_token": "<jwt>", "expires_at": <epoch seconds> }`. **401 means the session is over**
+  (the Worker also clears the cookie); anything else (403, 5xx, a network failure) is "not now",
+  never a sign-out. The page reads no claim from the token.
+- **What the gateway expects of the token** (unchanged, `gateway/src/workos.ts`): `iss`, `client_id`,
+  `exp`, `iat`, `sub`, `sid`, and `person_id` from the JWT template. The Worker adds and changes none.
+- **Refresh is serialised per session** by a Durable Object (`SessionRefresh`, keyed by WorkOS `sid`),
+  because refresh tokens are single-use: two tabs renewing together cause one refresh, and the second
+  gets the first one's result (for 30 s) instead of spending the same token twice and being signed out.
+- **Only a terminal answer ends a session.** A WorkOS outage, a rate limit or an unexpected fault while
+  reading the cookie is `503` with `Retry-After` and the cookie stays, so our outage is not their
+  sign-out. The only paths to a 401 and a cleared cookie are a cookie we cannot read at all (wrong
+  password, tampering), a terminal refusal from WorkOS, or a session too large to keep (below).
+- **A renewal's new cookie is always kept.** The old refresh token is spent the moment WorkOS answers,
+  so even when the new access token cannot be used (no readable `exp`) the new sealed cookie is set and
+  the answer is a quick `503` retry.
+- **The cookie size is checked where it can be seen.** A sealed session over 3800 characters is refused
+  (sign-in goes back to `/lite/?signin=failed`; a renewal ends the session honestly) rather than being
+  silently dropped by the browser. The real size with an access token, refresh token and user record
+  has still not been measured.
+- **Sign-out revokes the WorkOS session even when the access token has expired**, which is the usual
+  state of the cookie when someone comes back and signs out (the session id is read from the sealed
+  cookie, not from a verified token).
+- **The refresh de-duplication survives eviction:** the Durable Object also writes its last successful
+  result to its own storage, keyed by a hash of the old cookie (never the cookie), and ignores it after
+  30 s.
+- **Failures are logged** (the message only, never the request, cookies or tokens) and a browser
+  navigation to sign-in lands back on the app with `?signin=failed` instead of a JSON page.
+- **No open redirect:** after sign-in the person always lands on `/lite/`; the request cannot choose.
+  The login `state` is random, single-use and compared in constant time. A failed sign-in returns to
+  `/lite/?signin=failed` (the page does not show a message for it yet).
+- `/lite/auth/token` and `/lite/auth/logout` refuse requests the browser marks `Sec-Fetch-Site: cross-site`.
+- Sign-out is `POST /lite/auth/logout`: it clears both cookies at once and revokes the WorkOS session
+  in the background; a failed revocation does not stop the sign-out.
+- The CSP already restricts `connect-src` to the site and the API origin and `script-src` to `'self'`,
+  which is what protects an in-memory token from injected script.
+
+**Configuration, by name only.** Public vars in `wrangler.app.jsonc`: `WORKOS_CLIENT_ID`
+(`client_01M68PCT0T5ECHKDYH45ECT0GV`, not a secret) and `WORKOS_REDIRECT_URI`
+(`https://shamwari.ai/lite/callback`). Two **secrets**, bound from the account's Secrets Store and
+never written into git: `WORKOS_API_KEY` (the WorkOS environment's API key; the Worker is a
+confidential client) and `COOKIE_PASSWORD` (seals the cookie; at least 32 random characters).
+With either unbound the auth routes answer `503` and the page stays on developer-key mode.
+
+**Not verified** (nothing here has met a real WorkOS tenant; no credentials exist in this session):
+the sealed cookie must stay under the browser's size limit once it carries the access token, the
+refresh token and the user record (the SDK is designed for this; the real size was not measured); the
+cookie's 30-day lifetime is only an upper bound, and the real limit is the refresh token's, which a
+terminal refusal turns into a sign-out; and the SDK's refresh and error classification were exercised
+against a fake, not against WorkOS. The Worker was run under the Workers runtime locally (the real SDK
+built the correct AuthKit URL and a bad cookie was refused), but no code exchange or refresh was run.
+
+## The mobile app (Expo): a public client, PKCE, no secret
+
+Built in `mobile/src/auth/`, tested without a phone (`mobile/test/auth.test.ts`). It signs in to the
+**same Shamwari Chat AuthKit application** as the web chat (client `client_01M68PCT0T5ECHKDYH45ECT0GV`),
+so the gateway verifies its tokens exactly as it does the chat's and nothing in the gateway changes.
+It differs from the web chat in one way that matters: a phone cannot keep a secret, so there is no
+session Worker. The app is a **public client** using the authorization code flow with **PKCE**
+(WorkOS: `code_verifier` is required when the client secret is absent).
+
+What the WorkOS documentation says, read 2026-11-02 (not exercised against a real tenant): authorize at
+`/user_management/authorize` with `provider=authkit`, `state`, `code_challenge` and
+`code_challenge_method=S256`; exchange and refresh at `POST /user_management/authenticate` (JSON);
+refresh tokens **rotate**; sign-out is `/user_management/sessions/logout?session_id=…&return_to=…`
+(read from the WorkOS Node SDK source). WorkOS's own Android SDK uses the same shape with a custom
+scheme redirect and tells native apps to keep the access token in memory and the refresh token in
+keystore-backed storage.
+
+Rules the code keeps, each pinned by a test that fails when it breaks:
+
+- **No secret in the bundle.** No `client_secret`, API key or `sk_` string in `mobile/src`. The exchange
+  and refresh requests carry `client_id` and `code_verifier` / `refresh_token` only.
+- **The verifier and state are saved before the browser opens** (the OS can kill the app while it is
+  up), the redirect's `state` must match (constant-time) or nothing is exchanged, and the record is
+  cleared whether or not the exchange worked. A cancel and `access_denied` are "cancelled", not errors.
+- **Tokens:** the access token is in memory only; the refresh token is in the OS keystore only
+  (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`). Nothing logs a token, a code or a verifier.
+- **Rotation is saved first.** The new refresh token is written before the new access token is used,
+  because the old one is already spent.
+- **Refresh is serialised.** Any number of concurrent callers cause one refresh.
+- **Only `invalid_grant` deletes the stored credential.** An outage, a 429 or a network failure keeps the
+  session; the ask stays queued and is retried (the client treats a throwing credential lookup as
+  offline, not as signed out). Any other refusal (a 401 `invalid_client`, an unexpected 4xx) means a
+  request or configuration problem: the person is asked to sign in, but the keystore is **not** touched,
+  so a wrong client id can never wipe everyone's session.
+- **No stale write.** Sign-in and sign-out bump an epoch; a refresh that was in flight is discarded, so a
+  late answer can neither sign the person back in after sign-out nor delete a newer sign-in.
+  Two taps on "Sign in" are one sign-in.
+- **After a 401** the app renews once and retries once with a different token; it never loops.
+- **Sign-out** wipes this phone's copy first, before the browser opens: the waiting questions, the
+  thread, the pasted developer key and the keystore session, and any send already in flight has its
+  answer dropped. Only then does it open the WorkOS logout URL for the session. So on a shared phone,
+  killing the app or a hung browser still leaves the next person nothing of the last person's and
+  nothing able to send as them.
+- **Rule 1 is untouched:** sign-in grants nothing new. The gateway still gives a signed-in person only
+  the fixed `community` + `platform` grant, and the app still refuses a personal-scope ask on the phone.
+
+**Redirect scheme.** The app's own id, `ai.shamwari.app` (not a generic word: any other app can claim a
+generic scheme and intercept the redirect). Redirect `ai.shamwari.app://callback`, logout return
+`ai.shamwari.app://signed-out`. Expo Go cannot use this scheme, so Expo Go and tests use the pasted
+developer key; sign-in needs a development or preview build.
+
+**Not verified:** nothing here has met a real WorkOS tenant or a phone. In particular: that the
+Shamwari Chat application accepts a public-client exchange (no secret) and refresh; the exact error
+body WorkOS returns for a spent or revoked refresh token (the app deletes the credential only on
+`invalid_grant`; if WorkOS answers a revoked token with another code, the person is asked to sign in
+again and nothing is deleted);
+that `sid` is present in the token the app holds (it is needed to build the logout URL); and the
+keychain behaviour across an iOS reinstall (a keychain item can outlive the app).
+
+**Needs the owner (WorkOS production, Shamwari Chat application, Redirects tab):** add the redirect
+URI `ai.shamwari.app://callback` and the logout return `ai.shamwari.app://signed-out`. Custom-scheme
+redirects are accepted in this environment (it already holds `mukokolingo://auth/callback` and
+`mukoko://sign-in-callback`); the environment-level list was read on 2026-11-02 and holds no Shamwari
+entry. If the Shamwari Chat application does not allow a public client, say so: the alternative is a
+small token-exchange Worker, which would hold the secret instead of the phone.
 
 ## Revocation, stated plainly
 
@@ -212,20 +324,23 @@ owning-entity key.
 
 ## What is built, what is not
 
-| Piece                                             | State                                              |
-| ------------------------------------------------- | -------------------------------------------------- |
-| Gateway accepts and verifies a WorkOS token       | built, 59 tests, guards mutation-checked           |
-| One fixed grant, no permissions, no `personal`    | built, tested                                      |
-| Per-person metering on the canonical person id    | built; person ids must never equal entity ids (G6) |
-| `chat-auth` session Worker, `mukoko` AuthProvider | **design only**                                    |
-| Revocation by `sid` deny list                     | not built, not asked for                           |
+| Piece                                                  | State                                                                    |
+| ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| Gateway accepts and verifies a WorkOS token            | built, 59 tests, guards mutation-checked                                 |
+| One fixed grant, no permissions, no `personal`         | built, tested                                                            |
+| Per-person metering on the canonical person id         | built; person ids must never equal entity ids (G6)                       |
+| Session Worker (`site/worker/`), `mukoko` AuthProvider | built, tested against a fake WorkOS; **not deployed**; secrets not bound |
+| Revocation by `sid` deny list                          | not built, not asked for                                                 |
 
 ## Needs the owner
 
 - **Done in WorkOS production (2026-10-31, relayed by the orchestrating session):** a dedicated
   AuthKit application **Shamwari Chat**, client `client_01M68PCT0T5ECHKDYH45ECT0GV` (not a
   secret), **access-token lifetime 300 s**, redirect URI `https://shamwari.ai/chat/callback` only,
-  logout `https://shamwari.ai/chat/`, web origin `https://shamwari.ai`. So
+  logout `https://shamwari.ai/chat/`, web origin `https://shamwari.ai`. **The sign-in page is now the light
+  chat at `/lite/` (owner, 2026-11-01), so the app also needs the redirect URI
+  `https://shamwari.ai/lite/callback`, the sign-in start `https://shamwari.ai/lite/auth/login` and the
+  logout return `https://shamwari.ai/lite/`; the `/chat/` values are for the main chat and are left alone.** So
   `WORKOS_CLIENT_ID=client_01M68PCT0T5ECHKDYH45ECT0GV`, and the revocation window is about five
   minutes. The shared "Mukoko Account" app was not used because it has about forty redirect URIs
   and a five-hour access-token lifetime.
@@ -236,9 +351,19 @@ owning-entity key.
   refuses both (403 `not_provisioned`).
 - **Done: WorkOS `externalId` is set** for the 11 linked people (reconcile applied, in sync).
   Anyone without one is refused until they are linked.
-- **Still to do: read `iss` off a real access token** from the Shamwari Chat app and set
-  `WORKOS_ISSUER`; set `WORKOS_CLIENT_ID`, `WORKOS_MONTHLY_TOKEN_CAP` (and `WORKOS_AUDIENCE` only
-  if `aud` is added to the template). Not verified here: no real token has been inspected.
+- **Set in `gateway/wrangler.jsonc` (production vars), not yet read off a real token:**
+  `WORKOS_CLIENT_ID` is the Shamwari Chat client above. `WORKOS_ISSUER` is
+  `https://auth.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0`, taken from the
+  environment's OIDC discovery document (`.well-known/openid-configuration`), which returns the
+  **Mukoko Account** client id in the issuer even when queried with the Shamwari Chat client id,
+  so the issuer is per environment and not per app. WorkOS advises copying `iss` from a decoded
+  token because the documented form varies (a trailing slash is tolerated here). If this is
+  wrong, every WorkOS token is refused with 401 and `sk_shamwari_` keys are unaffected.
+  The JWKS (default URL for the chat client id) serves the same signing key as the Mukoko Account
+  one, checked. `WORKOS_AUDIENCE` is unset. `WORKOS_MONTHLY_TOKEN_CAP` is `1000000`: about $0.20
+  at the economy model's blended price, an estimate the owner can replace.
+- **Still to do: decode one real access token** from the Shamwari Chat app and confirm `iss`,
+  `client_id`, `sid` and `person_id` before the chat flag is turned on.
 - **Approve the gateway auth change at merge time** (this PR adds the `jose` dependency, MIT,
   the verifier for the token; nothing else new).
 - **A yes to the `chat-auth` Worker** (a new deployment) and where its cookie-sealing secret
