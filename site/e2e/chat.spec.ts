@@ -145,6 +145,9 @@ test('Shona is offered, shown as a draft, and Enter sends', async ({ page }) => 
   await openAccount(page);
   await page.locator('#lang').selectOption('sn');
   await expect(page.locator('html')).toHaveAttribute('lang', 'sn');
+  // The draft notice is a banner in the page, not inside the menu: it shows with the menu closed.
+  await page.locator('details.account summary').click();
+  await expect(page.locator('details.account')).not.toHaveAttribute('open', '');
   await expect(page.locator('#review')).toBeVisible();
   await expect(page.locator('#send')).toHaveText('Tumira');
   await page.locator('#q').fill('hello');
@@ -200,4 +203,35 @@ test('the icon buttons keep an accessible name in Shona, and Install stays visib
   await expect(page.locator('details.account summary')).toHaveAttribute('aria-label', 'Akaunti');
   // The install button lives outside the greeting, so asking a question (which hides the greeting) does not take it away.
   await expect(page.locator('#install').locator('xpath=ancestor::*[@id="empty"]')).toHaveCount(0);
+});
+
+test('the shell speaks the chosen language: new chat, the drawer buttons and the chats region', async ({ page }) => {
+  await openChat(page);
+  await openAccount(page);
+  await page.locator('#lang').selectOption('sn');
+  await page.locator('details.account summary').click();
+  await expect(page.getByRole('button', { name: 'Hurukuro itsva' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Vhura hurukuro' })).toBeVisible();
+  await page.getByRole('button', { name: 'Vhura hurukuro' }).click();
+  await expect(page.getByRole('button', { name: 'Vhara hurukuro' })).toBeVisible();
+  await expect(page.locator('[data-slot="app-sidebar"]')).toHaveAttribute('aria-label', 'Hurukuro dzenyu');
+});
+
+test('picking an earlier chat closes the drawer, so the chat is not left covered', async ({ page }) => {
+  await openChat(page);
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('.cite-link').first()).toBeVisible();
+  await page.locator('#new-chat').click();
+  await openChats(page);
+  await page.locator('#history-list button').first().click();
+  await expect(page.locator('[data-slot="app-sidebar"]')).toBeHidden();
+  await expect(page.locator('article.msg.bot').first()).toBeVisible();
+});
+
+test('the privacy sentence is the same before the script runs and after (English)', async ({ page }) => {
+  await page.route('**/_astro/**/*.js', (r) => r.abort()); // no script: the static page as a person without it sees it
+  await page.goto('/lite/');
+  const staticText = await page.locator('[data-i18n="storedHere"]').innerText();
+  expect(staticText).toContain('not the text of your question or its answer');
+  expect(staticText).not.toContain('a record of each question it answers');
 });

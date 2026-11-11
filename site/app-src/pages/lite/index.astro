@@ -12,7 +12,6 @@
 import '../../../src/chat/chat.css';
 import { en } from '../../../src/chat/strings';
 import AppShell from '@bundu/ui/app/AppShell.astro';
-import TopBarAction from '@bundu/ui/app/TopBarAction.astro';
 import Icon from '@bundu/ui/Icon.astro';
 
 // Fixed at build time and never read from the URL (see chat/main.ts).
@@ -61,7 +60,10 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
 
     <!-- The top bar's actions: a new chat and the bell. #new-chat and #bell are wrappers the script listens on. -->
     <span slot="actions" id="new-chat" class="contents">
-      <TopBarAction label={en.newChat} icon="plus" />
+      <button type="button" class="bar-action">
+        <Icon name="plus" class="h-5 w-5" />
+        <span class="sr-only sm:not-sr-only" data-i18n="newChat">New chat</span>
+      </button>
     </span>
     <span slot="actions" id="bell" class="contents">
       <!-- The icon set has no bell yet; this one is drawn in the set's stroke style. TopBarAction's classes. -->
@@ -85,9 +87,6 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
           <label for="lang" data-i18n="language">Language</label>
           <select id="lang" aria-describedby="review"></select>
         </div>
-        <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
-          This language is a draft and still needs review by a native speaker.
-        </p>
         <p class="account-note" data-i18n="privacyDetail">{en.privacyDetail}</p>
         <div class="account-row">
           <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
@@ -97,6 +96,9 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
     </details>
 
     <h1 class="sr-only" data-i18n="appName">Shamwari Chat</h1>
+    <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
+      This language is a draft and still needs review by a native speaker.
+    </p>
     <p id="offline" class="notice" role="status" hidden data-i18n="offlineBanner">
       You are offline. You can still write questions; they will be sent later.
     </p>
@@ -161,7 +163,7 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
     <!-- The quiet footer. -->
     <div slot="footer" class="footer-text">
       <p data-i18n="footer">{en.footer}</p>
-      <p data-i18n="storedHere">Your chat history is saved on this device only. Shamwari keeps a record of each question it answers, to run the service. Questions are not used to train Shamwari Mind.</p>
+      <p data-i18n="storedHere">{en.storedHere}</p>
     </div>
   </AppShell>
   <script>

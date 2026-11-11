@@ -106,8 +106,13 @@ async function underTheFloor(page: Page) {
         const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
         const dx = Math.max(rb.left - ra.right, ra.left - rb.right);
         const dy = Math.max(rb.top - ra.bottom, ra.top - rb.bottom);
+        if (dx < 0 && dy < 0) {
+          // The rectangles share area: the floor allows hit regions to touch, never to overlap.
+          out.push(`controls overlap: ${label(a)} and ${label(b)}`);
+          continue;
+        }
         // Neighbours side by side or one above the other: the gap along the axis where they do not overlap.
-        const gap = dx > 0 && dy <= 0 ? dx : dy > 0 && dx <= 0 ? dy : Math.max(dx, dy) > 0 ? Math.max(dx, dy) : -1;
+        const gap = Math.max(dx, dy);
         if (gap >= 0 && gap < 6.9) out.push(`controls ${gap.toFixed(1)}px apart (floor 7px): ${label(a)} and ${label(b)}`);
       }
     }
