@@ -73,6 +73,8 @@ test('a question written in the mode is kept on the device across a reload, stil
   await openChat(page);
   await sw(page).click();
   await ask(page, 'Is everyone equal under the law?');
+  // The note appears only once the question is written to the device, so a reload after it cannot lose the question.
+  await expect(page.locator('article.msg.user').first()).toContainText('Saved on this device only. Not sent.');
   const seen = watchNetwork(page);
   await page.reload();
   await page.waitForSelector('html[data-ready="true"]');
