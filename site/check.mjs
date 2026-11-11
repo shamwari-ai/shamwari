@@ -49,8 +49,25 @@ if (TARGET === 'app') {
   // the visitor's connection. A static rule for it in _redirects would be a second, silent
   // answer, so it must not exist; and the Worker must be told to take the root first.
   if (/^\/\s/m.test(redirects)) fail.push('app build: the root / belongs to the Worker (worker/root.ts), not _redirects');
-  const wrangler = readFileSync('wrangler.app.jsonc', 'utf8');
-  if (!/"run_worker_first"\s*:\s*\[\s*"\/"/.test(wrangler)) fail.push('wrangler.app.jsonc: run_worker_first must list "/" so the Worker answers the root');
+  // Parsed, not pattern-matched: a commented-out line must not satisfy it. The file is JSONC, so
+  // comment-only lines and trailing commas are removed before parsing (a "//" inside a string, such
+  // as a URL, is never at the start of a line).
+  const wranglerText = readFileSync('wrangler.app.jsonc', 'utf8')
+    .split('\n')
+    .filter((l) => !/^\s*\/\//.test(l))
+    .join('\n')
+    .replace(/,(\s*[}\]])/g, '$1');
+  let wrangler;
+  try {
+    wrangler = JSON.parse(wranglerText);
+  } catch (e) {
+    fail.push(`wrangler.app.jsonc could not be read: ${e.message}`);
+  }
+  if (wrangler) {
+    if (!Array.isArray(wrangler.assets?.run_worker_first) || !wrangler.assets.run_worker_first.includes('/')) fail.push('wrangler.app.jsonc: assets.run_worker_first must list "/" so the Worker answers the root');
+    // The switch that lets the root send anyone to /chat/ must be present and exactly "true" or "false".
+    if (!['true', 'false'].includes(wrangler.vars?.CHAT_LIVE)) fail.push('wrangler.app.jsonc: vars.CHAT_LIVE must be the string "true" or "false"');
+  }
   // It may send a visitor only to the main chat or the light chat.
   const rootSrc = readFileSync('worker/root.ts', 'utf8');
   const dests = [...rootSrc.matchAll(/export const (?:CHAT|LITE) = '([^']*)'/g)].map((m) => m[1]).sort().join(',');

@@ -109,7 +109,13 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
    Whether `wrangler deploy` removes a custom domain that is missing from the file is
    **not verified**, which is the reason to keep the two in step. Watch the first deploy
    of each Worker after this change and confirm the hostnames are still attached.
-7. **Later, not now:** register the WorkOS redirect URI `https://shamwari.ai/lite/callback`;
+7. **When the main chat answers at `/chat/`:** set `CHAT_LIVE` to `"true"` in `site/wrangler.app.jsonc`
+   and deploy `shamwari-app`. Until then the root `https://shamwari.ai/` sends everyone to `/lite/`
+   (`site/worker/root.ts`): by connection quality it would otherwise send fast visitors to `/chat/`.
+   Nothing in this build can check that `/chat/` is served by another build, so confirm
+   `https://shamwari.ai/chat/` answers 200 first; flipping the switch early turns the root into a 404
+   for fast connections.
+8. **Later, not now:** register the WorkOS redirect URI `https://shamwari.ai/lite/callback`;
    set `PUBLIC_CHAT_AUTH=mukoko` on the app build only when the session Worker exists; set
    `PUBLIC_CHAT_LIVE=true` on the marketing build when the app is released.
 

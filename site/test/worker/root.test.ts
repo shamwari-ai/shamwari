@@ -17,7 +17,7 @@ describe('the root before the main chat is live', () => {
 
 describe('the root once the main chat is live', () => {
   it('sends a fast connection to the main chat', () => {
-    expect(chooseDestination(get({ ECT: '4g', Downlink: '10', RTT: '50' }), true)).toBe(CHAT);
+    expect(chooseDestination(get({ ECT: '4g', Downlink: '9.8', RTT: '50' }), true)).toBe(CHAT);
   });
 
   it('sends data saver, slow classes, a thin pipe or a long round trip to the light chat', () => {
@@ -27,15 +27,28 @@ describe('the root once the main chat is live', () => {
     expect(chooseDestination(get({ ECT: '4g', Downlink: '10', RTT: '180' }), true)).toBe(LITE);
   });
 
-  it('treats a hint set that leaves a signal out as not fast', () => {
-    expect(chooseDestination(get({ Downlink: '10' }), true)).toBe(LITE); // no ECT
+  it('puts the threshold just under the 10 Mbps cap Chromium reports', () => {
+    expect(chooseDestination(get({ ECT: '4g', Downlink: '8', RTT: '40' }), true)).toBe(CHAT);
+    expect(chooseDestination(get({ ECT: '4g', Downlink: '7.9', RTT: '40' }), true)).toBe(LITE);
+  });
+
+  it('does not take a partial hint set as proof of speed, but still uses what is slow in it', () => {
+    expect(chooseDestination(get({ Downlink: '10' }), true)).toBe(LITE); // no ECT, nothing else known
     expect(chooseDestination(get({ ECT: '4g' }), true)).toBe(LITE); // no downlink
     expect(chooseDestination(get({ ECT: '4g', Downlink: 'fast' }), true)).toBe(LITE); // not a number
+    expect(chooseDestination(get({ ECT: '3g' }, { clientTcpRtt: 20 }), true)).toBe(LITE); // slow beats the measurement
+    // A partial set falls through to Cloudflare's measurement instead of being a dead end.
+    expect(chooseDestination(get({ ECT: '4g' }, { clientTcpRtt: 40 }), true)).toBe(CHAT);
   });
 
   it('falls back to Cloudflare’s round trip measurement when the browser sends no hints', () => {
     expect(chooseDestination(get({}, { clientTcpRtt: 40 }), true)).toBe(CHAT);
     expect(chooseDestination(get({}, { clientTcpRtt: 400 }), true)).toBe(LITE);
+  });
+
+  it('does not read a zero round trip (HTTP/3 has no TCP handshake) as very fast', () => {
+    expect(chooseDestination(get({}, { clientTcpRtt: 0 }), true)).toBe(LITE);
+    expect(chooseDestination(get({}, { clientTcpRtt: Number.NaN }), true)).toBe(LITE);
   });
 
   it('sends a visitor it knows nothing about to the light chat', () => {
@@ -76,8 +89,14 @@ describe('the Worker', () => {
     }
   });
 
-  it('does not answer other methods on the root', async () => {
-    const res = await worker.fetch(new Request('https://shamwari.ai/', { method: 'POST' }), {}, ctx);
-    expect(res.status).not.toBe(302);
+  it('answers HEAD like GET, and refuses other methods without reaching sign-in', async () => {
+    const head = await worker.fetch(new Request('https://shamwari.ai/', { method: 'HEAD' }), {}, ctx);
+    expect(head.status).toBe(302);
+    expect(head.headers.get('Location')).toBe(LITE);
+    for (const method of ['POST', 'PUT', 'DELETE', 'OPTIONS']) {
+      const res = await worker.fetch(new Request('https://shamwari.ai/', { method }), {}, ctx);
+      expect(res.status, method).toBe(405);
+      expect(res.headers.get('Allow'), method).toBe('GET, HEAD');
+    }
   });
 });
