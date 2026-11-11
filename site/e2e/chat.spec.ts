@@ -227,6 +227,7 @@ test('the chat has no small print under it: a link opens the disclaimer and priv
   await expect(page).toHaveURL(/\/lite\/disclaimer\/$/);
   await expect(page.getByText('not the text of your question or its answer')).toBeVisible();
   await expect(page.getByText('This is not legal advice')).toBeVisible();
+  await expect(page.locator('script')).toHaveCount(0); // only the chat page ships a script
 });
 
 test('the drawer pins a chat, files it in a project, keeps a saved answer, and deleting history clears all of it', async ({ page }) => {

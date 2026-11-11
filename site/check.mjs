@@ -80,7 +80,8 @@ if (TARGET === 'marketing') {
 }
 if (TARGET === 'app') {
   for (const p of pages) {
-    if (!p.endsWith('/lite/index.html')) fail.push(`app build contains a page that is not the chat: ${p.slice(DIST.length)}`);
+    // The chat, and its disclaimer and privacy page (no script, no marketing).
+    if (!p.endsWith('/lite/index.html') && !p.endsWith('/lite/disclaimer/index.html')) fail.push(`app build contains a page that is not the chat: ${p.slice(DIST.length)}`);
   }
   if (!pages.some((p) => p.endsWith('/lite/index.html'))) fail.push('app build has no /lite/ page');
   const redirects = files.includes(`${DIST}/_redirects`) ? readFileSync(`${DIST}/_redirects`, 'utf8') : '';
