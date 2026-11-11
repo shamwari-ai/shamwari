@@ -1,0 +1,55 @@
+# Stub-gateway end-to-end test (docs/librechat.md, "What the build must prove").
+# Everything runs on an internal network: no container here can reach the internet,
+# so a model call to any provider cannot succeed and the stub's log is the whole
+# record of what LibreChat tried to send. Secrets come from the environment the CI
+# job generates; none are written in this file.
+name: shamwari-chat-e2e
+
+networks:
+  inner:
+    internal: true
+
+services:
+  mongo:
+    image: mongo:7.0
+    networks: [inner]
+
+  librechat:
+    image: ${CHAT_IMAGE:-shamwari-chat:ci}
+    networks: [inner]
+    depends_on: [mongo]
+    volumes:
+      - ../librechat.test.yaml:/app/librechat.yaml:ro
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3080"
+      MONGO_URI: mongodb://mongo:27017/librechat
+      CONFIG_PATH: /app/librechat.yaml
+      ENDPOINTS: custom
+      SEARCH: "false"
+      NO_INDEX: "true"
+      # Test only: the driver registers a throwaway user. Production keeps both false
+      # (fly.toml, enforced by guard.mjs).
+      ALLOW_REGISTRATION: "true"
+      ALLOW_EMAIL_LOGIN: "true"
+      SHAMWARI_CHAT_PLACEHOLDER_KEY: not-a-secret
+      CREDS_KEY: ${CREDS_KEY}
+      CREDS_IV: ${CREDS_IV}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+
+  # Shares LibreChat's network namespace, so the config's 127.0.0.1:8787 is the stub.
+  stub:
+    image: node:22-alpine
+    network_mode: service:librechat
+    volumes:
+      - ./stub-gateway.mjs:/e2e/stub-gateway.mjs:ro
+    command: ["node", "/e2e/stub-gateway.mjs"]
+
+  driver:
+    image: node:22-alpine
+    network_mode: service:librechat
+    depends_on: [stub]
+    volumes:
+      - ./run.mjs:/e2e/run.mjs:ro
+    command: ["node", "/e2e/run.mjs"]

@@ -5,11 +5,14 @@ set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 commit="$(sed -n 's/^commit=//p' "$here/PIN")"
 tag="${1:-shamwari-chat:local}"
+# The Shamwari fork (docs/librechat.md). Its history contains the pinned upstream
+# commit, and the commit check below is what makes this safe.
+repo="${LIBRECHAT_REPO:-https://github.com/shamwari-ai/librechat}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 git init -q "$work/src"
-git -C "$work/src" fetch -q --depth 1 https://github.com/danny-avila/LibreChat "$commit"
+git -C "$work/src" fetch -q --depth 1 "$repo" "$commit"
 git -C "$work/src" checkout -q FETCH_HEAD
 got="$(git -C "$work/src" rev-parse HEAD)"
 [ "$got" = "$commit" ] || { echo "pinned commit mismatch: $got != $commit" >&2; exit 1; }

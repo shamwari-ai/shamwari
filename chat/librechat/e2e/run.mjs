@@ -1,0 +1,191 @@
+// Drives a real LibreChat (the pinned build) against the stub gateway and checks the
+// Rule 1 claims from docs/librechat.md. Exits non-zero on the first broken claim.
+// Runs in the same network namespace as LibreChat and the stub.
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+
+const APP = "http://127.0.0.1:3080";
+const STUB = "http://127.0.0.1:8787";
+const NIL = "00000000-0000-0000-0000-000000000000";
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const note = (k, v) => console.log(`[observed] ${k}=${JSON.stringify(v)}`);
+
+async function until(label, fn, ms = 120_000) {
+  const end = Date.now() + ms;
+  let last;
+  while (Date.now() < end) {
+    try {
+      const v = await fn();
+      if (v) return v;
+    } catch (e) {
+      last = e;
+    }
+    await sleep(1500);
+  }
+  throw new Error(
+    `timed out waiting for ${label}${last ? `: ${last.message}` : ""}`,
+  );
+}
+
+const json = async (path, init) => {
+  const res = await fetch(APP + path, init);
+  const text = await res.text();
+  let body = null;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    /* not JSON */
+  }
+  return { status: res.status, body, text };
+};
+
+const stubLog = async () => (await fetch(`${STUB}/__log`)).json();
+
+await until(
+  "LibreChat to be up",
+  async () => (await fetch(`${APP}/health`)).ok,
+);
+console.log("LibreChat is up");
+
+// 1. A throwaway account.
+const email = `e2e-${randomUUID().slice(0, 8)}@example.test`;
+const password = `Pw-${randomUUID()}`;
+const reg = await json("/api/auth/register", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    name: "E2E",
+    username: "e2e",
+    email,
+    password,
+    confirm_password: password,
+  }),
+});
+note("register.status", reg.status);
+assert.ok(
+  reg.status === 200 || reg.status === 201,
+  `register failed: ${reg.status} ${reg.text.slice(0, 300)}`,
+);
+const login = await json("/api/auth/login", {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ email, password }),
+});
+assert.equal(
+  login.status,
+  200,
+  `login failed: ${login.status} ${login.text.slice(0, 300)}`,
+);
+const token = login.body.token;
+assert.ok(token, "no token");
+const auth = {
+  authorization: `Bearer ${token}`,
+  "content-type": "application/json",
+};
+
+// 2. Ask a question through one endpoint; return what the person would be shown.
+async function ask(endpoint, text) {
+  const res = await json(`/api/agents/chat/${encodeURIComponent(endpoint)}`, {
+    method: "POST",
+    headers: auth,
+    body: JSON.stringify({
+      text,
+      endpoint,
+      endpointType: "custom",
+      model: "shamwari-economy",
+      messageId: randomUUID(),
+      parentMessageId: NIL,
+      isCreatedByUser: true,
+      sender: "User",
+    }),
+  });
+  note(`ask(${endpoint}).status`, res.status);
+  assert.ok(
+    res.status < 300,
+    `chat request refused: ${res.status} ${res.text.slice(0, 400)}`,
+  );
+  const conversationId = res.body?.conversationId ?? res.body?.streamId;
+  assert.ok(conversationId, `no conversation id: ${res.text.slice(0, 300)}`);
+  // Read the stream so the generation runs to its end, then read what was stored.
+  const stream = await fetch(
+    `${APP}/api/agents/chat/stream/${conversationId}`,
+    { headers: auth },
+  );
+  const streamText = await stream.text();
+  let shown = "";
+  await until(
+    `the ${endpoint} answer to be stored`,
+    async () => {
+      const m = await json(`/api/messages/${conversationId}`, {
+        headers: auth,
+      });
+      const list = Array.isArray(m.body) ? m.body : (m.body?.messages ?? []);
+      const reply = list.find((x) => x.isCreatedByUser === false);
+      if (!reply) return false;
+      shown =
+        typeof reply.text === "string" && reply.text
+          ? reply.text
+          : JSON.stringify(reply.content ?? "");
+      return shown.length > 0;
+    },
+    60_000,
+  );
+  return { shown, streamText };
+}
+
+// 3. Platform scope reaches the gateway, and only the gateway.
+const platform = await ask(
+  "Shamwari",
+  "What does section 56 of the Constitution say?",
+);
+note("platform.shown", platform.shown.slice(0, 200));
+assert.match(
+  platform.shown,
+  /STUB-ANSWER/,
+  "the gateway's answer was not shown",
+);
+
+// 4. Personal scope: the gateway refuses with 409 and the person sees why.
+const personal = await ask("Shamwari (personal)", "What is in my payslip?");
+note("personal.shown", personal.shown.slice(0, 400));
+assert.match(
+  personal.shown,
+  /Personal-layer data cannot be sent to an external inference provider/,
+  "the person was not shown the plain refusal sentence",
+);
+
+// 5. What LibreChat actually sent. This is the Rule 1 record.
+const log = await stubLog();
+note("stub.log", log);
+const calls = log.filter((e) => e.path === "/v1/chat/completions");
+assert.equal(
+  log.length,
+  calls.length,
+  `LibreChat called something other than chat completions: ${JSON.stringify(log.map((e) => e.path))}`,
+);
+assert.equal(
+  calls.length,
+  2,
+  `expected exactly one call per question (no title or helper calls), got ${calls.length}`,
+);
+assert.deepEqual(
+  calls.map((c) => c.scope),
+  ["platform", "personal"],
+  "scope did not reach the gateway as configured",
+);
+for (const c of calls) {
+  assert.equal(c.channel, "pwa", "X-Shamwari-Channel: pwa was not sent");
+  assert.equal(c.auth, "Bearer", "no bearer authorization");
+  assert.equal(c.stream, false, "stream: false was not sent");
+}
+
+// 6. Informational, not a pass/fail yet: are the gateway's citations shown?
+note(
+  "citations.visible",
+  /Constitution of Zimbabwe/.test(platform.shown) ||
+    /section 56/.test(platform.shown),
+);
+
+console.log(
+  "OK: LibreChat talked only to the stub gateway, with the configured scopes",
+);
