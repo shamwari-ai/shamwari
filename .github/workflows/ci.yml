@@ -316,6 +316,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
 
@@ -349,12 +350,33 @@ jobs:
       # local-only history, offline queue, axe, and the Mukoko sign-in (flag
       # on, against a stand-in for the session Worker). It builds its own
       # copies of the app (dist-e2e/) pointed at the mock.
+      # The browser is cached per Playwright version, and installed WITHOUT --with-deps: that flag runs apt
+      # for system packages, and when the runner's mirror does not resolve the job hung for ten minutes and
+      # failed before a single test ran (#184, #186, #188, #190). The runner image already carries every
+      # library Chromium links against; the packages --with-deps added in those logs were fonts for scripts
+      # this app does not render. If a library were ever missing, the e2e step below fails loudly, it does
+      # not pass quietly. Each step has its own timeout so a hung download fails in minutes.
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+        working-directory: site
+
+      - name: Cache the browser
+        id: pw-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
       - name: Install browser
-        run: npx playwright install --with-deps chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
+        timeout-minutes: 10
         working-directory: site
 
       - name: End-to-end tests
         run: npm run e2e
+        timeout-minutes: 15
         working-directory: site
 
   mobile:
