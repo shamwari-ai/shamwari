@@ -101,6 +101,7 @@ export const en = {
   authTitle: 'Sign in to ask',
   authMukoko: 'Sign in with Mukoko',
   authMukokoSoon: 'Mukoko sign-in is coming soon.',
+  signinOffline: 'You are offline. Sign in when you are back online.',
   authDevClear: 'Remove key',
   reviewNote: 'This language is a draft and still needs review by a native speaker.',
   errors: {
@@ -216,6 +217,7 @@ export const sn: Strings = {
   authTitle: 'Pinda kuti ubvunze',
   authMukoko: 'Pinda neMukoko',
   authMukokoSoon: 'Kupinda neMukoko kuri kuuya nokukurumidza.',
+  signinOffline: 'Hamuna internet. Pindai kana internet yadzoka.',
   authDevClear: 'Bvisa key',
   reviewNote: 'Mutauro uyu ndewekuyedza uye unoda kuongororwa nemutauri wepamusoro.',
   errors: {
@@ -328,6 +330,7 @@ export const nd: Strings = {
   authTitle: 'Ngena ukuze ubuze',
   authMukoko: 'Ngena ngeMukoko',
   authMukokoSoon: 'Ukungena ngeMukoko kuyeza masinyane.',
+  signinOffline: 'Awunayo i-inthanethi. Ngena nxa sebebuya i-inthanethi.',
   authDevClear: 'Susa i-key',
   reviewNote: 'Lolu limi lungolokuhlola futhi ludinga ukubukezwa ngumuntu okhuluma ulimi.',
   errors: {

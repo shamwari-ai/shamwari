@@ -76,18 +76,26 @@ test('429 offers the add-credit link and a wait time', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Add credit' })).toHaveAttribute('href', 'https://platform.shamwari.ai/billing');
 });
 
-test('a missing key asks for sign-in, keeps what was typed, and offers no key field', async ({ page }) => {
+test('signed out, the whole screen is the sign-in: no chat, no card, no picker, no key field', async ({ page }) => {
   await openChat(page, null);
-  await expect(page.locator('#auth')).toBeVisible();
-  // Sign-in is not on in this build: no button that cannot be pressed, just the plain line.
+  const screen = page.locator('#auth');
+  await expect(screen).toBeVisible();
+  // Nothing of the chat is on the page behind it or around it.
+  for (const sel of ['#thread', '#q', '#send', '#scope', '#log', '[data-slot="app-topbar"]', '.dock']) {
+    await expect(page.locator(sel), sel).toBeHidden();
+  }
+  await expect(page.getByText('Sign in to ask')).toHaveCount(0);
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  // Sign-in is not on in this build: no button that cannot be pressed, just the plain line, and the way to the privacy page.
   await expect(page.getByRole('button', { name: 'Sign in with Mukoko' })).toBeHidden();
   await expect(page.locator('#mukoko-soon')).toBeVisible();
-  await page.locator('#q').fill('hello');
-  await page.locator('#send').click();
+  await expect(page.getByRole('link', { name: 'Disclaimer and privacy' })).toBeVisible();
   await expect(page.locator('#auth-title')).toBeFocused();
-  await expect(page.locator('#q')).toHaveValue('hello');
-  // API keys are not typed into the page: "Use the API" in the drawer goes to the platform that issues them.
-  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  // It fills the screen at 360px.
+  const box = (await screen.boundingBox())!;
+  expect(box).toMatchObject({ x: 0, y: 0, width: 360, height: 640 });
+  // And a key typed anywhere is not a way in: "Use the API" lives in the drawer, which a signed-in person sees.
+  await openChat(page);
   await openChats(page);
   await expect(page.getByRole('link', { name: 'Use the API' })).toHaveAttribute('href', 'https://platform.nyuchi.com');
 });
