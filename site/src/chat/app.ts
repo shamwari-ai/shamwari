@@ -590,26 +590,10 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   };
   function showAuth() {
     authPanel.hidden = false;
-    (auth.kind === 'mukoko' ? $('#mukoko-signin') : $<HTMLInputElement>('#key')).focus();
+    const go = $<HTMLButtonElement>('#mukoko-signin');
+    (go.disabled ? $('#auth-title') : go).focus();
   }
 
-  $('#auth-form').addEventListener('submit', (e) => {
-    e.preventDefault();
-    const field = $<HTMLInputElement>('#key');
-    const bad = $('#key-error');
-    if (!auth.setKey?.(field.value)) {
-      bad.hidden = false;
-      field.setAttribute('aria-invalid', 'true');
-      field.focus();
-      return;
-    }
-    bad.hidden = true;
-    field.removeAttribute('aria-invalid');
-    field.value = '';
-    authPanel.hidden = true;
-    syncAuth();
-    input.focus();
-  });
   $('#signout').addEventListener('click', async () => {
     closeAccount();
     // Start the sign-out (its first, synchronous part flips the app to signed out), then clear
