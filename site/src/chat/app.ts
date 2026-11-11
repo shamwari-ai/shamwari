@@ -62,6 +62,21 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   let flushAgain = false;
   let retryMs = RETRY_FIRST_MS;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * OFFLINE MODE (the switch in the top bar). While it is on NOTHING goes to the network: a question is written to this
+   * device and stays there, no queue is replayed, no timer retries, and the session is not renewed. It is remembered
+   * across reloads. Turning it off sends nothing by itself either: a question written in the mode waits for the person's
+   * own "Send now"; only a question that was already queued before the mode went on resumes its normal retry.
+   */
+  const OFFLINE_KEY = 'shamwari.offlineMode';
+  const readOffline = (): boolean => {
+    try {
+      return localStorage.getItem(OFFLINE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  };
+  let offlineMode = readOffline();
 
   /**
    * One object per thread, however often the store is read. Without it, opening
@@ -143,7 +158,10 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     signIn: () => showAuth(),
   });
 
-  const queueActionsFor = (m: StoredMessage): QueueActions => ({
+  const queueActionsFor = (m: StoredMessage): QueueActions | undefined =>
+    // A question kept by offline mode offers "Send now" only once the mode is off (and never sends by itself).
+    m.status === 'local' && offlineMode ? undefined : queueActions(m);
+  const queueActions = (m: StoredMessage): QueueActions => ({
     sendNow: () => void deliver(thread, m),
     discard: async () => {
       thread.messages = thread.messages.filter((x) => x !== m);
@@ -420,7 +438,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     for (const m of th.messages) {
       if (m === target) break;
       if (m.role === 'assistant') out.push({ role: 'assistant', content: m.text });
-      else if (!m.error && m.status !== 'queued') out.push({ role: 'user', content: m.text });
+      else if (!m.error && m.status !== 'queued' && m.status !== 'local') out.push({ role: 'user', content: m.text });
     }
     out.push({ role: 'user', content: target.text });
     return out.slice(-(saveData() ? CONTEXT_SAVER : CONTEXT));
@@ -435,6 +453,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
    */
   async function deliver(th: Thread, m: StoredMessage): Promise<void> {
     if (inflight.has(m.id)) return;
+    if (offlineMode) return; // defence in depth: nothing reaches the network while the mode is on
     if (!auth.signedIn()) {
       showAuth();
       return;
@@ -565,7 +584,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
    */
   async function flush(): Promise<void> {
     // Offline, a timer-driven try can only fail; the `online` event runs this again.
-    if (!auth.signedIn() || !navigator.onLine) return;
+    if (!auth.signedIn() || !navigator.onLine || offlineMode) return;
     if (flushing) {
       flushAgain = true;
       return;
@@ -591,6 +610,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
 
   function scheduleRetry() {
     clearTimeout(retryTimer);
+    if (offlineMode) return;
     retryTimer = setTimeout(() => void flush(), retryMs);
     retryMs = Math.min(retryMs * 2, RETRY_MAX_MS);
   }
@@ -612,7 +632,13 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     syncEmpty();
     input.value = '';
     autosize();
-    if (!navigator.onLine) {
+    if (offlineMode) {
+      // Offline mode: written to this device and kept there. Not queued, not retried, never sent unless the person
+      // turns the mode off and chooses "Send now".
+      m.status = 'local';
+      await save(thread);
+      mount(m);
+    } else if (!navigator.onLine) {
       // Offline: do not even try. Save it, say so, send it when the network is back.
       m.status = 'queued';
       // Stored first, shown second: "waiting to send" must only appear once the
@@ -801,6 +827,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     saveLanguage(lang);
     applyStrings(document, lang);
     labelShell();
+    syncOfflineMode();
     rebuild();
     void renderHistory();
   });
@@ -818,7 +845,40 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     if (document.visibilityState === 'visible' && navigator.onLine) void flush();
   });
 
+  // ---- offline mode ---------------------------------------------------------------------------------------
+  const offlineSwitch = $<HTMLButtonElement>('#offline-mode');
+  const syncOfflineMode = () => {
+    const s = strings();
+    offlineSwitch.setAttribute('aria-checked', String(offlineMode));
+    offlineSwitch.dataset.state = offlineMode ? 'on' : 'off';
+    offlineSwitch.querySelector('.offline-state')!.textContent = offlineMode ? s.offlineModeOn : s.offlineModeOff;
+    $('#offline-mode-note').hidden = !offlineMode;
+    document.documentElement.toggleAttribute('data-offline-mode', offlineMode);
+  };
+  offlineSwitch.addEventListener('click', () => {
+    offlineMode = !offlineMode;
+    try {
+      localStorage.setItem(OFFLINE_KEY, offlineMode ? '1' : '0');
+    } catch {
+      /* no storage: the mode holds for this visit only */
+    }
+    if (offlineMode) {
+      clearTimeout(retryTimer); // nothing replays while it is on
+    } else {
+      retryMs = RETRY_FIRST_MS;
+      // Back to normal: a session is renewed, and a question that was queued BEFORE the mode went on resumes its retry.
+      // A question written IN the mode is not sent by this: it waits for the person's own "Send now".
+      void (auth.kind === 'mukoko' ? auth.refresh() : Promise.resolve(true)).then(() => {
+        if (!offlineMode && navigator.onLine && auth.signedIn()) void flush();
+      });
+    }
+    syncOfflineMode();
+    rebuild(); // each kept question shows the state that matches the mode
+    void renderHistory();
+  });
+
   // ---- go ------------------------------------------------------------------
+  syncOfflineMode();
   applyStrings(document, lang);
   labelShell();
   rebuild();
@@ -830,14 +890,15 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   document.documentElement.dataset.ready = 'true';
   const afterAuth = () => {
     document.documentElement.dataset.authReady = 'true';
-    if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
+    if (navigator.onLine && !offlineMode && hasQueued([thread, ...saved])) void flush();
   };
   if (auth.kind === 'mukoko') {
     // One silent renewal at start (the session cookie, if there is one, becomes a
     // token in memory), alongside the UI instead of in front of it: a slow link
     // must not hold up showing and writing questions. Until it answers, the
     // sign-in panel stays down so a signed-in person never sees it flash.
-    startup = auth.refresh().then(() => {
+    // In offline mode no request is made, not even the silent renewal: the hint of a past sign-in opens the chat.
+    startup = (offlineMode && auth.signedIn() ? Promise.resolve(true) : auth.refresh()).then(() => {
       startup = null;
       // Signed in (a session, or the hint of one while offline): the chat. Otherwise the session has ended: straight to sign-in.
       if (auth.signedIn()) {
