@@ -56,6 +56,8 @@ export interface Artifact {
 }
 
 export interface Store {
+  /** Let go of the database connection (a store that is no longer used). */
+  close?(): void;
   list(): Promise<Thread[]>;
   put(thread: Thread): Promise<void>;
   remove(id: string): Promise<void>;
@@ -130,6 +132,7 @@ export async function openStore(userKey: string | null = null): Promise<Store> {
     });
     const tx = (name: string, mode: IDBTransactionMode) => db.transaction(name, mode).objectStore(name);
     return {
+      close: () => db.close(),
       list: async () =>
         ((await wrap(tx(TABLE, 'readonly').getAll())) as Thread[]).sort((a, b) => b.updatedAt - a.updatedAt),
       put: async (t) => void (await wrap(tx(TABLE, 'readwrite').put(t))),
@@ -159,16 +162,38 @@ export async function openStore(userKey: string | null = null): Promise<Store> {
  */
 export interface SwitchableStore extends Store {
   readonly key: string | null;
+  /** Counts every switch. A read that began under an older number belongs to someone else's store and must be dropped. */
+  readonly generation: number;
   switchTo(userKey: string | null, adopt?: boolean): Promise<void>;
 }
+
+const ADOPTED = 'shamwari.chat.adopted';
+const adopted = (): boolean => {
+  try {
+    return localStorage.getItem(ADOPTED) === '1';
+  } catch {
+    return true; // cannot tell: do not copy anything between people
+  }
+};
+const markAdopted = (): void => {
+  try {
+    localStorage.setItem(ADOPTED, '1');
+  } catch {
+    /* adopted() then reads as true */
+  }
+};
 
 export async function openSwitchableStore(initialKey: string | null): Promise<SwitchableStore> {
   let current = await openStore(initialKey);
   let key = initialKey;
+  let generation = 0;
   const delegate = <K extends keyof Store>(name: K): Store[K] => ((...a: unknown[]) => (current[name] as (...x: unknown[]) => unknown)(...a)) as Store[K];
   return {
     get key() {
       return key;
+    },
+    get generation() {
+      return generation;
     },
     list: delegate('list'),
     put: delegate('put'),
@@ -184,15 +209,20 @@ export async function openSwitchableStore(initialKey: string | null): Promise<Sw
       if (next === key) return;
       const from = current;
       const to = await openStore(next);
-      if (adopt && key === null) {
-        // Copy first, clear after: a failure part-way leaves the data in the unowned store, never nowhere.
+      // Adoption happens ONCE per device. The flag is set the moment the copy has succeeded, before the unowned store is
+      // cleared: if the clear then fails, the next person to sign in still does not adopt what is left, so one person's chats
+      // are never copied to another. (What is left is cleared again, below, the next time round.)
+      if (adopt && key === null && !adopted()) {
         for (const t of await from.list()) await to.put(t);
         for (const p of await from.projects()) await to.putProject(p);
         for (const a of await from.artifacts()) await to.putArtifact(a);
-        await from.clear();
+        markAdopted();
       }
+      if (key === null && adopted()) await from.clear().catch(() => undefined);
+      generation += 1;
       current = to;
       key = next;
+      from.close?.();
     },
   };
 }
