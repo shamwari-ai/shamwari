@@ -9,7 +9,7 @@
  * HTTP shape and the rules, and is tested against a fake port.
  *
  * Routes (everything else is a static asset and never reaches this code):
- *   GET  /lite/auth/login    start sign-in; sets a one-time state cookie, 302 to AuthKit
+ *   GET  /lite/auth/login    start sign-in (PKCE S256); sets one-time state and verifier cookies, 302 to AuthKit
  *   GET  /lite/callback      AuthKit returns here; checks state, sets the session cookie, 302 /lite/
  *   GET  /lite/auth/token    {access_token, expires_at}, no-store; 401 = the session is over
  *   POST /lite/auth/logout   revokes the session, clears the cookies, 204
@@ -37,9 +37,10 @@ export type RefreshResult =
   | { status: 'retry'; retryAfter?: number };
 
 export interface AuthKitPort {
-  authorizationUrl(state: string): string;
-  /** null: WorkOS refused the code, or could not be reached. */
-  exchangeCode(code: string): Promise<{ sealed: string } | null>;
+  /** The AuthKit URL (carrying a PKCE S256 challenge) and the verifier that must come back with the code. */
+  authorizationUrl(state: string): Promise<{ url: string; verifier: string }>;
+  /** null: WorkOS refused the code, or could not be reached (the reason is logged by the port, never the code). */
+  exchangeCode(code: string, verifier: string): Promise<{ sealed: string } | null>;
   /** Unseal the cookie and verify the access token inside it. */
   check(sealed: string): Promise<CheckResult>;
   /** Revoke the WorkOS session. Best effort. */
@@ -62,6 +63,8 @@ export interface Deps {
  */
 export const SESSION_COOKIE = '__Secure-shamwari_session';
 export const STATE_COOKIE = '__Secure-shamwari_oauth';
+/** The PKCE code verifier for one sign-in attempt: HttpOnly, /lite/ only, ten minutes, spent at the callback. */
+export const VERIFIER_COOKIE = '__Secure-shamwari_pkce';
 export const COOKIE_PATH = '/lite/';
 /**
  * Browsers silently drop a cookie over about 4096 bytes (name and attributes included). A sealed
@@ -150,7 +153,11 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
   if (path === '/lite/auth/login') {
     if (req.method !== 'GET') return json(405, { error: 'method_not_allowed' }, { Allow: 'GET' });
     const state = deps.randomState();
-    return redirect(deps.port.authorizationUrl(state), [cookieHeader(STATE_COOKIE, state, STATE_MAX_AGE)]);
+    const { url: to, verifier } = await deps.port.authorizationUrl(state);
+    return redirect(to, [
+      cookieHeader(STATE_COOKIE, state, STATE_MAX_AGE),
+      cookieHeader(VERIFIER_COOKIE, verifier, STATE_MAX_AGE),
+    ]);
   }
 
   if (path === '/lite/callback') {
@@ -158,13 +165,14 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     const expected = readCookie(req, STATE_COOKIE);
     const got = url.searchParams.get('state');
     const code = url.searchParams.get('code');
-    // The state cookie is single-use whatever happens next.
-    const spent = clear(STATE_COOKIE);
-    if (!expected || !got || !eq(expected, got)) return redirect('/lite/?signin=failed', [spent]);
-    if (url.searchParams.has('error') || !code) return redirect('/lite/?signin=failed', [spent]);
-    const session = await deps.port.exchangeCode(code);
-    if (!session || session.sealed.length > MAX_COOKIE_VALUE) return redirect('/lite/?signin=failed', [spent]);
-    return redirect('/lite/', [spent, cookieHeader(SESSION_COOKIE, session.sealed, SESSION_COOKIE_MAX_AGE)]);
+    const verifier = readCookie(req, VERIFIER_COOKIE);
+    // The state and verifier cookies are single-use whatever happens next.
+    const spent = [clear(STATE_COOKIE), clear(VERIFIER_COOKIE)];
+    if (!expected || !got || !eq(expected, got)) return redirect('/lite/?signin=failed', spent);
+    if (url.searchParams.has('error') || !code || !verifier) return redirect('/lite/?signin=failed', spent);
+    const session = await deps.port.exchangeCode(code, verifier);
+    if (!session || session.sealed.length > MAX_COOKIE_VALUE) return redirect('/lite/?signin=failed', spent);
+    return redirect('/lite/', [...spent, cookieHeader(SESSION_COOKIE, session.sealed, SESSION_COOKIE_MAX_AGE)]);
   }
 
   if (path === '/lite/auth/token') {
@@ -222,6 +230,7 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     const h = new Headers(base);
     h.append('Set-Cookie', clear(SESSION_COOKIE));
     h.append('Set-Cookie', clear(STATE_COOKIE));
+    h.append('Set-Cookie', clear(VERIFIER_COOKIE));
     return new Response(null, { status: 204, headers: h });
   }
 

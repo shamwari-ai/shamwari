@@ -18,9 +18,11 @@ export function fakePort(): Fake {
     codeResult: { sealed: 'SEALED-NEW' },
     checkResult: { status: 'invalid' },
     revokeFails: false,
-    authorizationUrl: (state) => `https://auth.example/authorize?state=${state}`,
-    async exchangeCode(code) {
-      f.calls.push(`exchange:${code}`);
+    async authorizationUrl(state) {
+      return { url: `https://auth.example/authorize?state=${state}&code_challenge=CHALLENGE&code_challenge_method=S256`, verifier: 'VERIFIER123' };
+    },
+    async exchangeCode(code, verifier) {
+      f.calls.push(`exchange:${code}:${verifier}`);
       return f.codeResult;
     },
     async check(sealed) {

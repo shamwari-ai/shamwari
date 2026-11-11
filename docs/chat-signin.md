@@ -212,7 +212,7 @@ browser                    shamwari-app Worker (worker/)         WorkOS
   The login `state` is random, single-use and compared in constant time. A failed sign-in returns to
   `/lite/?signin=failed` (the page does not show a message for it yet).
 - `/lite/auth/token` and `/lite/auth/logout` refuse requests the browser marks `Sec-Fetch-Site: cross-site`.
-- Sign-out is `POST /lite/auth/logout`: it clears both cookies at once and revokes the WorkOS session
+- Sign-out is `POST /lite/auth/logout`: it clears the cookies at once and, when an API key is bound, revokes the WorkOS session
   in the background; a failed revocation does not stop the sign-out.
 - The CSP already restricts `connect-src` to the site and the API origin and `script-src` to `'self'`,
   which is what protects an in-memory token from injected script.
@@ -220,11 +220,15 @@ browser                    shamwari-app Worker (worker/)         WorkOS
 **Configuration, by name only.** Public vars in `app/wrangler.jsonc`: `WORKOS_CLIENT_ID`
 (`client_01M68PCT0T5ECHKDYH45ECT0GV`, not a secret) and `WORKOS_REDIRECT_URI`
 (`https://shamwari.ai/lite/callback`). Two **secrets**, bound from the account's Secrets Store and
-never written into git: `WORKOS_API_KEY` (the WorkOS environment's API key; the Worker is a
-confidential client) and `COOKIE_PASSWORD` (seals the cookie; at least 32 random characters).
-With either unbound the auth routes answer `503` and the gate fails closed: the page is a `503`, never served
+never written into git: `COOKIE_PASSWORD` (seals the cookie; at least 32 random characters). Sign-in is a
+**PKCE public client** (S256 challenge at login, the verifier kept in a ten-minute HttpOnly cookie scoped to `/lite/`,
+sent with the code at the callback), so it needs **no WorkOS API key**: the Shamwari Chat AuthKit application has none,
+and another application's key is refused for it. `WORKOS_API_KEY` is an optional binding, used only if a key issued to
+this application is ever bound; without it sign-out clears our cookies but cannot revoke the WorkOS session, so AuthKit's own hosted session
+stays signed in and the next visit to `/lite/auth/login` may sign the same person straight back in. Ending that
+needs a visit to AuthKit's logout URL (a follow-up) or an API key issued to this application. With `COOKIE_PASSWORD` unbound the auth routes answer `503` and the gate fails closed: the page is a `503`, never served
 (`docs/domains-and-deploy.md`, "Before sign-in can work, and what the gate does"). The bindings are by name in
-`site/app/wrangler.jsonc` (`CONSOLE_WORKOS_API_KEY` and `SESSION_SECRET` in the shared Secrets Store).
+`site/app/wrangler.jsonc` (`SESSION_SECRET` in the shared Secrets Store).
 
 **Not verified** (nothing here has met a real WorkOS tenant; no credentials exist in this session):
 the sealed cookie must stay under the browser's size limit once it carries the access token, the

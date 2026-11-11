@@ -153,11 +153,11 @@ service worker and the stylesheets (the list is in `site/worker/gate.ts` and is 
 `site/test/worker/gate.test.ts`), plus the two root icons (`/favicon.png`, `/apple-touch-icon.png`), which the
 Worker does not see.
 
-1. **The two secrets are bound by name, with no values in git.** `site/app/wrangler.jsonc` binds
-   `WORKOS_API_KEY` to the Secrets Store secret `CONSOLE_WORKOS_API_KEY` and `COOKIE_PASSWORD` to
-   `SESSION_SECRET` (store `56f84bfa8a564c54a95dbf4f4b4281b4`). Both are the shared Mukoko secrets.
-   Nothing is created by hand for them.
-2. The gate **fails closed**. If either secret does not resolve, a request for the page is a `503` with a
+1. **The one secret is bound by name, with no value in git.** `site/app/wrangler.jsonc` binds
+   `COOKIE_PASSWORD` to `SESSION_SECRET` (store `56f84bfa8a564c54a95dbf4f4b4281b4`). There is no WorkOS API key
+   (PKCE public client); an optional `WORKOS_API_KEY` binding is used only if a key issued to this application
+   is ever added.
+2. The gate **fails closed**. If the secret does not resolve, a request for the page is a `503` with a
    `Retry-After`, never the page; the public pages above still answer.
 3. The first deploy of `shamwari-app` also creates the `SessionRefresh` Durable Object (a migration
    in the same file). It shows up under Workers & Pages > shamwari-app > Bindings.
@@ -171,17 +171,17 @@ latest config (when this was written, `shamwari-app` as deployed listed no secre
 variables and the Durable Object), so check these against `https://shamwari.ai` after deploying:
 
 - [ ] **First, redeploy `shamwari-app` from this change, then look at the dashboard.** Workers & Pages > `shamwari-app` >
-      Settings > **Bindings** must list `WORKOS_API_KEY` and `COOKIE_PASSWORD` (Secrets Store), `SESSION_REFRESH` (Durable
+      Settings > **Bindings** must list `COOKIE_PASSWORD` (Secrets Store), `SESSION_REFRESH` (Durable
       Object) and `ASSETS` (Assets). A Worker that lists none of the secrets was deployed before they were added to
       `site/app/wrangler.jsonc`: it will answer `503` to every page until it is redeployed with them. Then the Secrets Store
-      must hold `CONSOLE_WORKOS_API_KEY` and `SESSION_SECRET` (it did when this was written; names only, never values).
+      must hold `SESSION_SECRET` (it did when this was written; names only, never values).
 - [ ] `GET /lite/` with no cookie answers `302` to `/lite/auth/login`, not `503`, and not the page.
 - [ ] `GET /_astro/<any script>.js` with no cookie answers `401`.
 - [ ] `GET /lite/disclaimer/`, `/lite/manifest.webmanifest` and `/lite/sw.js` answer `200` with no cookie.
 - [ ] Signing in from `/lite/auth/login` lands on `/lite/` and the chat loads; `/lite/auth/token` answers `200`.
 - [ ] `https://shamwari.ai/lite/callback` completes (it is the registered redirect URI).
 - [ ] With the cookie cleared, `/lite/` is a `302` to sign-in again.
-- [ ] Bindings for `WORKOS_API_KEY`, `COOKIE_PASSWORD`, `SESSION_REFRESH` and `ASSETS` are listed on the Worker.
+- [ ] Bindings for `COOKIE_PASSWORD`, `SESSION_REFRESH` and `ASSETS` are listed on the Worker.
 
 ## Things this has not verified
 
@@ -197,8 +197,9 @@ variables and the Durable Object), so check these against `https://shamwari.ai` 
 
 ## WorkOS sign-in on the app Worker (2026-11-11)
 
-`site/app/wrangler.jsonc` binds `WORKOS_API_KEY` (from `CONSOLE_WORKOS_API_KEY`) and `COOKIE_PASSWORD` (from
-`SESSION_SECRET`) out of the account's Secrets Store, the shared Mukoko secrets. Deploy with
+`site/app/wrangler.jsonc` binds `COOKIE_PASSWORD` (from `SESSION_SECRET`) out of the account's Secrets Store. There
+is no WorkOS API key: sign-in is a PKCE public client (2026-11-11 fix; the Shamwari Chat AuthKit app has no key and
+another app's key was refused, which ended every sign-in on `?signin=failed`). Deploy with
 `npm run deploy:app` from `site/`, which builds with `PUBLIC_CHAT_AUTH=mukoko` and then runs `wrangler deploy`.
 After a deploy, `GET /lite/auth/login` should answer 302 to the Mukoko Account sign-in page; a real sign-in
 needs a person and a registered redirect URI (`https://shamwari.ai/lite/callback`).

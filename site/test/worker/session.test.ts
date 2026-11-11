@@ -1,20 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { handle, SESSION_COOKIE, STATE_COOKIE, MAX_COOKIE_VALUE, jwtClaims, jwtExp } from '../../worker/session';
+import { handle, SESSION_COOKIE, STATE_COOKIE, VERIFIER_COOKIE, MAX_COOKIE_VALUE, jwtClaims, jwtExp } from '../../worker/session';
 import { NOW, b64, deps, fakePort, jwt, req, setCookies } from './helpers';
 
 const secs = NOW / 1000;
 const live = jwt({ exp: secs + 300, sid: 's1' });
 const aboutToLapse = jwt({ exp: secs + 20, sid: 's1' });
 
+const BOTH = `${STATE_COOKIE}=STATE123; ${VERIFIER_COOKIE}=VERIFIER123`;
+
 describe('login and callback', () => {
-  it('starts sign-in with a one-time state cookie, HttpOnly, Secure, SameSite=Lax', async () => {
+  it('starts sign-in with one-time state and PKCE verifier cookies, HttpOnly, Secure, SameSite=Lax, scoped to /lite/', async () => {
     const res = await handle(req('/lite/auth/login'), deps(fakePort()));
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe('https://auth.example/authorize?state=STATE123');
-    const c = setCookies(res)[0]!;
-    expect(c).toContain(`${STATE_COOKIE}=STATE123`);
-    for (const a of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Path=/', 'Max-Age=600']) expect(c).toContain(a);
-    expect(c).not.toContain('Domain');
+    const to = new URL(res.headers.get('Location')!);
+    expect(to.searchParams.get('state')).toBe('STATE123');
+    // The PKCE challenge goes to AuthKit; the verifier itself never appears in the URL.
+    expect(to.searchParams.get('code_challenge')).toBe('CHALLENGE');
+    expect(to.searchParams.get('code_challenge_method')).toBe('S256');
+    expect(to.toString()).not.toContain('VERIFIER123');
+    const cookies = setCookies(res);
+    expect(cookies).toHaveLength(2);
+    const c = cookies.find((x) => x.startsWith(`${STATE_COOKIE}=STATE123`))!;
+    const v = cookies.find((x) => x.startsWith(`${VERIFIER_COOKIE}=VERIFIER123`))!;
+    for (const k of [c, v]) {
+      for (const a of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Path=/lite/', 'Max-Age=600']) expect(k).toContain(a);
+      expect(k).not.toContain('Domain');
+    }
   });
 
   it('has no return parameter: nothing in the request decides where a person lands', async () => {
@@ -23,7 +34,7 @@ describe('login and callback', () => {
     const cb = fakePort();
     const ok = await handle(
       req('/lite/callback?code=c1&state=STATE123&return=https://evil.example', {
-        cookie: `${STATE_COOKIE}=STATE123`,
+        cookie: BOTH,
       }),
       deps(cb),
     );
@@ -34,7 +45,7 @@ describe('login and callback', () => {
     const port = fakePort();
     const res = await handle(
       req('/lite/callback?code=c1&state=STATE123', {
-        cookie: `${STATE_COOKIE}=STATE123`,
+        cookie: BOTH,
       }),
       deps(port),
     );
@@ -42,17 +53,19 @@ describe('login and callback', () => {
     expect(res.headers.get('Location')).toBe('/lite/');
     const cookies = setCookies(res);
     expect(cookies.find((c) => c.startsWith(`${STATE_COOKIE}=;`))).toContain('Max-Age=0');
+    expect(cookies.find((c) => c.startsWith(`${VERIFIER_COOKIE}=;`))).toContain('Max-Age=0');
     const s = cookies.find((c) => c.startsWith(`${SESSION_COOKIE}=SEALED-NEW`))!;
     for (const a of ['HttpOnly', 'Secure', 'SameSite=Lax', 'Path=/']) expect(s).toContain(a);
-    expect(port.calls).toEqual(['exchange:c1']);
+    // The verifier from the cookie goes back to AuthKit with the code.
+    expect(port.calls).toEqual(['exchange:c1:VERIFIER123']);
   });
 
   it.each([
     ['a missing state cookie', '/lite/callback?code=c1&state=STATE123', undefined],
-    ['a different state', '/lite/callback?code=c1&state=OTHER', `${STATE_COOKIE}=STATE123`],
-    ['no state in the URL', '/lite/callback?code=c1', `${STATE_COOKIE}=STATE123`],
-    ['an error from AuthKit', '/lite/callback?error=access_denied&state=STATE123', `${STATE_COOKIE}=STATE123`],
-    ['no code', '/lite/callback?state=STATE123', `${STATE_COOKIE}=STATE123`],
+    ['a different state', '/lite/callback?code=c1&state=OTHER', BOTH],
+    ['no state in the URL', '/lite/callback?code=c1', BOTH],
+    ['an error from AuthKit', '/lite/callback?error=access_denied&state=STATE123', BOTH],
+    ['no code', '/lite/callback?state=STATE123', BOTH],
   ])('refuses %s without calling WorkOS or setting a session', async (_n, path, cookie) => {
     const port = fakePort();
     const res = await handle(req(path, { cookie }), deps(port));
@@ -63,12 +76,23 @@ describe('login and callback', () => {
     expect(setCookies(res).some((c) => c.startsWith(`${STATE_COOKIE}=;`))).toBe(true);
   });
 
+  it('a callback with no PKCE verifier cookie is refused without calling WorkOS (the code is useless without it)', async () => {
+    const port = fakePort();
+    const res = await handle(
+      req('/lite/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
+      deps(port),
+    );
+    expect(res.headers.get('Location')).toBe('/lite/?signin=failed');
+    expect(port.calls).toEqual([]);
+    expect(setCookies(res).some((c) => c.startsWith(`${VERIFIER_COOKIE}=;`))).toBe(true);
+  });
+
   it('a refused code sets no session', async () => {
     const port = fakePort();
     port.codeResult = null;
     const res = await handle(
       req('/lite/callback?code=bad&state=STATE123', {
-        cookie: `${STATE_COOKIE}=STATE123`,
+        cookie: BOTH,
       }),
       deps(port),
     );
@@ -88,7 +112,7 @@ describe('cookie scope', () => {
     const port = fakePort();
     const login = await handle(req('/lite/auth/login'), deps(port));
     const callback = await handle(
-      req('/lite/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
+      req('/lite/callback?code=c1&state=STATE123', { cookie: BOTH }),
       deps(port),
     );
     const out = await handle(req('/lite/auth/logout', { method: 'POST', cookie: `${SESSION_COOKIE}=S` }), deps(port));
@@ -241,7 +265,7 @@ describe('token', () => {
     const port = fakePort();
     port.codeResult = { sealed: big };
     const cb = await handle(
-      req('/lite/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
+      req('/lite/callback?code=c1&state=STATE123', { cookie: BOTH }),
       deps(port),
     );
     expect(cb.headers.get('Location')).toBe('/lite/?signin=failed');
@@ -259,7 +283,7 @@ describe('token', () => {
     const p3 = fakePort();
     p3.codeResult = { sealed: 'y'.repeat(MAX_COOKIE_VALUE) };
     const ok = await handle(
-      req('/lite/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
+      req('/lite/callback?code=c1&state=STATE123', { cookie: BOTH }),
       deps(p3),
     );
     expect(ok.headers.get('Location')).toBe('/lite/');
@@ -302,7 +326,7 @@ describe('token', () => {
 });
 
 describe('logout', () => {
-  it('clears both cookies, answers 204, and revokes in the background', async () => {
+  it('clears every sign-in cookie, answers 204, and revokes in the background', async () => {
     const port = fakePort();
     const d = deps(port);
     const res = await handle(
@@ -314,7 +338,7 @@ describe('logout', () => {
     );
     expect(res.status).toBe(204);
     expect(setCookies(res).every((c) => c.includes('Max-Age=0'))).toBe(true);
-    expect(setCookies(res)).toHaveLength(2);
+    expect(setCookies(res)).toHaveLength(3);
     await Promise.all(d.waited);
     expect(port.calls).toEqual(['revoke:SEALED']);
   });
