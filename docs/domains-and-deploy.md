@@ -165,6 +165,11 @@ The deploy is a separate, manual step. Nothing in the repository can show that t
 latest config (when this was written, `shamwari-app` as deployed listed no secret bindings, only its plain
 variables and the Durable Object), so check these against `https://shamwari.ai` after deploying:
 
+- [ ] **First, redeploy `shamwari-app` from this change, then look at the dashboard.** Workers & Pages > `shamwari-app` >
+      Settings > **Bindings** must list `WORKOS_API_KEY` and `COOKIE_PASSWORD` (Secrets Store), `SESSION_REFRESH` (Durable
+      Object) and `ASSETS` (Assets). A Worker that lists none of the secrets was deployed before they were added to
+      `wrangler.app.jsonc`: it will answer `503` to every page until it is redeployed with them. Then the Secrets Store
+      must hold `CONSOLE_WORKOS_API_KEY` and `SESSION_SECRET` (it did when this was written; names only, never values).
 - [ ] `GET /lite/` with no cookie answers `302` to `/lite/auth/login`, not `503`, and not the page.
 - [ ] `GET /_astro/<any script>.js` with no cookie answers `401`.
 - [ ] `GET /lite/disclaimer/`, `/lite/manifest.webmanifest` and `/lite/sw.js` answer `200` with no cookie.
