@@ -249,6 +249,20 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
       <button type="button" id="artifact-close" class="btn primary" data-i18n="close">Close</button>
     </div>
   </dialog>
+  <!-- Signing out of a Mukoko account: the messages stay on this device unless the person also chooses to delete them. -->
+  <dialog id="signout-dialog" class="artifact-view" aria-labelledby="signout-title">
+    <h2 id="signout-title" data-i18n="signOutTitle">{en.signOutTitle}</h2>
+    <p data-i18n="signOutKept">{en.signOutKept}</p>
+    <p class="row">
+      <input type="checkbox" id="signout-delete" />
+      <label for="signout-delete" data-i18n="signOutAlsoDelete">{en.signOutAlsoDelete}</label>
+    </p>
+    <p class="note" data-i18n="signOutNotEncrypted">{en.signOutNotEncrypted}</p>
+    <div class="row">
+      <button type="button" id="signout-cancel" class="btn" data-i18n="signOutCancel">{en.signOutCancel}</button>
+      <button type="button" id="signout-confirm" class="btn primary" data-i18n="signOut">{en.signOut}</button>
+    </div>
+  </dialog>
   <script>
     import '../../../src/chat/main';
   </script>
