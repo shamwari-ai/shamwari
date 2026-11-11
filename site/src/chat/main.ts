@@ -1,3 +1,4 @@
+import { startUpdateNotice } from './update';
 import { startApp } from './app';
 import { LANGUAGES } from './strings';
 
@@ -21,39 +22,40 @@ const authMode = document.querySelector<HTMLMetaElement>('meta[name="shamwari-au
 if (apiBase) {
   void startApp({ apiBase, authMode });
 }
+startUpdateNotice();
 
 // Offline shell. Registered after load so it never competes with the first paint,
 // and scoped to /lite/ so the marketing pages are never served from it.
 if ('serviceWorker' in navigator) {
-  // A new build installs in the background and used to wait until every tab was closed. On a phone a tab is
-  // almost never closed, so people kept seeing an old build for weeks. Now it takes over as soon as nothing
-  // would be lost: the question box is empty (queued questions are already on the device, so a reload keeps
-  // them), and the page reloads once into the new build.
+  // A new build installs in the background and waits. The person is told ("A new version is ready") and
+  // chooses when to switch (chat/update.ts); only then does the waiting worker take over and the page reload.
+  // The first install also fires controllerchange (it claims the page), so only a page that already had a
+  // worker reloads.
   let reloading = false;
-  // The first install also fires controllerchange (it claims the page); only a page that already had a worker is reloaded.
   const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!hadController || reloading || !document.querySelector('#q')) return;
+    if (!hadController || reloading) return;
     reloading = true;
     location.reload();
   });
-  const takeOver = (waiting: ServiceWorker) => {
-    const go = () => {
-      const q = document.querySelector<HTMLTextAreaElement>('#q');
-      if (q && q.value.trim() !== '') return false; // someone is writing: try again later
-      waiting.postMessage('skip-waiting');
-      return true;
-    };
-    if (go()) return;
-    const timer = setInterval(() => go() && clearInterval(timer), 5000);
+  const offer = (waiting: ServiceWorker) => {
+    const ask = new Promise<string>((done) => {
+      const ch = new MessageChannel();
+      ch.port1.onmessage = (e) => done(String(e.data));
+      waiting.postMessage('version', [ch.port2]);
+      setTimeout(() => done(''), 1500);
+    });
+    void ask.then((version) =>
+      dispatchEvent(new CustomEvent('shamwari:update', { detail: { version, apply: () => waiting.postMessage('skip-waiting') } })),
+    );
   };
   addEventListener('load', () => {
     navigator.serviceWorker
       .register('/lite/sw.js', { scope: '/lite/' })
       .then((reg) => {
-        // Only an UPDATE is taken over: with no controller this is the first install, which claims by itself.
+        // Only an UPDATE is offered: with no controller this is the first install, which claims by itself.
         const ready = (w: ServiceWorker | null) => {
-          if (w && navigator.serviceWorker.controller) takeOver(w);
+          if (w && navigator.serviceWorker.controller) offer(w);
         };
         ready(reg.waiting);
         reg.addEventListener('updatefound', () => {

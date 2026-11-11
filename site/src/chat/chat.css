@@ -139,9 +139,16 @@ body {
 
 /* The drawer: chats kept on this device. */
 .chats {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--gap-floor);
+  min-width: 0;
+  /* Tall enough that the foot (update card, New chat, account) sits at the bottom of the drawer. */
+  min-height: calc(100dvh - 5rem);
   padding-inline: var(--gap-floor);
+}
+.chats > * {
+  min-width: 0;
 }
 .chats-title {
   margin: 0;
@@ -535,9 +542,17 @@ input:not([type='checkbox']):not([type='radio']) {
 .side-form {
   margin-top: var(--gap-floor);
 }
+.side-form {
+  flex-wrap: wrap;
+}
 .side-form input {
   flex: 1 1 8rem;
   min-width: 0;
+}
+.side-account {
+  padding: 0;
+  width: var(--target-floor);
+  flex: none;
 }
 .project > summary {
   display: flex;
@@ -591,4 +606,45 @@ input:not([type='checkbox']):not([type='radio']) {
 .artifact-text {
   white-space: pre-wrap;
   line-height: var(--leading-floor);
+}
+
+/* "A new version is ready": a pop-up above the question box; with the drawer open, a card at the drawer's foot. */
+.update {
+  display: grid;
+  gap: var(--gap-floor);
+  padding: var(--inset-floor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 1rem);
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
+}
+.update[hidden] {
+  display: none;
+}
+.update p {
+  margin: 0;
+}
+.update-popup {
+  position: fixed;
+  inset-inline: var(--inset-floor);
+  bottom: calc(9rem + env(safe-area-inset-bottom));
+  z-index: 20;
+  max-width: 28rem;
+  margin-inline: auto;
+}
+.side-foot {
+  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  gap: var(--gap-floor);
+  padding-block: var(--gap-floor) max(var(--gap-floor), env(safe-area-inset-bottom));
+  background: var(--background);
+}
+.side-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-floor);
 }

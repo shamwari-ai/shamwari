@@ -78,6 +78,18 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
         <ul id="artifact-list" class="side-list"></ul>
         <p id="artifact-empty" class="chats-empty" data-i18n="noArtifacts">Answers you save appear here.</p>
       </section>
+
+      <!-- Pinned to the bottom of the drawer: a new version, when there is one, then New chat and the account. -->
+      <div class="side-foot">
+        <section id="update-card" class="update update-card" aria-labelledby="update-card-title" hidden>
+          <p id="update-card-title"><strong data-i18n="updateReady">A new version is ready.</strong> <span data-update-has-version><span data-i18n="version">Version</span> <span data-update-version></span></span></p>
+          <button type="button" class="btn primary" data-update-now data-i18n="updateNow">Update now</button>
+        </section>
+        <div class="side-bar">
+          <button type="button" id="side-account" class="btn side-account" aria-label={en.avatar} data-i18n-attr="aria-label:avatar"><Icon name="user" class="h-5 w-5" /></button>
+          <button type="button" id="side-new" class="btn primary" data-i18n="newChat">New chat</button>
+        </div>
+      </div>
     </div>
 
     <!-- The top bar's actions: a new chat and the bell. #new-chat and #bell are wrappers the script listens on. -->
@@ -168,6 +180,15 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
       <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>
     </div>
+
+    <!-- A new version is ready: a small pop-up above the question box. With the drawer open it becomes the card at the drawer's foot. -->
+    <aside id="update" class="update update-popup" role="status" hidden>
+      <p><strong data-i18n="updateReady">A new version is ready.</strong> <span data-update-has-version><span data-i18n="version">Version</span> <span data-update-version></span></span></p>
+      <div class="row">
+        <button type="button" class="btn primary" data-update-now data-i18n="updateNow">Update now</button>
+        <button type="button" class="btn" data-update-later data-i18n="updateLater">Later</button>
+      </div>
+    </aside>
 
     <!-- The dock: the composer, pinned to the bottom of the screen. (Sign-in, when it is needed, is in the page above
          it, not in the dock: a pinned panel would cover what a person is reading.) -->
