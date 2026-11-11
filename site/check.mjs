@@ -72,6 +72,14 @@ if (TARGET === 'marketing' && pages.length < 4) fail.push(`expected at least 4 b
 // https://www.shamwari.ai (shamwari-site).
 const MARKETING_ORIGIN = 'https://www.shamwari.ai';
 const APP_ORIGIN = 'https://shamwari.ai';
+// Every built page names an icon (a browser also asks for /favicon.ico by default), and the files they name exist.
+if (!files.includes(`${DIST}/favicon.ico`)) fail.push(`${DIST}/favicon.ico is missing (browsers and iPad Safari request it by default)`);
+for (const p of pages) {
+  const html = readFileSync(p, 'utf8');
+  for (const [what, re] of [['an icon link', /<link[^>]+rel="icon"[^>]+href="\/favicon\.ico"/], ['a png icon link', /<link[^>]+rel="icon"[^>]+href="\/favicon\.png"/], ['an apple-touch-icon link', /<link[^>]+rel="apple-touch-icon"/]]) {
+    if (!re.test(html)) fail.push(`${p.slice(DIST.length)} has no ${what}`);
+  }
+}
 if (TARGET === 'marketing') {
   for (const f of files) {
     const rel = f.slice(DIST.length);

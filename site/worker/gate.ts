@@ -52,13 +52,13 @@ export interface GateDeps {
 }
 
 const noStore = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
-/** The failure page is not served by the static assets, so it carries its own policy: it loads and runs nothing. */
-const pageOnly = { 'Content-Security-Policy': "default-src 'none'; base-uri 'none'; form-action 'none'", 'Content-Language': 'en' };
+/** The failure page is not served by the static assets, so it carries its own policy: it loads and runs nothing but its own icons (img-src 'self'). */
+const pageOnly = { 'Content-Security-Policy': "default-src 'none'; img-src 'self'; base-uri 'none'; form-action 'none'", 'Content-Language': 'en' };
 
 const clearSession = `${SESSION_COOKIE}=; Path=/lite/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
 
 /** What a failed sign-in shows. It is not the app, and it does not redirect back into sign-in (that would loop). */
-const FAILED_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign-in failed</title></head><body><main><h1>We could not sign you in</h1><p>Please try again.</p><p><a href="/lite/auth/login">Try again</a></p></main></body></html>`;
+const FAILED_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign-in failed</title><link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48"><link rel="icon" type="image/png" href="/favicon.png" sizes="256x256"><link rel="apple-touch-icon" href="/apple-touch-icon.png"></head><body><main><h1>We could not sign you in</h1><p>Please try again.</p><p><a href="/lite/auth/login">Try again</a></p></main></body></html>`;
 
 export function failedPage(status = 401): Response {
   return new Response(FAILED_PAGE, {

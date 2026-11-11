@@ -101,6 +101,11 @@ describe('the gate: no session, no app', () => {
     expect(body).not.toContain('APP-CONTENT');
     // It is not served by the static assets, so it carries its own policy: it loads and runs nothing.
     expect(res.headers.get('Content-Security-Policy')).toContain("default-src 'none'");
+    // ... except its own icons: it names them, and the policy lets only same-origin images through.
+    expect(body).toContain('rel="icon" href="/favicon.ico"');
+    expect(body).toContain('rel="apple-touch-icon" href="/apple-touch-icon.png"');
+    expect(res.headers.get('Content-Security-Policy')).toContain("img-src 'self'");
+    expect(res.headers.get('Content-Security-Policy')).not.toMatch(/script-src|connect-src|style-src/);
     expect(res.headers.get('Cache-Control')).toBe('no-store');
   });
 
@@ -152,7 +157,7 @@ describe('what is public', () => {
     }
     const walk = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
-    const outside = new Set(['/favicon.png', '/apple-touch-icon.png', '/_headers', '/_redirects']);
+    const outside = new Set(['/favicon.ico', '/favicon.png', '/apple-touch-icon.png', '/_headers', '/_redirects']);
     for (const f of walk(dist)) {
       const url = f.slice(dist.length).replace(/\/index\.html$/, '/');
       if (outside.has(url)) continue;
