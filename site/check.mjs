@@ -20,6 +20,45 @@ if (broken.length) {
   process.exit(1);
 }
 
+/**
+ * The text a person can read in built HTML: markup removed and the contents of <script> and <style>
+ * skipped, by walking the string. It is a check's reading aid, not a sanitiser, and deliberately not
+ * a pair of regular expressions (those are the shape CodeQL calls incomplete multi-character
+ * sanitisation, and they mishandle a ">" inside a quoted attribute, which this does not).
+ */
+function visibleText(html) {
+  const lower = html.toLowerCase();
+  let out = '';
+  let i = 0;
+  while (i < html.length) {
+    const lt = html.indexOf('<', i);
+    if (lt === -1) {
+      out += html.slice(i);
+      break;
+    }
+    out += html.slice(i, lt) + ' ';
+    const raw = lower.startsWith('<script', lt) ? 'script' : lower.startsWith('<style', lt) ? 'style' : null;
+    if (raw) {
+      const close = lower.indexOf('</' + raw, lt);
+      const gt = close === -1 ? -1 : html.indexOf('>', close);
+      i = gt === -1 ? html.length : gt + 1;
+      continue;
+    }
+    // The end of this tag: the next ">" that is not inside a quoted attribute value.
+    let quote = '';
+    let j = lt + 1;
+    for (; j < html.length; j++) {
+      const ch = html[j];
+      if (quote) {
+        if (ch === quote) quote = '';
+      } else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === '>') break;
+    }
+    i = j + 1;
+  }
+  return out;
+}
+
 const TARGET = process.argv[2] === 'app' ? 'app' : 'marketing';
 const DIST = TARGET === 'app' ? 'dist-app' : 'dist';
 const files = walk(DIST);
@@ -45,8 +84,33 @@ if (TARGET === 'app') {
   }
   if (!pages.some((p) => p.endsWith('/lite/index.html'))) fail.push('app build has no /lite/ page');
   const redirects = files.includes(`${DIST}/_redirects`) ? readFileSync(`${DIST}/_redirects`, 'utf8') : '';
-  // The apex root goes to /chat/ (the main Shamwari Chat, owned by another build) for now; this app is /lite/.
-  if (!/^\/\s+\/chat\/\s+302\s*$/m.test(redirects)) fail.push('app build: the root / must 302 to /chat/ (_redirects)');
+  // The apex root is answered by the Worker (worker/root.ts), which chooses /chat/ or /lite/ by
+  // the visitor's connection. A static rule for it in _redirects would be a second, silent
+  // answer, so it must not exist; and the Worker must be told to take the root first.
+  if (/^\/\s/m.test(redirects)) fail.push('app build: the root / belongs to the Worker (worker/root.ts), not _redirects');
+  // Parsed, not pattern-matched: a commented-out line must not satisfy it. The file is JSONC, so
+  // comment-only lines and trailing commas are removed before parsing (a "//" inside a string, such
+  // as a URL, is never at the start of a line).
+  const wranglerText = readFileSync('wrangler.app.jsonc', 'utf8')
+    .split('\n')
+    .filter((l) => !/^\s*\/\//.test(l))
+    .join('\n')
+    .replace(/,(\s*[}\]])/g, '$1');
+  let wrangler;
+  try {
+    wrangler = JSON.parse(wranglerText);
+  } catch (e) {
+    fail.push(`wrangler.app.jsonc could not be read: ${e.message}`);
+  }
+  if (wrangler) {
+    if (!Array.isArray(wrangler.assets?.run_worker_first) || !wrangler.assets.run_worker_first.includes('/')) fail.push('wrangler.app.jsonc: assets.run_worker_first must list "/" so the Worker answers the root');
+    // The switch that lets the root send anyone to /chat/ must be present and exactly "true" or "false".
+    if (!['true', 'false'].includes(wrangler.vars?.CHAT_LIVE)) fail.push('wrangler.app.jsonc: vars.CHAT_LIVE must be the string "true" or "false"');
+  }
+  // It may send a visitor only to the main chat or the light chat.
+  const rootSrc = readFileSync('worker/root.ts', 'utf8');
+  const dests = [...rootSrc.matchAll(/export const (?:CHAT|LITE) = '([^']*)'/g)].map((m) => m[1]).sort().join(',');
+  if (dests !== '/chat/,/lite/') fail.push(`worker/root.ts: the root may go only to /chat/ and /lite/, found ${dests || 'nothing'}`);
   // Redirects may only go to the chat, the light chat, or the marketing origin: the app Worker
   // sends old marketing links to www but never serves a marketing page itself. The destination
   // is parsed, not prefix-matched, so "//host", "/chat/../x" and "/chat//host" cannot slip past.
@@ -198,6 +262,12 @@ for (const page of pages) {
       fail.push(`${where}: the diagram's description must say personal data goes to Mind and never to a provider`);
     }
   }
+
+  // A `{NAME}` inside a quoted Astro attribute is not interpolated: it ships as literal text. Nothing
+  // else notices, so look for it in what was built (visible text only, not scripts or styles).
+  const visible = visibleText(html);
+  const leaked = visible.match(/\{[A-Za-z_$][\w$.]*\}/);
+  if (leaked) fail.push(`${where}: an unrendered placeholder ${leaked[0]} is in the page text (a {…} inside a quoted attribute is not interpolated)`);
 
   // No client JavaScript anywhere except the chat app. @bundu/ui's React
   // primitives render server-side with no client:* directive, so the

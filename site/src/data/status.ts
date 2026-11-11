@@ -4,6 +4,9 @@
 // see site/README.md's "Keeping this honest".
 import { REPO } from '../lib/site';
 
+/** When the corpus was last checked for loaded content. One place, so every page that says it agrees. */
+export const CORPUS_LAST_CHECKED = '31 October 2026';
+
 export type Status = 'live' | 'building' | 'planned';
 
 export interface StatusItem {
@@ -33,8 +36,8 @@ export const STATUS: StatusItem[] = [
   },
   {
     state: 'building',
-    title: 'The Zimbabwean legal and tax corpus',
-    body: 'Sources are being reviewed and approved one at a time: we ingest what we have the rights to, nothing scraped first and asked about later. As of 31 October 2026 nothing is loaded, so Shamwari cannot cite a real source yet. The Constitution of Zimbabwe goes in first. ZimLII, a free library of Zimbabwean law, licenses its legislation for non-commercial use by default, though some collections differ, which does not fit a commercial service, so it stays out until we have its permission.',
+    title: 'The sources behind every answer',
+    body: `Sources are reviewed and approved one at a time: we use what we have the right to use, nothing scraped first and asked about later. The order is farming information from Nyuchi-owned and licence-clean sources first, the Constitution of Zimbabwe second, and law and tax after that, once the Acts have a licence we can use. When we last checked (${CORPUS_LAST_CHECKED}) nothing was loaded, so Shamwari cannot cite a real source yet. ZimLII, a free library of Zimbabwean law, licenses its legislation for non-commercial use by default, though some collections differ, which does not fit a commercial service, so it stays out until we have its permission.`,
     issues: [17, 18],
     highlight: true,
   },
@@ -47,8 +50,14 @@ export const STATUS: StatusItem[] = [
   {
     state: 'building',
     title: 'Shamwari Chat',
-    body: 'Ask in Shona, Ndebele or English and get the answer with the section it came from. A lightweight app that installs from the browser and is built for slow connections. It is being built and tested against a stand-in for the API; it is not live yet and does not answer real questions yet. The lightweight app will live at shamwari.ai/lite, apart from this marketing site. Sign-in will use your Mukoko Account: the API side is built, the app side is not.',
+    body: 'Ask in English, Shona or Ndebele and get the answer with the section it came from. The Shona and Ndebele wording is still a draft that native speakers have not yet reviewed. An early test version of the lightweight app, which installs from the browser and is built for slow connections, is online at shamwari.ai/lite, apart from this marketing site. It does not answer real questions yet: the service behind it is not deployed and sign-in is not switched on. Sign-in will use your Mukoko Account. The main chat will live at shamwari.ai/chat.',
     issues: [83],
+  },
+  {
+    state: 'building',
+    title: 'Shamwari mobile app',
+    body: 'An Android and iPhone app built with Expo: the same chat with a queue for questions asked offline, English, Shona and Ndebele (drafts), and sign-in with your Mukoko Account. It is built and tested in code but not yet tried on a phone, and it is not in any app store.',
+    issues: [144],
   },
   {
     state: 'planned',
@@ -58,7 +67,7 @@ export const STATUS: StatusItem[] = [
   {
     state: 'planned',
     title: 'Shamwari MCP server',
-    body: 'Connect Shamwari’s cited Zimbabwean law and tax to your own agents and tools. Not built yet.',
+    body: 'Connect Shamwari’s cited answers to your own agents and tools. Not built yet.',
   },
   {
     state: 'planned',

@@ -22,6 +22,8 @@ export interface WorkerEnv {
   WORKOS_API_KEY?: SecretBinding;
   COOKIE_PASSWORD?: SecretBinding;
   SESSION_REFRESH?: DurableObjectNamespaceLike;
+  /** "true" once the main chat answers at /chat/. Until then the root sends everyone to /lite/. */
+  CHAT_LIVE?: string;
 }
 
 export interface DurableObjectNamespaceLike {
