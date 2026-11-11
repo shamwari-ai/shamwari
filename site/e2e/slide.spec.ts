@@ -108,3 +108,15 @@ test('only the transform animates, and with reduced motion it is instant', async
   // No wait for a slide: the moment the drawer is open the page is already where it ends up.
   expect(Math.round(await pageX(page))).toBe(Math.round(await drawerW(page)));
 });
+
+test('turning the screen wide while the drawer is open does not leave the page inert', async ({ page }) => {
+  await openChat(page);
+  await toggle(page).click();
+  await settled(page);
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await expect(page.locator('html')).not.toHaveAttribute('data-drawer', 'open');
+  await expect(page.locator('[data-slot="app-main"]')).toHaveJSProperty('inert', false);
+  expect(await pageX(page)).toBeGreaterThanOrEqual(0);
+  await page.locator('#q').fill('still reachable');
+  await expect(page.locator('#q')).toHaveValue('still reachable');
+});
