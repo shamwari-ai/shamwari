@@ -2,6 +2,13 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { ask, makeProject, newChat, openAccount, openChat, openChats, seedLegacyQuestion, openSection, closeChats } from './helpers';
 
+// PW_CPU_THROTTLE=4 runs every test here on a CPU four times slower, to flush out timing races (animations, async renders)
+// that a quick machine hides. Off by default.
+test.beforeEach(async ({ page }) => {
+  const rate = Number(process.env.PW_CPU_THROTTLE ?? 0);
+  if (rate > 1) await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate });
+});
+
 const scan = async (page: Page) =>
   (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze()).violations;
 
