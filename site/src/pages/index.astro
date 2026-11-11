@@ -8,7 +8,7 @@ import { Card } from '@bundu/ui/ui/card';
 import StatusPill from '../components/StatusPill.astro';
 import DataScopes from '../components/DataScopes.astro';
 import NumberBadge from '../components/NumberBadge.astro';
-import { STATUS } from '../data/status';
+import { CORPUS_LAST_CHECKED, STATUS } from '../data/status';
 // The hero's right-hand panel, in the way nyuchi.com lists what it runs:
 // the five products, each with its honest state. The state is read from the
 // one STATUS list that /project/ also renders, so the two cannot disagree.
@@ -19,7 +19,6 @@ const stateOf = (title: string) => {
 };
 const panel = [
   { name: 'Chat', title: 'Shamwari Chat', note: 'Ask in English, Shona or Ndebele, with the source cited' },
-  { name: 'Mobile', title: 'Shamwari mobile app', note: 'The same chat on Android and iPhone, with questions queued while offline' },
   { name: 'CLI', title: 'Shamwari CLI', note: 'Shamwari in your terminal' },
   { name: 'Factory', title: 'Shamwari Factory', note: 'The coding agent, working in your GitHub repositories, for paying customers' },
   { name: 'MCP', title: 'Shamwari MCP server', note: 'Connect Shamwari to your own agents and tools' },
@@ -101,7 +100,7 @@ const phases = [
     <SectionHeader
       eyebrow="What it starts with"
       title="One trusted source at a time"
-      description="We use what we have the right to use, and we say so. Nothing is scraped first and asked about later. When we last checked, on 31 October 2026, no source was loaded, so Shamwari cannot cite a real one yet; this is the order we are building it in."
+      description={`We use what we have the right to use, and we say so. Nothing is scraped first and asked about later. When we last checked, on ${CORPUS_LAST_CHECKED}, no source was loaded, so Shamwari cannot cite a real one yet; this is the order we are building it in.`}
       max="max-w-2xl"
     />
     <ol class="mt-8 grid grid-cols-1 gap-5 md:grid-cols-3">
