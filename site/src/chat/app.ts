@@ -185,6 +185,17 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     syncEmpty();
   };
 
+  /** Close the chats drawer (a popover below 64rem) and the account menu: after an action they must not stay over the page. */
+  const closeDrawer = () => (document.getElementById('chat-sidebar') as (HTMLElement & { hidePopover?: () => void }) | null)?.hidePopover?.();
+  const closeAccount = () => document.querySelector('details.account')?.removeAttribute('open');
+  /** Mzizi's AppShell names its menu and close buttons in English; name them in the chosen language. */
+  const labelShell = () => {
+    const s = strings();
+    document.querySelector('[data-slot="app-topbar"] > button[popovertarget]')?.setAttribute('aria-label', s.openChats);
+    document.querySelector('[data-slot="app-sidebar"] button[popovertargetaction="hide"]')?.setAttribute('aria-label', s.closeChats);
+    document.querySelector('[data-slot="app-sidebar"]')?.setAttribute('aria-label', s.yourChats);
+  };
+
   const renderHistory = async () => {
     const list = (await listThreads()).filter((t) => t.id !== thread.id && t.messages.length);
     const ul = $('#history-list');
@@ -197,6 +208,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
           thread = (await listThreads()).find((x) => x.id === t.id) ?? t;
           rebuild();
           void renderHistory();
+          closeDrawer();
           $('#thread').focus();
         });
         return h('li', {}, b);
@@ -437,6 +449,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     input.focus();
   });
   $('#signout').addEventListener('click', async () => {
+    closeAccount();
     // Start the sign-out (its first, synchronous part flips the app to signed out), then clear
     // the chats WITHOUT waiting on the network: a hung request must not leave the previous
     // person's chats on a phone that is being handed to someone else.
@@ -505,7 +518,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   // it brings the sign-in panel up. There are no notifications to show yet, and the bell says so rather
   // than doing nothing.
   $('#open-signin').addEventListener('click', () => {
-    document.querySelector<HTMLDetailsElement>('details.account')?.removeAttribute('open');
+    closeAccount();
     showAuth();
   });
   let bellTimer: ReturnType<typeof setTimeout> | undefined;
@@ -547,6 +560,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
 
   $('#delete-history').addEventListener('click', async () => {
     if (!confirm(strings().deleteConfirm)) return;
+    closeAccount();
     await wipeHistory();
     $('#toast').textContent = strings().deleted;
     input.focus();
@@ -559,6 +573,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     lang = langSelect.value;
     saveLanguage(lang);
     applyStrings(document, lang);
+    labelShell();
     rebuild();
   });
 
@@ -577,6 +592,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
 
   // ---- go ------------------------------------------------------------------
   applyStrings(document, lang);
+  labelShell();
   rebuild();
   online();
   syncAuth();
