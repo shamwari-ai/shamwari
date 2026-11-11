@@ -55,7 +55,7 @@ while (queue.length) {
     : [...code.matchAll(/url\(\s*["']?(\/[^"')?#]+)/g)].map((m) => m[1]);
   for (const g of found) if (!wanted.has(g)) { wanted.add(g); queue.push(g); }
 }
-const precache = [...new Set(['/lite/', '/lite/manifest.webmanifest', ...wanted, '/lite/icons/icon-192.png'])].sort();
+const precache = [...new Set(['/lite/', '/lite/disclaimer/', '/lite/manifest.webmanifest', ...wanted, '/lite/icons/icon-192.png'])].sort();
 
 const version = createHash('sha256')
   .update(precache.map((p) => `${p}:${createHash('sha256').update(read(p.endsWith('/') ? `${p}index.html` : p)).digest('hex')}`).join('\n'))
@@ -119,7 +119,9 @@ self.addEventListener('fetch', (e) => {
     // name hashed assets that this worker's precache does not hold. A new build
     // ships a new worker (its file changes), which precaches the new shell and
     // assets together and takes over once the old tabs are closed.
-    e.respondWith(caches.match('/lite/').then((hit) => hit || fetch(req)));
+    // A page the worker precached (the disclaimer) is served as itself; any other address gets the shell.
+    const page = PRECACHE.includes(url.pathname) && url.pathname.endsWith('/') ? url.pathname : '/lite/';
+    e.respondWith(caches.match(page).then((hit) => hit || fetch(req)));
     return;
   }
   e.respondWith(caches.match(req).then((hit) => hit || fetch(req)));

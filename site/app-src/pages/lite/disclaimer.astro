@@ -1,0 +1,30 @@
+---
+// The disclaimer and the privacy statement, on their own page so the chat has no small print under it.
+// Complete English HTML without JavaScript; a small script translates it to the saved language.
+import '../../../src/chat/chat.css';
+import { en } from '../../../src/chat/strings';
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Disclaimer and privacy - Shamwari</title>
+  <link rel="canonical" href="https://shamwari.ai/lite/disclaimer/" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
+  <meta name="theme-color" content="#283593" />
+</head>
+<body class="text-base">
+  <main class="legal">
+    <h1 data-i18n="disclaimerTitle">{en.disclaimerTitle}</h1>
+    <p data-i18n="footer">{en.footer}</p>
+    <p data-i18n="storedHere">{en.storedHere}</p>
+    <p data-i18n="privacyDetail">{en.privacyDetail}</p>
+    <p><a class="btn" href="/lite/" data-i18n="backToChat">{en.backToChat}</a></p>
+  </main>
+  <script>
+    import { applyStrings, currentLanguage } from '../../../src/chat/i18n';
+    applyStrings(document, currentLanguage());
+  </script>
+</body>
+</html>

@@ -76,23 +76,18 @@ test('429 offers the add-credit link and a wait time', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Add credit' })).toHaveAttribute('href', 'https://platform.shamwari.ai/billing');
 });
 
-test('a missing key asks for sign-in and keeps what was typed', async ({ page }) => {
+test('a missing key asks for sign-in, keeps what was typed, and offers no key field', async ({ page }) => {
   await openChat(page, null);
   await expect(page.locator('#auth')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in with Mukoko' })).toBeDisabled();
   await page.locator('#q').fill('hello');
   await page.locator('#send').click();
-  await expect(page.locator('#key')).toBeFocused();
+  await expect(page.locator('#auth-title')).toBeFocused();
   await expect(page.locator('#q')).toHaveValue('hello');
-
-  await page.locator('#key').fill('not-a-key');
-  await page.getByRole('button', { name: 'Use this key' }).click();
-  await expect(page.locator('#key-error')).toBeVisible();
-
-  await page.locator('#key').fill('sk_shamwari_mock_ok');
-  await page.getByRole('button', { name: 'Use this key' }).click();
-  await expect(page.locator('#auth')).toBeHidden();
-  await expect(page.locator('#q')).toBeFocused();
+  // API keys are not typed into the page: "Use the API" in the drawer goes to the platform that issues them.
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await openChats(page);
+  await expect(page.getByRole('link', { name: 'Use the API' })).toHaveAttribute('href', 'https://platform.nyuchi.com');
 });
 
 test('history stays on the device across reloads, new chat starts clean, delete wipes it', async ({ page }) => {
@@ -167,10 +162,7 @@ test('the home screen greets, offers suggested prompts, and the chips ask the qu
 });
 
 test('the bell says there is nothing new, and the account menu holds sign-in and settings', async ({ page }) => {
-  await openChat(page, null);
-  await page.locator('#auth').waitFor();
-  await page.locator('#key').fill('sk_shamwari_mock_ok');
-  await page.getByRole('button', { name: 'Use this key' }).click();
+  await openChat(page);
   await expect(page.locator('#auth')).toBeHidden();
 
   await page.getByRole('button', { name: 'Notifications' }).click();
@@ -228,12 +220,13 @@ test('picking an earlier chat closes the drawer, so the chat is not left covered
   await expect(page.locator('article.msg.bot').first()).toBeVisible();
 });
 
-test('the privacy sentence is the same before the script runs and after (English)', async ({ page }) => {
-  await page.route('**/_astro/**/*.js', (r) => r.abort()); // no script: the static page as a person without it sees it
+test('the chat has no small print under it: a link opens the disclaimer and privacy page', async ({ page }) => {
   await page.goto('/lite/');
-  const staticText = await page.locator('[data-i18n="storedHere"]').innerText();
-  expect(staticText).toContain('not the text of your question or its answer');
-  expect(staticText).not.toContain('a record of each question it answers');
+  await expect(page.locator('[data-i18n="storedHere"]')).toHaveCount(0);
+  await page.getByRole('link', { name: 'Disclaimer and privacy' }).click();
+  await expect(page).toHaveURL(/\/lite\/disclaimer\/$/);
+  await expect(page.getByText('not the text of your question or its answer')).toBeVisible();
+  await expect(page.getByText('This is not legal advice')).toBeVisible();
 });
 
 test('the drawer pins a chat, files it in a project, keeps a saved answer, and deleting history clears all of it', async ({ page }) => {

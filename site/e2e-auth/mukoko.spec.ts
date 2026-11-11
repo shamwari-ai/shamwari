@@ -34,7 +34,7 @@ test('the flag changes the sign-in screen: Mukoko is real, the developer key is 
   await expect(page.locator('html')).toHaveAttribute('data-auth', 'mukoko');
   await expect(page.locator('#auth')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in with Mukoko' })).toBeEnabled();
-  await expect(page.locator('#key')).toBeHidden();
+  await expect(page.locator('#key')).toHaveCount(0);
   await expect(page.locator('#mukoko-soon')).toBeHidden();
 });
 
