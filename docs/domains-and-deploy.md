@@ -10,7 +10,8 @@ with the Workers custom-domains API (`override_existing_origin`), `www.shamwari.
 `shamwari-site`, and `api.shamwari.ai` is the gateway. The root `/` sends visitors to `/lite/` for now
 (`CHAT_LIVE` is `false`). The sign-in secrets are not bound yet, so sign-in answers 503 and the chat
 stays in developer-key mode. To undo the apex move, point `shamwari.ai` back at `shamwari-site` with the
-same API call and restore the apex line in `site/wrangler.jsonc`.
+same API call, restore the apex line in `site/wrangler.jsonc` and **remove it from
+`site/wrangler.app.jsonc`** (otherwise the next hand deploy of `shamwari-app` takes the apex back).
 
 ## What lives where
 
@@ -60,6 +61,12 @@ say the chat is ready when it is not. Do not set the variable before `/chat/` an
 - **The shared brand overlay** `site/src/styles/brand-shamwari.css` is imported by both.
 
 ## Switching it on: the order matters
+
+_Done on 2026-11-11, in a different way from the steps below:_ the app Worker was created with Wrangler
+rather than from GitHub (step 2), and the apex was moved with the Workers custom-domains API rather than
+two dashboard taps (step 5). The step 6 file change is in the repo. Steps 1, 3, 4 and 6 stand as written;
+what is still open is the sign-in section below, connecting `shamwari-app` to GitHub so it deploys itself,
+and step 7 (`CHAT_LIVE`).
 
 Everything below is done in the Cloudflare dashboard, on a phone is fine. Do the steps in
 this order; each one is safe to stop after.
