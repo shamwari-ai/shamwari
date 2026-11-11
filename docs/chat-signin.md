@@ -218,7 +218,7 @@ browser                    shamwari-app Worker (worker/)         WorkOS
   which is what protects an in-memory token from injected script.
 
 **Configuration, by name only.** Public vars in `app/wrangler.jsonc`: `WORKOS_CLIENT_ID`
-(`client_01M68PCT0T5ECHKDYH45ECT0GV`, not a secret) and `WORKOS_REDIRECT_URI`
+(`client_01KQBBSMQTSMTBN7HEC9KQBJC0`, the Mukoko Account application that `CONSOLE_WORKOS_API_KEY` belongs to; not a secret) and `WORKOS_REDIRECT_URI`
 (`https://shamwari.ai/lite/callback`). Two **secrets**, bound from the account's Secrets Store and
 never written into git: `WORKOS_API_KEY` (the WorkOS environment's API key; the Worker is a
 confidential client) and `COOKIE_PASSWORD` (seals the cookie; at least 32 random characters).
@@ -346,6 +346,13 @@ owning-entity key.
   `WORKOS_CLIENT_ID=client_01M68PCT0T5ECHKDYH45ECT0GV`, and the revocation window is about five
   minutes. The shared "Mukoko Account" app was not used because it has about forty redirect URIs
   and a five-hour access-token lifetime.
+- **Changed 2026-11-11 (owner's decision, relayed by the orchestrating session): the light chat (`/lite/`) signs
+  in through the Mukoko Account application, client `client_01KQBBSMQTSMTBN7HEC9KQBJC0`.** The Shamwari Chat
+  application has no API key, so the Worker's confidential code exchange (with `CONSOLE_WORKOS_API_KEY`, which
+  belongs to Mukoko Account) was refused. Consequences: the gateway must accept both client ids
+  (`gateway/wrangler.jsonc`), and light-chat access tokens now live as long as that application's setting (about
+  five hours, not five minutes), so a revoked session can keep working at the gateway for that long. The mobile
+  app is unchanged and stays on Shamwari Chat.
 - **Done: the JWT template.** Production now carries `urn:nyuchi:roles` (unchanged) plus
   `person_id` (`{{ user.external_id }}`). **No permission and no role is added for Shamwari, and
   no `aud`** (see above). Staging still has `{"aud": "https://api.shamwari.ai", ...}`. An unset
