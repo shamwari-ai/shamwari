@@ -1,6 +1,6 @@
 # The app Worker (shamwari-app) owns the apex https://shamwari.ai.
-# The root goes to the chat for now.
-/ /chat/ 302
+# The root / is NOT here: the Worker answers it (worker/root.ts), choosing /chat/ or /lite/ by
+# the visitor's connection. A static rule here would shadow nothing and mislead.
 
 # The marketing site now lives on www. Old apex links to it are sent there
 # (a redirect, not a page: this Worker serves no marketing page).

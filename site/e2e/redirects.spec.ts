@@ -1,15 +1,12 @@
 import { expect, test } from '@playwright/test';
 
-// The apex is the app's. Its root goes to the chat, and the few marketing URLs that used
+// The apex is the app's. Its root goes to the chat or the light chat (the Worker decides), and the few marketing URLs that used
 // to live there are sent to www (a redirect, never a page). Exercised through the same
 // _redirects file Workers static assets reads.
 const go = (page: import('@playwright/test').Page, path: string) => page.request.get(path, { maxRedirects: 0 });
 
-test('the root goes to the chat', async ({ page }) => {
-  const res = await go(page, '/');
-  expect(res.status()).toBe(302);
-  expect(res.headers()['location']).toBe('/chat/');
-});
+// The root is not a static redirect: the Worker answers it by connection quality, covered in
+// test/worker/root.test.ts (this server only stands in for the static assets).
 
 test('old marketing links on the apex are sent to www', async ({ page }) => {
   for (const [from, to] of [

@@ -1,4 +1,5 @@
 import { handle, type Deps, type RefreshResult } from './session';
+import { rootResponse } from './root';
 import { makePort, type WorkerEnv } from './workos-port';
 
 export { SessionRefresh } from './refresh-do';
@@ -19,6 +20,8 @@ function randomState(): string {
 
 export default {
   async fetch(req: Request, env: WorkerEnv, ctx: Ctx): Promise<Response> {
+    // The root needs no secrets and no WorkOS, so it is answered before either is touched.
+    if (req.method === 'GET' && new URL(req.url).pathname === '/') return rootResponse(req, env.CHAT_LIVE === 'true');
     try {
       const port = await makePort(env);
       const deps: Deps = {
