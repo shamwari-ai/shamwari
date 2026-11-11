@@ -1,7 +1,7 @@
 import { decideDestination, parseScope, ScopeRefusal } from '../scope';
 import { sha256Hex } from '../idempotency';
 import { plain, clip } from '../extractive';
-import { OWN_INFORMATION_NOTICE_SHORT } from '../personal';
+import { OWN_INFORMATION_NOTICE_MIN, OWN_INFORMATION_NOTICE_SHORT } from '../personal';
 import type { Reach } from '../router';
 import type { Env, Scope } from '../types';
 
@@ -138,7 +138,9 @@ export function compose(
   source = gsm7(source);
   const src = source ? clip(source, Math.floor(maxChars * 0.4), '...').text : '';
   // The notice is never the part that gets clipped away: the body gives up room for it.
-  const note = notice ? gsm7(OWN_INFORMATION_NOTICE_SHORT) : '';
+  // The full short form on SMS; on a screen of about 180 characters the marker alone,
+  // or the answer would be squeezed to a few words to make room for it.
+  const note = notice ? gsm7(maxChars >= 300 ? OWN_INFORMATION_NOTICE_SHORT : OWN_INFORMATION_NOTICE_MIN) : '';
   const room = Math.max(20, maxChars - (src ? src.length + 1 : 0) - (note ? note.length + 1 : 0));
   const text = clip(gsm7(body), room, '...').text;
   return [text, src, note].filter(Boolean).join('\n');
