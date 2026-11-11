@@ -8,7 +8,7 @@
  *
  * Both bars change height (the composer grows with the text, the bar wraps on a narrow screen), so their
  * real heights are measured and written to `--topbar-h` and `--dock-h`, which chat.css turns into
- * `scroll-padding`. Before this runs, and with no ResizeObserver, chat.css has safe fallbacks.
+ * `scroll-padding` (the bug and its reproduction: #185). Before this runs, and with no ResizeObserver, chat.css has safe fallbacks.
  */
 export function trackChrome(root: HTMLElement = document.documentElement): () => void {
   const bars: Array<[string, string]> = [
