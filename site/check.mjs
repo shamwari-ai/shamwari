@@ -20,6 +20,45 @@ if (broken.length) {
   process.exit(1);
 }
 
+/**
+ * The text a person can read in built HTML: markup removed and the contents of <script> and <style>
+ * skipped, by walking the string. It is a check's reading aid, not a sanitiser, and deliberately not
+ * a pair of regular expressions (those are the shape CodeQL calls incomplete multi-character
+ * sanitisation, and they mishandle a ">" inside a quoted attribute, which this does not).
+ */
+function visibleText(html) {
+  const lower = html.toLowerCase();
+  let out = '';
+  let i = 0;
+  while (i < html.length) {
+    const lt = html.indexOf('<', i);
+    if (lt === -1) {
+      out += html.slice(i);
+      break;
+    }
+    out += html.slice(i, lt) + ' ';
+    const raw = lower.startsWith('<script', lt) ? 'script' : lower.startsWith('<style', lt) ? 'style' : null;
+    if (raw) {
+      const close = lower.indexOf('</' + raw, lt);
+      const gt = close === -1 ? -1 : html.indexOf('>', close);
+      i = gt === -1 ? html.length : gt + 1;
+      continue;
+    }
+    // The end of this tag: the next ">" that is not inside a quoted attribute value.
+    let quote = '';
+    let j = lt + 1;
+    for (; j < html.length; j++) {
+      const ch = html[j];
+      if (quote) {
+        if (ch === quote) quote = '';
+      } else if (ch === '"' || ch === "'") quote = ch;
+      else if (ch === '>') break;
+    }
+    i = j + 1;
+  }
+  return out;
+}
+
 const TARGET = process.argv[2] === 'app' ? 'app' : 'marketing';
 const DIST = TARGET === 'app' ? 'dist-app' : 'dist';
 const files = walk(DIST);
@@ -226,7 +265,7 @@ for (const page of pages) {
 
   // A `{NAME}` inside a quoted Astro attribute is not interpolated: it ships as literal text. Nothing
   // else notices, so look for it in what was built (visible text only, not scripts or styles).
-  const visible = html.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, '').replace(/<[^>]+>/g, ' ');
+  const visible = visibleText(html);
   const leaked = visible.match(/\{[A-Za-z_$][\w$.]*\}/);
   if (leaked) fail.push(`${where}: an unrendered placeholder ${leaked[0]} is in the page text (a {…} inside a quoted attribute is not interpolated)`);
 
