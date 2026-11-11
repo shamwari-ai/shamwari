@@ -104,7 +104,11 @@ function config(env: Env): Config | null {
   // WorkOS's own documentation shows the issuer both with and without a trailing slash, so a
   // value copied from either form must work. Only that one character is tolerated: any other
   // difference is a different issuer and is refused.
-  const bare = issuer.replace(/\/+$/, '');
+  // Trailing slashes are stripped with a loop, not a regex: `/\/+$/` backtracks quadratically
+  // on a long run of slashes (CodeQL js/polynomial-redos).
+  let end = issuer.length;
+  while (end > 0 && issuer.charCodeAt(end - 1) === 47) end--;
+  const bare = issuer.slice(0, end);
   if (bare === '') return null;
   return { clientId, issuers: [bare, `${bare}/`], audience, jwksUrl, monthlyTokenCap: cap, maxTokenAgeSeconds: maxAge };
 }
