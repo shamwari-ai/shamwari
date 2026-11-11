@@ -48,9 +48,11 @@ export default {
     if (!origin || typeof origin.fetch !== "function")
       return plain(503, "Chat is not available yet.");
 
+    // Built by concatenation, never by resolving the path against a base: a path that begins
+    // with a second slash (`/chat//evil.com/x`) would otherwise be read as a host.
+    const originPath = stripPrefix(url.pathname);
     const target = new URL(
-      stripPrefix(url.pathname) + url.search,
-      "http://chat-origin.internal",
+      "http://chat-origin.internal" + originPath + url.search,
     );
     const init = {
       method: req.method,
@@ -75,7 +77,7 @@ export default {
 
     const location = headers.get("location");
     if (location)
-      headers.set("location", rewriteLocation(location, PUBLIC_ORIGIN));
+      headers.set("location", rewriteLocation(location, originPath));
 
     const cookies =
       typeof res.headers.getSetCookie === "function"
@@ -86,10 +88,18 @@ export default {
       for (const c of cookies) {
         const scoped = rewriteSetCookie(c);
         if (scoped !== null) headers.append("set-cookie", scoped);
+        // Only the name is logged, never the value.
+        else
+          console.warn(
+            "dropped a __Host- cookie from the origin:",
+            c.split("=")[0],
+          );
       }
     }
 
-    headers.set("content-security-policy", CSP);
+    // Appended, not set: when several policies are sent the browser enforces all of them, so
+    // the origin's own policy (if it sends one) is never weakened by ours.
+    headers.append("content-security-policy", CSP);
     headers.set("x-content-type-options", "nosniff");
     headers.set("referrer-policy", "strict-origin-when-cross-origin");
     headers.set(

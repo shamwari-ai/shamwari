@@ -53,26 +53,24 @@ test("prefix is stripped, root stays root", () => {
   assert.equal(stripPrefix("/chat"), "/");
 });
 
-test("Location is re-prefixed only when it is ours and not already prefixed", () => {
-  assert.equal(rewriteLocation("/login", PUB), "/chat/login");
-  assert.equal(rewriteLocation("/login?a=1#x", PUB), "/chat/login?a=1#x");
-  assert.equal(rewriteLocation("/chat/login", PUB), "/chat/login");
+test("Location: relative forms are re-prefixed; absolute URLs are left as the origin sent them", () => {
+  assert.equal(rewriteLocation("/login"), "/chat/login");
+  assert.equal(rewriteLocation("/login?a=1#x"), "/chat/login?a=1#x");
+  assert.equal(rewriteLocation("/chat/login"), "/chat/login");
+  // relative to the path the origin was asked for, not to the site root
+  assert.equal(rewriteLocation("login", "/c/new"), "/chat/c/login");
+  assert.equal(rewriteLocation("../x", "/a/b/c"), "/chat/a/x");
+  // absolute: the origin names the exact place (it builds them from a base that carries /chat)
   assert.equal(
-    rewriteLocation("https://shamwari.ai/c/abc", PUB),
-    "/chat/c/abc",
+    rewriteLocation("https://shamwari.ai/chat/c/abc"),
+    "https://shamwari.ai/chat/c/abc",
   );
+  assert.equal(rewriteLocation("https://shamwari.ai/"), "https://shamwari.ai/");
   assert.equal(
-    rewriteLocation("https://shamwari.ai/chat/c/abc", PUB),
-    "/chat/c/abc",
-  );
-  assert.equal(
-    rewriteLocation("https://api.workos.com/sso/authorize?x=1", PUB),
+    rewriteLocation("https://api.workos.com/sso/authorize?x=1"),
     "https://api.workos.com/sso/authorize?x=1",
   );
-  assert.equal(
-    rewriteLocation("https://shamwari.ai.evil.example/x", PUB),
-    "https://shamwari.ai.evil.example/x",
-  );
+  assert.equal(rewriteLocation("//evil.example/x"), "//evil.example/x");
 });
 
 test("Set-Cookie is scoped to /chat", () => {
@@ -95,25 +93,44 @@ test("Set-Cookie is scoped to /chat", () => {
 
 test("only hashed assets are immutable; the API is never cached", () => {
   const imm = "public, max-age=31536000, immutable";
+  assert.equal(cacheControl("/chat/assets/index-Bx12_aZq.js", "GET", 200), imm);
   assert.equal(
-    cacheControl("/chat/assets/index-Bx12_aZq9.js", "GET", 200),
-    imm,
-  );
-  assert.equal(
-    cacheControl("/chat/assets/index-Bx12_aZq9.js", "GET", 404),
-    "no-cache",
-  );
-  assert.equal(
-    cacheControl("/chat/assets/index-Bx12_aZq9.js", "POST", 200),
+    cacheControl("/chat/assets/index-Bx12_aZq.js", "GET", 404),
     "no-cache",
   );
   assert.equal(cacheControl("/chat/assets/logo.png", "GET", 200), "no-cache");
   assert.equal(cacheControl("/chat/", "GET", 200), "no-cache");
-  assert.equal(cacheControl("/chat/api/messages", "GET", 200), "no-store");
-  assert.equal(
-    cacheControl("/chat/oauth/openid/callback", "GET", 302),
-    "no-store",
-  );
+});
+
+test("names that only look hashed are not immutable", () => {
+  for (const n of [
+    "logo-darkmode.png",
+    "logo-background.png",
+    "app-translations.js",
+    "favicon-dark-mode.svg",
+    "main-abcdefgh.css",
+  ]) {
+    assert.equal(cacheControl("/chat/assets/" + n, "GET", 200), "no-cache", n);
+  }
+});
+
+test("the API and OAuth are no-store whatever the case, bare or not, and so is every write", () => {
+  for (const p of [
+    "/chat/api",
+    "/chat/api/messages",
+    "/chat/API/messages",
+    "/chat/Api/x",
+    "/chat/oauth",
+    "/chat/Oauth/openid/callback",
+  ]) {
+    assert.equal(cacheControl(p, "GET", 200), "no-store", p);
+  }
+  for (const m of ["POST", "PUT", "PATCH", "DELETE"])
+    assert.equal(
+      cacheControl("/chat/assets/index-Bx12_aZq.js", m, 200),
+      "no-store",
+      m,
+    );
 });
 
 test("CSP carries the same-origin limits", () => {
@@ -255,28 +272,96 @@ test("the response body is streamed through untouched", async () => {
   assert.equal(await r.text(), "<html>hi</html>");
 });
 
+test("a path starting with a second slash cannot choose the host", async () => {
+  const o = origin(new Response("ok"));
+  for (const p of [
+    "/chat//evil.com/x",
+    "/chat///evil.com",
+    "/chat/\\evil.com/x",
+  ]) {
+    await call(p, o);
+  }
+  assert.equal(o.seen.length, 3);
+  for (const s of o.seen)
+    assert.equal(new URL(s.url).host, "chat-origin.internal", s.url);
+  assert.equal(new URL(o.seen[0].url).pathname, "//evil.com/x");
+});
+
+test("the client address reaches the origin, from Cloudflare's header and never the visitor's own", async () => {
+  const o = origin(new Response("ok"));
+  await call("/chat/", o, {
+    headers: {
+      "cf-connecting-ip": "203.0.113.9",
+      "x-forwarded-for": "6.6.6.6",
+    },
+  });
+  assert.equal(o.seen[0].headers["x-forwarded-for"], "203.0.113.9");
+  await call("/chat/", o, { headers: { "x-forwarded-for": "6.6.6.6" } });
+  assert.equal(o.seen[1].headers["x-forwarded-for"], undefined);
+});
+
+test("the origin's own CSP is kept and ours is added beside it", async () => {
+  const o = origin(
+    new Response("ok", {
+      headers: { "content-security-policy": "default-src 'self'" },
+    }),
+  );
+  const r = await call("/chat/", o);
+  const csp = r.headers.get("content-security-policy");
+  assert.ok(csp.includes("default-src 'self'"), csp);
+  assert.ok(csp.includes("frame-ancestors 'none'"), csp);
+});
+
+test("a dropped __Host- cookie is logged by name only", async () => {
+  const warned = [];
+  const orig = console.warn;
+  console.warn = (...a) => warned.push(a.join(" "));
+  try {
+    const headers = new Headers();
+    headers.append("set-cookie", "__Host-secret=VALUE123; Path=/; Secure");
+    await call("/chat/api/x", origin(new Response("ok", { headers })));
+  } finally {
+    console.warn = orig;
+  }
+  assert.equal(warned.length, 1);
+  assert.match(warned[0], /__Host-secret/);
+  assert.doesNotMatch(warned[0], /VALUE123/);
+});
+
+test("Location from the origin is resolved against the path it was asked for", async () => {
+  const o = origin(
+    new Response(null, { status: 302, headers: { location: "login" } }),
+  );
+  const r = await call("/chat/c/new", o);
+  assert.equal(r.headers.get("location"), "/chat/c/login");
+});
+
 // ---- the config can switch nothing on, and the source holds no provider --------------
 
 const strip = (s) => s.replace(/\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1");
-test("wrangler.jsonc declares no route, domain, public URL or binding", () => {
-  const text = strip(
-    readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
-  );
+test("wrangler.jsonc declares only the allowed keys, so nothing can be switched on", () => {
+  // Full-line comments only; a string containing // is left alone.
+  const text = readFileSync(
+    new URL("../wrangler.jsonc", import.meta.url),
+    "utf8",
+  )
+    .split("\n")
+    .filter((l) => !/^\s*\/\//.test(l))
+    .join("\n")
+    .replace(/,(\s*[}\]])/g, "$1");
   const cfg = JSON.parse(text);
-  for (const k of [
-    "routes",
-    "route",
-    "custom_domain",
-    "vpc_services",
-    "services",
-    "kv_namespaces",
-    "r2_buckets",
-    "d1_databases",
-    "secrets_store_secrets",
-    "vars",
-  ]) {
-    assert.equal(cfg[k], undefined, `wrangler.jsonc must not declare ${k}`);
-  }
+  // An allow-list, not a deny-list: any other key (routes, env.*, triggers, vpc_services,
+  // services, durable_objects, queues, hyperdrive, browser, ai, vars, secrets...) fails.
+  const allowed = [
+    "$schema",
+    "name",
+    "main",
+    "compatibility_date",
+    "observability",
+    "workers_dev",
+    "preview_urls",
+  ];
+  assert.deepEqual(Object.keys(cfg).sort(), [...allowed].sort());
   assert.equal(cfg.workers_dev, false);
   assert.equal(cfg.preview_urls, false);
 });
