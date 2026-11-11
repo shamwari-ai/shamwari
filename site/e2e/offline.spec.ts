@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, openAccount, openChat, openChats } from './helpers';
+import { ask, openAccount, openChat, openChats, newChat } from './helpers';
 
 const onlyOnce = (urls: string[], needle: string) => urls.filter((u) => u.includes(needle)).length;
 
@@ -58,7 +58,7 @@ test('a question queued in an earlier chat is still delivered after New chat', a
   await openChat(page);
   await context.setOffline(true);
   await ask(page, 'Queued in the first chat');
-  await page.getByRole('button', { name: 'New chat' }).click();
+  await newChat(page);
   await expect(page.locator('#log article')).toHaveCount(0);
 
   await context.setOffline(false);

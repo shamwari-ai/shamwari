@@ -49,10 +49,21 @@ if ('serviceWorker' in navigator) {
       dispatchEvent(new CustomEvent('shamwari:update', { detail: { version, apply: () => waiting.postMessage('skip-waiting') } })),
     );
   };
+  // The release this page is running ("v0.0.74"), shown at the foot of the drawer, so a person can tell which they have.
+  const showCurrent = (worker: ServiceWorker | null | undefined) => {
+    if (!worker) return;
+    const ch = new MessageChannel();
+    ch.port1.onmessage = (e) => {
+      for (const el of document.querySelectorAll('[data-current-version]')) el.textContent = String(e.data);
+      for (const el of document.querySelectorAll<HTMLElement>('[data-current-version-line]')) el.hidden = false;
+    };
+    worker.postMessage('version', [ch.port2]);
+  };
   addEventListener('load', () => {
     navigator.serviceWorker
       .register('/lite/sw.js', { scope: '/lite/' })
       .then((reg) => {
+        showCurrent(navigator.serviceWorker.controller ?? reg.active);
         // Only an UPDATE is offered: with no controller this is the first install, which claims by itself.
         const ready = (w: ServiceWorker | null) => {
           if (w && navigator.serviceWorker.controller) offer(w);

@@ -24,3 +24,9 @@ export async function openAccount(page: Page) {
 export async function openChats(page: Page) {
   await page.getByRole('button', { name: /open chats/i }).click();
 }
+
+/** Start a new chat from the drawer's foot (the top bar has no room for it on a small screen). */
+export async function newChat(page: Page) {
+  await openChats(page);
+  await page.locator('#side-new').click();
+}
