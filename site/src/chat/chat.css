@@ -834,3 +834,49 @@ html.app #thread {
     display: none;
   }
 }
+
+/* ---- signed out: a whole screen ---------------------------------------------------------------------------
+   The sign-in is a view of its own, not a card on the chat. While it shows, the chat (and the dialog) is not
+   in the page at all, so there is no thread, no composer and no picker behind it. */
+html[data-view='signin'] [data-slot='app-shell'],
+html[data-view='pending'] [data-slot='app-shell'],
+html[data-view='signin'] dialog,
+html[data-view='pending'] dialog {
+  display: none;
+}
+.signin-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow-y: auto;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: var(--inset-floor);
+  padding: var(--inset-floor) var(--page-inset);
+  padding-block-end: max(var(--inset-floor), env(safe-area-inset-bottom));
+  text-align: center;
+  background: var(--background);
+  color: var(--foreground);
+}
+.signin-screen[hidden] {
+  display: none;
+}
+.signin-screen .mark {
+  border-radius: var(--radius-lg);
+}
+.signin-screen h1 {
+  margin: 0;
+  font-family: inherit;
+  font-size: 1.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  outline: none;
+}
+.signin-screen .btn.primary {
+  width: 100%;
+  max-width: 24rem;
+}
+.signin-screen p {
+  margin: 0;
+}

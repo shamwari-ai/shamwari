@@ -148,13 +148,6 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
         </ul>
       </section>
       <p class="install"><button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button></p>
-      <section id="auth" class="panel" aria-labelledby="auth-title" hidden>
-        <h2 id="auth-title" tabindex="-1" data-i18n="authTitle">Sign in to ask</h2>
-        <p>
-          <button type="button" id="mukoko-signin" class="btn" disabled aria-describedby="mukoko-soon" data-i18n="authMukoko">Sign in with Mukoko</button>
-        </p>
-        <p id="mukoko-soon" class="small" data-i18n="authMukokoSoon">Mukoko sign-in is coming soon.</p>
-      </section>
 
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
       <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>
@@ -196,6 +189,19 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
       <a class="footer-link" href="/lite/disclaimer/" data-i18n="disclaimerLink">{en.disclaimerLink}</a>
     </div>
   </AppShell>
+  <!-- Signed out: a whole screen, and nothing else. No chat is shown behind it, and no prompt sits on top of one. With a
+       session the page never shows this; the Worker sends a request with none to the hosted sign-in, and the app goes
+       there itself when the session has ended. This is what a device sees when it cannot reach it (offline). -->
+  <main id="auth" class="signin-screen" aria-labelledby="auth-title" hidden>
+    <img class="mark" src="/apple-touch-icon.png" alt="" width="72" height="72" />
+    <h1 id="auth-title" tabindex="-1" data-i18n="appName">Shamwari Chat</h1>
+    <button type="button" id="mukoko-signin" class="btn primary" disabled aria-describedby="mukoko-soon" data-i18n="authMukoko">Sign in with Mukoko</button>
+    <p id="mukoko-soon" class="small" data-i18n="authMukokoSoon">Mukoko sign-in is coming soon.</p>
+    <p id="signin-failed" class="small bad" role="alert" hidden data-i18n="signInFailed">We could not sign you in. Please try again.</p>
+    <p id="signin-offline" class="small" role="status" hidden data-i18n="signinOffline">You are offline. Sign in when you are back online.</p>
+    <p id="signin-note" class="small" role="status" hidden></p>
+    <a class="footer-link" href="/lite/disclaimer/" data-i18n="disclaimerLink">Disclaimer and privacy</a>
+  </main>
   <!-- A saved answer, opened from the drawer. A native dialog: focus is held and Escape closes it. -->
   <dialog id="artifact-view" class="artifact-view" aria-labelledby="artifact-title-view">
     <h2 id="artifact-title-view"></h2>

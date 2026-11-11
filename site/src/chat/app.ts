@@ -592,13 +592,50 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
 
   // ---- auth ----------------------------------------------------------------
   const authPanel = $('#auth');
+  /** Back from a sign-in that failed: stop here and say so, do not send the person round the same loop again. */
+  const cameBackFailed = new URLSearchParams(location.search).get('signin') === 'failed';
   const syncAuth = () => {
     $('#signout').hidden = !auth.signedIn();
   };
-  function showAuth() {
-    authPanel.hidden = false;
+  /** Which whole screen is showing: the chat, or the sign-in. Never both, and never the chat with a prompt on it. */
+  const HOP = 'shamwari.signin.hop';
+  const setView = (view: 'app' | 'signin' | 'pending') => {
+    // A modal left open (a saved answer) would stay modal behind a hidden chat and come back stale.
+    if (view !== 'app') document.querySelectorAll<HTMLDialogElement>('dialog[open]').forEach((d) => d.close());
+    document.documentElement.dataset.view = view;
+    // 'pending' is neither screen: the first answer from the session is awaited, so a person who has a session never sees
+    // the sign-in flash and one who has none never sees the chat.
+    authPanel.hidden = view !== 'signin';
+  };
+  const syncOffline = () => {
+    $('#signin-offline').hidden = !(auth.kind === 'mukoko' && !navigator.onLine);
+  };
+  window.addEventListener('online', syncOffline);
+  window.addEventListener('offline', syncOffline);
+  /**
+   * The sign-in screen. With a session that has ended and a network to reach it, the app goes straight to the hosted
+   * sign-in instead (`redirect`), once: a sign-in that comes straight back signed out must stop here, not loop.
+   */
+  function showAuth(redirect = false) {
+    setView('signin');
+    const offline = !navigator.onLine;
+    syncOffline();
     const go = $<HTMLButtonElement>('#mukoko-signin');
-    (go.disabled ? $('#auth-title') : go).focus();
+    if (redirect && auth.kind === 'mukoko' && !offline && !cameBackFailed) {
+      let recent = false;
+      try {
+        recent = Date.now() - Number(sessionStorage.getItem(HOP) ?? 0) < 30_000;
+        if (!recent) sessionStorage.setItem(HOP, String(Date.now()));
+      } catch {
+        /* no session storage: the sign-in screen is shown, which is the safe side */
+        recent = true;
+      }
+      if (!recent) {
+        location.replace('/lite/auth/login');
+        return;
+      }
+    }
+    (go.disabled || go.hidden ? $('#auth-title') : go).focus();
   }
 
   $('#signout').addEventListener('click', async () => {
@@ -611,11 +648,18 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     // their chats off this device so the next person to open it does not read them.
     if (auth.kind === 'mukoko') {
       await wipeHistory();
-      $('#toast').textContent = strings().signedOutCleared;
+    }
+    // The screen changes now, without waiting on the network: a hung sign-out request must not leave the chat on show.
+    syncAuth();
+    showAuth();
+    // On the sign-in screen itself: the chat (and its toast) is not on screen while signed out.
+    if (auth.kind === 'mukoko') {
+      const note = $('#signin-note');
+      note.textContent = strings().signedOutCleared;
+      note.hidden = false;
     }
     await ended;
     syncAuth();
-    showAuth();
   });
   const mukokoBtn = $<HTMLButtonElement>('#mukoko-signin');
   if (auth.kind === 'mukoko') {
@@ -623,7 +667,8 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     // drop the parameter so a reload does not say it again.
     const params = new URLSearchParams(location.search);
     if (params.get('signin') === 'failed') {
-      $('#toast').textContent = strings().signInFailed;
+      // On the sign-in screen itself: the chat (and its toast) is not on screen while signed out.
+      $('#signin-failed').hidden = false;
       params.delete('signin');
       const rest = params.toString();
       history.replaceState(null, '', location.pathname + (rest ? `?${rest}` : '') + location.hash);
@@ -633,6 +678,8 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     mukokoBtn.removeAttribute('aria-describedby'); // it pointed at the "coming soon" text
     $('#signout').dataset.i18n = 'signOut';
     mukokoBtn.addEventListener('click', async () => {
+      $('#signin-failed').hidden = true; // a new try: the old failure is not still the news
+      $('#signin-note').hidden = true;
       if (auth.prepareSignIn && !(await auth.prepareSignIn())) {
         $('#toast').textContent = strings().signInRetry;
         return;
@@ -736,6 +783,8 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   online();
   syncAuth();
   void renderHistory();
+  // Before the first renewal answers: the chat only for a device that holds (or held) a session, else the sign-in screen.
+  setView(auth.signedIn() ? 'app' : auth.kind === 'mukoko' ? 'pending' : 'signin');
   document.documentElement.dataset.ready = 'true';
   const afterAuth = () => {
     document.documentElement.dataset.authReady = 'true';
@@ -748,12 +797,22 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     // sign-in panel stays down so a signed-in person never sees it flash.
     startup = auth.refresh().then(() => {
       startup = null;
-      authPanel.hidden = auth.signedIn();
+      // Signed in (a session, or the hint of one while offline): the chat. Otherwise the session has ended: straight to sign-in.
+      if (auth.signedIn()) {
+        setView('app');
+        // A sign-in that worked: the next time a session ends it is a new story, so the guard against a loop is cleared.
+        try {
+          sessionStorage.removeItem(HOP);
+        } catch {
+          /* nothing to clear */
+        }
+      } else showAuth(true);
       syncAuth();
       afterAuth();
     });
   } else {
-    if (!auth.signedIn()) authPanel.hidden = false;
+    if (auth.signedIn()) setView('app');
+    else showAuth();
     afterAuth();
   }
 }
