@@ -55,11 +55,11 @@ describe('no text is a failure, not an answer', () => {
 
   it('the Workers AI step throws rather than substituting an apology', async () => {
     const e = env({});
-    await expect(viaWorkersAI(e, targets(e).economy, messages)).rejects.toThrow(/no text/);
+    await expect(viaWorkersAI(e, targets(e).economy, messages, 'platform')).rejects.toThrow(/no text/);
   });
 
   it('the Workers AI step still returns a real answer', async () => {
     const e = env({ response: 'ok' });
-    expect((await viaWorkersAI(e, targets(e).economy, messages)).text).toBe('ok');
+    expect((await viaWorkersAI(e, targets(e).economy, messages, 'platform')).text).toBe('ok');
   });
 });

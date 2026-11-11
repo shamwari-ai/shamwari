@@ -85,7 +85,7 @@ function setup(
     if (u.includes('/ground/search')) {
       calls.ground += 1;
       if (opts.coreDown) return new Response('down', { status: 503 });
-      return Response.json({ chunks, hit: chunks.length > 0 });
+      return Response.json({ chunks, hit: chunks.length > 0, scope: 'platform' });
     }
     calls.inference += 1;
     void init;
@@ -353,10 +353,11 @@ describe('a key may only ask for the scopes it holds', () => {
     expect(calls.embed + calls.ground + calls.inference).toBe(0);
   });
 
-  it('a key limited to platform cannot ask for community', async () => {
-    const { env } = setup({ scopes: ['platform'] });
+  it('a key that holds neither community nor platform is refused, whatever the client asks for', async () => {
+    const { env, calls } = setup({ scopes: ['personal'] });
     const res = await worker.fetch(ask({ scope: 'community' }), env, ctx);
     expect(res.status).toBe(403);
+    expect(calls.embed + calls.ground + calls.inference).toBe(0);
   });
 
   it('the default allows community and platform, so existing keys keep working', async () => {

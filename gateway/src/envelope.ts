@@ -3,7 +3,10 @@
  * channel needs and nothing else. The default response stays OpenAI-shaped; a
  * request opts in with `"format": "compact"`.
  *
- *   { id, answer, cites: [{ n, label, url? }], scope, via, truncated, degraded }
+ *   { id, answer, cites: [{ n, label, url? }], scope, via, truncated, degraded, notice? }
+ *
+ * `notice` is present only when the answer was given without the person's own
+ * information (shamwari-ai/shamwari#81); a client renders it as one line.
  *
  * `via` is the rung that served it (gateway, workers-ai, extractive). Usage,
  * model names, latency and language are left out: they cost bytes a 2G link
@@ -27,6 +30,7 @@ interface Verbose {
     inference_path: string;
     truncated?: boolean;
     degraded?: boolean;
+    notice?: { message: string } | null;
     citations: { title: string; heading: string | null; url: string | null }[];
   };
 }
@@ -47,5 +51,7 @@ export function toCompact(v: Verbose, asciiLabels = false) {
     via: s.inference_path,
     truncated: s.truncated === true,
     degraded: s.degraded === true,
+    // Only when there is something to say: bytes cost on a 2G link.
+    ...(s.notice ? { notice: s.notice.message } : {}),
   };
 }

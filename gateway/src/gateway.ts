@@ -2,6 +2,7 @@ import type { Env, Message, LicenseClass, Scope, Tier } from './types';
 import type { Target } from './router';
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './router';
 import { resolveLicenseClass, WORKERS_AI_FALLBACK_MODEL } from './provenance';
+import { providerScope } from './scope';
 
 export interface InferenceResult {
   text: string;
@@ -102,6 +103,9 @@ export async function viaGateway(
   skipCache = false,
   maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
 ): Promise<InferenceResult | null> {
+  // RULE 1, where the call is made. Outside the try: a refusal is a bug in a
+  // caller, and must not be swallowed as "the gateway is unavailable".
+  providerScope({ scope: meta.scope, destination: 'cloud' });
   try {
     // A Secrets Store binding, so the token is read at request time and never
     // sits in the Worker's own secrets. If the read fails the step is
@@ -149,8 +153,10 @@ export async function viaWorkersAI(
   env: Env,
   target: Target,
   messages: Message[],
+  scope: Scope,
   maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
 ): Promise<InferenceResult> {
+  providerScope({ scope, destination: 'cloud' });
   const fb = (await env.AI.run(
     WORKERS_AI_FALLBACK_MODEL as never,
     {
@@ -206,7 +212,7 @@ export async function infer(
 ): Promise<InferenceResult> {
   return (
     (await viaGateway(env, target, messages, meta, false, maxTokens)) ??
-    (await viaWorkersAI(env, target, messages, maxTokens))
+    (await viaWorkersAI(env, target, messages, meta.scope, maxTokens))
   );
 }
 

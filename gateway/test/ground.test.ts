@@ -6,7 +6,8 @@
 // The fake Env below counts AI.run calls. That count is the test.
 import { describe, expect, it, vi } from 'vitest';
 import { ground } from '../src/ground';
-import type { Env, Message } from '../src/types';
+import type { ScopeResolution } from '../src/scope';
+import type { Env, Message, Scope } from '../src/types';
 
 const messages: Message[] = [{ role: 'user', content: 'Ndinobhadhara marii PAYE?' }];
 
@@ -32,19 +33,28 @@ function fakeEnv() {
 function stubFetch() {
   const seen: unknown[] = [];
   vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
-    seen.push(JSON.parse(String(init.body)));
-    return new Response(JSON.stringify({ chunks: [], hit: false }), {
+    const body = JSON.parse(String(init.body)) as { scope: string };
+    seen.push(body);
+    // Core answers for the scope it was asked for, as the real one does.
+    return new Response(JSON.stringify({ chunks: [], hit: false, scope: body.scope }), {
       headers: { 'Content-Type': 'application/json' },
     });
   });
   return seen;
 }
 
+const resolution = (scope: Scope, destination: 'cloud' | 'mind'): ScopeResolution => ({
+  scope,
+  destination,
+  grants: ['personal', 'community', 'platform'],
+  withoutOwnInformation: false,
+});
+
 describe('ground() and the edge embedding', () => {
   it('embeds on Cloudflare for a cloud destination', async () => {
     const seen = stubFetch();
     const { env, run } = fakeEnv();
-    await ground(env, messages, 'e1', 'platform', 'cloud', 'sn');
+    await ground(env, messages, 'e1', resolution('platform', 'cloud'), 'sn');
     expect(run).toHaveBeenCalledTimes(1);
     expect((seen[0] as { embedding?: number[] }).embedding).toHaveLength(1024);
   });
@@ -57,7 +67,7 @@ describe('ground() and the edge embedding', () => {
   it('never embeds on Cloudflare for a mind destination', async () => {
     const seen = stubFetch();
     const { env, run } = fakeEnv();
-    await ground(env, messages, 'e1', 'personal', 'mind', 'sn');
+    await ground(env, messages, 'e1', resolution('personal', 'mind'), 'sn');
     expect(run).not.toHaveBeenCalled();
     expect(seen[0]).not.toHaveProperty('embedding');
   });
@@ -65,14 +75,14 @@ describe('ground() and the edge embedding', () => {
   it('still sends the query text to Core, which is first-party', async () => {
     const seen = stubFetch();
     const { env } = fakeEnv();
-    await ground(env, messages, 'e1', 'personal', 'mind', 'sn');
+    await ground(env, messages, 'e1', resolution('personal', 'mind'), 'sn');
     expect((seen[0] as { query: string }).query).toBe(messages[0]?.content);
   });
 
   it('degrades to ungrounded rather than failing when Core is down', async () => {
     vi.stubGlobal('fetch', async () => new Response('boom', { status: 500 }));
     const { env } = fakeEnv();
-    const r = await ground(env, messages, 'e1', 'personal', 'mind', 'sn');
+    const r = await ground(env, messages, 'e1', resolution('personal', 'mind'), 'sn');
     expect(r.hit).toBe(false);
     expect(r.systemPrompt).toContain('Shamwari');
   });

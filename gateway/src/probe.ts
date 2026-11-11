@@ -105,7 +105,7 @@ export async function probe(env: Env, tier: 'economy' | 'standard' = 'economy'):
 
   const results: PathResult[] = [
     await timed('gateway', () => viaGateway(env, target, PROBE_MESSAGES, meta, true)),
-    await timed('workers-ai', () => viaWorkersAI(env, target, PROBE_MESSAGES)),
+    await timed('workers-ai', () => viaWorkersAI(env, target, PROBE_MESSAGES, meta.scope)),
   ];
 
   return {

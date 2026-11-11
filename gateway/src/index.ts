@@ -2,8 +2,9 @@ import type { Env, Message, SinkMessage, AuthContext, GroundChunk } from './type
 import { authenticate } from './auth';
 import { keyService, permittedScopes, usageMeter } from './keys';
 import { estimateCostUsd, PRICE_TABLE_VERSION } from './pricing';
-import { parseScope, decideDestination, ScopeRefusal } from './scope';
-import type { Capability, ScopeDecision } from './scope';
+import { resolveScope, ScopeRefusal } from './scope';
+import type { Capability, ScopeResolution } from './scope';
+import { OWN_INFORMATION_CODE, OWN_INFORMATION_NOTICE } from './personal';
 import { route, applyReach, isReach, policy, REACHES } from './router';
 import type { Reach } from './router';
 import { infer } from './gateway';
@@ -39,6 +40,22 @@ const citationsOf = (chunks: GroundChunk[]) =>
     effective_from: c.effective_from,
     url: c.source_url,
   }));
+
+/**
+ * The one line a client renders when an answer was given without the person's own
+ * information. Present on every chat and retrieval response, true or false, so a
+ * client never has to guess from an absent field. `notice` is null when there is
+ * nothing to say.
+ */
+function ownInformation(decision: ScopeResolution, g: GroundResult) {
+  // Either side saying yes is enough, and neither can unsay the other: Core is
+  // authoritative for what it returns, the gateway for what it saw first.
+  const without = decision.withoutOwnInformation || g.coreNeedsOwnInformation;
+  return {
+    answered_without_own_information: without,
+    notice: without ? { code: OWN_INFORMATION_CODE, message: OWN_INFORMATION_NOTICE } : null,
+  };
+}
 
 function billingPeriod(d = new Date()): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -100,7 +117,7 @@ async function admit(
       auth: AuthContext;
       body: ChatBody;
       messages: Message[];
-      decision: ScopeDecision;
+      decision: ScopeResolution;
       /** Only meaningful with `deferQuota`: the 429, or null when there is quota left. */
       quota: () => Promise<Response | null>;
     }
@@ -150,12 +167,18 @@ async function admit(
     return { ok: false, response: json({ error: 'messages_required' }, 400) };
   }
 
-  // Scope gate, before anything expensive happens.
-  const scope = parseScope(body.scope);
+  // Scope gate, before anything expensive happens. The server decides the scope:
+  // body.scope is read only to see whether the client explicitly asked for personal.
   try {
-    // The sovereignty gate first, so personal scope bound for Cloud is still the
-    // 409 that says why. Then the key: a key may only ask for the scopes it holds.
-    const decision = decideDestination(scope, env, capability);
+    // The sovereignty gate first, so an explicit personal request bound for Cloud is
+    // still the 409 that says why. Then the key: a key may only hold the scopes it holds.
+    const decision = resolveScope({
+      messages,
+      requested: body.scope,
+      grants: permittedScopes(auth),
+      env,
+      capability,
+    });
     if (!permittedScopes(auth).includes(decision.scope)) {
       return {
         ok: false,
@@ -164,7 +187,7 @@ async function admit(
             error: 'scope_not_permitted_for_key',
             scope: decision.scope,
             permitted_scopes: permittedScopes(auth),
-            hint: 'send an explicit "scope" this key holds',
+            hint: 'this key holds no community or platform scope',
           },
           403,
         ),
@@ -195,14 +218,7 @@ async function groundContext(req: Request, env: Env, ctx: ExecutionContext): Pro
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
   const language = lastUser ? detectLanguage(lastUser.content) : null;
 
-  const g = await ground(
-    env,
-    messages,
-    auth.ownerEntityId,
-    decision.scope,
-    decision.destination,
-    language,
-  );
+  const g = await ground(env, messages, auth.ownerEntityId, decision, language);
   const latencyMs = Date.now() - started;
 
   // Metered, but no conversation document. The gateway never sees the
@@ -239,6 +255,7 @@ async function groundContext(req: Request, env: Env, ctx: ExecutionContext): Pro
       destination: decision.destination,
       language,
       grounded: g.hit,
+      ...ownInformation(decision, g),
       inference_path: 'mind',
       latency_ms: latencyMs,
       citations: citationsOf(g.chunks),
@@ -265,7 +282,7 @@ function extractiveResponse(
   env: Env,
   a: {
     auth: AuthContext;
-    decision: ScopeDecision;
+    decision: ScopeResolution;
     g: GroundResult;
     language: string | null;
     requestId: string;
@@ -328,6 +345,7 @@ function extractiveResponse(
       scope: decision.scope,
       language,
       grounded: g.hit,
+      ...ownInformation(decision, g),
       cache_hit: false,
       inference_path: 'extractive',
       reach: reach ?? null,
@@ -396,14 +414,7 @@ const worker = {
       const lastUser = [...messages].reverse().find((m) => m.role === 'user');
       const language = lastUser ? detectLanguage(lastUser.content) : null;
 
-      const g = await ground(
-        env,
-        messages,
-        auth.ownerEntityId,
-        decision.scope,
-        decision.destination,
-        language,
-      );
+      const g = await ground(env, messages, auth.ownerEntityId, decision, language);
       const rung = { auth, decision, g, language, requestId, started, reach };
       if (body.mode === 'extractive') {
         // "Ground could not be asked" is not "Ground has nothing": only the
@@ -593,6 +604,7 @@ const worker = {
           scope: decision.scope,
           language,
           grounded: g.hit,
+          ...ownInformation(decision, g),
           cache_hit: result.cacheHit,
           inference_path: result.path,
           model_served: `${result.provider}/${result.model}`,
