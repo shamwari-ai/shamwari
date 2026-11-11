@@ -127,7 +127,7 @@ Enabled but incomplete (any of issuer or cap missing or malformed, or a blank au
 **503, never permissive**.
 
 `WORKOS_ISSUER` is a value to read off a real token before setting. The Console signs in
-through the custom domain `auth.mukoko.com` (app **Mukoko Account**), and whether that changes
+through the custom domain `accounts.mukoko.com` (app **Mukoko Account**), and whether that changes
 `iss` from WorkOS's default is not something this session could confirm.
 
 ### Things the code assumes about a real token (unverified)
@@ -353,10 +353,10 @@ owning-entity key.
   Anyone without one is refused until they are linked.
 - **Set in `gateway/wrangler.jsonc` (production vars), not yet read off a real token:**
   `WORKOS_CLIENT_ID` is the Shamwari Chat client above. `WORKOS_ISSUER` is
-  `https://auth.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0`, taken from the
-  environment's OIDC discovery document (`.well-known/openid-configuration`), which returns the
-  **Mukoko Account** client id in the issuer even when queried with the Shamwari Chat client id,
-  so the issuer is per environment and not per app. WorkOS advises copying `iss` from a decoded
+  `https://accounts.mukoko.com`, the `issuer` of the Mukoko Account custom domain's OIDC discovery
+  document (`https://accounts.mukoko.com/.well-known/openid-configuration`); the issuer is per
+  environment, not per app. (An earlier version of this file named `auth.mukoko.com`, which is not the
+  Mukoko Account domain.) WorkOS advises copying `iss` from a decoded
   token because the documented form varies (a trailing slash is tolerated here). If this is
   wrong, every WorkOS token is refused with 401 and `sk_shamwari_` keys are unaffected.
   The JWKS (default URL for the chat client id) serves the same signing key as the Mukoko Account
