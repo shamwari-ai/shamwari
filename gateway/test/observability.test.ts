@@ -1,66 +1,46 @@
 // Workers Logs persist at sampling 1, so what reaches a log line is what is stored (Rule 1:
-// personal data must not land in persisted logs). These fail if observability is dropped, if a
-// Worker that sees sign-in traffic stops redacting query strings, or if a log line can carry a
-// header, cookie, body, prompt, token or answer.
+// personal data must not land in persisted logs). These fail if observability is dropped, if the
+// gateway stops redacting query strings, or if a log line can carry a header, cookie, body,
+// prompt, token or answer. The site Workers have the same checks in site/test/worker/observability.test.ts.
 import { describe, expect, it } from "vitest";
 import gateway from "../wrangler.jsonc?raw";
-import siteApp from "../../site/wrangler.app.jsonc?raw";
-import site from "../../site/wrangler.jsonc?raw";
 
-const parse = (raw: string) =>
-  JSON.parse(
-    raw.replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1"),
-  ) as {
-    observability?: {
-      enabled?: boolean;
-      redact_query_string?: boolean;
-      logs?: { enabled?: boolean; persist?: boolean };
-      issue_detection?: { enabled?: boolean };
-    };
+const config = JSON.parse(
+  gateway.replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1"),
+) as {
+  observability?: {
+    enabled?: boolean;
+    redact_query_string?: boolean;
+    logs?: { enabled?: boolean };
+    issue_detection?: { enabled?: boolean };
   };
+};
 
-describe("observability in the wrangler configs", () => {
-  const configs = { gateway, "shamwari-app": siteApp, "shamwari-site": site };
-  for (const [name, raw] of Object.entries(configs)) {
-    it(`${name} has logs and issue detection on`, () => {
-      const o = parse(raw).observability;
-      expect(o?.enabled).toBe(true);
-      expect(o?.logs?.enabled).toBe(true);
-      expect(o?.issue_detection?.enabled).toBe(true);
-    });
-  }
-
-  it("redacts query strings on shamwari-app and the gateway", () => {
-    expect(parse(siteApp).observability?.redact_query_string).toBe(true);
-    expect(parse(gateway).observability?.redact_query_string).toBe(true);
+describe("gateway observability", () => {
+  it("has logs and issue detection on, and redacts query strings", () => {
+    const o = config.observability;
+    expect(o?.enabled).toBe(true);
+    expect(o?.logs?.enabled).toBe(true);
+    expect(o?.issue_detection?.enabled).toBe(true);
+    expect(o?.redact_query_string).toBe(true);
   });
 });
 
-describe("log lines carry messages only", () => {
+describe("gateway log lines carry messages only", () => {
   // Vite reads the sources as text; the gateway has no Node types, so no fs here.
-  const sources = import.meta.glob(
-    ["../src/**/*.ts", "../../site/worker/**/*.ts"],
-    {
-      query: "?raw",
-      import: "default",
-      eager: true,
-    },
-  );
+  const sources = import.meta.glob("../src/**/*.ts", {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  });
   const forbidden =
     /\b(headers?|cookies?|body|request|req|prompt|answer|token|authorization|secret|password)\b/i;
 
   it("finds the sources it scans", () => {
-    expect(
-      Object.keys(sources).some(
-        (f) => f.includes("/gateway/") || f.includes("src/index"),
-      ),
-    ).toBe(true);
-    expect(Object.keys(sources).some((f) => f.includes("site/worker"))).toBe(
-      true,
-    );
+    expect(Object.keys(sources).length).toBeGreaterThan(5);
   });
 
-  it("no console call mentions a header, cookie, body, prompt, token or answer value", () => {
+  it("no console call passes a header, cookie, body, prompt, token or answer value", () => {
     for (const [file, src] of Object.entries(sources)) {
       for (const m of src.matchAll(
         /console\.(?:log|info|warn|error|debug)\(([\s\S]*?)\);/g,
