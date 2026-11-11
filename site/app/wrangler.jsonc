@@ -1,5 +1,5 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
+  "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "shamwari-app",
   "compatibility_date": "2026-08-01",
   // Query strings are redacted: /lite/callback carries the OAuth code and state, and
@@ -22,9 +22,9 @@
   // output of `npm run build:app`), plus the SESSION WORKER (worker/) that does
   // sign-in and the gate in front of the chat. The root / is answered by the Worker (worker/root.ts): a 302 to /chat/ or /lite/
   // by connection quality, never a static redirect.
-  "main": "worker/index.ts",
+  "main": "../worker/index.ts",
   "assets": {
-    "directory": "./dist-app",
+    "directory": "../dist-app",
     // The Worker is the gate: it runs first for the root, everything under /lite/ and the build output in
     // /_astro/, and serves the static asset only to someone signed in (worker/gate.ts). The ASSETS binding
     // is how it reads them. Only the favicon and apple-touch icon are served without it.
@@ -74,4 +74,9 @@
   // Workers custom-domains API, override_existing_origin). It is declared here so a deploy keeps it
   // rather than releasing it; `shamwari-site` no longer declares it.
   "routes": [{ "pattern": "shamwari.ai", "custom_domain": true }],
+
+  // Workers Builds runs `wrangler preview` for every non-production branch, which refuses to run without this
+  // block. It is empty on purpose: previews inherit the top-level assets, bindings and migrations, and they do
+  // not take the custom domain above.
+  "previews": {},
 }

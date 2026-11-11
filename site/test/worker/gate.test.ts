@@ -202,8 +202,8 @@ describe('the Worker in front of the gate', () => {
     }
   });
 
-  it('keeps wrangler.app.jsonc routing the gated area to the Worker', () => {
-    const text = readFileSync(join(__dirname, '../../wrangler.app.jsonc'), 'utf8');
+  it('keeps app/wrangler.jsonc routing the gated area to the Worker', () => {
+    const text = readFileSync(join(__dirname, '../../app/wrangler.jsonc'), 'utf8');
     expect(text).toContain('"run_worker_first": ["/", "/lite/*", "/_astro/*"]');
   });
 });

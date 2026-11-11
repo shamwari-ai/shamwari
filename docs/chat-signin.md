@@ -159,7 +159,7 @@ where page script can read it, and a single-use refresh token raced by two tabs 
 person out. So the part that holds the session is a server.
 
 **Built in `site/worker/`, as part of the `shamwari-app` Worker** (not a third Worker): static
-assets answer everything, and `assets.run_worker_first` in `site/wrangler.app.jsonc` sends only
+assets answer everything, and `assets.run_worker_first` in `site/app/wrangler.jsonc` sends only
 `/lite/auth/login`, `/lite/auth/token`, `/lite/auth/logout` and `/lite/callback` to the script.
 It uses the **WorkOS SDK** (`@workos-inc/node`, its `workerd` build) for the authorization URL,
 the code exchange, cookie sealing, JWT verification, refresh and session revocation. There is no
@@ -217,14 +217,14 @@ browser                    shamwari-app Worker (worker/)         WorkOS
 - The CSP already restricts `connect-src` to the site and the API origin and `script-src` to `'self'`,
   which is what protects an in-memory token from injected script.
 
-**Configuration, by name only.** Public vars in `wrangler.app.jsonc`: `WORKOS_CLIENT_ID`
+**Configuration, by name only.** Public vars in `app/wrangler.jsonc`: `WORKOS_CLIENT_ID`
 (`client_01M68PCT0T5ECHKDYH45ECT0GV`, not a secret) and `WORKOS_REDIRECT_URI`
 (`https://shamwari.ai/lite/callback`). Two **secrets**, bound from the account's Secrets Store and
 never written into git: `WORKOS_API_KEY` (the WorkOS environment's API key; the Worker is a
 confidential client) and `COOKIE_PASSWORD` (seals the cookie; at least 32 random characters).
 With either unbound the auth routes answer `503` and the gate fails closed: the page is a `503`, never served
 (`docs/domains-and-deploy.md`, "Before sign-in can work, and what the gate does"). The bindings are by name in
-`site/wrangler.app.jsonc` (`CONSOLE_WORKOS_API_KEY` and `SESSION_SECRET` in the shared Secrets Store).
+`site/app/wrangler.jsonc` (`CONSOLE_WORKOS_API_KEY` and `SESSION_SECRET` in the shared Secrets Store).
 
 **Not verified** (nothing here has met a real WorkOS tenant; no credentials exist in this session):
 the sealed cookie must stay under the browser's size limit once it carries the access token, the
@@ -331,7 +331,7 @@ owning-entity key.
 | Gateway accepts and verifies a WorkOS token                                               | built, 59 tests, guards mutation-checked                                                                                                                    |
 | One fixed grant, no permissions, no `personal`                                            | built, tested                                                                                                                                               |
 | Per-person metering on the canonical person id                                            | built; person ids must never equal entity ids (G6)                                                                                                          |
-| Session Worker (`site/worker/`), `mukoko` AuthProvider, and the gate in front of `/lite/` | built, tested against a fake WorkOS and under the Workers runtime locally; secrets bound by name in `wrangler.app.jsonc`; **not deployed from this change** |
+| Session Worker (`site/worker/`), `mukoko` AuthProvider, and the gate in front of `/lite/` | built, tested against a fake WorkOS and under the Workers runtime locally; secrets bound by name in `app/wrangler.jsonc`; **not deployed from this change** |
 | Revocation by `sid` deny list                                                             | not built, not asked for                                                                                                                                    |
 
 ## Needs the owner

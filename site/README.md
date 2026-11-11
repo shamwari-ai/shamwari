@@ -33,7 +33,7 @@ npm run dev:app | build:app | check:app | test:app | e2e | deploy:app
 ```
 
 The app is built from `app-src/` and `app-public/` with `astro.app.config.mjs` and
-`wrangler.app.jsonc`; the marketing site from `src/`, `public/`, `astro.config.mjs` and
+`app/wrangler.jsonc`; the marketing site from `src/`, `public/`, `astro.config.mjs` and
 `wrangler.jsonc`. Everything below describes the marketing site.
 
 ## Pages
