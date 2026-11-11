@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { openAccount } from '../e2e/helpers';
 
 // Mukoko sign-in (WorkOS access token) against a STAND-IN for the session Worker and
 // the mock gateway. The flag is a build setting and is off in the normal build.
@@ -33,7 +34,7 @@ test('the flag changes the sign-in screen: Mukoko is real, the developer key is 
   await expect(page.locator('html')).toHaveAttribute('data-auth', 'mukoko');
   await expect(page.locator('#auth')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in with Mukoko' })).toBeEnabled();
-  await expect(page.locator('#key')).toBeHidden();
+  await expect(page.locator('#key')).toHaveCount(0);
   await expect(page.locator('#mukoko-soon')).toBeHidden();
 });
 
@@ -94,7 +95,7 @@ test('the token is never persisted anywhere the page can read', async ({ page })
 
 test('sign-out clears the token, ends the session, and the next ask needs a sign-in', async ({ page }) => {
   await open(page);
-  await page.getByText('Settings').click();
+  await openAccount(page);
   await expect(page.locator('#signout')).toHaveText('Sign out');
   await page.locator('#signout').click();
 
@@ -156,7 +157,7 @@ test('signing out removes the chats from this device, so the next person does no
   await open(page);
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('.cite').first()).toBeVisible();
-  await page.getByText('Settings').click();
+  await openAccount(page);
   await page.locator('#signout').click();
   await expect(page.locator('#toast')).toContainText('removed from this device');
   await expect(page.locator('#log article')).toHaveCount(0);
@@ -171,7 +172,7 @@ test('signing out clears the chats at once even when the sign-out request hangs'
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('.cite').first()).toBeVisible();
   await steer(page, { session: true, logoutDelayMs: 30_000 }); // the Worker never answers in time
-  await page.getByText('Settings').click();
+  await openAccount(page);
   await page.locator('#signout').click();
   // The chats are gone from the device without waiting for the network.
   await expect(page.locator('#toast')).toContainText('removed from this device', { timeout: 3_000 });

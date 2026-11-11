@@ -163,3 +163,11 @@ inert until these are done, and the page keeps using developer-key mode (`PUBLIC
   custom domains suggest it is.
 - The two Workers Builds projects both read this repository. A change that touches only the
   app triggers a build of both; each only deploys its own output.
+
+## WorkOS sign-in on the app Worker (2026-11-11)
+
+`site/wrangler.app.jsonc` binds `WORKOS_API_KEY` (from `CONSOLE_WORKOS_API_KEY`) and `COOKIE_PASSWORD` (from
+`SESSION_SECRET`) out of the account's Secrets Store, the shared Mukoko secrets. Deploy with
+`npm run deploy:app` from `site/`, which builds with `PUBLIC_CHAT_AUTH=mukoko` and then runs `wrangler deploy`.
+After a deploy, `GET /lite/auth/login` should answer 302 to the Mukoko Account sign-in page; a real sign-in
+needs a person and a registered redirect URI (`https://shamwari.ai/lite/callback`).

@@ -18,6 +18,8 @@ interface:
     public: false
 
 endpoints:
+  # LibreChat refuses private addresses unless listed. Test only: the stub gateway.
+  allowedAddresses: ['127.0.0.1:8787']
   custom:
     - name: 'Shamwari'
       apiKey: '${SHAMWARI_CHAT_PLACEHOLDER_KEY}'
@@ -26,9 +28,12 @@ endpoints:
         default: ['shamwari-economy']
         fetch: false
       titleConvo: false
+      dropParams: ['user']
       addParams:
         scope: 'platform'
         stream: false
+        streaming: false
+        disableStreaming: true
       headers:
         X-Shamwari-Channel: 'pwa'
     - name: 'Shamwari (personal)'
@@ -38,8 +43,11 @@ endpoints:
         default: ['shamwari-economy']
         fetch: false
       titleConvo: false
+      dropParams: ['user']
       addParams:
         scope: 'personal'
         stream: false
+        streaming: false
+        disableStreaming: true
       headers:
         X-Shamwari-Channel: 'pwa'

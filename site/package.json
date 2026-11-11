@@ -15,7 +15,7 @@
     "check": "astro check && node check.mjs marketing",
     "check:app": "node check.mjs app",
     "deploy": "npm run build && wrangler deploy",
-    "deploy:app": "npm run build:app && wrangler deploy --config wrangler.app.jsonc",
+    "deploy:app": "PUBLIC_CHAT_AUTH=mukoko npm run build:app && wrangler deploy --config wrangler.app.jsonc",
     "test": "vitest run",
     "test:site": "vitest run test/site",
     "test:app": "vitest run test/app test/worker",

@@ -23,7 +23,8 @@ test("the real configuration is clean", () => {
 test("the pin is the verified release", () => {
   const pin = read("PIN");
   assert.match(pin, /^tag=v0\.8\.8$/m);
-  assert.match(pin, /^commit=e8f3be08623663d4ad7f7241e693c94469b63bb0$/m);
+  assert.match(pin, /^base=e8f3be08623663d4ad7f7241e693c94469b63bb0$/m);
+  assert.match(pin, /^commit=[0-9a-f]{40}$/m);
 });
 
 // Mutation checks: the guard must FAIL on each way of breaking a rule, or it is a
@@ -364,6 +365,122 @@ const mutants = [
     "a build.sh that skips the tag check",
     (f) => ({ ...f, buildSh: f.buildSh.replace(/refs\/tags/g, "refs/heads") }),
     /tag in PIN resolves/,
+  ],
+  [
+    "a private address allowed in production",
+    (f) => ({
+      ...f,
+      production: f.production.replace(
+        "endpoints:\n",
+        "endpoints:\n  allowedAddresses: ['127.0.0.1:8787']\n",
+      ),
+    }),
+    /endpoint type "allowedAddresses"/,
+  ],
+  [
+    "a wider allowed address in the test config",
+    (f) => ({
+      ...f,
+      test: f.test.replace("['127.0.0.1:8787']", "['10.0.0.5:443']"),
+    }),
+    /allowedAddresses must be exactly/,
+  ],
+  [
+    "streaming left on",
+    (f) => ({
+      ...f,
+      production: f.production.replace(
+        "disableStreaming: true",
+        "disableStreaming: false",
+      ),
+    }),
+    /disableStreaming: true/,
+  ],
+  [
+    "the user id no longer dropped",
+    (f) => ({
+      ...f,
+      production: f.production.replace(
+        "dropParams: ['user']",
+        "dropParams: []",
+      ),
+    }),
+    /dropParams must be exactly/,
+  ],
+  [
+    "allowedAddresses dropped from the test config",
+    (f) => ({ ...f, test: f.test.replace(/  allowedAddresses:.*\n/, "") }),
+    /allowedAddresses must be present/,
+  ],
+  [
+    "a repository override in build.sh",
+    (f) => ({
+      ...f,
+      buildSh: f.buildSh.replace(
+        'repo="https://github.com/shamwari-ai/librechat"',
+        'repo="${LIBRECHAT_REPO:-https://github.com/shamwari-ai/librechat}"',
+      ),
+    }),
+    /source repository must be the Shamwari fork/,
+  ],
+  [
+    "no upstream base in the pin",
+    (f) => ({ ...f, pin: f.pin.replace(/base=.*\n/, "") }),
+    /base must be the full 40-hex/,
+  ],
+  [
+    "a build.sh that skips the ancestry check",
+    (f) => ({
+      ...f,
+      buildSh: f.buildSh.replace("merge-base --is-ancestor", "echo"),
+    }),
+    /built on the upstream base/,
+  ],
+  [
+    "an ancestry check that only exists in a comment",
+    (f) => ({
+      ...f,
+      buildSh: f.buildSh.replace(
+        /git -C "\$work\/src" merge-base --is-ancestor[^\n]*\n[^\n]*\n/,
+        '# git merge-base --is-ancestor "$base" HEAD || { exit 1; }\n',
+      ),
+    }),
+    /built on the upstream base/,
+  ],
+  [
+    "an ancestry check that no longer exits",
+    (f) => ({
+      ...f,
+      buildSh: f.buildSh.replace(
+        /(is-ancestor "\$base" HEAD[\s\\]*\|\|\s*\{[^}]*)exit 1/,
+        "$1true",
+      ),
+    }),
+    /built on the upstream base/,
+  ],
+  [
+    "a tag compared against the fork commit",
+    (f) => ({
+      ...f,
+      buildSh: f.buildSh.replace(
+        '"$tagged" = "$base"',
+        '"$tagged" = "$commit"',
+      ),
+    }),
+    /resolves to the upstream base/,
+  ],
+  [
+    "a neutered check with || true",
+    (f) => ({ ...f, buildSh: f.buildSh + "\ngit status || true\n" }),
+    /\|\| true/,
+  ],
+  [
+    "commit equal to base (stock upstream)",
+    (f) => ({
+      ...f,
+      pin: f.pin.replace(/commit=.*/, "commit=" + /base=(.*)/.exec(f.pin)[1]),
+    }),
+    /not the stock upstream commit/,
   ],
 ];
 

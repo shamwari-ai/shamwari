@@ -58,7 +58,7 @@ Relayed: "librechat out the box is the base we build it to make it ours."
 | A. Config plus thin patches (original brief) | Stock image, patches in `PATCHES.md`                                      | Cheapest upgrades; cannot add a scope selector, structured citations or Servers API without patches |
 | B. Fork at the pinned tag (relayed)          | Repo under `shamwari-ai`, `upstream` remote, our work as separate commits | We own the code and can change anything; every upstream security release becomes our merge job      |
 
-If B, the policy: base is the exact tag `v0.8.8` (commit `e8f3be08`); `upstream`
+If B, the policy: base is the exact tag `v0.8.8` (commit `e8f3be08`) and the build pins the fork commit above it (see the pin table); `upstream`
 points at `danny-avila/LibreChat`; our changes land as clearly separated
 commits by area (theme, scope selector, citations, Servers API, voice and
 i18n) so a merge conflict names its owner; upstream release tags are merged
@@ -242,12 +242,13 @@ the owner names them and the rest stay as the original brief.
 
 ## The pin
 
-|         |                                                                                                                |
-| ------- | -------------------------------------------------------------------------------------------------------------- |
-| Project | LibreChat, `github.com/danny-avila/LibreChat`, MIT                                                             |
-| Release | `v0.8.8` (latest non-release-candidate tag on 1 Nov 2026; tagged 30 Sep 2026)                                  |
-| Commit  | `e8f3be08623663d4ad7f7241e693c94469b63bb0`                                                                     |
-| Image   | `ghcr.io/danny-avila/librechat:v0.8.8`, pinned by **digest** in the Dockerfile once the build step resolves it |
+|         |                                                                                                                                                            |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project | LibreChat, `github.com/danny-avila/LibreChat`, MIT                                                                                                         |
+| Release | `v0.8.8` (latest non-release-candidate tag on 1 Nov 2026; tagged 30 Sep 2026)                                                                              |
+| Base    | `e8f3be08623663d4ad7f7241e693c94469b63bb0`, the upstream commit the release tag names                                                                      |
+| Commit  | the Shamwari fork commit built (`chat/librechat/PIN`), which must sit on the base                                                                          |
+| Build   | from source at that commit by `chat/librechat/build.sh`; the project's ghcr image for `v0.8.8` was not in its tag list, so there is no image digest to pin |
 
 A floating tag (`latest`, `main`) is a CI failure. An upgrade is a pull request
 that changes the tag, re-runs every test below, and re-reads
@@ -443,7 +444,7 @@ comment, not a control.
    real-looking secret; it must be an environment reference or a fixed
    non-secret placeholder that the `Authorization` header from the person's
    sign-in overrides (to test);
-6. the image reference is not pinned by tag and digest;
+6. the build source is not pinned: `PIN` lacks a 40-hex `base` and `commit`, the commit equals the base, or `build.sh` does not check the commit, its ancestry on the base and the tag against the base;
 7. any `mcpServers`, `webSearch`, `ocr`, `speech` or `fileConfig` block routes to
    a host other than the gateway;
 8. `ALLOW_REGISTRATION`, `ALLOW_EMAIL_LOGIN` or `ALLOW_SOCIAL_LOGIN` is anything

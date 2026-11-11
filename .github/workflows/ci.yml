@@ -24,8 +24,63 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Which parts of the repository this change touches, so each job below runs only when its own code (or
+  # something it depends on) changed. A job that is skipped reports as skipped, which satisfies a required
+  # check, so a docs-only change does not wait for the Core image build or the browser tests. A change to
+  # this file, or one that cannot be diffed (a new branch, a force push), runs everything.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      gateway: ${{ steps.f.outputs.gateway }}
+      chat_guard: ${{ steps.f.outputs.chat_guard }}
+      core: ${{ steps.f.outputs.core }}
+      docs_site: ${{ steps.f.outputs.docs_site }}
+      site: ${{ steps.f.outputs.site }}
+      app: ${{ steps.f.outputs.app }}
+      mobile: ${{ steps.f.outputs.mobile }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
+        with:
+          fetch-depth: 0
+
+      - id: f
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          all=false
+          if [ -z "${BASE:-}" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            all=true
+            files=""
+          else
+            files="$(git diff --name-only "$BASE" HEAD)"
+          fi
+          while IFS= read -r f; do [ -n "$f" ] && echo "changed: $f"; done <<< "$files"
+          # Anything that changes how CI itself runs, runs everything.
+          if echo "$files" | grep -qx '.github/workflows/ci.yml'; then all=true; fi
+          hit() { # hit <extended regex over paths>
+            if [ "$all" = true ] || echo "$files" | grep -Eq "$1"; then echo true; else echo false; fi
+          }
+          {
+            # The gateway's tests read some of the docs (the status and sign-in pages) and two files
+            # from core/ (the usage-field list and main.py), so those count.
+            echo "gateway=$(hit '^(gateway/|core/|docs/)')"
+            echo "chat_guard=$(hit '^chat/')"
+            # Core's end-to-end contract runs the gateway Worker against Core.
+            echo "core=$(hit '^(core/|gateway/|scripts/|db/)')"
+            echo "docs_site=$(hit '^docs-site/')"
+            echo "site=$(hit '^(site/|docs/)')"
+            echo "app=$(hit '^site/')"
+            echo "mobile=$(hit '^mobile/')"
+          } >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
   gateway:
     name: Gateway (types, tests)
+    needs: changes
+    if: needs.changes.outputs.gateway == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -52,6 +107,8 @@ jobs:
 
   chat-guard:
     name: LibreChat guard (Rule 1)
+    needs: changes
+    if: needs.changes.outputs.chat_guard == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
@@ -73,8 +130,44 @@ jobs:
         run: npm test
         working-directory: chat/librechat
 
+  chat-e2e:
+    name: LibreChat stub-gateway e2e
+    needs: changes
+    if: needs.changes.outputs.chat_guard == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
+
+      # Builds LibreChat from the commit pinned in chat/librechat/PIN (the Shamwari
+      # fork) and checks the checkout equals the pin before building.
+      - name: Build the pinned image
+        run: chat/librechat/build.sh shamwari-chat:ci
+
+      # The whole stack runs on a network with no route out. Secrets are generated
+      # for this run only and never written to a file.
+      - name: Run LibreChat against the stub gateway
+        run: |
+          CREDS_KEY="$(openssl rand -hex 32)"
+          CREDS_IV="$(openssl rand -hex 16)"
+          JWT_SECRET="$(openssl rand -hex 32)"
+          JWT_REFRESH_SECRET="$(openssl rand -hex 32)"
+          export CREDS_KEY CREDS_IV JWT_SECRET JWT_REFRESH_SECRET
+          docker compose -f chat/librechat/e2e/compose.yml up \
+            --abort-on-container-exit --exit-code-from driver
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose -f chat/librechat/e2e/compose.yml logs --no-color --tail 200 || true
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f chat/librechat/e2e/compose.yml down -v || true
+
   core:
     name: Core (imports, syntax)
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
     env:
       # Core reads its configuration at import time and fails loudly on a
@@ -152,6 +245,8 @@ jobs:
 
   docs-site:
     name: Docs site (build, links, tokens, size)
+    needs: changes
+    if: needs.changes.outputs.docs_site == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -183,6 +278,8 @@ jobs:
   site:
     # Name kept as it was, so a required-status rule on it keeps working.
     name: Landing page (build, links, tokens, size)
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -216,7 +313,10 @@ jobs:
 
   app:
     name: Chat app (build, check, unit, e2e)
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
 
@@ -250,16 +350,39 @@ jobs:
       # local-only history, offline queue, axe, and the Mukoko sign-in (flag
       # on, against a stand-in for the session Worker). It builds its own
       # copies of the app (dist-e2e/) pointed at the mock.
+      # The browser is cached per Playwright version, and installed WITHOUT --with-deps: that flag runs apt
+      # for system packages, and when the runner's mirror does not resolve the job hung for ten minutes and
+      # failed before a single test ran (#184, #186, #188, #190). The runner image already carries every
+      # library Chromium links against; the packages --with-deps added in those logs were fonts for scripts
+      # this app does not render. If a library were ever missing, the e2e step below fails loudly, it does
+      # not pass quietly. Each step has its own timeout so a hung download fails in minutes.
+      - name: Playwright version
+        id: pw
+        run: echo "version=$(npx playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
+        working-directory: site
+
+      - name: Cache the browser
+        id: pw-cache
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae  # v5.0.5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
       - name: Install browser
-        run: npx playwright install --with-deps chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
+        timeout-minutes: 10
         working-directory: site
 
       - name: End-to-end tests
         run: npm run e2e
+        timeout-minutes: 15
         working-directory: site
 
   mobile:
     name: Mobile (types, tests)
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6

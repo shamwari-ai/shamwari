@@ -1,3 +1,4 @@
+import { startUpdateNotice } from './update';
 import { startApp } from './app';
 import { LANGUAGES } from './strings';
 
@@ -21,14 +22,63 @@ const authMode = document.querySelector<HTMLMetaElement>('meta[name="shamwari-au
 if (apiBase) {
   void startApp({ apiBase, authMode });
 }
+startUpdateNotice();
 
 // Offline shell. Registered after load so it never competes with the first paint,
 // and scoped to /lite/ so the marketing pages are never served from it.
 if ('serviceWorker' in navigator) {
-  addEventListener('load', () => {
-    void navigator.serviceWorker.register('/lite/sw.js', { scope: '/lite/' }).catch(() => {
-      /* no service worker (private mode, old WebView): the app still works online */
+  // A new build installs in the background and waits. The person is told ("A new version is ready") and
+  // chooses when to switch (chat/update.ts); only then does the waiting worker take over and the page reload.
+  // The first install also fires controllerchange (it claims the page), so only a page that already had a
+  // worker reloads.
+  let reloading = false;
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;
+    reloading = true;
+    location.reload();
+  });
+  const offer = (waiting: ServiceWorker) => {
+    const ask = new Promise<string>((done) => {
+      const ch = new MessageChannel();
+      ch.port1.onmessage = (e) => done(String(e.data));
+      waiting.postMessage('version', [ch.port2]);
+      setTimeout(() => done(''), 1500);
     });
+    void ask.then((version) =>
+      dispatchEvent(new CustomEvent('shamwari:update', { detail: { version, apply: () => waiting.postMessage('skip-waiting') } })),
+    );
+  };
+  // The release this page is running ("v0.0.74"), shown at the foot of the drawer, so a person can tell which they have.
+  const showCurrent = (worker: ServiceWorker | null | undefined) => {
+    if (!worker) return;
+    const ch = new MessageChannel();
+    ch.port1.onmessage = (e) => {
+      for (const el of document.querySelectorAll('[data-current-version]')) el.textContent = String(e.data);
+      for (const el of document.querySelectorAll<HTMLElement>('[data-current-version-line]')) el.hidden = false;
+    };
+    worker.postMessage('version', [ch.port2]);
+  };
+  addEventListener('load', () => {
+    navigator.serviceWorker
+      .register('/lite/sw.js', { scope: '/lite/' })
+      .then((reg) => {
+        showCurrent(navigator.serviceWorker.controller ?? reg.active);
+        // Only an UPDATE is offered: with no controller this is the first install, which claims by itself.
+        const ready = (w: ServiceWorker | null) => {
+          if (w && navigator.serviceWorker.controller) offer(w);
+        };
+        ready(reg.waiting);
+        reg.addEventListener('updatefound', () => {
+          const w = reg.installing;
+          w?.addEventListener('statechange', () => {
+            if (w.state === 'installed') ready(w);
+          });
+        });
+      })
+      .catch(() => {
+        /* no service worker (private mode, old WebView): the app still works online */
+      });
   });
 }
 
