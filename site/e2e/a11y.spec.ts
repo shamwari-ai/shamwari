@@ -282,7 +282,7 @@ test('a new version is offered as a pop-up, becomes a card in the drawer, and Up
   expect(await underTheFloor(page), 'drawer with the update card').toEqual([]);
 
   // Closing it brings the pop-up back; Later hides it, the card stays.
-  await page.keyboard.press('Escape');
+  await closeChats(page);
   await expect(page.locator('#update')).toBeVisible();
   expect(await underTheFloor(page), 'pop-up').toEqual([]);
   await page.getByRole('button', { name: 'Later' }).click();
