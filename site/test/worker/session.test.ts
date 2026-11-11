@@ -155,6 +155,27 @@ describe('token', () => {
     expect(setCookies(res)[0]).toContain(`${SESSION_COOKIE}=SEALED2`);
   });
 
+  it('refreshes a token issued more than half an hour ago even with hours left on it (the gateway refuses tokens over an hour old)', async () => {
+    const port = fakePort();
+    const old = jwt({ iat: secs - 31 * 60, exp: secs + 4 * 3600, sid: 's1' });
+    port.checkResult = { status: 'valid', accessToken: old, sid: 's1' };
+    const fresh = jwt({ iat: secs, exp: secs + 5 * 3600, sid: 's1' });
+    let refreshed = 0;
+    const res = await handle(
+      withCookie(),
+      deps(port, async () => (refreshed++, { status: 'ok', sealed: 'SEALED2', accessToken: fresh })),
+    );
+    expect(refreshed).toBe(1);
+    expect(await res.json()).toEqual({ access_token: fresh, expires_at: secs + 5 * 3600 });
+
+    // A token issued ten minutes ago with hours left is still handed out as it is.
+    const young = jwt({ iat: secs - 600, exp: secs + 4 * 3600, sid: 's1' });
+    port.checkResult = { status: 'valid', accessToken: young, sid: 's1' };
+    const again = await handle(withCookie(), deps(port, async () => (refreshed++, { status: 'denied' })));
+    expect(refreshed).toBe(1);
+    expect(((await again.json()) as { access_token: string }).access_token).toBe(young);
+  });
+
   it('refreshes an expired token, keyed by the session id', async () => {
     const port = fakePort();
     port.checkResult = { status: 'expired', sid: 'sess-9' };

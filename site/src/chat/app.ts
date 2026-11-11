@@ -16,6 +16,12 @@ import { newId, openStore, titleOf, type Artifact, type Project, type StoredMess
 import { LANGUAGES, isLanguage } from './strings';
 import type { AskErrorKind, ChatMessage, Scope } from './types';
 
+/**
+ * The only scope this client asks with. There is no control for it anywhere: the person is never asked which kind of
+ * knowledge they mean. (Deciding it from the person and the question is a server-side change.) It is a constant, so
+ * `personal` can never be sent from here, and a question saved under any other scope is never sent by itself (see deliver).
+ */
+const GENERAL: Scope = 'platform';
 const RETRY_FIRST_MS = 15_000;
 const RETRY_MAX_MS = 5 * 60_000;
 /** Unanswered tries, while the browser reports online, before it stops retrying quietly. */
@@ -50,13 +56,27 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   document.documentElement.dataset.auth = auth.kind;
 
   let lang = currentLanguage();
-  let scope: Scope = 'platform';
   /** Messages with a request in flight. Replaces one global lock, so asking and the queue never block each other. */
   const inflight = new Set<string>();
   let flushing = false;
   let flushAgain = false;
   let retryMs = RETRY_FIRST_MS;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
+  /**
+   * OFFLINE MODE (the switch in the top bar). While it is on NOTHING goes to the network: a question is written to this
+   * device and stays there, no queue is replayed, no timer retries, and the session is not renewed. It is remembered
+   * across reloads. Turning it off sends nothing by itself either: a question written in the mode waits for the person's
+   * own "Send now"; only a question that was already queued before the mode went on resumes its normal retry.
+   */
+  const OFFLINE_KEY = 'shamwari.offlineMode';
+  const readOffline = (): boolean => {
+    try {
+      return localStorage.getItem(OFFLINE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  };
+  let offlineMode = readOffline();
 
   /**
    * One object per thread, however often the store is read. Without it, opening
@@ -134,11 +154,14 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   // ---- rendering -----------------------------------------------------------
   const actionsFor = (m: StoredMessage): ErrorActions => ({
     retry: () => void deliver(thread, m),
-    askGeneral: () => void ask(m.text, 'platform'),
+    askGeneral: () => void ask(m.text),
     signIn: () => showAuth(),
   });
 
-  const queueActionsFor = (m: StoredMessage): QueueActions => ({
+  const queueActionsFor = (m: StoredMessage): QueueActions | undefined =>
+    // A question kept by offline mode offers "Send now" only once the mode is off (and never sends by itself).
+    m.status === 'local' && offlineMode ? undefined : queueActions(m);
+  const queueActions = (m: StoredMessage): QueueActions => ({
     sendNow: () => void deliver(thread, m),
     discard: async () => {
       thread.messages = thread.messages.filter((x) => x !== m);
@@ -204,9 +227,27 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     thread = found;
     rebuild();
     void renderHistory();
+    showSection('chat');
     closeDrawer();
     $('#thread').focus();
   };
+
+  // ---- the drawer's sections: Chat, Projects, Artifacts, Plugins ------------------------------------------
+  type Section = 'chat' | 'projects' | 'artifacts' | 'plugins';
+  let pluginsLoaded = false;
+  const showSection = (name: Section) => {
+    document.querySelectorAll<HTMLElement>('[data-panel]').forEach((p) => (p.hidden = p.dataset.panel !== name));
+    document.querySelectorAll<HTMLElement>('[data-section]').forEach((b) => {
+      if (b.dataset.section === name) b.setAttribute('aria-current', 'page');
+      else b.removeAttribute('aria-current');
+    });
+    if (name === 'plugins' && !pluginsLoaded) {
+      pluginsLoaded = true;
+      // Loaded on first use: the chat's first load does not carry the tabs.
+      void import('./plugins').then((m) => m.initPlugins(document)).catch(() => (pluginsLoaded = false));
+    }
+  };
+  document.querySelectorAll<HTMLElement>('[data-section]').forEach((b) => b.addEventListener('click', () => showSection(b.dataset.section as Section)));
 
   const threadButton = (t: Thread): HTMLElement => {
     const b = h('button', { type: 'button', class: 'btn link' }, t.title || '…');
@@ -248,6 +289,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     const loose = all.filter((t) => t.id !== thread.id && !t.pinned && !t.projectId);
     $('#history-list').replaceChildren(...loose.map(threadButton));
     $('#side-chats').hidden = loose.length === 0;
+    $('#chats-empty').hidden = loose.length + pinnedProjects.length + pinnedChats.length > 0;
 
     $('#artifact-list').replaceChildren(
       ...artifacts.map((a) => {
@@ -257,6 +299,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
       }),
     );
     $('#side-artifacts').hidden = artifacts.length === 0;
+    $('#artifacts-empty').hidden = artifacts.length > 0;
 
     syncChatTools();
   };
@@ -395,7 +438,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     for (const m of th.messages) {
       if (m === target) break;
       if (m.role === 'assistant') out.push({ role: 'assistant', content: m.text });
-      else if (!m.error && m.status !== 'queued') out.push({ role: 'user', content: m.text });
+      else if (!m.error && m.status !== 'queued' && m.status !== 'local') out.push({ role: 'user', content: m.text });
     }
     out.push({ role: 'user', content: target.text });
     return out.slice(-(saveData() ? CONTEXT_SAVER : CONTEXT));
@@ -410,8 +453,20 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
    */
   async function deliver(th: Thread, m: StoredMessage): Promise<void> {
     if (inflight.has(m.id)) return;
+    if (offlineMode) return; // defence in depth: nothing reaches the network while the mode is on
     if (!auth.signedIn()) {
       showAuth();
+      return;
+    }
+    // A question saved from before there was one scope: `community` was allowed to reach the cloud, so it is sent as
+    // it was saved. Anything else (`personal`, or a scope this version does not know) is not sent by itself, now or
+    // later: nothing goes to the network. It is shown with the honest explanation and a button that asks it as a
+    // general question, which is the person's own choice and a new question, never a quiet downgrade of this one.
+    if (m.scope && m.scope !== GENERAL && m.scope !== 'community') {
+      m.status = 'failed';
+      m.error = { kind: 'scope_requires_local_inference', retryAfterSec: null, upgradeUrl: null };
+      await save(th);
+      if (th === thread) mount(m); // mount draws the error under the question
       return;
     }
     const shown = () => th === thread;
@@ -446,7 +501,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
       }
 
       let res = await client.ask(
-        { messages: contextFor(th, m), scope: m.scope ?? 'platform' },
+        { messages: contextFor(th, m), scope: m.scope === 'community' ? 'community' : GENERAL },
         { idempotencyKey: m.id },
       );
       // No credential could be obtained (the renewal failed on the network, say) for
@@ -529,7 +584,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
    */
   async function flush(): Promise<void> {
     // Offline, a timer-driven try can only fail; the `online` event runs this again.
-    if (!auth.signedIn() || !navigator.onLine) return;
+    if (!auth.signedIn() || !navigator.onLine || offlineMode) return;
     if (flushing) {
       flushAgain = true;
       return;
@@ -555,11 +610,12 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
 
   function scheduleRetry() {
     clearTimeout(retryTimer);
+    if (offlineMode) return;
     retryTimer = setTimeout(() => void flush(), retryMs);
     retryMs = Math.min(retryMs * 2, RETRY_MAX_MS);
   }
 
-  async function ask(text: string, withScope: Scope = scope): Promise<void> {
+  async function ask(text: string): Promise<void> {
     const clean = text.trim();
     if (!clean) return;
     // Straight after the sign-in redirect the cookie has not been turned into a token yet. A
@@ -570,13 +626,19 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
       showAuth();
       return;
     }
-    const m: StoredMessage = { id: newId(), role: 'user', text: clean, at: Date.now(), scope: withScope, status: 'sent' };
+    const m: StoredMessage = { id: newId(), role: 'user', text: clean, at: Date.now(), scope: GENERAL, status: 'sent' };
     if (!thread.messages.length) thread.title = titleOf(clean);
     thread.messages.push(m);
     syncEmpty();
     input.value = '';
     autosize();
-    if (!navigator.onLine) {
+    if (offlineMode) {
+      // Offline mode: written to this device and kept there. Not queued, not retried, never sent unless the person
+      // turns the mode off and chooses "Send now".
+      m.status = 'local';
+      await save(thread);
+      mount(m);
+    } else if (!navigator.onLine) {
       // Offline: do not even try. Save it, say so, send it when the network is back.
       m.status = 'queued';
       // Stored first, shown second: "waiting to send" must only appear once the
@@ -592,13 +654,50 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
 
   // ---- auth ----------------------------------------------------------------
   const authPanel = $('#auth');
+  /** Back from a sign-in that failed: stop here and say so, do not send the person round the same loop again. */
+  const cameBackFailed = new URLSearchParams(location.search).get('signin') === 'failed';
   const syncAuth = () => {
     $('#signout').hidden = !auth.signedIn();
   };
-  function showAuth() {
-    authPanel.hidden = false;
+  /** Which whole screen is showing: the chat, or the sign-in. Never both, and never the chat with a prompt on it. */
+  const HOP = 'shamwari.signin.hop';
+  const setView = (view: 'app' | 'signin' | 'pending') => {
+    // A modal left open (a saved answer) would stay modal behind a hidden chat and come back stale.
+    if (view !== 'app') document.querySelectorAll<HTMLDialogElement>('dialog[open]').forEach((d) => d.close());
+    document.documentElement.dataset.view = view;
+    // 'pending' is neither screen: the first answer from the session is awaited, so a person who has a session never sees
+    // the sign-in flash and one who has none never sees the chat.
+    authPanel.hidden = view !== 'signin';
+  };
+  const syncOffline = () => {
+    $('#signin-offline').hidden = !(auth.kind === 'mukoko' && !navigator.onLine);
+  };
+  window.addEventListener('online', syncOffline);
+  window.addEventListener('offline', syncOffline);
+  /**
+   * The sign-in screen. With a session that has ended and a network to reach it, the app goes straight to the hosted
+   * sign-in instead (`redirect`), once: a sign-in that comes straight back signed out must stop here, not loop.
+   */
+  function showAuth(redirect = false) {
+    setView('signin');
+    const offline = !navigator.onLine;
+    syncOffline();
     const go = $<HTMLButtonElement>('#mukoko-signin');
-    (go.disabled ? $('#auth-title') : go).focus();
+    if (redirect && auth.kind === 'mukoko' && !offline && !cameBackFailed) {
+      let recent = false;
+      try {
+        recent = Date.now() - Number(sessionStorage.getItem(HOP) ?? 0) < 30_000;
+        if (!recent) sessionStorage.setItem(HOP, String(Date.now()));
+      } catch {
+        /* no session storage: the sign-in screen is shown, which is the safe side */
+        recent = true;
+      }
+      if (!recent) {
+        location.replace('/lite/auth/login');
+        return;
+      }
+    }
+    (go.disabled || go.hidden ? $('#auth-title') : go).focus();
   }
 
   $('#signout').addEventListener('click', async () => {
@@ -611,11 +710,18 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     // their chats off this device so the next person to open it does not read them.
     if (auth.kind === 'mukoko') {
       await wipeHistory();
-      $('#toast').textContent = strings().signedOutCleared;
+    }
+    // The screen changes now, without waiting on the network: a hung sign-out request must not leave the chat on show.
+    syncAuth();
+    showAuth();
+    // On the sign-in screen itself: the chat (and its toast) is not on screen while signed out.
+    if (auth.kind === 'mukoko') {
+      const note = $('#signin-note');
+      note.textContent = strings().signedOutCleared;
+      note.hidden = false;
     }
     await ended;
     syncAuth();
-    showAuth();
   });
   const mukokoBtn = $<HTMLButtonElement>('#mukoko-signin');
   if (auth.kind === 'mukoko') {
@@ -623,7 +729,8 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     // drop the parameter so a reload does not say it again.
     const params = new URLSearchParams(location.search);
     if (params.get('signin') === 'failed') {
-      $('#toast').textContent = strings().signInFailed;
+      // On the sign-in screen itself: the chat (and its toast) is not on screen while signed out.
+      $('#signin-failed').hidden = false;
       params.delete('signin');
       const rest = params.toString();
       history.replaceState(null, '', location.pathname + (rest ? `?${rest}` : '') + location.hash);
@@ -633,6 +740,8 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     mukokoBtn.removeAttribute('aria-describedby'); // it pointed at the "coming soon" text
     $('#signout').dataset.i18n = 'signOut';
     mukokoBtn.addEventListener('click', async () => {
+      $('#signin-failed').hidden = true; // a new try: the old failure is not still the news
+      $('#signin-note').hidden = true;
       if (auth.prepareSignIn && !(await auth.prepareSignIn())) {
         $('#toast').textContent = strings().signInRetry;
         return;
@@ -659,12 +768,16 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     void ask(input.value);
   });
 
-  const scopeSelect = $<HTMLSelectElement>('#scope');
-  scopeSelect.addEventListener('change', () => {
-    scope = scopeSelect.value as Scope;
-  });
+  // The three suggested prompts fill the box and put the cursor in it: one tap less than typing, and nothing is sent
+  // until the person presses send (a prompt tapped by accident on a phone must not become a question).
   document.querySelectorAll<HTMLButtonElement>('[data-example]').forEach((b) =>
-    b.addEventListener('click', () => void ask(b.textContent ?? '')),
+    b.addEventListener('click', () => {
+      const text = (b.textContent ?? '').trim();
+      // Never over a draft: what the person already typed is kept, and the prompt goes after it.
+      input.value = input.value.trim() ? `${input.value.trimEnd()}\n${text}` : text;
+      autosize();
+      input.focus();
+    }),
   );
 
   // The drawer's foot: New chat, as in the top bar. Settings is a disclosure and opens by itself.
@@ -673,6 +786,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     document.querySelector<HTMLButtonElement>('#new-chat button')?.click();
   });
   $('#new-chat').addEventListener('click', () => {
+    showSection('chat'); // a new chat is a chat: the drawer's next opening shows the chats again
     if (thread.messages.length) {
       thread = fresh();
       rebuild();
@@ -693,6 +807,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     live.clear();
     thread = fresh();
     rebuild();
+    showSection('chat');
     void renderHistory();
   }
 
@@ -712,6 +827,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     saveLanguage(lang);
     applyStrings(document, lang);
     labelShell();
+    syncOfflineMode();
     rebuild();
     void renderHistory();
   });
@@ -729,31 +845,77 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     if (document.visibilityState === 'visible' && navigator.onLine) void flush();
   });
 
+  // ---- offline mode ---------------------------------------------------------------------------------------
+  const offlineSwitch = $<HTMLButtonElement>('#offline-mode');
+  const syncOfflineMode = () => {
+    const s = strings();
+    offlineSwitch.setAttribute('aria-checked', String(offlineMode));
+    offlineSwitch.dataset.state = offlineMode ? 'on' : 'off';
+    offlineSwitch.querySelector('.offline-state')!.textContent = offlineMode ? s.offlineModeOn : s.offlineModeOff;
+    $('#offline-mode-note').hidden = !offlineMode;
+    document.documentElement.toggleAttribute('data-offline-mode', offlineMode);
+  };
+  offlineSwitch.addEventListener('click', () => {
+    offlineMode = !offlineMode;
+    try {
+      localStorage.setItem(OFFLINE_KEY, offlineMode ? '1' : '0');
+    } catch {
+      /* no storage: the mode holds for this visit only */
+    }
+    if (offlineMode) {
+      clearTimeout(retryTimer); // nothing replays while it is on
+    } else {
+      retryMs = RETRY_FIRST_MS;
+      // Back to normal: a session is renewed, and a question that was queued BEFORE the mode went on resumes its retry.
+      // A question written IN the mode is not sent by this: it waits for the person's own "Send now".
+      void (auth.kind === 'mukoko' ? auth.refresh() : Promise.resolve(true)).then(() => {
+        if (!offlineMode && navigator.onLine && auth.signedIn()) void flush();
+      });
+    }
+    syncOfflineMode();
+    rebuild(); // each kept question shows the state that matches the mode
+    void renderHistory();
+  });
+
   // ---- go ------------------------------------------------------------------
+  syncOfflineMode();
   applyStrings(document, lang);
   labelShell();
   rebuild();
   online();
   syncAuth();
   void renderHistory();
+  // Before the first renewal answers: the chat only for a device that holds (or held) a session, else the sign-in screen.
+  setView(auth.signedIn() ? 'app' : auth.kind === 'mukoko' ? 'pending' : 'signin');
   document.documentElement.dataset.ready = 'true';
   const afterAuth = () => {
     document.documentElement.dataset.authReady = 'true';
-    if (navigator.onLine && hasQueued([thread, ...saved])) void flush();
+    if (navigator.onLine && !offlineMode && hasQueued([thread, ...saved])) void flush();
   };
   if (auth.kind === 'mukoko') {
     // One silent renewal at start (the session cookie, if there is one, becomes a
     // token in memory), alongside the UI instead of in front of it: a slow link
     // must not hold up showing and writing questions. Until it answers, the
     // sign-in panel stays down so a signed-in person never sees it flash.
-    startup = auth.refresh().then(() => {
+    // In offline mode no request is made, not even the silent renewal: the hint of a past sign-in opens the chat.
+    startup = (offlineMode && auth.signedIn() ? Promise.resolve(true) : auth.refresh()).then(() => {
       startup = null;
-      authPanel.hidden = auth.signedIn();
+      // Signed in (a session, or the hint of one while offline): the chat. Otherwise the session has ended: straight to sign-in.
+      if (auth.signedIn()) {
+        setView('app');
+        // A sign-in that worked: the next time a session ends it is a new story, so the guard against a loop is cleared.
+        try {
+          sessionStorage.removeItem(HOP);
+        } catch {
+          /* nothing to clear */
+        }
+      } else showAuth(true);
       syncAuth();
       afterAuth();
     });
   } else {
-    if (!auth.signedIn()) authPanel.hidden = false;
+    if (auth.signedIn()) setView('app');
+    else showAuth();
     afterAuth();
   }
 }

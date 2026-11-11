@@ -2,12 +2,24 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "shamwari-site",
   "compatibility_date": "2026-08-01",
-  "observability": { "enabled": true },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": false,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true,
+    },
+    "traces": { "enabled": false, "head_sampling_rate": 1, "persist": true },
+    "issue_detection": { "enabled": true },
+  },
 
   // Astro's static output. No Worker script, no bindings, no secrets.
   "assets": { "directory": "./dist" },
 
-  // The MARKETING site. The chat app is a separate Worker (wrangler.app.jsonc,
+  // The MARKETING site. The chat app is a separate Worker (app/wrangler.jsonc,
   // `shamwari-app`) that owns the apex https://shamwari.ai (moved on 2026-11-11); this one is
   // on https://www.shamwari.ai only. workers_dev gives a preview URL:
   // https://shamwari-site.nyuchi.workers.dev

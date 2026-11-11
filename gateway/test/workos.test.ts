@@ -7,6 +7,7 @@
 // a JWKS outage being treated as a revoked session (or, worse, as success), a token
 // carrying a personal permission reaching personal scope (rule 1), and the two
 // credential shapes being tried against each other's verifier.
+import prodConfig from '../wrangler.jsonc?raw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 import type { JWK } from 'jose';
@@ -359,6 +360,106 @@ describe('audience is optional by config, required when configured', () => {
     expect(await verify(await token({ aud: null }))).toBe('invalid');
     expect(await verify(await token({ aud: 'https://other.example' }))).toBe('invalid');
     expect(await verify(await token())).toBe('ok');
+  });
+});
+
+describe('a comma-separated client id list', () => {
+  const two = () => makeEnv({ WORKOS_CLIENT_ID: `${CLIENT}, client_second ,` }); // spaces and an empty entry are tolerated
+
+  it('accepts a token from either listed application', async () => {
+    expect(await verify(await token({ clientId: CLIENT }), two())).toBe('ok');
+    expect(await verify(await token({ clientId: 'client_second' }), two())).toBe('ok');
+  });
+
+  it('refuses a token from any application not listed', async () => {
+    expect(await verify(await token({ clientId: 'client_third' }), two())).toBe('invalid');
+    expect(await verify(await token({ clientId: 'client_secon' }), two())).toBe('invalid'); // a prefix is not a match
+    expect(await verify(await token({ clientId: null }), two())).toBe('invalid');
+  });
+
+  it.each([[','], [' , '], [',,']])('a list with no id in it (%j) is unavailable, never "accept any"', async (list) => {
+    expect(await verify(await token(), makeEnv({ WORKOS_CLIENT_ID: list }))).toBe('unavailable');
+    expect(await verify(await token({ clientId: 'client_second' }), makeEnv({ WORKOS_CLIENT_ID: list }))).toBe('unavailable');
+  });
+
+  it('the keys still come from the first id, and a signature from elsewhere is still refused', async () => {
+    expect(await verify(await token({ key: otherSigning, clientId: 'client_second' }), two())).toBe('invalid');
+  });
+});
+
+describe('every issuer the production config lists is accepted, and no other', () => {
+  const listed = (/"WORKOS_ISSUER":\s*"([^"]+)"/.exec(prodConfig)?.[1] ?? '').split(',');
+
+  it('lists the four expected issuers', () => {
+    expect(listed).toEqual([
+      'https://auth.mukoko.com',
+      'https://auth.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0',
+      'https://accounts.mukoko.com',
+      'https://accounts.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0',
+    ]);
+  });
+
+  it.each([0, 1, 2, 3])('accepts a token whose iss is listed issuer #%i, with or without a trailing slash', async (i) => {
+    const env = makeEnv({ WORKOS_ISSUER: listed.join(',') });
+    expect(await verify(await token({ iss: listed[i] }), env)).toBe('ok');
+    expect(await verify(await token({ iss: `${listed[i]}/` }), env)).toBe('ok');
+  });
+
+  it.each([
+    'https://api.workos.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0',
+    'https://auth.mukoko.com/user_management/client_other',
+    'https://auth.mukoko.com.evil.example',
+    'http://auth.mukoko.com',
+  ])('refuses an unlisted issuer: %s', async (iss) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await verify(await token({ iss }), makeEnv({ WORKOS_ISSUER: listed.join(',') }))).toBe('invalid');
+    spy.mockRestore();
+  });
+});
+
+describe('a refused token is logged by claim name, iss and client_id only', () => {
+  beforeEach(() => resetJwksCache());
+  const cases: [string, TokenOpts, string][] = [
+    ['iss', { iss: 'https://unknown.example' }, 'claim=iss iss=https://unknown.example client_id=client_test'],
+    ['client_id', { clientId: 'client_zzz' }, 'claim=client_id iss=' + ISSUER + ' client_id=client_zzz'],
+    ['exp', { exp: Math.floor(Date.now() / 1000) - 60 }, 'claim=exp'],
+  ];
+  it.each(cases)('%s: one line with the claim name and the two values', async (_n, opts, want) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await verify(await token(opts))).toBe('invalid');
+    const lines = spy.mock.calls.map((c) => c.join(' '));
+    spy.mockRestore();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('workos token refused');
+    expect(lines[0]).toContain(want);
+  });
+
+  it('never prints the token or the person, and cleans control characters out of iss (one line, no injection)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const t = await token({ iss: 'https://evil.example\nINJECTED line' });
+    await verify(t);
+    const out = spy.mock.calls.map((c) => c.join(' ')).join('\n');
+    spy.mockRestore();
+    expect(out).not.toContain(t);
+    expect(out.split('\n')).toHaveLength(1);
+    expect(out).toContain('iss=https://evil.example?INJECTED');
+    for (const personal of ['person_abc123', 'sub=', 'sid=', '@']) expect(out).not.toContain(personal);
+  });
+
+  it('a bad signature on a good token is not logged as a claim failure', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await verify(await token({ key: otherSigning }))).toBe('invalid');
+    const out = spy.mock.calls.map((c) => c.join(' ')).join('\n');
+    spy.mockRestore();
+    expect(out).not.toContain('claim=iss');
+  });
+
+  it('is capped, so a flood of forged tokens is not a flood of logs', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    for (let i = 0; i < 60; i++) await verify(await token({ iss: `https://flood${i}.example` }));
+    const n = spy.mock.calls.length;
+    spy.mockRestore();
+    expect(n).toBeLessThanOrEqual(20);
   });
 });
 

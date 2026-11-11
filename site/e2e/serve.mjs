@@ -8,6 +8,11 @@ import { extname, join, normalize } from 'node:path';
 const port = Number(process.argv[2] ?? 4322);
 const root = new URL(`../${process.argv[3] ?? 'dist-e2e'}/`, import.meta.url).pathname;
 const stubAuth = process.argv.includes('--stub-auth');
+// --gate: stand in for the Worker's gate (worker/gate.ts). Everything under /lite/ except the short public list needs the
+// session cookie, and a REAL BROWSER decides whether the cookie is sent (its Path is /lite/), which is the point: a gated
+// file outside that path never loads.
+const gated = process.argv.includes('--gate');
+const PUBLIC = /^\/lite\/(disclaimer\/?|manifest\.webmanifest|sw\.js|icons\/[\w.-]+\.png|_astro\/[\w.-]+\.css)$/;
 
 // A STAND-IN for the chat session Worker (docs/chat-signin.md), which is a design,
 // not code. It speaks only the three calls the page makes and keeps its state in
@@ -99,6 +104,13 @@ createServer(async (req, res) => {
   }
   if (stubAuth && (path.startsWith('/__stub/') || path.startsWith('/lite/auth/'))) {
     if ((await stubRoute(req, res, path)) !== false) return;
+  }
+  if (gated && (path.startsWith('/lite/') || path.startsWith('/_astro/')) && !PUBLIC.test(path)) {
+    if (!/(^|;\s*)stub_session=1/.test(req.headers.cookie ?? '')) {
+      const shell = path === '/lite/' || path === '/lite/index.html';
+      res.writeHead(shell ? 302 : 401, shell ? { Location: '/lite/auth/login', 'Cache-Control': 'no-store' } : { 'Cache-Control': 'no-store' });
+      return res.end();
+    }
   }
   let file = join(root, path);
   try {

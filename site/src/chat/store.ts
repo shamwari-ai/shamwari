@@ -14,7 +14,7 @@ export interface StoredMessage {
   at: number;
   scope?: Scope;
   /** user messages: `queued` = written offline, waiting to be sent. */
-  status?: 'sent' | 'queued' | 'failed';
+  status?: 'sent' | 'queued' | 'failed' | 'local';
   /** assistant messages */
   answer?: Answer;
   /** Why a queued question is waiting, when it is not simply offline (a brief 503, say). */

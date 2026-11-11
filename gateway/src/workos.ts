@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, errors, jwtVerify } from 'jose';
+import { createRemoteJWKSet, decodeJwt, errors, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
 import type { AuthContext, Env, Scope } from './types';
 
@@ -67,7 +67,8 @@ export function workosEnabled(env: Env): boolean {
 }
 
 interface Config {
-  clientId: string;
+  /** Every client id whose tokens are accepted (one or more AuthKit applications). */
+  clientIds: string[];
   /** Each configured `iss`, and the same with a trailing slash added. */
   issuers: string[];
   /** Absent means the `aud` claim is not checked: `iss`, `client_id` and `exp` carry the isolation. */
@@ -79,8 +80,16 @@ interface Config {
 
 /** null when enabled but incomplete: that is 'unavailable', never "accept anyway". */
 function config(env: Env): Config | null {
-  const { WORKOS_CLIENT_ID: clientId, WORKOS_ISSUER: issuer, WORKOS_AUDIENCE: audience } = env;
+  const { WORKOS_CLIENT_ID: clientIdList, WORKOS_ISSUER: issuer, WORKOS_AUDIENCE: audience } = env;
   const cap = Number(env.WORKOS_MONTHLY_TOKEN_CAP);
+  // One or more client ids, comma separated (the mobile app signs in through Shamwari Chat, the light chat
+  // through Mukoko Account). Blank entries are dropped; a list with nothing left is a configuration error,
+  // never "accept any".
+  const clientIds = (clientIdList ?? '')
+    .split(',')
+    .map((c) => c.trim())
+    .filter((c) => c !== '');
+  const clientId = clientIds[0];
   if (!clientId || !issuer) return null;
   // Optional by owner decision: the Shamwari Chat app is its own AuthKit application, so the
   // `client_id` check already isolates it, and `aud` sits in a JWT template shared by every
@@ -119,7 +128,7 @@ function config(env: Env): Config | null {
     if (bare === '') return null;
     issuers.push(bare, `${bare}/`);
   }
-  return { clientId, issuers, audience, jwksUrl, monthlyTokenCap: cap, maxTokenAgeSeconds: maxAge };
+  return { clientIds, issuers, audience, jwksUrl, monthlyTokenCap: cap, maxTokenAgeSeconds: maxAge };
 }
 
 // One JWKS set per URL per isolate. jose caches the keys, re-fetches on an
@@ -144,9 +153,11 @@ function jwksFor(url: URL) {
   return set;
 }
 
-/** For tests: forget cached keys so one test's JWKS does not answer for the next. */
+/** For tests: forget cached keys so one test's JWKS does not answer for the next, and restart the log cap. */
 export function resetJwksCache(): void {
   jwksSets.clear();
+  logWindowStart = 0;
+  logged = 0;
 }
 
 /**
@@ -159,6 +170,38 @@ export function resetJwksCache(): void {
 const OURS = new Set(['ERR_JWKS_TIMEOUT', 'ERR_JOSE_GENERIC', 'ERR_JWKS_INVALID']);
 function isVerdict(e: unknown): boolean {
   return e instanceof errors.JOSEError && !OURS.has(e.code);
+}
+
+/**
+ * One log line for a token refused over a claim, so Workers Logs shows what a real token carries (above all `iss`,
+ * which was never read off a real one). Only the NAME of the failing claim and the token's `iss` and `client_id`
+ * values: never the token, `sub`, email or any other claim. Those two come from a token nobody has verified yet, so
+ * they are cleaned (control characters out, length cut) before they reach a log, and the number of lines is capped
+ * per isolate and minute so a flood of forged tokens cannot become a flood of logs.
+ */
+let logWindowStart = 0;
+let logged = 0;
+const LOG_PER_MINUTE = 20;
+function clean(v: unknown): string {
+  return typeof v === 'string' ? v.replace(/[^\x20-\x7e]/g, '?').slice(0, 120) : String(typeof v);
+}
+function logRefusal(token: string, claim: string): void {
+  const now = Date.now();
+  if (now - logWindowStart > 60_000) {
+    logWindowStart = now;
+    logged = 0;
+  }
+  if (++logged > LOG_PER_MINUTE) return;
+  let iss: unknown;
+  let clientId: unknown;
+  try {
+    const c = decodeJwt(token);
+    iss = c.iss;
+    clientId = c.client_id;
+  } catch {
+    // not decodable: nothing to report beyond the claim
+  }
+  console.error(`workos token refused: claim=${clean(claim)} iss=${clean(iss)} client_id=${clean(clientId)}`);
 }
 
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.length > 0;
@@ -181,12 +224,20 @@ export async function verifyWorkosToken(token: string, env: Env): Promise<Workos
       maxTokenAge: cfg.maxTokenAgeSeconds,
     }));
   } catch (e) {
-    return { status: isVerdict(e) ? 'invalid' : 'unavailable' };
+    if (isVerdict(e)) {
+      const claim = (e as { claim?: unknown }).claim ?? (e as errors.JOSEError).code;
+      logRefusal(token, String(claim));
+      return { status: 'invalid' };
+    }
+    return { status: 'unavailable' };
   }
 
   if (!nonEmpty(payload.sub)) return { status: 'invalid' };
   // A token minted for another WorkOS app that shares our issuer and audience.
-  if (payload.client_id !== cfg.clientId) return { status: 'invalid' };
+  if (typeof payload.client_id !== 'string' || !cfg.clientIds.includes(payload.client_id)) {
+    logRefusal(token, 'client_id');
+    return { status: 'invalid' };
+  }
   // The session id is what revocation is keyed on; a token without one cannot be revoked.
   if (typeof payload.sid !== 'string' || !PERSON_ID_PATTERN.test(payload.sid)) {
     return { status: 'invalid' };

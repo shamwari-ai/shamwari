@@ -1,4 +1,4 @@
-import { SESSION_COOKIE, readCookie, type CheckResult } from './session';
+import { COOKIE_PATH, SESSION_COOKIE, readCookie, type CheckResult } from './session';
 
 /**
  * The gate in front of the light chat.
@@ -31,16 +31,20 @@ export const PUBLIC_EXACT: readonly string[] = [
   '/lite/icons/icon-512.png',
   '/lite/icons/maskable-512.png',
 ];
-/** Build output stylesheets: /_astro/<name>.<hash>.css and nothing else under /_astro/. */
-const PUBLIC_STYLESHEET = /^\/_astro\/[A-Za-z0-9._-]+\.css$/;
+/** Build output stylesheets: /lite/_astro/<name>.<hash>.css and nothing else under /lite/_astro/ (scripts there are gated). */
+const PUBLIC_STYLESHEET = /^\/lite\/_astro\/[A-Za-z0-9._-]+\.css$/;
 
 export const isPublic = (pathname: string): boolean => PUBLIC_EXACT.includes(pathname) || PUBLIC_STYLESHEET.test(pathname);
 
-/** Everything this Worker gates: the light chat and the build output its page loads. */
-export const isGated = (pathname: string): boolean => pathname.startsWith('/lite/') || pathname.startsWith('/_astro/');
+/**
+ * Everything this Worker gates: the light chat and the build output its page loads. All of it is under /lite/, because
+ * the session cookie is scoped to /lite/ (COOKIE_PATH): a gated path outside it would never be sent the cookie.
+ * (A test walks every gated path and file of the real build and fails on one outside COOKIE_PATH.)
+ */
+export const isGated = (pathname: string): boolean => pathname.startsWith(COOKIE_PATH);
 
-/** Build output, named by content hash: /_astro/<name>.<hash>.<ext>. */
-const HASHED = /^\/_astro\/[A-Za-z0-9._-]+\.[A-Za-z0-9_-]{6,}\.(js|css)$/;
+/** Build output, named by content hash: /lite/_astro/<name>.<hash>.<ext>. */
+const HASHED = /^\/lite\/_astro\/[A-Za-z0-9._-]+\.[A-Za-z0-9_-]{6,}\.(js|css)$/;
 
 const SHELL = new Set(['/lite/', '/lite/index.html']);
 
@@ -52,13 +56,13 @@ export interface GateDeps {
 }
 
 const noStore = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
-/** The failure page is not served by the static assets, so it carries its own policy: it loads and runs nothing. */
-const pageOnly = { 'Content-Security-Policy': "default-src 'none'; base-uri 'none'; form-action 'none'", 'Content-Language': 'en' };
+/** The failure page is not served by the static assets, so it carries its own policy: it loads and runs nothing but its own icons (img-src 'self'). */
+const pageOnly = { 'Content-Security-Policy': "default-src 'none'; img-src 'self'; base-uri 'none'; form-action 'none'", 'Content-Language': 'en' };
 
 const clearSession = `${SESSION_COOKIE}=; Path=/lite/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
 
 /** What a failed sign-in shows. It is not the app, and it does not redirect back into sign-in (that would loop). */
-const FAILED_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign-in failed</title></head><body><main><h1>We could not sign you in</h1><p>Please try again.</p><p><a href="/lite/auth/login">Try again</a></p></main></body></html>`;
+const FAILED_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign-in failed</title><link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48"><link rel="icon" type="image/png" href="/favicon.png" sizes="256x256"><link rel="apple-touch-icon" href="/apple-touch-icon.png"></head><body><main><h1>We could not sign you in</h1><p>Please try again.</p><p><a href="/lite/auth/login">Try again</a></p></main></body></html>`;
 
 export function failedPage(status = 401): Response {
   return new Response(FAILED_PAGE, {
@@ -117,7 +121,7 @@ export async function gate(req: Request, deps: GateDeps): Promise<Response> {
   const res = await deps.asset(req);
   const out = new Response(res.body, res);
   // Never kept by a shared cache. The page is revalidated every time; a build-output file has a content hash in
-  // its name, so the browser may keep it for good (the policy _headers sets for /_astro/, minus `public`).
+  // its name, so the browser may keep it for good (the policy _headers sets for /lite/_astro/, minus `public`).
   out.headers.set(
     'Cache-Control',
     HASHED.test(url.pathname) ? 'private, max-age=31536000, immutable' : 'private, no-cache',

@@ -1,0 +1,93 @@
+# Automatic release (shamwari-ai/shamwari#201): when CI is green on the new staging head, open
+# (or update) one release PR to main whose tree equals staging's, label it forward-ported, and
+# turn on auto-merge. Red CI never releases. Major versions are never automatic (this only moves
+# main; see staging-version.yml for the patch tag and the manual major bump).
+#
+# It needs a GitHub App (or equivalent) token: a PR opened with the built-in GITHUB_TOKEN does
+# not start the pull_request workflows, so the required checks would never run and the release PR
+# would sit. Secrets RELEASE_APP_ID and RELEASE_APP_PRIVATE_KEY. Without them this fails loudly.
+name: Release to main
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-to-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Open or update the release PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Fail closed: only a successful CI run on a push to staging releases.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    steps:
+      - name: Release app token
+        id: app
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf  # v2.2.1
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Release PR
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          git config user.name "shamwari-release[bot]"
+          git config user.email "shamwari-release[bot]@users.noreply.github.com"
+          git fetch origin staging main
+
+          # A newer staging head has its own CI run, and that run releases it. This one must not
+          # release a head CI has not vouched for.
+          staging=$(git rev-parse origin/staging)
+          if [ -n "${RUN_SHA:-}" ] && [ "$staging" != "$RUN_SHA" ]; then
+            echo "staging moved on from $RUN_SHA to $staging; the newer run will release it."
+            exit 0
+          fi
+          if [ "$(git rev-parse 'origin/main^{tree}')" = "$(git rev-parse 'origin/staging^{tree}')" ]; then
+            echo "main already has staging's tree; nothing to release."
+            exit 0
+          fi
+
+          # Tree equal to staging, parent main: the proven way to release without merge conflicts.
+          branch=release/staging-to-main
+          date=$(date -u +%Y-%m-%d)
+          git checkout -q -B "$branch" origin/main
+          git read-tree -u --reset origin/staging
+          git commit -q -m "chore: release staging to main, ${date}+${RUN_NUMBER}" \
+            -m "Tree equals staging at ${staging}."
+          git push --force origin "$branch"
+
+          title="chore: release staging to main, ${date}+${RUN_NUMBER}"
+          body=$(printf '%s\n\n%s\n' \
+            'No issue: automatic release of staging to main (shamwari-ai/shamwari#201).' \
+            "Tree equals staging at ${staging}. CI was green on that head.")
+          gh label create forward-ported --color 0e8a16 --description "Release PR carrying staging forward" 2>/dev/null || true
+          existing=$(gh pr list --head "$branch" --base main --state open --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh pr edit "$existing" --title "$title" --body "$body" --add-label forward-ported
+            pr=$existing
+          else
+            pr=$(gh pr create --base main --head "$branch" --title "$title" --body "$body" --label forward-ported | sed 's#.*/##')
+          fi
+          gh pr merge "$pr" --auto --merge
+          echo "release PR #$pr is open with auto-merge on."

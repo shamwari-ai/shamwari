@@ -18,6 +18,8 @@ export default defineConfig({
   // Mzizi's AppShell and its parts are Tailwind-classed; the chat's own code stays plain TypeScript.
   // Nothing is inlined into the page: the page's content-security policy allows scripts and styles only from
   // its own origin, and Mzizi's AppShell carries a small script that Astro would otherwise inline.
-  build: { format: 'directory', inlineStylesheets: 'never' },
+  // The build output goes under /lite/_astro/, not /_astro/: the session cookie is scoped to /lite/ (worker/session.ts), so
+  // a script anywhere else would be gated but never sent the cookie, and the page would load with no JavaScript.
+  build: { format: 'directory', inlineStylesheets: 'never', assets: 'lite/_astro' },
   vite: { plugins: [tailwindcss()], build: { assetsInlineLimit: 0 } },
 });

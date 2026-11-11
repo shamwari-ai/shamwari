@@ -37,6 +37,23 @@ export async function secret(b: SecretBinding): Promise<string | undefined> {
   return undefined;
 }
 
+/**
+ * Why a WorkOS call failed, for the logs: the error's name, HTTP status and WorkOS error code or description
+ * only. Never the authorization code, state, cookies, tokens or any key. Long text is cut.
+ */
+export function reason(err: unknown): string {
+  if (!(err instanceof Error)) return 'unknown error';
+  const e = err as Error & { status?: unknown; code?: unknown; error?: unknown; errorDescription?: unknown };
+  const parts = [
+    e.name,
+    typeof e.status === 'number' ? `status ${e.status}` : '',
+    typeof e.code === 'string' ? `code ${e.code}` : '',
+    typeof e.error === 'string' ? `error ${e.error}` : '',
+    typeof e.errorDescription === 'string' ? e.errorDescription : e.message,
+  ];
+  return parts.filter(Boolean).join(' | ').slice(0, 300);
+}
+
 export type Port = AuthKitPort & {
   refresh(sealed: string): Promise<RefreshResult>;
 };
@@ -82,7 +99,8 @@ export async function makePort(env: WorkerEnv, workosOverride?: WorkOS): Promise
           session: { sealSession: true, cookiePassword },
         });
         return r.sealedSession ? { sealed: r.sealedSession } : null;
-      } catch {
+      } catch (err) {
+        console.error('workos code exchange failed:', reason(err));
         return null;
       }
     },
@@ -116,8 +134,10 @@ export async function makePort(env: WorkerEnv, workosOverride?: WorkOS): Promise
             accessToken: r.session.accessToken,
           };
         }
+        console.error('workos refresh refused:', String(r.reason).slice(0, 80), r.retryable ? '(retryable)' : '(terminal)');
         return r.retryable ? { status: 'retry', retryAfter: r.retryAfter } : { status: 'denied' };
-      } catch {
+      } catch (err) {
+        console.error('workos refresh failed:', reason(err));
         return { status: 'retry' };
       }
     },
