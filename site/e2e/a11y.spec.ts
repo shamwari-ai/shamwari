@@ -312,8 +312,36 @@ for (const [name, width, height] of [['320px phone', 320, 568], ['390px phone', 
     await expect(page.locator('.cite-link').first()).toBeVisible();
     expect(await underTheFloor(page), `${name}: a long word and its answer`).toEqual([]);
     if (width < 1024) {
-      await openChats(page);
-      expect(await underTheFloor(page), `${name}: drawer`).toEqual([]);
+      // Every section of the drawer is held to the floor, not just the one it opens on.
+      for (const section of ['Chat', 'Projects', 'Artifacts', 'Plugins'] as const) {
+        await openSection(page, section);
+        expect(await underTheFloor(page), `${name}: drawer, ${section}`).toEqual([]);
+      }
     }
   });
 }
+
+// Text at 200% (the largest a person can ask a browser for): nothing may overflow the screen or the drawer, and the
+// drawer's rows stay reachable, on the narrowest phone and on the one we test with.
+test.describe('200% text', () => {
+  // The page's policy refuses an injected stylesheet, so this group (and only this group) runs with the policy bypassed
+  // to apply the larger text; nothing else about the page changes.
+  test.use({ bypassCSP: true });
+for (const [name, width, height] of [['320px phone', 320, 568], ['360px phone', 360, 640]] as const) {
+  test(`at 200% text on a ${name} the drawer and the home screen still meet the floor`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.addInitScript(() => {
+      const style = document.createElement('style');
+      style.textContent = 'html { font-size: 200% !important; }';
+      document.addEventListener('DOMContentLoaded', () => document.head.append(style));
+    });
+    await openChat(page);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize), 'the 200% really applies').toBe('32px');
+    expect(await underTheFloor(page), `${name} at 200%: home`).toEqual([]);
+    for (const section of ['Chat', 'Projects', 'Artifacts', 'Plugins'] as const) {
+      await openSection(page, section);
+      expect(await underTheFloor(page), `${name} at 200%: drawer, ${section}`).toEqual([]);
+    }
+  });
+}
+});
