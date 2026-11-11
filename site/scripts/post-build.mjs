@@ -53,7 +53,8 @@ const SCOPE = '/lite/';
 self.addEventListener('install', (e) => {
   // Precache is all-or-nothing: a half-cached shell is worse than none.
   e.waitUntil(
-    caches.open(CACHE).then((c) => c.addAll(PRECACHE)).then(() => {
+    // cache: 'reload' goes to the network, so a new build never precaches a stale copy from the browser's HTTP cache.
+    caches.open(CACHE).then((c) => Promise.all(PRECACHE.map((u) => c.add(new Request(u, { cache: 'reload' }))))).then(() => {
       // First install: take over at once, so the very first visit works offline.
       // An UPDATE waits until every open tab is closed instead: a page that is
       // already running keeps the files (and cache) it started with, and is never
@@ -61,6 +62,11 @@ self.addEventListener('install', (e) => {
       if (!self.registration.active) return self.skipWaiting();
     }),
   );
+});
+
+// The page asks for this once it is idle (see chat/main.ts): the update takes over now, not after every tab closes.
+self.addEventListener('message', (e) => {
+  if (e.data === 'skip-waiting') self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
