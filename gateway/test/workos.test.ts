@@ -362,6 +362,30 @@ describe('audience is optional by config, required when configured', () => {
   });
 });
 
+describe('a comma-separated client id list', () => {
+  const two = () => makeEnv({ WORKOS_CLIENT_ID: `${CLIENT}, client_second ,` }); // spaces and an empty entry are tolerated
+
+  it('accepts a token from either listed application', async () => {
+    expect(await verify(await token({ clientId: CLIENT }), two())).toBe('ok');
+    expect(await verify(await token({ clientId: 'client_second' }), two())).toBe('ok');
+  });
+
+  it('refuses a token from any application not listed', async () => {
+    expect(await verify(await token({ clientId: 'client_third' }), two())).toBe('invalid');
+    expect(await verify(await token({ clientId: 'client_secon' }), two())).toBe('invalid'); // a prefix is not a match
+    expect(await verify(await token({ clientId: null }), two())).toBe('invalid');
+  });
+
+  it.each([[','], [' , '], [',,']])('a list with no id in it (%j) is unavailable, never "accept any"', async (list) => {
+    expect(await verify(await token(), makeEnv({ WORKOS_CLIENT_ID: list }))).toBe('unavailable');
+    expect(await verify(await token({ clientId: 'client_second' }), makeEnv({ WORKOS_CLIENT_ID: list }))).toBe('unavailable');
+  });
+
+  it('the keys still come from the first id, and a signature from elsewhere is still refused', async () => {
+    expect(await verify(await token({ key: otherSigning, clientId: 'client_second' }), two())).toBe('invalid');
+  });
+});
+
 describe('a comma-separated issuer list', () => {
   const OTHER = 'https://other-issuer.example.test';
   it('accepts a token from any listed issuer and refuses one from none', async () => {
