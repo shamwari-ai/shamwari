@@ -68,8 +68,8 @@ export function workosEnabled(env: Env): boolean {
 
 interface Config {
   clientId: string;
-  /** The configured `iss`, and the same with a trailing slash added or removed. */
-  issuers: [string, string];
+  /** Each configured `iss`, and the same with a trailing slash added. */
+  issuers: string[];
   /** Absent means the `aud` claim is not checked: `iss`, `client_id` and `exp` carry the isolation. */
   audience: string | undefined;
   jwksUrl: URL;
@@ -106,11 +106,20 @@ function config(env: Env): Config | null {
   // difference is a different issuer and is refused.
   // Trailing slashes are stripped with a loop, not a regex: `/\/+$/` backtracks quadratically
   // on a long run of slashes (CodeQL js/polynomial-redos).
-  let end = issuer.length;
-  while (end > 0 && issuer.charCodeAt(end - 1) === 47) end--;
-  const bare = issuer.slice(0, end);
-  if (bare === '') return null;
-  return { clientId, issuers: [bare, `${bare}/`], audience, jwksUrl, monthlyTokenCap: cap, maxTokenAgeSeconds: maxAge };
+  // WORKOS_ISSUER may name more than one issuer, comma separated: the Mukoko Account custom domain's
+  // OIDC discovery document gives `https://accounts.mukoko.com`, while WorkOS's user-management tokens
+  // have carried a per-client path (`.../user_management/<client_id>`). Until a real token settles which
+  // one `iss` is, both are listed and anything else is still refused.
+  const issuers: string[] = [];
+  for (const one of issuer.split(',')) {
+    let end = one.trim().length;
+    const t = one.trim();
+    while (end > 0 && t.charCodeAt(end - 1) === 47) end--;
+    const bare = t.slice(0, end);
+    if (bare === '') return null;
+    issuers.push(bare, `${bare}/`);
+  }
+  return { clientId, issuers, audience, jwksUrl, monthlyTokenCap: cap, maxTokenAgeSeconds: maxAge };
 }
 
 // One JWKS set per URL per isolate. jose caches the keys, re-fetches on an

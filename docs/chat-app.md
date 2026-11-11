@@ -36,17 +36,42 @@ two is designed elsewhere). The full map, the build commands and the Cloudflare 
 No framework. Plain TypeScript, bundled by Astro, with DOM built through
 `textContent` (never `innerHTML`, so a Ground passage cannot inject markup).
 `@bundu/ui` React components are not used: they render fine statically, but
-shipping React to the browser would take most of the budget. Mzizi's _tokens_
-are used directly through `tokens.css` and `color-scheme.css` (plain CSS, dark
-mode follows the device). Mzizi has no chat or citation component today.
+shipping React to the browser would take most of the budget.
+
+The frame is Mzizi's own: `AppShell` from `@bundu/ui/app` (the standard app chrome, mounted
+once). It is an Astro component, so it ships as HTML and one small script, with no React. It
+brings the top bar (the brand, a new-chat action, the bell, the account menu), a drawer for the
+chats kept on the device, and a quiet footer. Its classes are Tailwind's, so the app build
+compiles Tailwind to one static stylesheet (`tailwind.app.config.mjs` scans only the chat and
+the three `@bundu/ui` parts it uses). The chat's own styles are plain CSS in `src/chat/chat.css`
+and take every size from the Bundu floor tokens (`--fs-body`, `--fs-caption`, `--target-floor`,
+`--inset-floor`, `--gap-floor`, `--leading-floor`), never from numbers of their own. Dark mode
+follows the device. Nothing is inlined into the page, because its content-security policy allows
+scripts and styles only from its own origin.
+
+Where the chat departs from the library, and why:
+
+- **No web fonts.** Mzizi names Noto Sans first; the chat loads no font and falls back to the
+  device's own, because the shell has to paint on 2G.
+- **A hand-drawn bell.** The icon set has no bell yet.
+- **The account menu is Mzizi's disclosure pattern without its `AccountMenu` component.** The
+  component names a signed-in person (their initials and name); this chat has none to show until
+  Mukoko sign-in is on. Switch to `AccountMenu` then.
+- **The menu, close and top-bar action buttons are lifted from 44 px to the 49 px floor** in
+  `chat.css`; `AppShell` draws them at 44 px. Worth raising upstream.
+
+The Bundu floor (17 px body, 14 px minimum text, a 49 px hit region on every control, 7 px
+between controls, 14 px insets, 1.5 leading) is measured on the rendered page by the e2e
+tests in `site/e2e/a11y.spec.ts`: the home screen, an answer with its citation card, the
+account menu open and the drawer open. A control that falls under it fails the build.
 
 | Budget                         | Limit                 | Measured (this build)        | Check            |
 | ------------------------------ | --------------------- | ---------------------------- | ---------------- |
-| First-load JS, gzipped         | 100 KB                | 9.2 KB                       | `site/check.mjs` |
-| Chat CSS, gzipped              | 30 KB                 | 4.8 KB                       | `site/check.mjs` |
-| Whole first load (HTML+CSS+JS) | 50 KB (R2 design)     | 16.0 KB                      | `site/check.mjs` |
+| First-load JS, gzipped         | 100 KB                | 12.3 KB                      | `site/check.mjs` |
+| Chat CSS, gzipped              | 30 KB                 | 19.0 KB                      | `site/check.mjs` |
+| Whole first load (HTML+CSS+JS) | 50 KB (R2 design)     | 34.8 KB                      | `site/check.mjs` |
 | Web fonts                      | none, system stack    | none                         | `site/check.mjs` |
-| Touch targets                  | 48 px (Mzizi)         | all 48 px or more            | e2e test         |
+| Hit regions and text sizes     | the Bundu floor       | all at or above the floor    | e2e test         |
 | Accessibility                  | axe wcag2a/aa/21/22aa | 0 violations, light and dark | e2e test         |
 
 ## Installable and offline
@@ -92,6 +117,26 @@ mode follows the device). Mzizi has no chat or citation component today.
   10 minutes and then deletes it. The footer says exactly this and nothing more.
   Until #125 is deployed the older gateway still stores the conversation, so
   **this wording is only true once that change is deployed**.
+- **The drawer is local too: pinned, projects, chats, artifacts.** A _project_ is a
+  named group of chats; a chat is in at most one. _Pinned_ is a shortcut to a chat
+  or project, not a move. An _artifact_ is one answer the person chose to keep (its
+  text and sources), kept apart from the chat so deleting the chat does not lose
+  it. All three live in the same IndexedDB (`projects`, `artifacts` beside
+  `threads`, database version 2) and go with "Delete history". Nothing about them
+  is sent anywhere. These are defaults, chosen so the drawer could ship; they are
+  cheap to change while the data is only on the device.
+- **Owner decision, 2026-11-11: the mobile app keeps chats on the device (sync is opt-in);
+  every other surface (the web chat and Lite) stores them in the database.** This
+  supersedes "History is local only" above for the web. The collections already exist in
+  Mongo (`shamwari.conversations`: `ownerPersonId`, `lastMessageAt`, `surfaceContext`,
+  `licenseClass`, `promoted`; `shamwari.messages`: `conversationId` + `sequence`, unique,
+  `licenseClass`), both empty today. The Nyuchi Servers API (`/v1/shamwari/*`) owns the
+  messages routes and the Shamwari API (`api.shamwari.ai`) serves them to the apps; Core
+  holds no database login. Both are Rust (#66). Until they are live the web chat keeps
+  using the device store described below, so nothing breaks. The footer text ("saved on
+  this device only") and the `pwa` channel's "no content stored" rule change with the
+  web switch-over, in the same release. Rule 2 still holds: only `open_weight` provenance
+  trains Mind, whatever is stored.
 - **Offline queue.** A question written offline is stored on the device and sent
   when the network returns, with one `Idempotency-Key` per message so a retry
   after a dropped connection is replayed by the gateway instead of answered and

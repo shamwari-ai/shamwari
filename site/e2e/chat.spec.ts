@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, openChat } from './helpers';
+import { ask, makeProject, openAccount, openChat, openChats, newChat } from './helpers';
 
 test('asks a question and renders the answer with its citation card', async ({ page }) => {
   await openChat(page);
@@ -76,23 +76,20 @@ test('429 offers the add-credit link and a wait time', async ({ page }) => {
   await expect(page.getByRole('link', { name: 'Add credit' })).toHaveAttribute('href', 'https://platform.shamwari.ai/billing');
 });
 
-test('a missing key asks for sign-in and keeps what was typed', async ({ page }) => {
+test('a missing key asks for sign-in, keeps what was typed, and offers no key field', async ({ page }) => {
   await openChat(page, null);
   await expect(page.locator('#auth')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Sign in with Mukoko' })).toBeDisabled();
+  // Sign-in is not on in this build: no button that cannot be pressed, just the plain line.
+  await expect(page.getByRole('button', { name: 'Sign in with Mukoko' })).toBeHidden();
+  await expect(page.locator('#mukoko-soon')).toBeVisible();
   await page.locator('#q').fill('hello');
   await page.locator('#send').click();
-  await expect(page.locator('#key')).toBeFocused();
+  await expect(page.locator('#auth-title')).toBeFocused();
   await expect(page.locator('#q')).toHaveValue('hello');
-
-  await page.locator('#key').fill('not-a-key');
-  await page.getByRole('button', { name: 'Use this key' }).click();
-  await expect(page.locator('#key-error')).toBeVisible();
-
-  await page.locator('#key').fill('sk_shamwari_mock_ok');
-  await page.getByRole('button', { name: 'Use this key' }).click();
-  await expect(page.locator('#auth')).toBeHidden();
-  await expect(page.locator('#q')).toBeFocused();
+  // API keys are not typed into the page: "Use the API" in the drawer goes to the platform that issues them.
+  await expect(page.locator('input[type="password"]')).toHaveCount(0);
+  await openChats(page);
+  await expect(page.getByRole('link', { name: 'Use the API' })).toHaveAttribute('href', 'https://platform.nyuchi.com');
 });
 
 test('history stays on the device across reloads, new chat starts clean, delete wipes it', async ({ page }) => {
@@ -105,14 +102,14 @@ test('history stays on the device across reloads, new chat starts clean, delete 
   await expect(page.locator('article.msg.user')).toContainText('Is everyone equal');
   await expect(page.locator('.cite').first()).toBeVisible();
 
-  await page.getByRole('button', { name: 'New chat' }).click();
+  await newChat(page);
   await expect(page.locator('#log article')).toHaveCount(0);
   await expect(page.locator('#q')).toBeFocused();
-  await page.locator('#history summary').click();
+  await openChats(page);
   await expect(page.locator('#history-list button')).toContainText('Is everyone equal');
 
   page.once('dialog', (d) => d.accept());
-  await page.getByText('Settings').click();
+  await openAccount(page);
   await page.getByRole('button', { name: 'Delete history' }).click();
   await expect(page.locator('#toast')).toContainText('History deleted');
   await expect(page.locator('#history')).toBeHidden();
@@ -142,8 +139,12 @@ test('nothing is sent to a server except the ask itself', async ({ page }) => {
 test('Shona is offered, shown as a draft, and Enter sends', async ({ page }) => {
   await openChat(page);
   await expect(page.locator('#review')).toBeHidden();
+  await openAccount(page);
   await page.locator('#lang').selectOption('sn');
   await expect(page.locator('html')).toHaveAttribute('lang', 'sn');
+  // The draft notice is a banner in the page, not inside the menu: it shows with the menu closed.
+  await page.locator('details.account summary').click();
+  await expect(page.locator('details.account')).not.toHaveAttribute('open', '');
   await expect(page.locator('#review')).toBeVisible();
   await expect(page.locator('#send')).toHaveText('Tumira');
   await page.locator('#q').fill('hello');
@@ -162,38 +163,112 @@ test('the home screen greets, offers suggested prompts, and the chips ask the qu
   await expect(page.locator('#empty')).toBeHidden();
 });
 
-test('the bell says there is nothing new, and the avatar opens sign-in when there is no key', async ({ page }) => {
-  await openChat(page, null);
-  await page.locator('#auth').waitFor();
-  await page.locator('#key').fill('sk_shamwari_mock_ok');
-  await page.getByRole('button', { name: 'Use this key' }).click();
+test('Settings is in the drawer, there is no bell, and signing out brings the sign-in panel back', async ({ page }) => {
+  await openChat(page);
   await expect(page.locator('#auth')).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Notifications' })).toHaveCount(0);
+  // No account menu in the top bar: its three controls are the drawer, the brand and New chat.
+  await expect(page.locator('[data-slot="app-topbar"] details')).toHaveCount(0);
 
-  await page.getByRole('button', { name: 'Notifications' }).click();
-  await expect(page.locator('#toast')).toHaveText('No new notifications');
-  // A second tap says it again (the line is cleared first so a screen reader announces it) and it
-  // clears itself, so it does not sit next to unrelated state.
-  await page.getByRole('button', { name: 'Notifications' }).click();
-  await expect(page.locator('#toast')).toHaveText('No new notifications');
-  await expect(page.locator('#toast')).toHaveText('', { timeout: 6000 });
-
-  // Signed in, the avatar opens Settings, where the person can remove the key.
-  await page.getByRole('button', { name: 'Account' }).click();
-  await expect(page.locator('details.more')).toHaveAttribute('open', '');
-  await expect(page.locator('details.more summary')).toBeFocused();
+  // Signed in, Settings holds language, Delete history and the way to remove the key.
+  await openAccount(page);
+  await expect(page.locator('#lang')).toBeVisible();
+  await expect(page.locator('#signout')).toBeVisible();
+  await expect(page.locator('#open-signin')).toHaveCount(0); // sign-in is shown once, on the page
   await page.locator('#signout').click();
-  await expect(page.locator('#auth')).toBeVisible();
-  // Signed out, the avatar brings the sign-in panel back after it was dismissed.
-  await page.locator('#auth').evaluate((el) => ((el as HTMLElement).hidden = true));
-  await page.getByRole('button', { name: 'Account' }).click();
   await expect(page.locator('#auth')).toBeVisible();
 });
 
-test('the icon buttons keep an accessible name in Shona, and Install stays visible after a question', async ({ page }) => {
+test('Settings is named in Shona, and Install stays visible after a question', async ({ page }) => {
   await openChat(page);
+  await openAccount(page);
   await page.locator('#lang').selectOption('sn');
-  await expect(page.getByRole('button', { name: 'Zviziviso' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Akaunti' })).toBeVisible();
+  await expect(page.locator('details.account summary')).toHaveText('Zvirongwa');
   // The install button lives outside the greeting, so asking a question (which hides the greeting) does not take it away.
   await expect(page.locator('#install').locator('xpath=ancestor::*[@id="empty"]')).toHaveCount(0);
+});
+
+test('the shell speaks the chosen language: new chat, the drawer buttons and the chats region', async ({ page }) => {
+  await openChat(page);
+  await openAccount(page);
+  await page.locator('#lang').selectOption('sn');
+  await page.keyboard.press('Escape'); // close the drawer
+  await expect(page.getByRole('button', { name: 'Vhura hurukuro' })).toBeVisible();
+  await page.getByRole('button', { name: 'Vhura hurukuro' }).click();
+  await expect(page.getByRole('button', { name: 'Vhara hurukuro' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hurukuro itsva' })).toBeVisible();
+  await expect(page.locator('[data-slot="app-sidebar"]')).toHaveAttribute('aria-label', 'Hurukuro dzenyu');
+});
+
+test('picking an earlier chat closes the drawer, so the chat is not left covered', async ({ page }) => {
+  await openChat(page);
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('.cite-link').first()).toBeVisible();
+  await newChat(page);
+  await openChats(page);
+  await page.locator('#history-list button').first().click();
+  await expect(page.locator('[data-slot="app-sidebar"]')).toBeHidden();
+  await expect(page.locator('article.msg.bot').first()).toBeVisible();
+});
+
+test('the chat has no small print under it: a link opens the disclaimer and privacy page', async ({ page }) => {
+  await page.goto('/lite/');
+  await expect(page.locator('[data-i18n="storedHere"]')).toHaveCount(0);
+  await page.getByRole('link', { name: 'Disclaimer and privacy' }).click();
+  await expect(page).toHaveURL(/\/lite\/disclaimer\/$/);
+  await expect(page.getByText('not the text of your question or its answer')).toBeVisible();
+  await expect(page.getByText('This is not legal advice')).toBeVisible();
+  await expect(page.locator('script')).toHaveCount(0); // only the chat page ships a script
+  // It is a document, not the chat's one scroller: the other languages and the way back can be reached on a phone.
+  const back = page.getByRole('link', { name: 'Back to the chat' });
+  await back.scrollIntoViewIfNeeded();
+  await expect(back).toBeInViewport();
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).not.toBe('hidden');
+});
+
+test('the drawer pins a chat, files it in a project, keeps a saved answer, and deleting history clears all of it', async ({ page }) => {
+  await openChat(page);
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('article.msg.bot .cite').first()).toBeVisible();
+
+  // A project, made from the drawer, and the open chat filed in it.
+  await openChats(page);
+  await makeProject(page, 'Know my rights');
+  await expect(page.locator('#project-list summary')).toContainText('Know my rights (0)');
+  await page.keyboard.press('Escape');
+  await page.locator('#chat-project').selectOption({ label: 'Know my rights' });
+  await openChats(page);
+  await expect(page.locator('#project-list summary')).toContainText('Know my rights (1)');
+
+  // Pin the chat: it is listed under Pinned.
+  await page.keyboard.press('Escape');
+  await page.locator('#pin-chat').click();
+  await expect(page.locator('#pin-chat')).toHaveAttribute('aria-pressed', 'true');
+  await openChats(page);
+  await expect(page.locator('#side-pinned')).toBeVisible();
+  await expect(page.locator('#pinned-list')).toContainText('Is everyone equal');
+  await page.keyboard.press('Escape');
+
+  // Keep the answer: it appears under Artifacts and opens in a dialog with its source.
+  await page.getByRole('button', { name: 'Save answer' }).click();
+  await expect(page.locator('#toast')).toContainText('Saved to Artifacts');
+  await openChats(page);
+  await page.locator('#artifact-list button').first().click();
+  await expect(page.locator('#artifact-view')).toBeVisible();
+  await expect(page.locator('#artifact-cites li').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+
+  // It all survives a reload (it is on the device) and goes with Delete history.
+  await page.reload();
+  await page.waitForSelector('html[data-ready="true"]');
+  await openChats(page);
+  await expect(page.locator('#artifact-list button')).toHaveCount(1);
+  await expect(page.locator('#project-list summary')).toContainText('Know my rights');
+  await page.keyboard.press('Escape');
+  page.once('dialog', (d) => d.accept());
+  await openAccount(page);
+  await page.getByRole('button', { name: 'Delete history' }).click();
+  await openChats(page);
+  await expect(page.locator('#artifact-list button')).toHaveCount(0);
+  await expect(page.locator('#project-list li')).toHaveCount(0);
 });

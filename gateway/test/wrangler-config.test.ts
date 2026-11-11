@@ -15,7 +15,7 @@ describe('wrangler.jsonc production vars', () => {
 
   it('enables WorkOS with a complete, well-formed configuration', () => {
     expect(v.WORKOS_CLIENT_ID).toMatch(/^client_[0-9A-Z]{26}$/);
-    expect(v.WORKOS_ISSUER).toMatch(/^https:\/\/[^\s/]+\/\S+$/);
+    for (const iss of (v.WORKOS_ISSUER ?? '').split(',')) expect(iss).toMatch(/^https:\/\/accounts\.mukoko\.com(\/\S+)?$/);
     expect(Number.isInteger(Number(v.WORKOS_MONTHLY_TOKEN_CAP))).toBe(true);
     expect(Number(v.WORKOS_MONTHLY_TOKEN_CAP)).toBeGreaterThan(0);
   });

@@ -57,7 +57,15 @@ export function renderCitation(c: Citation, s: Strings, lang: Language): HTMLEle
   );
 }
 
-export function renderAnswer(m: StoredMessage, a: Answer, s: Strings, lang: Language): HTMLElement {
+export function renderAnswer(
+  m: StoredMessage,
+  a: Answer,
+  s: Strings,
+  lang: Language,
+  onSave?: () => void,
+): HTMLElement {
+  const save = onSave ? h('button', { type: 'button', class: 'btn link save-answer' }, s.saveAnswer) : null;
+  save?.addEventListener('click', onSave!);
   return h(
     'article',
     { class: 'msg bot', 'data-id': m.id, 'aria-label': s.shamwari },
@@ -73,6 +81,7 @@ export function renderAnswer(m: StoredMessage, a: Answer, s: Strings, lang: Lang
         )
       : h('p', { class: 'note' }, s.noSources),
     h('p', { class: 'meta' }, `${s.scopeLabel}: ${s.scope[a.scope]}`),
+    save,
   );
 }
 

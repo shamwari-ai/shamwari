@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, openChat } from './helpers';
+import { ask, openAccount, openChat, openChats, newChat } from './helpers';
 
 const onlyOnce = (urls: string[], needle: string) => urls.filter((u) => u.includes(needle)).length;
 
@@ -58,12 +58,12 @@ test('a question queued in an earlier chat is still delivered after New chat', a
   await openChat(page);
   await context.setOffline(true);
   await ask(page, 'Queued in the first chat');
-  await page.getByRole('button', { name: 'New chat' }).click();
+  await newChat(page);
   await expect(page.locator('#log article')).toHaveCount(0);
 
   await context.setOffline(false);
   // Delivered in the background while another chat is open; open the old one to see it.
-  await page.locator('#history summary').click();
+  await openChats(page);
   await page.locator('#history-list button').first().click();
   await expect(page.locator('article.msg.bot').first()).toBeVisible({ timeout: 15_000 });
 });
@@ -113,6 +113,7 @@ test('the content security policy holds: no violations while chatting', async ({
   await openChat(page);
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('.cite').first()).toBeVisible();
+  await openAccount(page);
   await page.locator('#lang').selectOption('nd');
   expect(problems).toEqual([]);
 
@@ -133,7 +134,7 @@ test('discarding the only question leaves nothing behind after a reload', async 
       page.evaluate(
         () =>
           new Promise<number>((done) => {
-            const open = indexedDB.open('shamwari-chat', 1);
+            const open = indexedDB.open('shamwari-chat');
             open.onsuccess = () => {
               const all = open.result.transaction('threads').objectStore('threads').getAll();
               all.onsuccess = () => done(all.result.length);
@@ -197,7 +198,7 @@ test('deleting history while a question is in flight does not bring it back', as
   await openChat(page);
   await ask(page, 'slow answer please'); // held for 3 s by the mock
   await expect(page.locator('.pending')).toBeVisible();
-  await page.getByText('Settings').click();
+  await openAccount(page);
   page.once('dialog', (d) => d.accept());
   await page.getByRole('button', { name: 'Delete history' }).click();
   await expect(page.locator('#toast')).toContainText('History deleted');
@@ -214,7 +215,7 @@ test('an interrupted question in an older chat is recovered and answered, not ju
   await page.evaluate(
     () =>
       new Promise<void>((done, fail) => {
-        const open = indexedDB.open('shamwari-chat', 1);
+        const open = indexedDB.open('shamwari-chat');
         open.onerror = () => fail(open.error);
         open.onsuccess = () => {
           const tx = open.result.transaction('threads', 'readwrite');
@@ -229,7 +230,7 @@ test('an interrupted question in an older chat is recovered and answered, not ju
   await page.reload();
   await page.waitForSelector('html[data-ready="true"]');
   // The newer chat is on screen; the older one is delivered in the background.
-  await page.locator('#history summary').click();
+  await openChats(page);
   await page.locator('#history-list button').first().click();
   await expect(page.locator('article.msg.bot .cite').first()).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('article.queued')).toHaveCount(0);
@@ -300,7 +301,7 @@ test('the install button is in plain view, survives a dismissed dialog, and goes
   await offer();
   // Visible without opening Settings.
   await expect(page.locator('#install')).toBeVisible();
-  await expect(page.locator('details.more')).not.toHaveAttribute('open', '');
+  await expect(page.locator('details.account')).not.toHaveAttribute('open', '');
   await page.locator('#install').click(); // dialog dismissed: the event is spent
   await expect(page.locator('#install')).toBeHidden();
   await offer(); // the browser offers again later

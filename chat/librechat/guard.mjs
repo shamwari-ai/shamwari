@@ -15,6 +15,7 @@ const ENDPOINT_OPTIONS = [
   "models",
   "modelDisplayLabel",
   "titleConvo",
+  "dropParams",
   "addParams",
   "headers",
 ];
@@ -74,7 +75,12 @@ export function parseToml(text) {
   return out;
 }
 
-function checkConfig(name, yamlText, { allowedScopes, allowedBaseURLs }, v) {
+function checkConfig(
+  name,
+  yamlText,
+  { allowedScopes, allowedBaseURLs, allowedAddresses },
+  v,
+) {
   let cfg;
   try {
     cfg = parse(yamlText);
@@ -87,9 +93,20 @@ function checkConfig(name, yamlText, { allowedScopes, allowedBaseURLs }, v) {
       v.push(`${name}: top-level key "${k}" is not on the allowlist`);
   }
   const eps = cfg?.endpoints ?? {};
+  if (allowedAddresses && eps.allowedAddresses === undefined)
+    v.push(
+      `${name}: allowedAddresses must be present (the stub is a private address)`,
+    );
   for (const k of Object.keys(eps)) {
-    if (k !== "custom")
+    if (k === "allowedAddresses" && allowedAddresses) {
+      const got = JSON.stringify(eps[k]);
+      if (got !== JSON.stringify(allowedAddresses))
+        v.push(
+          `${name}: allowedAddresses must be exactly ${JSON.stringify(allowedAddresses)}, got ${got}`,
+        );
+    } else if (k !== "custom") {
       v.push(`${name}: endpoint type "${k}" is not allowed (only custom)`);
+    }
   }
   const custom = Array.isArray(eps.custom) ? eps.custom : [];
   if (custom.length === 0) v.push(`${name}: no custom endpoint defined`);
@@ -104,16 +121,29 @@ function checkConfig(name, yamlText, { allowedScopes, allowedBaseURLs }, v) {
     else if (key !== "${" + PLACEHOLDER_KEY + "}")
       v.push(`${label} apiKey must be the fixed placeholder reference`);
     if (e?.titleConvo !== false) v.push(`${label} titleConvo must be false`);
+    if (JSON.stringify(e?.dropParams) !== JSON.stringify(["user"]))
+      v.push(`${label} dropParams must be exactly ["user"]`);
     const scope = e?.addParams?.scope;
     if (!allowedScopes.includes(scope))
       v.push(`${label} scope "${scope}" is not allowed here`);
     if (e?.addParams?.stream !== false)
       v.push(`${label} must set stream: false`);
+    // The gateway does not stream, so LibreChat must not either (docs/librechat.md).
+    if (
+      e?.addParams?.streaming !== false ||
+      e?.addParams?.disableStreaming !== true
+    )
+      v.push(`${label} must set streaming: false and disableStreaming: true`);
     if (e?.headers?.["X-Shamwari-Channel"] !== "pwa")
       v.push(`${label} must send X-Shamwari-Channel: pwa`);
     for (const k of extra(e?.headers, ["X-Shamwari-Channel"]))
       v.push(`${label} header "${k}" is not allowed`);
-    for (const k of extra(e?.addParams, ["scope", "stream"]))
+    for (const k of extra(e?.addParams, [
+      "scope",
+      "stream",
+      "streaming",
+      "disableStreaming",
+    ]))
       v.push(`${label} addParams key "${k}" is not allowed`);
     for (const k of extra(e, ENDPOINT_OPTIONS))
       v.push(`${label} option "${k}" is not allowed`);
@@ -144,7 +174,11 @@ export function check({ production, test, fly, dockerfile, buildSh, pin }) {
   checkConfig(
     "librechat.test.yaml",
     test,
-    { allowedScopes: TEST_SCOPES, allowedBaseURLs: [GATEWAY, STUB] },
+    {
+      allowedScopes: TEST_SCOPES,
+      allowedBaseURLs: [GATEWAY, STUB],
+      allowedAddresses: ["127.0.0.1:8787"],
+    },
     v,
   );
 
@@ -205,15 +239,42 @@ export function check({ production, test, fly, dockerfile, buildSh, pin }) {
       v.push(`Dockerfile: FROM must be \${BASE_IMAGE}, got "${line.trim()}"`);
     if (/:latest\b/.test(line)) v.push("Dockerfile: floating :latest tag");
   }
+  const base = /^base=([0-9a-f]{40})$/m.exec(pin)?.[1];
+  if (!base) v.push("PIN: base must be the full 40-hex upstream commit");
   const commit = /^commit=([0-9a-f]{40})$/m.exec(pin)?.[1];
   const tag = /^tag=(v\d+\.\d+\.\d+)$/m.exec(pin)?.[1];
   if (!commit) v.push("PIN: commit must be a full 40-hex SHA");
   if (!tag) v.push("PIN: tag must be an exact release tag (no rc, no latest)");
   if (!/rev-parse HEAD/.test(buildSh) || !/PIN/.test(buildSh))
     v.push("build.sh: must verify the checked-out commit against PIN");
-  if (!/refs\/tags/.test(buildSh))
+  if (!/^repo="https:\/\/github\.com\/shamwari-ai\/librechat"$/m.test(buildSh))
     v.push(
-      "build.sh: must verify that the tag in PIN resolves to the pinned commit",
+      "build.sh: the source repository must be the Shamwari fork, with no override",
+    );
+  const live = buildSh
+    .split("\n")
+    .filter((l) => !/^\s*#/.test(l))
+    .join("\n");
+  if (
+    !/merge-base --is-ancestor "\$base" HEAD\s*\\?\n?\s*\|\|\s*\{[^}]*exit 1/.test(
+      live,
+    )
+  )
+    v.push(
+      "build.sh: must verify the fork commit is built on the upstream base and exit 1 if not",
+    );
+  if (
+    !/refs\/tags/.test(live) ||
+    !/\[ "\$tagged" = "\$base" \]\s*\|\|\s*\{[^}]*exit 1/.test(live)
+  )
+    v.push(
+      "build.sh: must verify that the tag in PIN resolves to the upstream base and exit 1 if not",
+    );
+  if (/\|\|\s*(true|:)\b/.test(live))
+    v.push("build.sh: no `|| true` or `|| :` escapes");
+  if (base && commit && base === commit)
+    v.push(
+      "PIN: commit must be a Shamwari commit above base, not the stock upstream commit",
     );
   return v;
 }
