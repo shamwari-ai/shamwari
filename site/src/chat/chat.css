@@ -643,30 +643,6 @@ input:not([type='checkbox']):not([type='radio']) {
   line-height: var(--leading-floor);
 }
 
-/* "A new version is ready": a pop-up above the question box; with the drawer open, a card at the drawer's foot. */
-.update {
-  display: grid;
-  gap: var(--gap-floor);
-  padding: var(--inset-floor);
-  border: 1px solid var(--border);
-  border-radius: var(--radius, 1rem);
-  background: var(--card);
-  color: var(--foreground);
-  box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
-}
-.update[hidden] {
-  display: none;
-}
-.update p {
-  margin: 0;
-}
-.update-popup {
-  /* In the column, directly above the composer: it takes its room from the messages, never covers them. */
-  flex: none;
-  width: 100%;
-  max-width: 28rem;
-  margin-inline: auto;
-}
 .side-foot {
   flex: none;
   display: grid;
