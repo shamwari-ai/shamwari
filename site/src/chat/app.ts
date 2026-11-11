@@ -1,6 +1,7 @@
 import { developerKey } from './auth';
 import { mukokoAuth } from './auth-mukoko';
 import { createClient } from './client';
+import { readStoredUser, rememberUser, subjectOf, userKeyOf } from './user';
 import { applyStrings, currentLanguage, saveLanguage } from './i18n';
 import {
   h,
@@ -12,7 +13,7 @@ import {
   type ErrorActions,
   type QueueActions,
 } from './render';
-import { newId, openStore, titleOf, type Artifact, type Project, type StoredMessage, type Thread } from './store';
+import { newId, openSwitchableStore, titleOf, type Artifact, type Project, type StoredMessage, type Thread } from './store';
 import { LANGUAGES, isLanguage } from './strings';
 import type { AskErrorKind, ChatMessage, Scope } from './types';
 
@@ -44,7 +45,8 @@ const saveData = (): boolean =>
   (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
 
 export async function startApp(opts: { apiBase: string; authMode?: 'developer-key' | 'mukoko' }): Promise<void> {
-  const store = await openStore();
+  // One store per signed-in person (see user.ts). A device that has not been told who is using it holds the unowned store.
+  const store = await openSwitchableStore(opts.authMode === 'mukoko' ? readStoredUser() : null);
   // The Mukoko provider is behind a build flag and off by default; the developer
   // key stays exactly as it was until the session Worker ships.
   const auth = opts.authMode === 'mukoko' ? mukokoAuth() : developerKey();
@@ -732,28 +734,57 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     (go.disabled || go.hidden ? $('#auth-title') : go).focus();
   }
 
-  $('#signout').addEventListener('click', async () => {
-    closeAccount();
-    // Start the sign-out (its first, synchronous part flips the app to signed out), then clear
-    // the chats WITHOUT waiting on the network: a hung request must not leave the previous
-    // person's chats on a phone that is being handed to someone else.
+  /**
+   * Sign out. For a Mukoko account the messages STAY on this device by default (they are this person's, and are kept in
+   * their own store); a choice in the dialog also deletes them. Either way the screen leaves the chat at once, without
+   * waiting on the network, and nothing of this person is left in memory for the next one.
+   */
+  const signOutDialog = $<HTMLDialogElement>('#signout-dialog');
+  async function finishSignOut(alsoDelete: boolean) {
     const ended = Promise.resolve(auth.signOut());
-    // A Mukoko account belongs to a person, and the phone may not. Signing out takes
-    // their chats off this device so the next person to open it does not read them.
-    if (auth.kind === 'mukoko') {
-      await wipeHistory();
+    if (alsoDelete) await deleteMessagesFromDevice();
+    else {
+      // Kept on the device: stop everything that could still write, empty the screen, and let go of this person's store.
+      epoch += 1;
+      clearTimeout(retryTimer);
+      live.clear();
+      saved.splice(0, saved.length);
+      thread = fresh();
+      rebuild();
+      showSection('chat');
+      void renderHistory();
     }
-    // The screen changes now, without waiting on the network: a hung sign-out request must not leave the chat on show.
+    rememberUser(null);
+    await store.switchTo(null);
+    if (!alsoDelete) {
+      live.clear();
+      void renderHistory();
+    }
     syncAuth();
     showAuth();
-    // On the sign-in screen itself: the chat (and its toast) is not on screen while signed out.
-    if (auth.kind === 'mukoko') {
-      const note = $('#signin-note');
-      note.textContent = strings().signedOutCleared;
-      note.hidden = false;
-    }
+    const note = $('#signin-note');
+    note.textContent = alsoDelete ? strings().signedOutCleared : strings().signedOutKeptNote;
+    note.hidden = false;
     await ended;
     syncAuth();
+  }
+  $('#signout').addEventListener('click', async () => {
+    closeAccount();
+    if (auth.kind === 'mukoko') {
+      $<HTMLInputElement>('#signout-delete').checked = false; // keeping is the default, every time
+      signOutDialog.showModal();
+      return;
+    }
+    // Developer-key mode: removing the key is all there is to it.
+    await Promise.resolve(auth.signOut());
+    syncAuth();
+    showAuth();
+  });
+  $('#signout-cancel').addEventListener('click', () => signOutDialog.close());
+  $('#signout-confirm').addEventListener('click', () => {
+    const alsoDelete = $<HTMLInputElement>('#signout-delete').checked;
+    signOutDialog.close();
+    void finishSignOut(alsoDelete);
   });
   const mukokoBtn = $<HTMLButtonElement>('#mukoko-signin');
   if (auth.kind === 'mukoko') {
@@ -827,6 +858,34 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     input.focus();
   });
 
+  /**
+   * Point the app at the signed-in person's own store, once their token says who they are. The first person to sign in on a
+   * device that held chats from before stores were per person keeps them (they move into this person's store); anyone
+   * else starts empty. Everything on screen is rebuilt from the new store.
+   */
+  async function bindUser(): Promise<void> {
+    if (auth.kind !== 'mukoko') return;
+    const sub = subjectOf(auth.getKey());
+    if (!sub) return; // offline with only the hint: the remembered store (or the unowned one) stays
+    const key = await userKeyOf(sub);
+    rememberUser(key);
+    if (store.key === key) return;
+    epoch += 1; // nothing in flight may write into the other store
+    clearTimeout(retryTimer);
+    await store.switchTo(key, store.key === null);
+    live.clear();
+    const all = await listThreads();
+    saved.splice(0, saved.length, ...all);
+    thread = all.find((t) => t.messages.length) ?? fresh();
+    rebuild();
+    void renderHistory();
+  }
+
+  /** Take everything this device holds of the current store off it. The ONE delete: Delete history and sign-out both use it. */
+  async function deleteMessagesFromDevice() {
+    await wipeHistory();
+  }
+
   /** Remove every chat from this device. Anything in flight belongs to what is being removed. */
   async function wipeHistory() {
     epoch += 1;
@@ -846,7 +905,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   $('#delete-history').addEventListener('click', async () => {
     if (!confirm(strings().deleteConfirm)) return;
     closeAccount();
-    await wipeHistory();
+    await deleteMessagesFromDevice();
     $('#toast').textContent = strings().deleted;
     input.focus();
   });
@@ -930,7 +989,8 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     // must not hold up showing and writing questions. Until it answers, the
     // sign-in panel stays down so a signed-in person never sees it flash.
     // In offline mode no request is made, not even the silent renewal: the hint of a past sign-in opens the chat.
-    startup = (offlineMode && auth.signedIn() ? Promise.resolve(true) : auth.refresh()).then(() => {
+    startup = (offlineMode && auth.signedIn() ? Promise.resolve(true) : auth.refresh()).then(async () => {
+      await bindUser().catch(() => undefined);
       startup = null;
       // Signed in (a session, or the hint of one while offline): the chat. Otherwise the session has ended: straight to sign-in.
       if (auth.signedIn()) {
