@@ -15,6 +15,7 @@ const ENDPOINT_OPTIONS = [
   "models",
   "modelDisplayLabel",
   "titleConvo",
+  "dropParams",
   "addParams",
   "headers",
 ];
@@ -116,6 +117,8 @@ function checkConfig(
     else if (key !== "${" + PLACEHOLDER_KEY + "}")
       v.push(`${label} apiKey must be the fixed placeholder reference`);
     if (e?.titleConvo !== false) v.push(`${label} titleConvo must be false`);
+    if (JSON.stringify(e?.dropParams) !== JSON.stringify(["user"]))
+      v.push(`${label} dropParams must be exactly ["user"]`);
     const scope = e?.addParams?.scope;
     if (!allowedScopes.includes(scope))
       v.push(`${label} scope "${scope}" is not allowed here`);

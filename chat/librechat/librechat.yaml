@@ -38,6 +38,8 @@ endpoints:
       modelDisplayLabel: 'Shamwari'
       # One extra model call per chat, spending the person's quota. Off.
       titleConvo: false
+      # LibreChat adds its internal user id as `user`; the gateway has no use for it.
+      dropParams: ['user']
       addParams:
         scope: 'platform'
         # The gateway does not stream. LibreChat's model layer takes `streaming` and

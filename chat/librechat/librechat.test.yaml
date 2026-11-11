@@ -28,6 +28,7 @@ endpoints:
         default: ['shamwari-economy']
         fetch: false
       titleConvo: false
+      dropParams: ['user']
       addParams:
         scope: 'platform'
         stream: false
@@ -42,6 +43,7 @@ endpoints:
         default: ['shamwari-economy']
         fetch: false
       titleConvo: false
+      dropParams: ['user']
       addParams:
         scope: 'personal'
         stream: false
