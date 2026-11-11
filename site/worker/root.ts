@@ -7,7 +7,7 @@
  *  - `Save-Data: on` (the person asked their phone to save data): light.
  *  - The network client hints `ECT`, `Downlink` and `RTT`, which Chromium sends once the first
  *    answer asks for them (`Accept-CH` + `Critical-CH`, so it retries by itself). A connection
- *    that is not 4g, under 10 Mbps, or over 100 ms round trip: light. Browsers report 4g as the
+ *    that is not 4g, under 8 Mbps, or over 100 ms round trip: light. Browsers report 4g as the
  *    best class, so "better than 4g" is only visible as these numbers, not as a label.
  *  - Cloudflare's own measurement of the round trip to the visitor (`cf.clientTcpRtt`), for
  *    browsers that send no hints (Safari, Firefox).
@@ -20,7 +20,9 @@
 export const CHAT = '/chat/';
 export const LITE = '/lite/';
 
-export const FAST_DOWNLINK_MBPS = 10;
+/** Chromium caps the Downlink hint at 10 Mbps, so this sits just under the cap: a fast link whose
+ *  estimate wobbles still passes, a typical 4g link (a few Mbps) does not. */
+export const FAST_DOWNLINK_MBPS = 8;
 export const FAST_RTT_MS = 100;
 /** Cloudflare measures the TCP handshake, which runs a little above the browser's RTT. */
 export const FAST_TCP_RTT_MS = 150;
@@ -43,19 +45,28 @@ export function chooseDestination(req: Request, chatLive: boolean): string {
   const ect = h.get('ECT')?.toLowerCase() ?? null;
   const downlink = num(h.get('Downlink'));
   const rtt = num(h.get('RTT'));
-  if (ect !== null || downlink !== null || rtt !== null) {
-    if (ect !== '4g') return LITE; // slow-2g, 2g, 3g, or a hint set that left it out
-    if (downlink === null || downlink < FAST_DOWNLINK_MBPS) return LITE;
-    if (rtt !== null && rtt > FAST_RTT_MS) return LITE;
-    return CHAT;
-  }
 
+  // Any signal that is present and slow settles it: light.
+  if (ect !== null && ect !== '4g') return LITE; // slow-2g, 2g or 3g
+  if (downlink !== null && downlink < FAST_DOWNLINK_MBPS) return LITE;
+  if (rtt !== null && rtt > FAST_RTT_MS) return LITE;
+  // Hints can only say "fast" when they are all here. A partial set (a privacy setting that
+  // withholds one) is not evidence of speed, so it falls through to the measurement below.
+  if (ect === '4g' && downlink !== null) return CHAT;
+
+  // No usable hints (Safari, Firefox, or the first request before Chromium has sent any): the
+  // round trip Cloudflare measured. Zero is not a measurement: over HTTP/3 there is no TCP
+  // handshake to time, so it must not read as "very fast".
   const tcp = (req as Request & { cf?: CfLike }).cf?.clientTcpRtt;
-  if (typeof tcp === 'number' && tcp <= FAST_TCP_RTT_MS) return CHAT;
+  if (typeof tcp === 'number' && tcp > 0 && tcp <= FAST_TCP_RTT_MS) return CHAT;
   return LITE;
 }
 
 export function rootResponse(req: Request, chatLive: boolean): Response {
+  // GET and HEAD only: a link checker's HEAD gets the same answer, anything else is refused.
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD', 'Cache-Control': 'no-store' } });
+  }
   return new Response(null, {
     status: 302,
     headers: {
