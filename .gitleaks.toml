@@ -31,7 +31,8 @@ regexes = ['''Bearer sk_shamwari_\.\.\.''', '''SECRET-\d''', '''sk_shamwari_e2e_
 
 # The obviously fake end-to-end key `sk_shamwari_e2e_0123456789abcdef` that #122 put in
 # core/e2e_app.py. #128 builds that value at runtime, so no current file carries it, but
-# the history scan still reads it in the #122 commits. It is allowlisted as the literal
+# the history scan still reads it in the #122 commits (f4976d8, the squash, and its
+# pre-squash twin b3c0945). It is allowlisted as the literal
 # string (the `regexes` entry above), not by commit, so a real credential committed in
 # those same commits is still reported. A random key never equals this value.
 #
