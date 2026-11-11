@@ -24,8 +24,62 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Which parts of the repository this change touches, so each job below runs only when its own code (or
+  # something it depends on) changed. A job that is skipped reports as skipped, which satisfies a required
+  # check, so a docs-only change does not wait for the Core image build or the browser tests. A change to
+  # this file, or one that cannot be diffed (a new branch, a force push), runs everything.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-latest
+    outputs:
+      gateway: ${{ steps.f.outputs.gateway }}
+      chat_guard: ${{ steps.f.outputs.chat_guard }}
+      core: ${{ steps.f.outputs.core }}
+      docs_site: ${{ steps.f.outputs.docs_site }}
+      site: ${{ steps.f.outputs.site }}
+      app: ${{ steps.f.outputs.app }}
+      mobile: ${{ steps.f.outputs.mobile }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: f
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          all=false
+          if [ -z "${BASE:-}" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] \
+             || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            all=true
+            files=""
+          else
+            files="$(git diff --name-only "$BASE" HEAD)"
+          fi
+          echo "$files" | sed 's/^/changed: /'
+          # Anything that changes how CI itself runs, runs everything.
+          if echo "$files" | grep -qx '.github/workflows/ci.yml'; then all=true; fi
+          hit() { # hit <extended regex over paths>
+            if [ "$all" = true ] || echo "$files" | grep -Eq "$1"; then echo true; else echo false; fi
+          }
+          {
+            # The gateway's tests read some of the docs (the status and sign-in pages), so docs count.
+            echo "gateway=$(hit '^(gateway/|docs/)')"
+            echo "chat_guard=$(hit '^chat/')"
+            # Core's end-to-end contract runs the gateway Worker against Core.
+            echo "core=$(hit '^(core/|gateway/|scripts/|db/)')"
+            echo "docs_site=$(hit '^docs-site/')"
+            echo "site=$(hit '^(site/|docs/)')"
+            echo "app=$(hit '^site/')"
+            echo "mobile=$(hit '^mobile/')"
+          } >> "$GITHUB_OUTPUT"
+          cat "$GITHUB_OUTPUT"
+
   gateway:
     name: Gateway (types, tests)
+    needs: changes
+    if: needs.changes.outputs.gateway == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -52,6 +106,8 @@ jobs:
 
   chat-guard:
     name: LibreChat guard (Rule 1)
+    needs: changes
+    if: needs.changes.outputs.chat_guard == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
@@ -75,6 +131,8 @@ jobs:
 
   core:
     name: Core (imports, syntax)
+    needs: changes
+    if: needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
     env:
       # Core reads its configuration at import time and fails loudly on a
@@ -152,6 +210,8 @@ jobs:
 
   docs-site:
     name: Docs site (build, links, tokens, size)
+    needs: changes
+    if: needs.changes.outputs.docs_site == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -183,6 +243,8 @@ jobs:
   site:
     # Name kept as it was, so a required-status rule on it keeps working.
     name: Landing page (build, links, tokens, size)
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -216,6 +278,8 @@ jobs:
 
   app:
     name: Chat app (build, check, unit, e2e)
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
@@ -260,6 +324,8 @@ jobs:
 
   mobile:
     name: Mobile (types, tests)
+    needs: changes
+    if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
