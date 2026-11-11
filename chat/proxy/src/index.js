@@ -91,7 +91,6 @@ export default {
 
     headers.set("content-security-policy", CSP);
     headers.set("x-content-type-options", "nosniff");
-    headers.set("x-frame-options", "DENY");
     headers.set("referrer-policy", "strict-origin-when-cross-origin");
     headers.set(
       "cache-control",
