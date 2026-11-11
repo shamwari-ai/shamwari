@@ -150,6 +150,14 @@ body {
   flex: 1 1 0;
   min-height: 0;
   padding-inline: var(--gap-floor);
+  /* The drawer's head (brand, close button) sits right above this column. Whatever the scroll position, no row may come
+     closer to it than the 7px floor. The top two tokens of the column are a clipped band (clipped content is not drawn
+     and takes no taps), so a row that is reachable starts at least 7px below the head, with room for the 2px the floor
+     audit probes inside a row. The content starts a third token down, so at rest the first row's focus ring (which
+     reaches above the row) is inside the visible part, and scroll-padding keeps a focused row out of the band too. */
+  padding-block-start: calc(var(--gap-floor) * 3);
+  scroll-padding-block-start: calc(var(--gap-floor) * 3);
+  clip-path: inset(calc(var(--gap-floor) * 2) 0 0 0);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -1031,4 +1039,28 @@ html[data-view='pending'] dialog {
 .offline-switch[aria-checked='true'] {
   background: var(--muted);
   box-shadow: inset 0 0 0 1.5px var(--foreground);
+}
+
+/* ---- large text ------------------------------------------------------------------------------------------------
+   With text at 200% the top bar's menu, brand and actions (Offline mode, New chat) no longer fit one row on a phone. The
+   bar wraps instead of pushing the last action off the screen: the actions drop to a second line, right-aligned. */
+[data-slot='app-topbar'] {
+  flex-wrap: wrap;
+  row-gap: var(--gap-floor);
+  padding-block: var(--gap-floor);
+}
+[data-slot='app-topbar'] > div.ml-auto {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* In the drawer, a label that does not fit wraps (at 200% text "Delete history" is wider than the drawer), and the
+   Plugins / Skills / MCP tabs wrap onto a second line instead of running off the screen. */
+.chats .btn,
+.chats .side-row {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.side-tabs {
+  flex-wrap: wrap;
 }

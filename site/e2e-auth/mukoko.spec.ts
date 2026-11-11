@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openAccount } from '../e2e/helpers';
+import { closeChats, openAccount, openChats } from '../e2e/helpers';
 
 // Mukoko sign-in (WorkOS access token) against a STAND-IN for the session Worker and
 // the mock gateway. The flag is a build setting and is off in the normal build.
@@ -7,6 +7,21 @@ const STUB = 'http://127.0.0.1:4323/__stub/auth';
 const MOCK = 'http://127.0.0.1:8789';
 const VALID = 'eyJhbGciOiJSUzI1NiJ9.valid-secret-payload.sig';
 const EXPIRED = 'eyJhbGciOiJSUzI1NiJ9.expired.sig';
+
+/** An access token that names a person (the page reads only `sub`, to choose whose store of messages to open). */
+const b64url = (o: object) => Buffer.from(JSON.stringify(o)).toString('base64url');
+const tokenFor = (sub: string) => `eyJhbGciOiJSUzI1NiJ9.${b64url({ sub })}.sig`;
+
+/** Sign out through the dialog: keeping the messages is the default, deleting them is a choice made in the dialog. */
+async function signOut(page: Page, opts: { alsoDelete?: boolean } = {}) {
+  await openAccount(page);
+  await page.locator('#signout').click();
+  const dialog = page.locator('#signout-dialog');
+  await expect(dialog).toBeVisible();
+  await expect(page.locator('#signout-delete')).not.toBeChecked(); // keep is the default
+  if (opts.alsoDelete) await page.locator('#signout-delete').check();
+  await dialog.getByRole('button', { name: 'Sign out' }).click();
+}
 
 const steer = (page: Page, body: object) => page.request.post(STUB, { data: body });
 const state = async (page: Page) => (await page.request.get(STUB)).json() as Promise<{ tokenCalls: number; logoutCalls: number; session: boolean }>;
@@ -109,6 +124,7 @@ test('sign-out clears the token, ends the session, and the next ask needs a sign
   await openAccount(page);
   await expect(page.locator('#signout')).toHaveText('Sign out');
   await page.locator('#signout').click();
+  await page.locator('#signout-dialog').getByRole('button', { name: 'Sign out' }).click();
 
   await SIGNIN_SCREEN_ONLY(page);
   await expect(page.locator('#signin-note')).toContainText('Signed out'); // said on the sign-in screen, where the person is looking
@@ -163,29 +179,111 @@ test('the Mukoko button starts sign-in on the Worker, which the service worker m
   expect((await state(page)).session).toBe(true);
 });
 
-test('signing out removes the chats from this device, so the next person does not read them', async ({ page }) => {
+test('signing out keeps the messages on this device by default, and says they are not encrypted', async ({ page }) => {
+  await steer(page, { session: true, tokens: [tokenFor('user-A')] });
   await open(page);
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('.cite').first()).toBeVisible();
   await openAccount(page);
   await page.locator('#signout').click();
-  await expect(page.locator('#signin-note')).toContainText('removed from this device');
-  await expect(page.locator('#log article')).toHaveCount(0);
-  await page.reload();
+  await expect(page.locator('#signout-dialog')).toContainText('not encrypted');
+  await expect(page.locator('#signout-dialog')).toContainText('Also delete messages from this device');
+  await page.locator('#signout-dialog').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.locator('#signout-dialog')).toBeHidden();
+  await expect(page.locator('#log article')).not.toHaveCount(0); // cancelling signs nothing out
+  await signOut(page);
+  await expect(page.locator('#signin-note')).toContainText('stay on this device');
+  await expect(page.locator('#log article')).toHaveCount(0); // not on screen for the next person
+  // The same person signs in again: their messages are there.
+  await steer(page, { session: true, tokens: [tokenFor('user-A')] });
+  await page.goto('/lite/');
   await page.waitForSelector('html[data-auth-ready="true"]');
-  await expect(page.locator('#log article')).toHaveCount(0);
-  await expect(page.locator('#history')).toBeHidden();
+  await expect(page.locator('article.msg.user')).toContainText('Is everyone equal');
 });
 
-test('signing out clears the chats at once even when the sign-out request hangs', async ({ page }) => {
+test('another person signing in on the same device does not read them; the first person still has them', async ({ page }) => {
+  await steer(page, { session: true, tokens: [tokenFor('user-A')] });
+  await open(page);
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('.cite').first()).toBeVisible();
+  await signOut(page);
+
+  await steer(page, { session: true, tokens: [tokenFor('user-B')] });
+  await page.goto('/lite/');
+  await page.waitForSelector('html[data-auth-ready="true"]');
+  await expect(page.locator('#log article')).toHaveCount(0);
+  await openChats(page);
+  await expect(page.locator('#history-list button')).toHaveCount(0);
+  await expect(page.getByText('Is everyone equal')).toHaveCount(0);
+  await closeChats(page); // the page behind an open drawer is inert
+  await ask(page, 'Question from B');
+  await expect(page.locator('.cite').first()).toBeVisible();
+  await signOut(page);
+
+  await steer(page, { session: true, tokens: [tokenFor('user-A')] });
+  await page.goto('/lite/');
+  await page.waitForSelector('html[data-auth-ready="true"]');
+  await expect(page.locator('article.msg.user')).toContainText('Is everyone equal');
+  await expect(page.getByText('Question from B')).toHaveCount(0);
+});
+
+test('chats from before stores were per person go to the first person who signs in, not to the next', async ({ page }) => {
+  // A device from before this change: its chats are in the unowned store (the one developer-key mode uses).
+  await steer(page, { session: true, tokens: [VALID] }); // a token that names nobody: the unowned store stays in use
+  await open(page);
+  await ask(page, 'Old question');
+  await expect(page.locator('.cite').first()).toBeVisible();
+  await signOut(page);
+  await steer(page, { session: true, tokens: [tokenFor('user-A')] });
+  await page.goto('/lite/');
+  await page.waitForSelector('html[data-auth-ready="true"]');
+  await expect(page.locator('article.msg.user')).toContainText('Old question'); // adopted by the first person
+  await signOut(page);
+  await steer(page, { session: true, tokens: [tokenFor('user-B')] });
+  await page.goto('/lite/');
+  await page.waitForSelector('html[data-auth-ready="true"]');
+  await expect(page.getByText('Old question')).toHaveCount(0);
+});
+
+test('when the session has ended by the time the page loads, the previous person\'s chats are not left on the page', async ({ page }) => {
+  await steer(page, { session: true, tokens: [tokenFor('user-A')] });
+  await open(page);
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('.cite').first()).toBeVisible();
+  await steer(page, { session: false, tokenStatus: 401 }); // the session ended while the page was closed
+  await page.goto('/lite/?signin=failed'); // stay on the sign-in screen, no redirect
+  await page.waitForSelector('html[data-auth-ready="true"]');
+  await expect(page.locator('#auth')).toBeVisible();
+  await expect(page.getByText('Is everyone equal')).toHaveCount(0); // not even hidden in the page
+  await steer(page, { session: true, tokens: [tokenFor('user-A')] });
+  await page.goto('/lite/');
+  await page.waitForSelector('html[data-auth-ready="true"]');
+  await expect(page.locator('article.msg.user')).toContainText('Is everyone equal'); // still theirs, on the device
+});
+
+test('"Also delete messages from this device" removes them, and signing in again finds nothing', async ({ page }) => {
+  await steer(page, { session: true, tokens: [tokenFor('user-A')] });
+  await open(page);
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('.cite').first()).toBeVisible();
+  await signOut(page, { alsoDelete: true });
+  await expect(page.locator('#signin-note')).toContainText('removed from this device');
+  await expect(page.locator('#log article')).toHaveCount(0);
+  await steer(page, { session: true, tokens: [tokenFor('user-A')] });
+  await page.goto('/lite/');
+  await page.waitForSelector('html[data-auth-ready="true"]');
+  await expect(page.locator('#log article')).toHaveCount(0);
+  await openChats(page);
+  await expect(page.locator('#history-list button')).toHaveCount(0);
+});
+
+test('signing out leaves the chat at once even when the sign-out request hangs', async ({ page }) => {
   await open(page);
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('.cite').first()).toBeVisible();
   await steer(page, { session: true, logoutDelayMs: 30_000 }); // the Worker never answers in time
-  await openAccount(page);
-  await page.locator('#signout').click();
-  // The chats are gone from the device without waiting for the network.
-  await expect(page.locator('#signin-note')).toContainText('removed from this device', { timeout: 3_000 });
+  await signOut(page);
+  await expect(page.locator('#signin-note')).toContainText('Signed out', { timeout: 3_000 });
   await expect(page.locator('#log article')).toHaveCount(0);
 });
 
