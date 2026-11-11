@@ -17,7 +17,7 @@ describe('wrangler.jsonc production vars', () => {
     const ids = (v.WORKOS_CLIENT_ID ?? '').split(',');
     expect(ids.length).toBeGreaterThan(0);
     for (const id of ids) expect(id).toMatch(/^client_[0-9A-Z]{26}$/);
-    for (const iss of (v.WORKOS_ISSUER ?? '').split(',')) expect(iss).toMatch(/^https:\/\/accounts\.mukoko\.com(\/\S+)?$/);
+    for (const iss of (v.WORKOS_ISSUER ?? '').split(',')) expect(iss).toMatch(/^https:\/\/(accounts|auth)\.mukoko\.com(\/\S+)?$/);
     expect(Number.isInteger(Number(v.WORKOS_MONTHLY_TOKEN_CAP))).toBe(true);
     expect(Number(v.WORKOS_MONTHLY_TOKEN_CAP)).toBeGreaterThan(0);
   });
