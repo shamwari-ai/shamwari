@@ -40,6 +40,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await openChat(page);
       await openAccount(page);
       await page.locator('#lang').selectOption('sn');
+      await closeChats(page); // the page behind an open drawer is inert; the draft note is read with the drawer closed
       await expect(page.locator('#review')).toBeVisible();
       expect(summary(await scan(page))).toEqual([]);
     });
@@ -70,7 +71,8 @@ async function underTheFloor(page: Page) {
       const b = el.getBoundingClientRect();
       // Not hidden, not zero-sized, and on the screen: the skip link is parked off-screen until it is focused.
       const onScreen = b.right > 0 && b.left < innerWidth && b.bottom > 0;
-      return s.visibility !== 'hidden' && s.display !== 'none' && b.width > 0 && b.height > 0 && onScreen;
+      // An inert subtree (the page behind an open drawer) cannot be reached, so it is nobody's neighbour.
+      return s.visibility !== 'hidden' && s.display !== 'none' && b.width > 0 && b.height > 0 && onScreen && !el.closest('[inert]');
     };
     const label = (el: Element) => `${el.tagName.toLowerCase()}${(el as HTMLElement).id ? '#' + (el as HTMLElement).id : ''} "${(el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 24)}"`;
     const out: string[] = [];

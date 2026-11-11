@@ -220,18 +220,21 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   const drawerToggle = document.querySelector<HTMLElement>('[data-slot="app-topbar"] > button[popovertarget]');
   const pageFrame = document.querySelector<HTMLElement>('[data-slot="app-main"]');
   drawerToggle?.setAttribute('aria-expanded', 'false');
-  drawer?.addEventListener('toggle', (e) => {
+  // `beforetoggle` runs synchronously inside show/hidePopover(), so a caller that closes the drawer and then focuses the
+  // question box (New chat) finds the page already reachable again. `toggle` runs after, for focus.
+  drawer?.addEventListener('beforetoggle', (e) => {
     const open = (e as Event & { newState?: string }).newState === 'open';
     if (open) document.documentElement.setAttribute('data-drawer', 'open');
     else document.documentElement.removeAttribute('data-drawer');
     drawerToggle?.setAttribute('aria-expanded', String(open));
-    if (open) {
-      if (pageFrame) pageFrame.inert = true;
+    if (pageFrame) pageFrame.inert = open;
+  });
+  drawer?.addEventListener('toggle', (e) => {
+    if ((e as Event & { newState?: string }).newState === 'open') {
       drawer.querySelector<HTMLElement>('button[popovertargetaction="hide"]')?.focus();
-    } else {
-      if (pageFrame) pageFrame.inert = false;
+    } else if (!document.activeElement || document.activeElement === document.body || drawer.contains(document.activeElement)) {
       // Back to the button that opened it, unless the person already moved on to something else.
-      if (!document.activeElement || document.activeElement === document.body || drawer.contains(document.activeElement)) drawerToggle?.focus();
+      drawerToggle?.focus();
     }
   });
 
