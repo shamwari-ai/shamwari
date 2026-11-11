@@ -39,8 +39,6 @@ export const BREADCRUMB_LABELS: Record<string, string> = Object.fromEntries(
   PAGES.filter((p) => !p.external && p.path !== '/').map((p) => [p.path.replace(/\//g, ''), p.label]),
 );
 
-export const EARLY_ACCESS_BLURB =
-  "We're bringing on the first customers by hand — mostly around Zimbabwean tax and regulatory compliance, where being wrong costs real money and the answer changes monthly.";
 
 // Mirrors the { target, rel } spread @bundu/ui's Button/Card already do
 // internally for an external link — used by local components (Header,

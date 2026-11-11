@@ -4,6 +4,9 @@
 // see site/README.md's "Keeping this honest".
 import { REPO } from '../lib/site';
 
+/** When the corpus was last checked for loaded content. One place, so every page that says it agrees. */
+export const CORPUS_LAST_CHECKED = '31 October 2026';
+
 export type Status = 'live' | 'building' | 'planned';
 
 export interface StatusItem {
@@ -34,7 +37,7 @@ export const STATUS: StatusItem[] = [
   {
     state: 'building',
     title: 'The sources behind every answer',
-    body: 'Sources are reviewed and approved one at a time: we use what we have the right to use, nothing scraped first and asked about later. The order is farming information from Nyuchi-owned and licence-clean sources first, the Constitution of Zimbabwe second, and law and tax after that, once the Acts have a licence we can use. When we last checked (31 October 2026) nothing was loaded, so Shamwari cannot cite a real source yet. ZimLII, a free library of Zimbabwean law, licenses its legislation for non-commercial use by default, though some collections differ, which does not fit a commercial service, so it stays out until we have its permission.',
+    body: `Sources are reviewed and approved one at a time: we use what we have the right to use, nothing scraped first and asked about later. The order is farming information from Nyuchi-owned and licence-clean sources first, the Constitution of Zimbabwe second, and law and tax after that, once the Acts have a licence we can use. When we last checked (${CORPUS_LAST_CHECKED}) nothing was loaded, so Shamwari cannot cite a real source yet. ZimLII, a free library of Zimbabwean law, licenses its legislation for non-commercial use by default, though some collections differ, which does not fit a commercial service, so it stays out until we have its permission.`,
     issues: [17, 18],
     highlight: true,
   },
@@ -64,7 +67,7 @@ export const STATUS: StatusItem[] = [
   {
     state: 'planned',
     title: 'Shamwari MCP server',
-    body: 'Connect Shamwari’s cited Zimbabwean law and tax to your own agents and tools. Not built yet.',
+    body: 'Connect Shamwari’s cited answers to your own agents and tools. Not built yet.',
   },
   {
     state: 'planned',

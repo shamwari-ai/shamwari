@@ -224,6 +224,12 @@ for (const page of pages) {
     }
   }
 
+  // A `{NAME}` inside a quoted Astro attribute is not interpolated: it ships as literal text. Nothing
+  // else notices, so look for it in what was built (visible text only, not scripts or styles).
+  const visible = html.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, '').replace(/<[^>]+>/g, ' ');
+  const leaked = visible.match(/\{[A-Za-z_$][\w$.]*\}/);
+  if (leaked) fail.push(`${where}: an unrendered placeholder ${leaked[0]} is in the page text (a {…} inside a quoted attribute is not interpolated)`);
+
   // No client JavaScript anywhere except the chat app. @bundu/ui's React
   // primitives render server-side with no client:* directive, so the
   // marketing pages ship none. The chat page is the one exception, and it may
