@@ -209,9 +209,27 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     thread = found;
     rebuild();
     void renderHistory();
+    showSection('chat');
     closeDrawer();
     $('#thread').focus();
   };
+
+  // ---- the drawer's sections: Chat, Projects, Artifacts, Plugins ------------------------------------------
+  type Section = 'chat' | 'projects' | 'artifacts' | 'plugins';
+  let pluginsLoaded = false;
+  const showSection = (name: Section) => {
+    document.querySelectorAll<HTMLElement>('[data-panel]').forEach((p) => (p.hidden = p.dataset.panel !== name));
+    document.querySelectorAll<HTMLElement>('[data-section]').forEach((b) => {
+      if (b.dataset.section === name) b.setAttribute('aria-current', 'page');
+      else b.removeAttribute('aria-current');
+    });
+    if (name === 'plugins' && !pluginsLoaded) {
+      pluginsLoaded = true;
+      // Loaded on first use: the chat's first load does not carry the tabs.
+      void import('./plugins').then((m) => m.initPlugins(document)).catch(() => (pluginsLoaded = false));
+    }
+  };
+  document.querySelectorAll<HTMLElement>('[data-section]').forEach((b) => b.addEventListener('click', () => showSection(b.dataset.section as Section)));
 
   const threadButton = (t: Thread): HTMLElement => {
     const b = h('button', { type: 'button', class: 'btn link' }, t.title || '…');
@@ -262,6 +280,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
       }),
     );
     $('#side-artifacts').hidden = artifacts.length === 0;
+    $('#artifacts-empty').hidden = artifacts.length > 0;
 
     syncChatTools();
   };
