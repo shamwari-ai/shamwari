@@ -419,6 +419,12 @@ input:not([type='checkbox']):not([type='radio']) {
 .legal p {
   margin: 0;
 }
+.legal section {
+  display: grid;
+  gap: var(--gap-floor);
+  padding-block-end: var(--inset-floor);
+  border-bottom: 1px solid var(--border);
+}
 .legal {
   max-width: 40rem;
   margin: 0 auto;

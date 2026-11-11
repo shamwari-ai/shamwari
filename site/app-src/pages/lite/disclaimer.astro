@@ -1,8 +1,14 @@
 ---
 // The disclaimer and the privacy statement, on their own page so the chat has no small print under it.
-// Complete English HTML without JavaScript; a small script translates it to the saved language.
+// No script (only the chat page ships one): all three languages are on the page, English first, each marked
+// with its own lang so a screen reader and a person find theirs.
 import '../../../src/chat/chat.css';
-import { en } from '../../../src/chat/strings';
+import { en, sn, nd } from '../../../src/chat/strings';
+const versions = [
+  { lang: 'en', s: en },
+  { lang: 'sn', s: sn },
+  { lang: 'nd', s: nd },
+];
 ---
 <!doctype html>
 <html lang="en">
@@ -16,15 +22,15 @@ import { en } from '../../../src/chat/strings';
 </head>
 <body class="text-base">
   <main class="legal">
-    <h1 data-i18n="disclaimerTitle">{en.disclaimerTitle}</h1>
-    <p data-i18n="footer">{en.footer}</p>
-    <p data-i18n="storedHere">{en.storedHere}</p>
-    <p data-i18n="privacyDetail">{en.privacyDetail}</p>
-    <p><a class="btn" href="/lite/" data-i18n="backToChat">{en.backToChat}</a></p>
+    {versions.map(({ lang, s }) => (
+      <section lang={lang} aria-labelledby={`legal-${lang}`}>
+        <h1 id={`legal-${lang}`}>{s.disclaimerTitle}</h1>
+        <p>{s.footer}</p>
+        <p>{s.storedHere}</p>
+        <p>{s.privacyDetail}</p>
+      </section>
+    ))}
+    <p><a class="btn" href="/lite/">{en.backToChat}</a></p>
   </main>
-  <script>
-    import { applyStrings, currentLanguage } from '../../../src/chat/i18n';
-    applyStrings(document, currentLanguage());
-  </script>
 </body>
 </html>
