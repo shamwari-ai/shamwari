@@ -64,8 +64,9 @@ jobs:
             if [ "$all" = true ] || echo "$files" | grep -Eq "$1"; then echo true; else echo false; fi
           }
           {
-            # The gateway's tests read some of the docs (the status and sign-in pages), so docs count.
-            echo "gateway=$(hit '^(gateway/|docs/)')"
+            # The gateway's tests read some of the docs (the status and sign-in pages) and two files
+            # from core/ (the usage-field list and main.py), so those count.
+            echo "gateway=$(hit '^(gateway/|core/|docs/)')"
             echo "chat_guard=$(hit '^chat/')"
             # Core's end-to-end contract runs the gateway Worker against Core.
             echo "core=$(hit '^(core/|gateway/|scripts/|db/)')"
