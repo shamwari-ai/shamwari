@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, openAccount, openChat, openChats } from './helpers';
+import { ask, openAccount, openChat, openChats, newChat } from './helpers';
 
 const onlyOnce = (urls: string[], needle: string) => urls.filter((u) => u.includes(needle)).length;
 
@@ -58,7 +58,7 @@ test('a question queued in an earlier chat is still delivered after New chat', a
   await openChat(page);
   await context.setOffline(true);
   await ask(page, 'Queued in the first chat');
-  await page.getByRole('button', { name: 'New chat' }).click();
+  await newChat(page);
   await expect(page.locator('#log article')).toHaveCount(0);
 
   await context.setOffline(false);
@@ -134,7 +134,7 @@ test('discarding the only question leaves nothing behind after a reload', async 
       page.evaluate(
         () =>
           new Promise<number>((done) => {
-            const open = indexedDB.open('shamwari-chat', 1);
+            const open = indexedDB.open('shamwari-chat');
             open.onsuccess = () => {
               const all = open.result.transaction('threads').objectStore('threads').getAll();
               all.onsuccess = () => done(all.result.length);
@@ -215,7 +215,7 @@ test('an interrupted question in an older chat is recovered and answered, not ju
   await page.evaluate(
     () =>
       new Promise<void>((done, fail) => {
-        const open = indexedDB.open('shamwari-chat', 1);
+        const open = indexedDB.open('shamwari-chat');
         open.onerror = () => fail(open.error);
         open.onsuccess = () => {
           const tx = open.result.transaction('threads', 'readwrite');

@@ -12,7 +12,7 @@ import {
   type ErrorActions,
   type QueueActions,
 } from './render';
-import { newId, openStore, titleOf, type StoredMessage, type Thread } from './store';
+import { newId, openStore, titleOf, type Artifact, type Project, type StoredMessage, type Thread } from './store';
 import { LANGUAGES, isLanguage } from './strings';
 import type { AskErrorKind, ChatMessage, Scope } from './types';
 
@@ -162,7 +162,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   const mount = (m: StoredMessage) => {
     const s = strings();
     if (m.role === 'assistant' && m.answer) {
-      place(m.id, renderAnswer(m, m.answer, s, lang));
+      place(m.id, renderAnswer(m, m.answer, s, lang, () => void saveAnswer(m)));
       return;
     }
     const existing = nodes.get(m.id);
@@ -196,25 +196,187 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     document.querySelector('[data-slot="app-sidebar"]')?.setAttribute('aria-label', s.yourChats);
   };
 
+  // ---- the drawer: pinned, projects, chats, artifacts ------------------------------------------------
+  const openThread = async (id: string) => {
+    // Read it again: a question queued in that chat may have been answered in the background since the list was drawn.
+    const found = (await listThreads()).find((x) => x.id === id);
+    if (!found) return;
+    thread = found;
+    rebuild();
+    void renderHistory();
+    closeDrawer();
+    $('#thread').focus();
+  };
+
+  const threadButton = (t: Thread): HTMLElement => {
+    const b = h('button', { type: 'button', class: 'btn link' }, t.title || '…');
+    if (t.id === thread.id) b.setAttribute('aria-current', 'true');
+    b.addEventListener('click', () => void openThread(t.id));
+    return h('li', {}, b);
+  };
+
+  const saveProject = async (p: Project) => {
+    p.updatedAt = Date.now();
+    try {
+      await store.putProject(p);
+    } catch {
+      $('#toast').textContent = strings().storageFailed;
+    }
+  };
+
+  let projectsNow: Project[] = [];
+
   const renderHistory = async () => {
-    const list = (await listThreads()).filter((t) => t.id !== thread.id && t.messages.length);
-    const ul = $('#history-list');
-    ul.replaceChildren(
-      ...list.map((t) => {
-        const b = h('button', { type: 'button', class: 'btn link' }, t.title || '…');
-        b.addEventListener('click', async () => {
-          // Read it again: a question queued in that chat may have been
-          // answered in the background since this list was drawn.
-          thread = (await listThreads()).find((x) => x.id === t.id) ?? t;
-          rebuild();
-          void renderHistory();
-          closeDrawer();
-          $('#thread').focus();
-        });
+    const s = strings();
+    const all = (await listThreads()).filter((t) => t.messages.length);
+    projectsNow = await store.projects().catch(() => [] as Project[]);
+    const artifacts = await store.artifacts().catch(() => [] as Artifact[]);
+
+    // Pinned: pinned projects, then pinned chats that are not already inside a project.
+    const pinnedProjects = projectsNow.filter((p) => p.pinned);
+    const pinnedChats = all.filter((t) => t.pinned);
+    $('#pinned-list').replaceChildren(
+      ...pinnedProjects.map((p) => projectItem(p, all, s)),
+      ...pinnedChats.map(threadButton),
+    );
+    $('#side-pinned').hidden = pinnedProjects.length + pinnedChats.length === 0;
+
+    // Projects (the pinned ones are listed again here: Pinned is a shortcut, not a move).
+    $('#project-list').replaceChildren(...projectsNow.map((p) => projectItem(p, all, s)));
+    $('#project-empty').hidden = projectsNow.length > 0;
+
+    // Loose chats: not pinned, not in a project, not the one on screen.
+    const loose = all.filter((t) => t.id !== thread.id && !t.pinned && !t.projectId);
+    $('#history-list').replaceChildren(...loose.map(threadButton));
+    $('#history').hidden = loose.length === 0;
+
+    $('#artifact-list').replaceChildren(
+      ...artifacts.map((a) => {
+        const b = h('button', { type: 'button', class: 'btn link' }, a.title || '…');
+        b.addEventListener('click', () => showArtifact(a));
         return h('li', {}, b);
       }),
     );
-    $('#history').hidden = list.length === 0;
+    $('#artifact-empty').hidden = artifacts.length > 0;
+
+    syncChatTools();
+  };
+
+  /** One project: its chats, and the two things a person does to a project (pin it, delete it). */
+  const projectItem = (p: Project, all: Thread[], s: ReturnType<typeof strings>): HTMLElement => {
+    const inside = all.filter((t) => t.projectId === p.id);
+    const pin = h('button', { type: 'button', class: 'btn', 'aria-pressed': String(!!p.pinned) }, p.pinned ? s.unpinProject : s.pinProject);
+    pin.addEventListener('click', async () => {
+      p.pinned = !p.pinned;
+      await saveProject(p);
+      void renderHistory();
+    });
+    const del = h('button', { type: 'button', class: 'btn danger' }, s.deleteProject);
+    del.addEventListener('click', async () => {
+      if (!confirm(s.deleteProjectConfirm)) return;
+      // Its chats are kept: they go back to being loose chats.
+      for (const t of inside) {
+        delete t.projectId;
+        await save(t);
+      }
+      await store.removeProject(p.id).catch(() => undefined);
+      void renderHistory();
+    });
+    const summary = h('summary', {}, `${p.name} (${inside.length})`);
+    return h('li', {}, h('details', { class: 'project' }, summary, h('ul', { class: 'side-list' }, ...inside.map(threadButton)), h('div', { class: 'row' }, pin, del)));
+  };
+
+  /** The open chat's tools: pin, project, delete. Only a chat with a question in it has any. */
+  const syncChatTools = () => {
+    const s = strings();
+    const tools = $('#chat-tools');
+    tools.hidden = thread.messages.length === 0;
+    const pin = $('#pin-chat');
+    pin.textContent = thread.pinned ? s.unpin : s.pin;
+    pin.setAttribute('aria-pressed', String(!!thread.pinned));
+    const sel = $<HTMLSelectElement>('#chat-project');
+    sel.replaceChildren(
+      h('option', { value: '' }, s.noProject),
+      ...projectsNow.map((p) => h('option', { value: p.id }, p.name)),
+    );
+    sel.value = thread.projectId && projectsNow.some((p) => p.id === thread.projectId) ? thread.projectId : '';
+  };
+
+  $('#pin-chat').addEventListener('click', async () => {
+    thread.pinned = !thread.pinned;
+    await save(thread);
+    void renderHistory();
+  });
+  $('#chat-project').addEventListener('change', async () => {
+    const id = $<HTMLSelectElement>('#chat-project').value;
+    if (id) thread.projectId = id;
+    else delete thread.projectId;
+    await save(thread);
+    void renderHistory();
+  });
+  $('#delete-chat').addEventListener('click', async () => {
+    if (!confirm(strings().deleteChatConfirm)) return;
+    const gone = thread;
+    live.delete(gone.id);
+    gone.messages = [];
+    await save(gone); // an empty thread is removed from the store
+    thread = fresh();
+    rebuild();
+    void renderHistory();
+    input.focus();
+  });
+  $<HTMLFormElement>('#project-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const field = $<HTMLInputElement>('#project-name');
+    const name = field.value.trim().replace(/\s+/g, ' ').slice(0, 60);
+    if (!name) return;
+    await saveProject({ id: newId(), name, updatedAt: Date.now() });
+    field.value = '';
+    void renderHistory();
+  });
+
+  // ---- artifacts: an answer kept apart from its chat ------------------------------------------------
+  const dialog = $<HTMLDialogElement>('#artifact-view');
+  let shown: Artifact | null = null;
+  const showArtifact = (a: Artifact) => {
+    shown = a;
+    $('#artifact-title-view').textContent = a.title;
+    $('#artifact-text').textContent = a.text;
+    $('#artifact-cites').replaceChildren(
+      ...a.citations.map((c) => h('li', {}, c.heading ? `${c.title} — ${c.heading}` : c.title)),
+    );
+    $('#artifact-open').hidden = !live.has(a.threadId);
+    closeDrawer();
+    dialog.showModal();
+  };
+  $('#artifact-close').addEventListener('click', () => dialog.close());
+  $('#artifact-open').addEventListener('click', () => {
+    const id = shown?.threadId;
+    dialog.close();
+    if (id) void openThread(id);
+  });
+  $('#artifact-remove').addEventListener('click', async () => {
+    if (shown) await store.removeArtifact(shown.id).catch(() => undefined);
+    dialog.close();
+    void renderHistory();
+  });
+  const saveAnswer = async (m: StoredMessage) => {
+    if (!m.answer) return;
+    const q = thread.messages[thread.messages.indexOf(m) - 1];
+    try {
+      await store.putArtifact({
+        id: newId(),
+        threadId: thread.id,
+        title: titleOf(q?.text || m.answer.text),
+        text: m.answer.text,
+        citations: m.answer.citations,
+        savedAt: Date.now(),
+      });
+      $('#toast').textContent = strings().answerSaved;
+    } catch {
+      $('#toast').textContent = strings().storageFailed;
+    }
+    void renderHistory();
   };
 
   const syncBusy = () => log.setAttribute('aria-busy', String(inflight.size > 0));
@@ -306,7 +468,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
         delete m.hint;
         if (shown()) {
           mount(m);
-          place(reply.id, renderAnswer(reply, res.value, strings(), lang), m.id);
+          place(reply.id, renderAnswer(reply, res.value, strings(), lang, () => void saveAnswer(reply)), m.id);
           nodes.get(reply.id)!.scrollIntoView({ block: 'start' });
         }
         retryMs = RETRY_FIRST_MS;
@@ -534,6 +696,18 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     }, 4000);
   });
 
+  // The drawer's foot: New chat and the account, as in the top bar.
+  $('#side-new').addEventListener('click', () => {
+    closeDrawer();
+    document.querySelector<HTMLButtonElement>('#new-chat button')?.click();
+  });
+  $('#side-account').addEventListener('click', () => {
+    closeDrawer();
+    const menu = document.querySelector<HTMLDetailsElement>('details.account');
+    if (menu) menu.open = true;
+    menu?.querySelector('summary')?.focus();
+  });
+
   $('#new-chat').addEventListener('click', () => {
     if (thread.messages.length) {
       thread = fresh();
@@ -575,6 +749,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     applyStrings(document, lang);
     labelShell();
     rebuild();
+    void renderHistory();
   });
 
   const online = () => {

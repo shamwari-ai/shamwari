@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, openAccount, openChat, openChats } from './helpers';
+import { ask, openAccount, openChat, openChats, newChat } from './helpers';
 
 test('asks a question and renders the answer with its citation card', async ({ page }) => {
   await openChat(page);
@@ -105,7 +105,7 @@ test('history stays on the device across reloads, new chat starts clean, delete 
   await expect(page.locator('article.msg.user')).toContainText('Is everyone equal');
   await expect(page.locator('.cite').first()).toBeVisible();
 
-  await page.getByRole('button', { name: 'New chat' }).click();
+  await newChat(page);
   await expect(page.locator('#log article')).toHaveCount(0);
   await expect(page.locator('#q')).toBeFocused();
   await openChats(page);
@@ -210,10 +210,10 @@ test('the shell speaks the chosen language: new chat, the drawer buttons and the
   await openAccount(page);
   await page.locator('#lang').selectOption('sn');
   await page.locator('details.account summary').click();
-  await expect(page.getByRole('button', { name: 'Hurukuro itsva' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Vhura hurukuro' })).toBeVisible();
   await page.getByRole('button', { name: 'Vhura hurukuro' }).click();
   await expect(page.getByRole('button', { name: 'Vhara hurukuro' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hurukuro itsva' })).toBeVisible();
   await expect(page.locator('[data-slot="app-sidebar"]')).toHaveAttribute('aria-label', 'Hurukuro dzenyu');
 });
 
@@ -221,7 +221,7 @@ test('picking an earlier chat closes the drawer, so the chat is not left covered
   await openChat(page);
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('.cite-link').first()).toBeVisible();
-  await page.locator('#new-chat').click();
+  await newChat(page);
   await openChats(page);
   await page.locator('#history-list button').first().click();
   await expect(page.locator('[data-slot="app-sidebar"]')).toBeHidden();
@@ -234,4 +234,52 @@ test('the privacy sentence is the same before the script runs and after (English
   const staticText = await page.locator('[data-i18n="storedHere"]').innerText();
   expect(staticText).toContain('not the text of your question or its answer');
   expect(staticText).not.toContain('a record of each question it answers');
+});
+
+test('the drawer pins a chat, files it in a project, keeps a saved answer, and deleting history clears all of it', async ({ page }) => {
+  await openChat(page);
+  await ask(page, 'Is everyone equal under the law?');
+  await expect(page.locator('article.msg.bot .cite').first()).toBeVisible();
+
+  // A project, made from the drawer, and the open chat filed in it.
+  await openChats(page);
+  await page.locator('#project-name').fill('Know my rights');
+  await page.getByRole('button', { name: 'Create project' }).click();
+  await expect(page.locator('#project-list summary')).toContainText('Know my rights (0)');
+  await page.keyboard.press('Escape');
+  await page.locator('#chat-project').selectOption({ label: 'Know my rights' });
+  await openChats(page);
+  await expect(page.locator('#project-list summary')).toContainText('Know my rights (1)');
+
+  // Pin the chat: it is listed under Pinned.
+  await page.keyboard.press('Escape');
+  await page.locator('#pin-chat').click();
+  await expect(page.locator('#pin-chat')).toHaveAttribute('aria-pressed', 'true');
+  await openChats(page);
+  await expect(page.locator('#side-pinned')).toBeVisible();
+  await expect(page.locator('#pinned-list')).toContainText('Is everyone equal');
+  await page.keyboard.press('Escape');
+
+  // Keep the answer: it appears under Artifacts and opens in a dialog with its source.
+  await page.getByRole('button', { name: 'Save answer' }).click();
+  await expect(page.locator('#toast')).toContainText('Saved to Artifacts');
+  await openChats(page);
+  await page.locator('#artifact-list button').first().click();
+  await expect(page.locator('#artifact-view')).toBeVisible();
+  await expect(page.locator('#artifact-cites li').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Close' }).click();
+
+  // It all survives a reload (it is on the device) and goes with Delete history.
+  await page.reload();
+  await page.waitForSelector('html[data-ready="true"]');
+  await openChats(page);
+  await expect(page.locator('#artifact-list button')).toHaveCount(1);
+  await expect(page.locator('#project-list summary')).toContainText('Know my rights');
+  await page.keyboard.press('Escape');
+  page.once('dialog', (d) => d.accept());
+  await openAccount(page);
+  await page.getByRole('button', { name: 'Delete history' }).click();
+  await openChats(page);
+  await expect(page.locator('#artifact-list button')).toHaveCount(0);
+  await expect(page.locator('#project-list li')).toHaveCount(0);
 });
