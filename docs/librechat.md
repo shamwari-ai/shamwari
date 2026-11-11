@@ -242,12 +242,13 @@ the owner names them and the rest stay as the original brief.
 
 ## The pin
 
-|         |                                                                                                                |
-| ------- | -------------------------------------------------------------------------------------------------------------- |
-| Project | LibreChat, `github.com/danny-avila/LibreChat`, MIT                                                             |
-| Release | `v0.8.8` (latest non-release-candidate tag on 1 Nov 2026; tagged 30 Sep 2026)                                  |
-| Commit  | `e8f3be08623663d4ad7f7241e693c94469b63bb0`                                                                     |
-| Image   | `ghcr.io/danny-avila/librechat:v0.8.8`, pinned by **digest** in the Dockerfile once the build step resolves it |
+|         |                                                                                                                                                            |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project | LibreChat, `github.com/danny-avila/LibreChat`, MIT                                                                                                         |
+| Release | `v0.8.8` (latest non-release-candidate tag on 1 Nov 2026; tagged 30 Sep 2026)                                                                              |
+| Base    | `e8f3be08623663d4ad7f7241e693c94469b63bb0`, the upstream commit the release tag names                                                                      |
+| Commit  | the Shamwari fork commit built (`chat/librechat/PIN`), which must sit on the base                                                                          |
+| Build   | from source at that commit by `chat/librechat/build.sh`; the project's ghcr image for `v0.8.8` was not in its tag list, so there is no image digest to pin |
 
 A floating tag (`latest`, `main`) is a CI failure. An upgrade is a pull request
 that changes the tag, re-runs every test below, and re-reads

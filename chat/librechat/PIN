@@ -1,4 +1,7 @@
-# The exact LibreChat release this deployment is built from. Changing either
-# line is a pull request that re-runs every guard (see docs/librechat.md, "The pin").
+# The exact LibreChat this deployment is built from: the Shamwari fork (FORK.md in
+# shamwari-ai/librechat) at `commit`, which sits on the upstream release `tag` at `base`.
+# Changing any line is a pull request that re-runs every guard and the e2e
+# (see docs/librechat.md, "The pin").
 tag=v0.8.8
-commit=e8f3be08623663d4ad7f7241e693c94469b63bb0
+base=e8f3be08623663d4ad7f7241e693c94469b63bb0
+commit=6538de302ea70487b202e4711bff103520724786
