@@ -91,10 +91,17 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
         <!-- Keys are not asked for here: "Use the API" goes to the Nyuchi platform, where they are issued.
              Settings holds language, delete history and sign out: the account menu, folded into the drawer. -->
         <nav class="side-nav" aria-label={en.settings} data-i18n-attr="aria-label:settings">
-          <a class="btn side-link" href="https://platform.nyuchi.com" target="_blank" rel="noopener" data-i18n="useApi">Use the API</a>
-          <a class="btn side-link" href="/lite/disclaimer/" data-i18n="disclaimerLink">{en.disclaimerLink}</a>
+          <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener">
+            <Icon name="key" class="side-icon" /><span data-i18n="useApi">Use the API</span>
+            <Icon name="external" class="side-icon side-external" /><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span>
+          </a>
+          <a class="side-row" href="/lite/disclaimer/">
+            <Icon name="shield-check" class="side-icon" /><span data-i18n="disclaimerLink">{en.disclaimerLink}</span>
+          </a>
           <details class="account side-settings" data-slot="account-menu">
-            <summary class="btn side-link" data-i18n="settings">Settings</summary>
+            <summary class="side-row">
+              <Icon name="sliders" class="side-icon" /><span data-i18n="settings">Settings</span>
+            </summary>
             <div class="settings-panel" data-slot="account-menu-panel">
               <div class="account-row">
                 <label for="lang" data-i18n="language">Language</label>
