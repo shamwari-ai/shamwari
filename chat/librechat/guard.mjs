@@ -93,6 +93,10 @@ function checkConfig(
       v.push(`${name}: top-level key "${k}" is not on the allowlist`);
   }
   const eps = cfg?.endpoints ?? {};
+  if (allowedAddresses && eps.allowedAddresses === undefined)
+    v.push(
+      `${name}: allowedAddresses must be present (the stub is a private address)`,
+    );
   for (const k of Object.keys(eps)) {
     if (k === "allowedAddresses" && allowedAddresses) {
       const got = JSON.stringify(eps[k]);
@@ -241,6 +245,10 @@ export function check({ production, test, fly, dockerfile, buildSh, pin }) {
   if (!tag) v.push("PIN: tag must be an exact release tag (no rc, no latest)");
   if (!/rev-parse HEAD/.test(buildSh) || !/PIN/.test(buildSh))
     v.push("build.sh: must verify the checked-out commit against PIN");
+  if (!/^repo="https:\/\/github\.com\/shamwari-ai\/librechat"$/m.test(buildSh))
+    v.push(
+      "build.sh: the source repository must be the Shamwari fork, with no override",
+    );
   if (!/refs\/tags/.test(buildSh))
     v.push(
       "build.sh: must verify that the tag in PIN resolves to the pinned commit",

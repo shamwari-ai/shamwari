@@ -7,7 +7,7 @@ commit="$(sed -n 's/^commit=//p' "$here/PIN")"
 tag="${1:-shamwari-chat:local}"
 # The Shamwari fork (docs/librechat.md). Its history contains the pinned upstream
 # commit, and the commit check below is what makes this safe.
-repo="${LIBRECHAT_REPO:-https://github.com/shamwari-ai/librechat}"
+repo="https://github.com/shamwari-ai/librechat"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
