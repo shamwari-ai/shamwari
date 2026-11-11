@@ -49,13 +49,48 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
       <span class="wordmark">shamwari</span>
     </a>
 
-    <!-- The drawer: the chats kept on this device. The script fills #history-list. -->
+    <!-- The drawer: what is kept on this device. Pinned chats and projects, then projects, loose chats and saved
+         answers. The script fills the lists; with no script the page is just the empty states. -->
     <div slot="nav" class="chats">
-      <h2 class="chats-title" data-i18n="earlierChats">Earlier chats</h2>
-      <div id="history" hidden>
-        <ul id="history-list"></ul>
+      <section id="side-pinned" aria-labelledby="pinned-title" hidden>
+        <h2 id="pinned-title" class="chats-title" data-i18n="pinned">Pinned</h2>
+        <ul id="pinned-list" class="side-list"></ul>
+      </section>
+      <section aria-labelledby="projects-title">
+        <h2 id="projects-title" class="chats-title" data-i18n="projects">Projects</h2>
+        <ul id="project-list" class="side-list"></ul>
+        <p id="project-empty" class="chats-empty" data-i18n="noProjects">No projects yet.</p>
+        <form id="project-form" class="row side-form" autocomplete="off">
+          <label class="sr-only" for="project-name" data-i18n="projectName">Project name</label>
+          <input id="project-name" maxlength="60" data-i18n-attr="placeholder:projectName" placeholder="Project name" />
+          <button type="submit" class="btn" data-i18n="createProject">Create project</button>
+        </form>
+      </section>
+      <section aria-labelledby="chats-title">
+        <h2 id="chats-title" class="chats-title" data-i18n="earlierChats">Earlier chats</h2>
+        <div id="history" hidden>
+          <ul id="history-list" class="side-list"></ul>
+        </div>
+        <p id="history-empty" class="chats-empty" data-i18n="noEarlierChats">No earlier chats on this device yet.</p>
+      </section>
+      <section aria-labelledby="artifacts-title">
+        <h2 id="artifacts-title" class="chats-title" data-i18n="artifacts">Artifacts</h2>
+        <ul id="artifact-list" class="side-list"></ul>
+        <p id="artifact-empty" class="chats-empty" data-i18n="noArtifacts">Answers you save appear here.</p>
+      </section>
+
+      <!-- Pinned to the bottom of the drawer: a new version, when there is one, then New chat and the account. -->
+      <div class="side-foot">
+        <section id="update-card" class="update update-card" aria-labelledby="update-card-title" hidden>
+          <p id="update-card-title"><strong data-i18n="updateReady">A new version is ready.</strong> <span data-update-has-version><span data-i18n="version">Version</span> <span data-update-version></span></span></p>
+          <button type="button" class="btn primary" data-update-now data-i18n="updateNow">Update now</button>
+        </section>
+        <div class="side-bar">
+          <button type="button" id="side-account" class="btn side-account" aria-label={en.avatar} data-i18n-attr="aria-label:avatar"><Icon name="user" class="h-5 w-5" /></button>
+          <button type="button" id="side-new" class="btn primary" data-i18n="newChat">New chat</button>
+        </div>
+        <p class="version-line" data-current-version-line hidden><span data-i18n="version">Version</span> <span data-current-version></span></p>
       </div>
-      <p id="history-empty" class="chats-empty" data-i18n="noEarlierChats">No earlier chats on this device yet.</p>
     </div>
 
     <!-- The top bar's actions: a new chat and the bell. #new-chat and #bell are wrappers the script listens on. -->
@@ -103,6 +138,15 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
       You are offline. You can still write questions; they will be sent later.
     </p>
 
+    <!-- What can be done with the open chat: pin it, file it in a project, delete it. Shown once it has a question. -->
+    <div id="chat-tools" class="chat-tools" role="group" aria-labelledby="chat-tools-title" hidden>
+      <h2 id="chat-tools-title" class="sr-only" data-i18n="chatOptions">Chat options</h2>
+      <button type="button" id="pin-chat" class="btn" aria-pressed="false" data-i18n="pin">Pin this chat</button>
+      <label class="sr-only" for="chat-project" data-i18n="project">Project</label>
+      <select id="chat-project"></select>
+      <button type="button" id="delete-chat" class="btn danger" data-i18n="deleteChat">Delete chat</button>
+    </div>
+
     <div id="thread" tabindex="-1" class="thread">
       <section id="empty" aria-labelledby="greeting">
         <img class="mark" src="/apple-touch-icon.png" alt="" width="56" height="56" />
@@ -138,6 +182,15 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
       <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>
     </div>
 
+    <!-- A new version is ready: a small pop-up above the question box. With the drawer open it becomes the card at the drawer's foot. -->
+    <aside id="update" class="update update-popup" role="status" hidden>
+      <p><strong data-i18n="updateReady">A new version is ready.</strong> <span data-update-has-version><span data-i18n="version">Version</span> <span data-update-version></span></span></p>
+      <div class="row">
+        <button type="button" class="btn primary" data-update-now data-i18n="updateNow">Update now</button>
+        <button type="button" class="btn" data-update-later data-i18n="updateLater">Later</button>
+      </div>
+    </aside>
+
     <!-- The dock: the composer, pinned to the bottom of the screen. (Sign-in, when it is needed, is in the page above
          it, not in the dock: a pinned panel would cover what a person is reading.) -->
     <div class="dock">
@@ -166,6 +219,17 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
       <p data-i18n="storedHere">{en.storedHere}</p>
     </div>
   </AppShell>
+  <!-- A saved answer, opened from the drawer. A native dialog: focus is held and Escape closes it. -->
+  <dialog id="artifact-view" class="artifact-view" aria-labelledby="artifact-title-view">
+    <h2 id="artifact-title-view"></h2>
+    <p id="artifact-text" class="artifact-text"></p>
+    <ul id="artifact-cites" class="side-list"></ul>
+    <div class="row">
+      <button type="button" id="artifact-open" class="btn" data-i18n="openChat">Open the chat</button>
+      <button type="button" id="artifact-remove" class="btn danger" data-i18n="removeArtifact">Remove</button>
+      <button type="button" id="artifact-close" class="btn primary" data-i18n="close">Close</button>
+    </div>
+  </dialog>
   <script>
     import '../../../src/chat/main';
   </script>

@@ -139,9 +139,16 @@ body {
 
 /* The drawer: chats kept on this device. */
 .chats {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--gap-floor);
+  min-width: 0;
+  /* Tall enough that the foot (update card, New chat, account) sits at the bottom of the drawer. */
+  min-height: calc(100dvh - 5rem);
   padding-inline: var(--gap-floor);
+}
+.chats > * {
+  min-width: 0;
 }
 .chats-title {
   margin: 0;
@@ -359,7 +366,8 @@ input:not([type='checkbox']):not([type='radio']) {
   color: var(--muted-foreground);
 }
 .scope select {
-  flex: 1;
+  flex: 1 1 0;
+  width: 0;
   min-width: 0;
 }
 .composer {
@@ -522,4 +530,194 @@ input:not([type='checkbox']):not([type='radio']) {
 /* Developer-key panel belongs to the developer-key provider only. */
 [data-auth='mukoko'] .devkey {
   display: none;
+}
+
+/* The drawer's lists: pinned, projects, loose chats, saved answers. */
+.side-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--gap-floor);
+}
+.side-form {
+  margin-top: var(--gap-floor);
+}
+.side-form {
+  flex-wrap: wrap;
+}
+.side-form input {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.side-account {
+  padding: 0;
+  width: var(--target-floor);
+  flex: none;
+}
+.project > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--target-floor);
+  padding-inline: var(--inset-floor);
+  cursor: pointer;
+  border-radius: 9999px;
+}
+.project > .side-list,
+.project > .row {
+  padding-inline-start: var(--inset-floor);
+  padding-block: var(--gap-floor);
+}
+[aria-current='true'] {
+  font-weight: 600;
+}
+
+/* The open chat's tools, above the thread. */
+.chat-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor) var(--inset-floor);
+}
+.chat-tools[hidden] {
+  display: none;
+}
+.chat-tools select {
+  max-width: 100%;
+}
+.save-answer {
+  margin-top: var(--gap-floor);
+}
+
+/* A saved answer, in a native dialog. */
+.artifact-view {
+  width: min(40rem, calc(100vw - 2 * var(--inset-floor)));
+  max-height: 85vh;
+  overflow: auto;
+  padding: var(--inset-floor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 1rem);
+  background: var(--card);
+  color: var(--foreground);
+}
+.artifact-view::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+.artifact-text {
+  white-space: pre-wrap;
+  line-height: var(--leading-floor);
+}
+
+/* "A new version is ready": a pop-up above the question box; with the drawer open, a card at the drawer's foot. */
+.update {
+  display: grid;
+  gap: var(--gap-floor);
+  padding: var(--inset-floor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 1rem);
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.12);
+}
+.update[hidden] {
+  display: none;
+}
+.update p {
+  margin: 0;
+}
+.update-popup {
+  position: fixed;
+  inset-inline: var(--inset-floor);
+  bottom: calc(9rem + env(safe-area-inset-bottom));
+  z-index: 20;
+  max-width: 28rem;
+  margin-inline: auto;
+}
+.side-foot {
+  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  gap: var(--gap-floor);
+  padding-block: var(--gap-floor) max(var(--gap-floor), env(safe-area-inset-bottom));
+  background: var(--background);
+}
+.side-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-floor);
+}
+
+/* ---- the global page layout ----------------------------------------------------------------------------
+   One layout for every screen of the app, from the Bundu floor (Mzizi): 14px between content and the edge of
+   the screen, 7px between neighbouring blocks, nothing wider than the screen, and text that wraps. The e2e
+   floor audit measures all four on every state, so a screen that breaks one fails the build. */
+:root {
+  --page-inset: max(var(--inset-floor), env(safe-area-inset-left), env(safe-area-inset-right));
+}
+html {
+  overflow-wrap: anywhere; /* a long word or address wraps instead of widening the page */
+}
+[data-slot='app-topbar'] {
+  padding-inline: var(--page-inset);
+}
+main#main {
+  padding-inline: var(--page-inset);
+}
+/* The page's own column: a track may shrink below its content, so one wide child cannot push the page wider. */
+main#main > .grid {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--gap-floor);
+}
+main#main :where(.thread, .dock, .ask, #empty, .panel, .chat-tools) {
+  min-width: 0;
+}
+.dock,
+.ask {
+  grid-template-columns: minmax(0, 1fr);
+}
+.ask {
+  display: grid;
+  gap: var(--gap-floor);
+}
+[data-slot='sidebar-head'] {
+  padding-inline: var(--page-inset);
+  padding-block-end: var(--gap-floor);
+}
+.chats {
+  padding-inline: var(--page-inset);
+}
+.msg,
+.msg .text,
+.cite {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+/* On a narrow screen the top bar has room for the menu, the brand, the bell and the account: New chat is in the
+   drawer's foot, and below 360px the wordmark gives way to the mark (the drawer still shows it). */
+@media (max-width: 30rem) {
+  [data-slot='app-topbar'] #new-chat {
+    display: none;
+  }
+}
+@media (max-width: 20rem) {
+  [data-slot='app-topbar'] .wordmark {
+    display: none;
+  }
+}
+/* The brand is a link: its hit region is the floor even when only the mark shows. */
+.brand {
+  min-height: var(--target-floor);
+  min-width: var(--target-floor);
+  justify-content: center;
+}
+
+.version-line {
+  margin: 0;
+  font-size: var(--fs-caption);
+  color: var(--muted-foreground);
+  text-align: center;
 }

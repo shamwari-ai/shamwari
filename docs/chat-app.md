@@ -117,6 +117,26 @@ account menu open and the drawer open. A control that falls under it fails the b
   10 minutes and then deletes it. The footer says exactly this and nothing more.
   Until #125 is deployed the older gateway still stores the conversation, so
   **this wording is only true once that change is deployed**.
+- **The drawer is local too: pinned, projects, chats, artifacts.** A _project_ is a
+  named group of chats; a chat is in at most one. _Pinned_ is a shortcut to a chat
+  or project, not a move. An _artifact_ is one answer the person chose to keep (its
+  text and sources), kept apart from the chat so deleting the chat does not lose
+  it. All three live in the same IndexedDB (`projects`, `artifacts` beside
+  `threads`, database version 2) and go with "Delete history". Nothing about them
+  is sent anywhere. These are defaults, chosen so the drawer could ship; they are
+  cheap to change while the data is only on the device.
+- **Owner decision, 2026-11-11: the mobile app keeps chats on the device (sync is opt-in);
+  every other surface (the web chat and Lite) stores them in the database.** This
+  supersedes "History is local only" above for the web. The collections already exist in
+  Mongo (`shamwari.conversations`: `ownerPersonId`, `lastMessageAt`, `surfaceContext`,
+  `licenseClass`, `promoted`; `shamwari.messages`: `conversationId` + `sequence`, unique,
+  `licenseClass`), both empty today. The Nyuchi Servers API (`/v1/shamwari/*`) owns the
+  messages routes and the Shamwari API (`api.shamwari.ai`) serves them to the apps; Core
+  holds no database login. Both are Rust (#66). Until they are live the web chat keeps
+  using the device store described below, so nothing breaks. The footer text ("saved on
+  this device only") and the `pwa` channel's "no content stored" rule change with the
+  web switch-over, in the same release. Rule 2 still holds: only `open_weight` provenance
+  trains Mind, whatever is stored.
 - **Offline queue.** A question written offline is stored on the device and sent
   when the network returns, with one `Idempotency-Key` per message so a retry
   after a dropped connection is replayed by the gateway instead of answered and
