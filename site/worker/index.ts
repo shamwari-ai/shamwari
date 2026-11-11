@@ -7,7 +7,7 @@ export { SessionRefresh } from './refresh-do';
 
 /**
  * Entry point of the `shamwari-app` Worker. It runs first for the root, for everything under /lite/ and for the
- * build output in /_astro/ (`assets.run_worker_first`, wrangler.app.jsonc): the sign-in routes are answered here,
+ * build output in /_astro/ (`assets.run_worker_first`, app/wrangler.jsonc): the sign-in routes are answered here,
  * and every other path is passed through the gate (gate.ts), which serves the static asset only to someone with
  * a session (or, for the short public list, to anyone).
  */
@@ -15,14 +15,14 @@ interface Ctx {
   waitUntil(p: Promise<unknown>): void;
 }
 
-/** The static assets binding (`assets.binding` in wrangler.app.jsonc). */
+/** The static assets binding (`assets.binding` in app/wrangler.jsonc). */
 export interface AssetsBinding {
   fetch(req: Request): Promise<Response>;
 }
 export type Env = WorkerEnv & { ASSETS?: AssetsBinding };
 
 /** The only paths (besides the root) that reach this Worker on purpose: `assets.run_worker_first`.
- *  test/worker/root.test.ts fails if this and wrangler.app.jsonc disagree. */
+ *  test/worker/root.test.ts fails if this and app/wrangler.jsonc disagree. */
 export const SESSION_PATHS = new Set(['/lite/auth/login', '/lite/auth/token', '/lite/auth/logout', '/lite/callback']);
 
 function randomState(): string {

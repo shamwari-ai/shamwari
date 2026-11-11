@@ -92,7 +92,7 @@ if (TARGET === 'app') {
   // Parsed, not pattern-matched: a commented-out line must not satisfy it. The file is JSONC, so
   // comment-only lines and trailing commas are removed before parsing (a "//" inside a string, such
   // as a URL, is never at the start of a line).
-  const wranglerText = readFileSync('wrangler.app.jsonc', 'utf8')
+  const wranglerText = readFileSync('app/wrangler.jsonc', 'utf8')
     .split('\n')
     .filter((l) => !/^\s*\/\//.test(l))
     .join('\n')
@@ -101,12 +101,12 @@ if (TARGET === 'app') {
   try {
     wrangler = JSON.parse(wranglerText);
   } catch (e) {
-    fail.push(`wrangler.app.jsonc could not be read: ${e.message}`);
+    fail.push(`app/wrangler.jsonc could not be read: ${e.message}`);
   }
   if (wrangler) {
-    if (!Array.isArray(wrangler.assets?.run_worker_first) || !wrangler.assets.run_worker_first.includes('/')) fail.push('wrangler.app.jsonc: assets.run_worker_first must list "/" so the Worker answers the root');
+    if (!Array.isArray(wrangler.assets?.run_worker_first) || !wrangler.assets.run_worker_first.includes('/')) fail.push('app/wrangler.jsonc: assets.run_worker_first must list "/" so the Worker answers the root');
     // The switch that lets the root send anyone to /chat/ must be present and exactly "true" or "false".
-    if (!['true', 'false'].includes(wrangler.vars?.CHAT_LIVE)) fail.push('wrangler.app.jsonc: vars.CHAT_LIVE must be the string "true" or "false"');
+    if (!['true', 'false'].includes(wrangler.vars?.CHAT_LIVE)) fail.push('app/wrangler.jsonc: vars.CHAT_LIVE must be the string "true" or "false"');
   }
   // It may send a visitor only to the main chat or the light chat.
   const rootSrc = readFileSync('worker/root.ts', 'utf8');

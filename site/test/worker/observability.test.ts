@@ -21,7 +21,7 @@ const load = (path: string): Config =>
 
 describe("site observability", () => {
   for (const [name, path] of [
-    ["shamwari-app", "../../wrangler.app.jsonc"],
+    ["shamwari-app", "../../app/wrangler.jsonc"],
     ["shamwari-site", "../../wrangler.jsonc"],
   ] as const) {
     it(`${name} has logs and issue detection on`, () => {
@@ -34,7 +34,7 @@ describe("site observability", () => {
 
   it("shamwari-app redacts query strings", () => {
     expect(
-      load("../../wrangler.app.jsonc").observability?.redact_query_string,
+      load("../../app/wrangler.jsonc").observability?.redact_query_string,
     ).toBe(true);
   });
 });

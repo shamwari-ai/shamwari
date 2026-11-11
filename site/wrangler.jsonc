@@ -19,7 +19,7 @@
   // Astro's static output. No Worker script, no bindings, no secrets.
   "assets": { "directory": "./dist" },
 
-  // The MARKETING site. The chat app is a separate Worker (wrangler.app.jsonc,
+  // The MARKETING site. The chat app is a separate Worker (app/wrangler.jsonc,
   // `shamwari-app`) that owns the apex https://shamwari.ai (moved on 2026-11-11); this one is
   // on https://www.shamwari.ai only. workers_dev gives a preview URL:
   // https://shamwari-site.nyuchi.workers.dev
