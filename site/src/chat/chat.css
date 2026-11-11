@@ -150,14 +150,8 @@ body {
   flex: 1 1 0;
   min-height: 0;
   padding-inline: var(--gap-floor);
-  /* The drawer's head (brand, close button) sits right above this column. Whatever the scroll position, no row may come
-     closer to it than the 7px floor. The top two tokens of the column are a clipped band (clipped content is not drawn
-     and takes no taps), so a row that is reachable starts at least 7px below the head, with room for the 2px the floor
-     audit probes inside a row. The content starts a third token down, so at rest the first row's focus ring (which
-     reaches above the row) is inside the visible part, and scroll-padding keeps a focused row out of the band too. */
-  padding-block-start: calc(var(--gap-floor) * 3);
-  scroll-padding-block-start: calc(var(--gap-floor) * 3);
-  clip-path: inset(calc(var(--gap-floor) * 2) 0 0 0);
+  /* A row that is focused is scrolled to a token below the column's top edge, never flush against the drawer's head. */
+  scroll-padding-block-start: var(--gap-floor);
   overflow-y: auto;
   overscroll-behavior: contain;
 }
