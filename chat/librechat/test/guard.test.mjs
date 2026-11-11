@@ -436,6 +436,49 @@ const mutants = [
     }),
     /built on the upstream base/,
   ],
+  [
+    "an ancestry check that only exists in a comment",
+    (f) => ({
+      ...f,
+      buildSh: f.buildSh.replace(
+        /git -C "\$work\/src" merge-base --is-ancestor[^\n]*\n[^\n]*\n/,
+        '# git merge-base --is-ancestor "$base" HEAD || { exit 1; }\n',
+      ),
+    }),
+    /built on the upstream base/,
+  ],
+  [
+    "an ancestry check that no longer exits",
+    (f) => ({
+      ...f,
+      buildSh: f.buildSh.replace(
+        /(is-ancestor "\$base" HEAD[\s\\]*\|\|\s*\{[^}]*)exit 1/,
+        "$1true",
+      ),
+    }),
+    /built on the upstream base/,
+  ],
+  [
+    "a tag compared against the fork commit",
+    (f) => ({
+      ...f,
+      buildSh: f.buildSh.replace('"$tagged" = "$base"', '"$tagged" = "$commit"'),
+    }),
+    /resolves to the upstream base/,
+  ],
+  [
+    "a neutered check with || true",
+    (f) => ({ ...f, buildSh: f.buildSh + "\ngit status || true\n" }),
+    /\|\| true/,
+  ],
+  [
+    "commit equal to base (stock upstream)",
+    (f) => ({
+      ...f,
+      pin: f.pin.replace(/commit=.*/, "commit=" + /base=(.*)/.exec(f.pin)[1]),
+    }),
+    /not the stock upstream commit/,
+  ],
 ];
 
 for (const [name, mutate, expected] of mutants) {
