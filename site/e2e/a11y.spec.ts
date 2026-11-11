@@ -317,6 +317,10 @@ for (const [name, width, height] of [['320px phone', 320, 568], ['390px phone', 
         await openSection(page, section);
         expect(await underTheFloor(page), `${name}: drawer, ${section}`).toEqual([]);
       }
+      // ... and with Settings open, which scrolls the column: the head and the first row must still be 7px apart.
+      await openSection(page, 'Chat');
+      await openAccount(page);
+      expect(await underTheFloor(page), `${name}: drawer, settings open`).toEqual([]);
     }
   });
 }
@@ -342,6 +346,9 @@ for (const [name, width, height] of [['320px phone', 320, 568], ['360px phone', 
       await openSection(page, section);
       expect(await underTheFloor(page), `${name} at 200%: drawer, ${section}`).toEqual([]);
     }
+    await openSection(page, 'Chat');
+    await openAccount(page);
+    expect(await underTheFloor(page), `${name} at 200%: drawer, settings open`).toEqual([]);
   });
 }
 });
