@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { ask, newChat, openAccount, openChat, openChats } from './helpers';
+import { ask, makeProject, newChat, openAccount, openChat, openChats } from './helpers';
 
 const scan = async (page: Page) =>
   (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze()).violations;
@@ -194,15 +194,14 @@ test('an answer with its citation card meets the Bundu floor', async ({ page }) 
   expect(await underTheFloor(page)).toEqual([]);
 });
 
-test('the account menu and the chats drawer meet the Bundu floor', async ({ page }) => {
+test('Settings and the chats drawer meet the Bundu floor', async ({ page }) => {
   await openChat(page);
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('.cite-link').first()).toBeVisible();
   await newChat(page); // a second chat, so the drawer has something to list
   await openAccount(page);
-  expect(await underTheFloor(page), 'account menu open').toEqual([]);
+  expect(await underTheFloor(page), 'settings open').toEqual([]);
   await page.locator('details.account summary').click();
-  await openChats(page);
   await expect(page.locator('#history-list button').first()).toBeVisible();
   expect(await underTheFloor(page), 'drawer open').toEqual([]);
 });
@@ -213,8 +212,7 @@ test('the drawer with a project, a pinned chat and a saved answer meets the Bund
   await expect(page.locator('.cite-link').first()).toBeVisible();
   await page.getByRole('button', { name: 'Save answer' }).click();
   await openChats(page);
-  await page.locator('#project-name').fill('Know my rights');
-  await page.getByRole('button', { name: 'Create project' }).click();
+  await makeProject(page, 'Know my rights');
   await page.keyboard.press('Escape');
   await page.locator('#chat-project').selectOption({ label: 'Know my rights' });
   await page.locator('#pin-chat').click();

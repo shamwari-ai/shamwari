@@ -299,7 +299,7 @@ test('the install button is in plain view, survives a dismissed dialog, and goes
       window.dispatchEvent(e);
     });
   await offer();
-  // Visible without opening the account menu.
+  // Visible without opening Settings.
   await expect(page.locator('#install')).toBeVisible();
   await expect(page.locator('details.account')).not.toHaveAttribute('open', '');
   await page.locator('#install').click(); // dialog dismissed: the event is spent
