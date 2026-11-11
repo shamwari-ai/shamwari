@@ -127,11 +127,17 @@ async function ask(endpoint, text) {
   const conversationId = res.body?.conversationId ?? res.body?.streamId;
   assert.ok(conversationId, `no conversation id: ${res.text.slice(0, 300)}`);
   // Read the stream so the generation runs to its end, then read what was stored.
-  const stream = await fetch(
-    `${APP}/api/agents/chat/stream/${conversationId}`,
-    { headers: auth },
-  );
-  const streamText = await stream.text();
+  // Bounded: a stream that never closes must not hold the job for its whole timeout.
+  let streamText = "";
+  try {
+    const stream = await fetch(
+      `${APP}/api/agents/chat/stream/${conversationId}`,
+      { headers: auth, signal: AbortSignal.timeout(90_000) },
+    );
+    streamText = await stream.text();
+  } catch (e) {
+    note(`stream(${endpoint}).ended`, String(e?.name ?? e));
+  }
   let shown = "";
   await until(
     `the ${endpoint} answer to be stored`,

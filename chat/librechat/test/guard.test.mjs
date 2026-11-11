@@ -406,6 +406,22 @@ const mutants = [
     }),
     /dropParams must be exactly/,
   ],
+  [
+    "allowedAddresses dropped from the test config",
+    (f) => ({ ...f, test: f.test.replace(/  allowedAddresses:.*\n/, "") }),
+    /allowedAddresses must be present/,
+  ],
+  [
+    "a repository override in build.sh",
+    (f) => ({
+      ...f,
+      buildSh: f.buildSh.replace(
+        'repo="https://github.com/shamwari-ai/librechat"',
+        'repo="${LIBRECHAT_REPO:-https://github.com/shamwari-ai/librechat}"',
+      ),
+    }),
+    /source repository must be the Shamwari fork/,
+  ],
 ];
 
 for (const [name, mutate, expected] of mutants) {
