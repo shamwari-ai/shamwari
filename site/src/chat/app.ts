@@ -500,6 +500,20 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     b.addEventListener('click', () => void ask(b.textContent ?? '')),
   );
 
+  // The two icons at the top right. The avatar opens sign-in, or Settings once signed in. There are
+  // no notifications to show yet, and the bell says so rather than doing nothing.
+  $('#avatar').addEventListener('click', () => {
+    if (!auth.signedIn()) return showAuth();
+    const more = document.querySelector<HTMLDetailsElement>('details.more');
+    if (more) {
+      more.open = true;
+      more.scrollIntoView({ block: 'nearest' });
+    }
+  });
+  $('#bell').addEventListener('click', () => {
+    $('#toast').textContent = strings().noNotifications;
+  });
+
   $('#new-chat').addEventListener('click', () => {
     if (thread.messages.length) {
       thread = fresh();

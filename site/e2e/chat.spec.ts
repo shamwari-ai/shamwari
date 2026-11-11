@@ -150,3 +150,35 @@ test('Shona is offered, shown as a draft, and Enter sends', async ({ page }) => 
   await page.locator('#q').press('Enter');
   await expect(page.locator('article.msg.bot').first()).toBeVisible();
 });
+
+test('the home screen greets, offers suggested prompts, and the chips ask the question', async ({ page }) => {
+  await openChat(page);
+  await expect(page.getByRole('heading', { name: 'Hello, friend' })).toBeVisible();
+  const chips = page.locator('#empty [data-example]');
+  await expect(chips).toHaveCount(3);
+  // A chip is a question the person did not have to type: it asks, and the greeting steps aside.
+  await chips.first().click();
+  await expect(page.locator('article.msg.user')).toContainText('Constitution');
+  await expect(page.locator('#empty')).toBeHidden();
+});
+
+test('the bell says there is nothing new, and the avatar opens sign-in when there is no key', async ({ page }) => {
+  await openChat(page, null);
+  await page.locator('#auth').waitFor();
+  await page.locator('#key').fill('sk_shamwari_mock_ok');
+  await page.getByRole('button', { name: 'Use this key' }).click();
+  await expect(page.locator('#auth')).toBeHidden();
+
+  await page.getByRole('button', { name: 'Notifications' }).click();
+  await expect(page.locator('#toast')).toHaveText('No new notifications');
+
+  // Signed in, the avatar opens Settings, where the person can remove the key.
+  await page.getByRole('button', { name: 'Account' }).click();
+  await expect(page.locator('details.more')).toHaveAttribute('open', '');
+  await page.locator('#signout').click();
+  await expect(page.locator('#auth')).toBeVisible();
+  // Signed out, the avatar brings the sign-in panel back after it was dismissed.
+  await page.locator('#auth').evaluate((el) => (el.hidden = true));
+  await page.getByRole('button', { name: 'Account' }).click();
+  await expect(page.locator('#auth')).toBeVisible();
+});
