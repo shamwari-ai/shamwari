@@ -13,7 +13,5 @@
   // https://shamwari-site.nyuchi.workers.dev
   "workers_dev": true,
 
-  "routes": [
-    { "pattern": "www.shamwari.ai", "custom_domain": true },
-  ],
+  "routes": [{ "pattern": "www.shamwari.ai", "custom_domain": true }],
 }
