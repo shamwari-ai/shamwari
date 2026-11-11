@@ -147,6 +147,11 @@ body {
   flex: 1 1 0;
   min-height: 0;
   padding-inline: var(--gap-floor);
+  /* On a short screen the sections, the list (at least 8rem) and the foot together can be taller than the drawer; then the
+     whole column scrolls, so the foot (Settings, Delete history) is always reachable. On a tall one the list scrolls
+     inside it and the foot stays pinned, as before. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .chats > * {
   min-width: 0;
@@ -791,8 +796,8 @@ html.app #thread {
   overflow: clip;
 }
 .side-scroll {
-  flex: 1 1 0;
-  min-height: 0;
+  flex: 1 1 8rem;
+  min-height: 8rem;
   overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
