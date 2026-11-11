@@ -45,8 +45,16 @@ if (TARGET === 'app') {
   }
   if (!pages.some((p) => p.endsWith('/lite/index.html'))) fail.push('app build has no /lite/ page');
   const redirects = files.includes(`${DIST}/_redirects`) ? readFileSync(`${DIST}/_redirects`, 'utf8') : '';
-  // The apex root goes to /chat/ (the main Shamwari Chat, owned by another build) for now; this app is /lite/.
-  if (!/^\/\s+\/chat\/\s+302\s*$/m.test(redirects)) fail.push('app build: the root / must 302 to /chat/ (_redirects)');
+  // The apex root is answered by the Worker (worker/root.ts), which chooses /chat/ or /lite/ by
+  // the visitor's connection. A static rule for it in _redirects would be a second, silent
+  // answer, so it must not exist; and the Worker must be told to take the root first.
+  if (/^\/\s/m.test(redirects)) fail.push('app build: the root / belongs to the Worker (worker/root.ts), not _redirects');
+  const wrangler = readFileSync('wrangler.app.jsonc', 'utf8');
+  if (!/"run_worker_first"\s*:\s*\[\s*"\/"/.test(wrangler)) fail.push('wrangler.app.jsonc: run_worker_first must list "/" so the Worker answers the root');
+  // It may send a visitor only to the main chat or the light chat.
+  const rootSrc = readFileSync('worker/root.ts', 'utf8');
+  const dests = [...rootSrc.matchAll(/export const (?:CHAT|LITE) = '([^']*)'/g)].map((m) => m[1]).sort().join(',');
+  if (dests !== '/chat/,/lite/') fail.push(`worker/root.ts: the root may go only to /chat/ and /lite/, found ${dests || 'nothing'}`);
   // Redirects may only go to the chat, the light chat, or the marketing origin: the app Worker
   // sends old marketing links to www but never serves a marketing page itself. The destination
   // is parsed, not prefix-matched, so "//host", "/chat/../x" and "/chat//host" cannot slip past.
