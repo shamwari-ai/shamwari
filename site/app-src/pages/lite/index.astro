@@ -27,7 +27,8 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
   <title>Shamwari Chat</title>
   <meta name="description" content="Ask in Shona, Ndebele or English and get the answer with the section it came from." />
   <link rel="canonical" href="https://shamwari.ai/lite/" />
-  <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+  <link rel="icon" type="image/png" href="/favicon.png" sizes="256x256" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta name="theme-color" content="#283593" />
   <meta name="shamwari-api" content={api} />
@@ -52,11 +53,32 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
     <!-- The drawer: what is kept on this device. Pinned chats and projects, then projects, loose chats and saved
          answers. The script fills the lists; with no script the page is just the empty states. -->
     <div slot="nav" class="chats">
+      <!-- The sections of the drawer, at the top. Each opens its own list below; the script switches them. Factory
+           is a planned product, so it is a row that says so and is not a link or a button. -->
+      <nav class="side-primary" aria-label={en.sections} data-i18n-attr="aria-label:sections">
+        <ul class="side-list">
+          <li><button type="button" class="side-row" data-section="chat" aria-current="page"><Icon name="message" class="side-icon" /><span data-i18n="navChat">{en.navChat}</span></button></li>
+          <li><button type="button" class="side-row" data-section="projects"><Icon name="layers" class="side-icon" /><span data-i18n="projects">{en.projects}</span></button></li>
+          <li><span class="side-row side-disabled" aria-disabled="true"><Icon name="workflow" class="side-icon" /><span data-i18n="navFactory">{en.navFactory}</span><span class="side-chip" data-i18n="comingSoon">{en.comingSoon}</span></span></li>
+          <li><button type="button" class="side-row" data-section="artifacts"><Icon name="clipboard" class="side-icon" /><span data-i18n="artifacts">{en.artifacts}</span></button></li>
+          <li><button type="button" class="side-row" data-section="plugins"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span></button></li>
+        </ul>
+      </nav>
       <div class="side-scroll">
+      <div data-panel="chat">
       <section id="side-pinned" aria-labelledby="pinned-title" hidden>
         <h2 id="pinned-title" class="chats-title" data-i18n="pinned">Pinned</h2>
         <ul id="pinned-list" class="side-list"></ul>
       </section>
+      <section id="side-chats" aria-labelledby="chats-title" hidden>
+        <h2 id="chats-title" class="chats-title" data-i18n="earlierChats">Earlier chats</h2>
+        <div id="history">
+          <ul id="history-list" class="side-list"></ul>
+        </div>
+      </section>
+      <p id="chats-empty" class="side-empty" data-i18n="chatsEmpty">{en.chatsEmpty}</p>
+      </div>
+      <div data-panel="projects" hidden>
       <section aria-labelledby="projects-title">
         <h2 id="projects-title" class="chats-title" data-i18n="projects">Projects</h2>
         <ul id="project-list" class="side-list"></ul>
@@ -67,16 +89,27 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
           <button type="submit" class="btn" data-i18n="createProject">Create project</button>
         </form>
       </section>
-      <section id="side-chats" aria-labelledby="chats-title" hidden>
-        <h2 id="chats-title" class="chats-title" data-i18n="earlierChats">Earlier chats</h2>
-        <div id="history">
-          <ul id="history-list" class="side-list"></ul>
-        </div>
-      </section>
+      </div>
+      <div data-panel="artifacts" hidden>
       <section id="side-artifacts" aria-labelledby="artifacts-title" hidden>
         <h2 id="artifacts-title" class="chats-title" data-i18n="artifacts">Artifacts</h2>
         <ul id="artifact-list" class="side-list"></ul>
       </section>
+      <p id="artifacts-empty" class="side-empty" data-i18n="artifactsEmpty">{en.artifactsEmpty}</p>
+      </div>
+      <!-- Plugins, Skills and MCP: nothing exists behind them yet, so each says so. Its script loads only when this
+           panel is first opened. -->
+      <div data-panel="plugins" hidden>
+        <div role="tablist" class="side-tabs" aria-label={en.navPlugins} data-i18n-attr="aria-label:navPlugins">
+          <button type="button" role="tab" id="tab-plugins" aria-controls="tabpanel-plugins" aria-selected="true" data-i18n="pluginsTab">{en.pluginsTab}</button>
+          <button type="button" role="tab" id="tab-skills" aria-controls="tabpanel-skills" aria-selected="false" tabindex="-1" data-i18n="skillsTab">{en.skillsTab}</button>
+          <button type="button" role="tab" id="tab-mcp" aria-controls="tabpanel-mcp" aria-selected="false" tabindex="-1" data-i18n="mcpTab">{en.mcpTab}</button>
+        </div>
+        <div role="tabpanel" id="tabpanel-plugins" aria-labelledby="tab-plugins"><p class="side-empty" data-i18n="pluginsEmpty">{en.pluginsEmpty}</p></div>
+        <div role="tabpanel" id="tabpanel-skills" aria-labelledby="tab-skills" hidden><p class="side-empty" data-i18n="skillsEmpty">{en.skillsEmpty}</p></div>
+        <div role="tabpanel" id="tabpanel-mcp" aria-labelledby="tab-mcp" hidden><p class="side-empty" data-i18n="mcpEmpty">{en.mcpEmpty}</p></div>
+        <p class="side-empty" data-i18n="thirdPartyNote">{en.thirdPartyNote}</p>
+      </div>
       </div>
 
       <!-- Pinned to the bottom of the drawer: a new version, when there is one, then New chat and the account. -->
@@ -91,9 +124,17 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
         <!-- Keys are not asked for here: "Use the API" goes to the Nyuchi platform, where they are issued.
              Settings holds language, delete history and sign out: the account menu, folded into the drawer. -->
         <nav class="side-nav" aria-label={en.settings} data-i18n-attr="aria-label:settings">
-          <a class="btn side-link" href="https://platform.nyuchi.com" target="_blank" rel="noopener" data-i18n="useApi">Use the API</a>
+          <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener">
+            <Icon name="key" class="side-icon" /><span data-i18n="useApi">Use the API</span>
+            <Icon name="external" class="side-icon side-external" /><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span>
+          </a>
+          <a class="side-row" href="/lite/disclaimer/">
+            <Icon name="shield-check" class="side-icon" /><span data-i18n="disclaimerLink">{en.disclaimerLink}</span>
+          </a>
           <details class="account side-settings" data-slot="account-menu">
-            <summary class="btn side-link" data-i18n="settings">Settings</summary>
+            <summary class="side-row">
+              <Icon name="sliders" class="side-icon" /><span data-i18n="settings">Settings</span>
+            </summary>
             <div class="settings-panel" data-slot="account-menu-panel">
               <div class="account-row">
                 <label for="lang" data-i18n="language">Language</label>
@@ -110,7 +151,13 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
       </div>
     </div>
 
-    <!-- The top bar's actions: a new chat. #new-chat is a wrapper the script listens on. -->
+    <!-- The top bar's actions, at the right: OFFLINE MODE (a switch; on, nothing is sent and nothing replays), then a new
+         chat. #new-chat is a wrapper the script listens on. -->
+    <button slot="actions" type="button" id="offline-mode" role="switch" aria-checked="false" class="bar-action offline-switch">
+      <Icon name="globe" class="h-5 w-5" />
+      <span class="sr-only sm:not-sr-only" data-i18n="offlineMode">{en.offlineMode}</span>
+      <span class="offline-state" aria-hidden="true" data-i18n="offlineModeOff">{en.offlineModeOff}</span>
+    </button>
     <span slot="actions" id="new-chat" class="contents">
       <button type="button" class="bar-action">
         <Icon name="plus" class="h-5 w-5" />
@@ -122,6 +169,7 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
     <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
       This language is a draft and still needs review by a native speaker.
     </p>
+    <p id="offline-mode-note" class="notice" role="status" hidden data-i18n="offlineModeNote">{en.offlineModeNote}</p>
     <p id="offline" class="notice" role="status" hidden data-i18n="offlineBanner">
       You are offline. You can still write questions; they will be sent later.
     </p>
@@ -148,13 +196,6 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
         </ul>
       </section>
       <p class="install"><button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button></p>
-      <section id="auth" class="panel" aria-labelledby="auth-title" hidden>
-        <h2 id="auth-title" tabindex="-1" data-i18n="authTitle">Sign in to ask</h2>
-        <p>
-          <button type="button" id="mukoko-signin" class="btn" disabled aria-describedby="mukoko-soon" data-i18n="authMukoko">Sign in with Mukoko</button>
-        </p>
-        <p id="mukoko-soon" class="small" data-i18n="authMukokoSoon">Mukoko sign-in is coming soon.</p>
-      </section>
 
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
       <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>
@@ -174,14 +215,6 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
     <div class="dock">
       <section class="ask" aria-labelledby="ask-title">
         <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
-        <div class="scope">
-          <label for="scope" data-i18n="scopeLabel">Asking about</label>
-          <select id="scope">
-            <option value="platform" data-i18n="scope.platform">General knowledge</option>
-            <option value="community" data-i18n="scope.community">Community knowledge</option>
-            <option value="personal" data-i18n="scope.personal">My own information</option>
-          </select>
-        </div>
         <form id="composer" class="composer" autocomplete="off">
           <label class="sr-only" for="q" data-i18n="placeholder">Ask a question</label>
           <textarea id="q" rows="1" enterkeyhint="send" data-i18n-attr="placeholder:placeholder" placeholder="Ask a question"></textarea>
@@ -191,11 +224,20 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
       </section>
     </div>
 
-    <!-- The quiet footer: one link. The disclaimer and the privacy statement live on their own page. -->
-    <div slot="footer" class="footer-text">
-      <a class="footer-link" href="/lite/disclaimer/" data-i18n="disclaimerLink">{en.disclaimerLink}</a>
-    </div>
   </AppShell>
+  <!-- Signed out: a whole screen, and nothing else. No chat is shown behind it, and no prompt sits on top of one. With a
+       session the page never shows this; the Worker sends a request with none to the hosted sign-in, and the app goes
+       there itself when the session has ended. This is what a device sees when it cannot reach it (offline). -->
+  <main id="auth" class="signin-screen" aria-labelledby="auth-title" hidden>
+    <img class="mark" src="/apple-touch-icon.png" alt="" width="72" height="72" />
+    <h1 id="auth-title" tabindex="-1" data-i18n="appName">Shamwari Chat</h1>
+    <button type="button" id="mukoko-signin" class="btn primary" disabled aria-describedby="mukoko-soon" data-i18n="authMukoko">Sign in with Mukoko</button>
+    <p id="mukoko-soon" class="small" data-i18n="authMukokoSoon">Mukoko sign-in is coming soon.</p>
+    <p id="signin-failed" class="small bad" role="alert" hidden data-i18n="signInFailed">We could not sign you in. Please try again.</p>
+    <p id="signin-offline" class="small" role="status" hidden data-i18n="signinOffline">You are offline. Sign in when you are back online.</p>
+    <p id="signin-note" class="small" role="status" hidden></p>
+    <a class="footer-link" href="/lite/disclaimer/" data-i18n="disclaimerLink">Disclaimer and privacy</a>
+  </main>
   <!-- A saved answer, opened from the drawer. A native dialog: focus is held and Escape closes it. -->
   <dialog id="artifact-view" class="artifact-view" aria-labelledby="artifact-title-view">
     <h2 id="artifact-title-view"></h2>

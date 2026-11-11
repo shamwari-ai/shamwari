@@ -5,13 +5,13 @@ exact order to switch it on.
 
 **Status, 2026-11-11:** `shamwari-app` is deployed (created with Wrangler from `staging`, not yet
 connected to GitHub as a Workers Build, so it is redeployed by hand with
-`npx wrangler deploy --config wrangler.app.jsonc` from `site/`). The apex `shamwari.ai` was moved to it
+`npx wrangler deploy --config app/wrangler.jsonc` from `site/`). The apex `shamwari.ai` was moved to it
 with the Workers custom-domains API (`override_existing_origin`), `www.shamwari.ai` stays on
 `shamwari-site`, and `api.shamwari.ai` is the gateway. The root `/` sends visitors to `/lite/` for now
 (`CHAT_LIVE` is `false`). The sign-in secrets are not bound yet, so sign-in answers 503 and the chat
 stays in developer-key mode. To undo the apex move, point `shamwari.ai` back at `shamwari-site` with the
 same API call, restore the apex line in `site/wrangler.jsonc` and **remove it from
-`site/wrangler.app.jsonc`** (otherwise the next hand deploy of `shamwari-app` takes the apex back).
+`site/app/wrangler.jsonc`** (otherwise the next hand deploy of `shamwari-app` takes the apex back).
 
 ## What lives where
 
@@ -22,7 +22,7 @@ same API call, restore the apex line in `site/wrangler.jsonc` and **remove it fr
 | Pages           | `/lite/` only. `/` answers 302 to `/chat/`. | Home, Blueprint, Project, Contact, `sitemap.xml`, `robots.txt` |
 | Source          | `site/app-src/`, `site/app-public/`         | `site/src/`, `site/public/`                                    |
 | Astro config    | `site/astro.app.config.mjs`                 | `site/astro.config.mjs`                                        |
-| Wrangler config | `site/wrangler.app.jsonc`                   | `site/wrangler.jsonc`                                          |
+| Wrangler config | `site/app/wrangler.jsonc`                   | `site/wrangler.jsonc`                                          |
 | Build           | `npm run build:app` into `site/dist-app/`   | `npm run build` into `site/dist/`                              |
 | CI job          | "Chat app (build, check, unit, e2e)"        | "Landing page (build, links, tokens, size)" (name unchanged)   |
 | Canonical URLs  | `https://shamwari.ai/lite/`                 | `https://www.shamwari.ai/...`                                  |
@@ -91,9 +91,14 @@ this order; each one is safe to stop after.
 tokens, size)`, now covers the marketing site only; without the new one, a change that
    breaks the chat can merge on a green marketing check.
 2. **Create the app Worker from GitHub.** Workers & Pages, Create, Import a repository,
-   choose `shamwari-ai/shamwari`. Name it `shamwari-app`. Root directory `site`. Build
-   command `npm ci && npm run build:app`. Deploy command
-   `npx wrangler deploy --config wrangler.app.jsonc`. Production branch `main`.
+   choose `shamwari-ai/shamwari`. Name it `shamwari-app`. **Root directory `site/app`**: Workers Builds
+   reads the default `wrangler.jsonc` in the root directory and checks its `name` against the Worker's
+   name, so the app's config is `site/app/wrangler.jsonc` (name `shamwari-app`) and `site/wrangler.jsonc`
+   stays the marketing site's. Build command
+   `cd .. && npm ci && PUBLIC_CHAT_AUTH=mukoko npm run build:app` (the `mukoko` flag is required: a plain
+   build is developer-key mode and breaks the sign-in screen). Deploy command `npx wrangler deploy`.
+   Non-production branch deploy command `npx wrangler preview` (needs the `previews` block already in the
+   file). Production branch `main`.
    (It is the same repository as `shamwari-site`; it is a second Workers Builds project.)
 3. **Check it on its own address.** Open `https://shamwari-app.nyuchi.workers.dev/lite/`.
    The chat should load, and `https://shamwari-app.nyuchi.workers.dev/` should redirect to
@@ -116,14 +121,14 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
    is a 404.
    **Then make the files match the dashboard, in ONE small change:** add
    `{ "pattern": "shamwari.ai", "custom_domain": true }` to `routes` in
-   `site/wrangler.app.jsonc` and delete that same line from `site/wrangler.jsonc`.
+   `site/app/wrangler.jsonc` and delete that same line from `site/wrangler.jsonc`.
    It is deliberately not done in advance: dropping the apex from `shamwari-site`'s file
    before the move could let a deploy release it with nothing else holding it, and
    declaring it on `shamwari-app` before the move would make a deploy fight for it.
    Whether `wrangler deploy` removes a custom domain that is missing from the file is
    **not verified**, which is the reason to keep the two in step. Watch the first deploy
    of each Worker after this change and confirm the hostnames are still attached.
-7. **When the main chat answers at `/chat/`:** set `CHAT_LIVE` to `"true"` in `site/wrangler.app.jsonc`
+7. **When the main chat answers at `/chat/`:** set `CHAT_LIVE` to `"true"` in `site/app/wrangler.jsonc`
    and deploy `shamwari-app`. Until then the root `https://shamwari.ai/` sends everyone to `/lite/`
    (`site/worker/root.ts`): by connection quality it would otherwise send fast visitors to `/chat/`.
    Nothing in this build can check that `/chat/` is served by another build, so confirm
@@ -140,7 +145,7 @@ as it does today.
 ## Before sign-in can work, and what the gate does
 
 The session Worker (`site/worker/`, see `docs/chat-signin.md`) ships inside `shamwari-app`, and it is also
-the **gate** in front of the light chat: it runs first for `/lite/*` and `/_astro/*`
+the **gate** in front of the light chat: it runs first for `/lite/*` (the build output is under `/lite/_astro/`, inside the session cookie's Path)
 (`assets.run_worker_first`), and serves the page and its scripts only to someone with a session. An
 unauthenticated request for `/lite/` is sent straight to the AuthKit hosted sign-in. The only things served
 without a session are the privacy page (`/lite/disclaimer/`), the manifest, the three install icons, the
@@ -148,7 +153,7 @@ service worker and the stylesheets (the list is in `site/worker/gate.ts` and is 
 `site/test/worker/gate.test.ts`), plus the two root icons (`/favicon.png`, `/apple-touch-icon.png`), which the
 Worker does not see.
 
-1. **The two secrets are bound by name, with no values in git.** `site/wrangler.app.jsonc` binds
+1. **The two secrets are bound by name, with no values in git.** `site/app/wrangler.jsonc` binds
    `WORKOS_API_KEY` to the Secrets Store secret `CONSOLE_WORKOS_API_KEY` and `COOKIE_PASSWORD` to
    `SESSION_SECRET` (store `56f84bfa8a564c54a95dbf4f4b4281b4`). Both are the shared Mukoko secrets.
    Nothing is created by hand for them.
@@ -168,10 +173,10 @@ variables and the Durable Object), so check these against `https://shamwari.ai` 
 - [ ] **First, redeploy `shamwari-app` from this change, then look at the dashboard.** Workers & Pages > `shamwari-app` >
       Settings > **Bindings** must list `WORKOS_API_KEY` and `COOKIE_PASSWORD` (Secrets Store), `SESSION_REFRESH` (Durable
       Object) and `ASSETS` (Assets). A Worker that lists none of the secrets was deployed before they were added to
-      `wrangler.app.jsonc`: it will answer `503` to every page until it is redeployed with them. Then the Secrets Store
+      `site/app/wrangler.jsonc`: it will answer `503` to every page until it is redeployed with them. Then the Secrets Store
       must hold `CONSOLE_WORKOS_API_KEY` and `SESSION_SECRET` (it did when this was written; names only, never values).
 - [ ] `GET /lite/` with no cookie answers `302` to `/lite/auth/login`, not `503`, and not the page.
-- [ ] `GET /_astro/<any script>.js` with no cookie answers `401`.
+- [ ] `GET /lite/_astro/<any script>.js` with no cookie answers `401`.
 - [ ] `GET /lite/disclaimer/`, `/lite/manifest.webmanifest` and `/lite/sw.js` answer `200` with no cookie.
 - [ ] Signing in from `/lite/auth/login` lands on `/lite/` and the chat loads; `/lite/auth/token` answers `200`.
 - [ ] `https://shamwari.ai/lite/callback` completes (it is the registered redirect URI).
@@ -192,8 +197,37 @@ variables and the Durable Object), so check these against `https://shamwari.ai` 
 
 ## WorkOS sign-in on the app Worker (2026-11-11)
 
-`site/wrangler.app.jsonc` binds `WORKOS_API_KEY` (from `CONSOLE_WORKOS_API_KEY`) and `COOKIE_PASSWORD` (from
+`site/app/wrangler.jsonc` binds `WORKOS_API_KEY` (from `CONSOLE_WORKOS_API_KEY`) and `COOKIE_PASSWORD` (from
 `SESSION_SECRET`) out of the account's Secrets Store, the shared Mukoko secrets. Deploy with
 `npm run deploy:app` from `site/`, which builds with `PUBLIC_CHAT_AUTH=mukoko` and then runs `wrangler deploy`.
 After a deploy, `GET /lite/auth/login` should answer 302 to the Mukoko Account sign-in page; a real sign-in
 needs a person and a registered redirect URI (`https://shamwari.ai/lite/callback`).
+
+## Automatic release to production (shamwari-ai/shamwari#201)
+
+Every merge to `staging` is released to `main` and production without a manual step. Only a major
+version is gated; it is never automatic.
+
+1. A PR merges to `staging` through the queue.
+2. **Verify:** `release-to-main.yml` runs when CI finishes on the staging head. A red head
+   releases nothing, and a head that has since been replaced is left to the newer run.
+3. **Release PR:** it keeps one branch, `release/staging-to-main`, whose tree equals staging's
+   (branch from `main`, `git read-tree -u --reset origin/staging`, commit), opens or updates the
+   PR `chore: release staging to main, DATE+n`, labels it `forward-ported`, and turns on
+   auto-merge. It moves `main` only: the gateway and Core are not deployed by this.
+4. **Deploy:** when `main` updates, Workers Builds deploys `shamwari-site` (connected) and
+   `shamwari-app` (once the owner connects it in the Cloudflare dashboard).
+5. **Smoke:** `smoke-production.yml` checks production for up to 18 minutes: `/lite/`
+   unauthenticated is a 302 to `/lite/auth/login`; `/lite/disclaimer/`,
+   `/lite/manifest.webmanifest` and `/lite/sw.js` are 200; a `/lite/_astro/*.js` script named in
+   `sw.js` is 401 without a session; `www.shamwari.ai` is 200. On failure it opens an issue.
+
+**Rollback:** Cloudflare dashboard, Workers & Pages, the Worker, Deployments, roll back to the
+previous version (a deploy keeps the previous version ids), then fix forward on `staging`.
+
+**Needs the owner:** a GitHub App (or token) the release workflow can use, stored as the
+repository secrets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`, installed on this repository
+with Contents, Pull requests and Issues write. The built-in `GITHUB_TOKEN` is not enough: a PR it
+opens does not start the pull-request workflows, so the required checks would never run.
+Both workflows must also be on `main` before they run (`workflow_run` uses the default branch's
+copy), so the first release is cut by hand.

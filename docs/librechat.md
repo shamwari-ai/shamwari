@@ -339,19 +339,52 @@ the three options in the brief:
 3. _A LibreChat patch to mount routes under a prefix_ — rejected. It touches the
    server's route table, which is exactly the code every upgrade changes.
 
-### Route table (and an ordering trap)
+### Route table
 
-Cloudflare picks the most specific route. Today the existing app Worker is
-planned for `shamwari.ai/chat/` (draft #134). After this change:
+Cloudflare picks the most specific route. The apex `shamwari.ai` belongs to the
+`shamwari-app` Worker (a custom domain), which serves the light chat at `/lite/`
+and answers any path it has no page for with a plain 404 (`site/worker/index.ts`).
+The light chat is therefore **not** under `/chat/`, so there is no `/chat/lite`
+collision to manage. After the cutover:
 
-| Pattern                                               | Worker                                                                      | Serves      |
-| ----------------------------------------------------- | --------------------------------------------------------------------------- | ----------- |
-| `shamwari.ai/chat/lite` and `shamwari.ai/chat/lite/*` | `shamwari-app` (existing, rebased onto `/chat/lite/`; `/lite` if confirmed) | the R2 page |
-| `shamwari.ai/chat` and `shamwari.ai/chat/*`           | the new proxy Worker                                                        | LibreChat   |
+| Pattern                                     | Worker                                | Serves         |
+| ------------------------------------------- | ------------------------------------- | -------------- |
+| `shamwari.ai/chat` and `shamwari.ai/chat/*` | `shamwari-chat-proxy` (`chat/proxy/`) | LibreChat      |
+| everything else on `shamwari.ai`            | `shamwari-app` (existing)             | `/`, `/lite/…` |
 
-`#134` and the chat-app Worker need their path moved from `/chat/` to
-`/chat/lite/` first. That is a change to open PRs, so it is sequenced in the
-cutover list, not done here.
+**To verify before the flip:** that a path route on `shamwari.ai/chat*` wins over
+the apex custom domain for those paths. Cloudflare's docs describe custom domains
+and routes as separate mechanisms; the preview-hostname test in the cutover list
+is where this is proven, and the flip waits on it.
+
+The proxy Worker is built and unit-tested (`chat/proxy/`) but declares **no
+route and no origin binding**; a test fails if either appears in its config.
+Attaching the route is cutover step 7. Until the origin binding exists it answers
+503 and contacts nothing.
+
+What it does, each with a test:
+
+- Only `/chat` and `/chat/…` are ours (`/chatter` is not); `/chat` redirects to `/chat/`.
+- The prefix is stripped before the origin sees the path. The origin address is built by
+  concatenation, so a path like `/chat//evil.com/x` cannot choose the host.
+- `Location`: a root-relative or relative redirect is re-prefixed (a relative one is
+  resolved against the path the origin was asked for). An absolute URL is left as the
+  origin wrote it, since LibreChat builds those from `DOMAIN_SERVER`, which carries
+  `/chat`. **To test:** which forms LibreChat actually emits.
+- Every `Set-Cookie` is scoped to `Path=/chat` and loses its `Domain`. A `__Host-`
+  cookie (it must be `Path=/`) is dropped, and its name (never its value) is logged.
+- The visitor's `X-Forwarded-*` are replaced by the proxy's own. The client address is
+  forwarded from `CF-Connecting-IP`, so LibreChat's per-IP limits see real clients.
+- The API and OAuth routes, and every non-GET request, are `no-store` (the path check is
+  case-insensitive, as Express routing is). Only a file name ending in an 8-character
+  content hash that contains a digit or a capital is `immutable`.
+- The same-origin CSP limits are _added beside_ any policy the origin sends, never in its
+  place. Framing is refused by `frame-ancestors`. `nosniff` is set.
+- An unreachable origin is a 502 with no detail.
+
+**Not yet in the proxy, and why:** `script-src` in the CSP (LibreChat's build has
+inline scripts that have to be read first), edge caching of hashed assets
+(needs the real file set), and the sub-path e2e through a real LibreChat.
 
 ### The old service worker will trap returning users
 
@@ -775,7 +808,7 @@ fact, and each fails when a rule is broken.
 | Stub-gateway: streaming | the endpoint works against a non-streaming gateway                                                                                         |
 | Stub-gateway: citations | a response carrying `shamwari.citations` shows its sources to the person                                                                   |
 | Sub-path e2e            | page, assets, `/chat/api/...`, redirect and cookie path all work through the Worker rewrite; cookies have `Path=/chat`                     |
-| Worker unit tests       | strip prefix, `Location` and `Set-Cookie` rewrite, CSP, the `/chat/lite` route wins                                                        |
+| Worker unit tests       | strip prefix, `Location` and `Set-Cookie` rewrite, CSP, cache rules, an allow-list for the config (`chat/proxy/`, done, 24 tests)          |
 | Old service worker      | the retiring worker unregisters and clears caches; the lite worker is scoped to `/chat/lite/`                                              |
 | Weight job              | records first-load bytes against the old page's 16.0 KB                                                                                    |
 | Theme test              | `--surface-primary` computes to the sodalite value                                                                                         |

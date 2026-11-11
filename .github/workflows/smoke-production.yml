@@ -1,0 +1,69 @@
+# Post-deploy smoke check (shamwari-ai/shamwari#201). Workers Builds deploys main a few minutes
+# after the merge, so this retries. It only reads public URLs; it deploys and changes nothing.
+# On failure it opens an issue so the owner hears about it. Rollback: Workers & Pages,
+# the Worker, Deployments, roll back to the previous version (see docs/domains-and-deploy.md).
+name: Smoke production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: smoke-production
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Production answers as expected
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check production, retrying while the deploy lands
+        run: |
+          set -u
+          code() { curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$@"; }
+          check() {
+            local failed=0
+            lite=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 https://shamwari.ai/lite/)
+            case "$lite" in
+              "302 https://shamwari.ai/lite/auth/login"*) ;;
+              *) echo "/lite/ unauthenticated: got '$lite', want 302 to /lite/auth/login"; failed=1 ;;
+            esac
+            for p in /lite/disclaimer/ /lite/manifest.webmanifest /lite/sw.js; do
+              c=$(code "https://shamwari.ai$p"); [ "$c" = 200 ] || { echo "$p: got $c, want 200"; failed=1; }
+            done
+            # A script asset needs a session: take one named in the public service worker.
+            js=$(curl -s --max-time 20 https://shamwari.ai/lite/sw.js | grep -o '/lite/_astro/[A-Za-z0-9._-]*\.js' | head -1)
+            if [ -z "$js" ]; then echo "no /lite/_astro script named in sw.js"; failed=1
+            else
+              c=$(code "https://shamwari.ai$js")
+              [ "$c" = 401 ] || { echo "$js without a session: got $c, want 401"; failed=1; }
+            fi
+            c=$(code https://www.shamwari.ai/); [ "$c" = 200 ] || { echo "www.shamwari.ai: got $c, want 200"; failed=1; }
+            return $failed
+          }
+          for attempt in $(seq 1 12); do
+            if check; then echo "production is as expected (attempt $attempt)"; exit 0; fi
+            echo "attempt $attempt failed; waiting 90s for the deploy"; sleep 90
+          done
+          exit 1
+
+      - name: Open an issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "production smoke check failed after the release of ${GITHUB_SHA::7}" \
+            --body "The post-deploy smoke check failed. Run: $RUN_URL
+
+          Roll back the affected Worker to its previous version in the Cloudflare dashboard
+          (Workers & Pages, Deployments), then fix forward.
+
+          No issue: automatic report from smoke-production.yml (shamwari-ai/shamwari#201)."

@@ -108,7 +108,21 @@ export function renderUser(m: StoredMessage, s: Strings, queue?: QueueActions): 
  */
 export function updateUser(el: HTMLElement, m: StoredMessage, s: Strings, queue?: QueueActions): void {
   el.querySelector('.queue-extra')?.remove();
-  el.classList.toggle('queued', m.status === 'queued');
+  el.classList.toggle('queued', m.status === 'queued' || m.status === 'local');
+  if (m.status === 'local') {
+    // Written in offline mode: kept on this device and not sent, which is the point, so it is said plainly. Only with
+    // offline mode off does it offer to be sent, and then only as the person's own act: nothing sends it by itself.
+    const note = h('div', { class: 'queue-extra' }, h('p', { class: 'note', role: 'status' }, s.offlineLocal));
+    if (queue) {
+      const now = h('button', { type: 'button', class: 'btn' }, s.sendNow);
+      const drop = h('button', { type: 'button', class: 'btn' }, s.discard);
+      now.addEventListener('click', queue.sendNow);
+      drop.addEventListener('click', queue.discard);
+      note.append(h('div', { class: 'row' }, now, drop));
+    }
+    el.append(note);
+    return;
+  }
   if (m.status !== 'queued') return;
   // A status, not an alert: waiting to send is the app working as designed.
   // Say the real reason: a brief outage is not "no connection", and the person

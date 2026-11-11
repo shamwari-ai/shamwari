@@ -72,6 +72,14 @@ if (TARGET === 'marketing' && pages.length < 4) fail.push(`expected at least 4 b
 // https://www.shamwari.ai (shamwari-site).
 const MARKETING_ORIGIN = 'https://www.shamwari.ai';
 const APP_ORIGIN = 'https://shamwari.ai';
+// Every built page names an icon (a browser also asks for /favicon.ico by default), and the files they name exist.
+if (!files.includes(`${DIST}/favicon.ico`)) fail.push(`${DIST}/favicon.ico is missing (browsers and iPad Safari request it by default)`);
+for (const p of pages) {
+  const html = readFileSync(p, 'utf8');
+  for (const [what, re] of [['an icon link', /<link[^>]+rel="icon"[^>]+href="\/favicon\.ico"/], ['a png icon link', /<link[^>]+rel="icon"[^>]+href="\/favicon\.png"/], ['an apple-touch-icon link', /<link[^>]+rel="apple-touch-icon"/]]) {
+    if (!re.test(html)) fail.push(`${p.slice(DIST.length)} has no ${what}`);
+  }
+}
 if (TARGET === 'marketing') {
   for (const f of files) {
     const rel = f.slice(DIST.length);
@@ -92,7 +100,7 @@ if (TARGET === 'app') {
   // Parsed, not pattern-matched: a commented-out line must not satisfy it. The file is JSONC, so
   // comment-only lines and trailing commas are removed before parsing (a "//" inside a string, such
   // as a URL, is never at the start of a line).
-  const wranglerText = readFileSync('wrangler.app.jsonc', 'utf8')
+  const wranglerText = readFileSync('app/wrangler.jsonc', 'utf8')
     .split('\n')
     .filter((l) => !/^\s*\/\//.test(l))
     .join('\n')
@@ -101,12 +109,12 @@ if (TARGET === 'app') {
   try {
     wrangler = JSON.parse(wranglerText);
   } catch (e) {
-    fail.push(`wrangler.app.jsonc could not be read: ${e.message}`);
+    fail.push(`app/wrangler.jsonc could not be read: ${e.message}`);
   }
   if (wrangler) {
-    if (!Array.isArray(wrangler.assets?.run_worker_first) || !wrangler.assets.run_worker_first.includes('/')) fail.push('wrangler.app.jsonc: assets.run_worker_first must list "/" so the Worker answers the root');
+    if (!Array.isArray(wrangler.assets?.run_worker_first) || !wrangler.assets.run_worker_first.includes('/')) fail.push('app/wrangler.jsonc: assets.run_worker_first must list "/" so the Worker answers the root');
     // The switch that lets the root send anyone to /chat/ must be present and exactly "true" or "false".
-    if (!['true', 'false'].includes(wrangler.vars?.CHAT_LIVE)) fail.push('wrangler.app.jsonc: vars.CHAT_LIVE must be the string "true" or "false"');
+    if (!['true', 'false'].includes(wrangler.vars?.CHAT_LIVE)) fail.push('app/wrangler.jsonc: vars.CHAT_LIVE must be the string "true" or "false"');
   }
   // It may send a visitor only to the main chat or the light chat.
   const rootSrc = readFileSync('worker/root.ts', 'utf8');
@@ -273,13 +281,13 @@ for (const page of pages) {
   // No client JavaScript anywhere except the chat app. @bundu/ui's React
   // primitives render server-side with no client:* directive, so the
   // marketing pages ship none. The chat page is the one exception, and it may
-  // load only its own bundled module from /_astro/ (no third-party script, no
+  // load only its own bundled module from /lite/_astro/ (no third-party script, no
   // inline script), whose size is held to the budget below.
   const scripts = [...html.matchAll(/<script\b([^>]*)>/gi)].filter((m) => !/type="application\/ld\+json"/i.test(m[1]));
   if (where === 'lite/index.html') {
     for (const [, attrs] of scripts) {
       const src = attrs.match(/\bsrc="([^"]+)"/)?.[1];
-      if (!src || !src.startsWith('/_astro/')) fail.push(`${where}: script is not a bundled /_astro/ module (${attrs.trim().slice(0, 60)})`);
+      if (!src || !src.startsWith('/lite/_astro/')) fail.push(`${where}: script is not a bundled /lite/_astro/ module (${attrs.trim().slice(0, 60)})`);
       else chatScripts.add(src);
     }
     if (!scripts.length) fail.push(`${where}: the chat page ships no script`);
@@ -303,7 +311,7 @@ const visit = (src) => {
   if (closure.has(src)) return;
   closure.add(src);
   const code = readFileSync(DIST + src, 'utf8');
-  for (const [, dep] of code.matchAll(/(?:^|[;}\s])(?:import|export)[^'"`;]*?from\s*["']\.\/([^"']+)["']/g)) visit('/_astro/' + dep);
+  for (const [, dep] of code.matchAll(/(?:^|[;}\s])(?:import|export)[^'"`;]*?from\s*["']\.\/([^"']+)["']/g)) visit('/lite/_astro/' + dep);
 };
 for (const src of chatScripts) if (assets.has(src)) visit(src);
 const chatJs = [...closure].reduce((n, src) => n + gz(DIST + src), 0);

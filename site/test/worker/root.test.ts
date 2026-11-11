@@ -112,9 +112,9 @@ describe('the Worker', () => {
     }
   });
 
-  it('keeps its list of Worker-only paths in step with wrangler.app.jsonc', () => {
+  it('keeps its list of Worker-only paths in step with app/wrangler.jsonc', () => {
     // The same comment-line and trailing-comma stripping check.mjs uses: the file is JSONC.
-    const text = readFileSync(new URL('../../wrangler.app.jsonc', import.meta.url), 'utf8')
+    const text = readFileSync(new URL('../../app/wrangler.jsonc', import.meta.url), 'utf8')
       .split('\n')
       .filter((l) => !/^\s*\/\//.test(l))
       .join('\n')
@@ -122,7 +122,7 @@ describe('the Worker', () => {
     const assets = JSON.parse(text).assets;
     // The Worker is the gate: it runs first for the root, the whole of /lite/ (which includes the sign-in routes
     // in SESSION_PATHS) and the build output, and reads the static files through the ASSETS binding.
-    expect(assets.run_worker_first).toEqual(['/', '/lite/*', '/_astro/*']);
+    expect(assets.run_worker_first).toEqual(['/', '/lite/*']);
     expect(assets.binding).toBe('ASSETS');
     for (const p of SESSION_PATHS) expect(p.startsWith('/lite/')).toBe(true);
   });

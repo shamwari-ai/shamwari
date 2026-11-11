@@ -34,7 +34,7 @@ const release = releaseVersion();
 
 // The two icons the marketing site and the app share live once, in public/; the app
 // build takes its copy here rather than keeping a second binary that can drift.
-for (const icon of ['favicon.png', 'apple-touch-icon.png']) copyFileSync(fileURLToPath(new URL(`../public/${icon}`, import.meta.url)), join(out, icon));
+for (const icon of ['favicon.ico', 'favicon.png', 'apple-touch-icon.png']) copyFileSync(fileURLToPath(new URL(`../public/${icon}`, import.meta.url)), join(out, icon));
 const read = (p) => readFileSync(join(out, p));
 const html = read('lite/index.html').toString('utf8');
 
@@ -44,14 +44,14 @@ const refs = [...html.matchAll(/(?:href|src)="(\/[^"#?]+)"/g)].map((m) => m[1]);
 // scripts import, and the files its stylesheets point at. Reading the built files
 // (not guessing) means a later shared chunk or a font in the CSS cannot be left
 // out of the precache and break the shell offline.
-const wanted = new Set(refs.filter((r) => /^\/(_astro|chat)\//.test(r) || r === '/favicon.png' || r === '/apple-touch-icon.png'));
+const wanted = new Set(refs.filter((r) => /^\/lite\/_astro\//.test(r) || r === '/favicon.ico' || r === '/favicon.png' || r === '/apple-touch-icon.png'));
 const queue = [...wanted];
 while (queue.length) {
   const f = queue.pop();
   if (!/\.(js|css)$/.test(f)) continue;
   const code = read(f).toString('utf8');
   const found = f.endsWith('.js')
-    ? [...code.matchAll(/(?:from|import)\s*\(?\s*["']\.\/([^"']+)["']/g)].map((m) => `/_astro/${m[1]}`)
+    ? [...code.matchAll(/(?:from|import)\s*\(?\s*["']\.\/([^"']+)["']/g)].map((m) => `/lite/_astro/${m[1]}`)
     : [...code.matchAll(/url\(\s*["']?(\/[^"')?#]+)/g)].map((m) => m[1]);
   for (const g of found) if (!wanted.has(g)) { wanted.add(g); queue.push(g); }
 }
@@ -100,14 +100,14 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Only same-origin GETs under /lite/ and its hashed assets are ever answered
+// Only same-origin GETs under /lite/ (its hashed assets are there too) are ever answered
 // from here. The API is another origin and a POST, so a question and its answer
 // never enter a cache.
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== self.location.origin) return;
-  if (!url.pathname.startsWith(SCOPE) && !url.pathname.startsWith('/_astro/')) return;
+  if (!url.pathname.startsWith(SCOPE)) return;
   if (url.pathname === '/lite/sw.js') return;
   // Sign-in is a server round trip: the login redirect, the OAuth callback and the
   // token/logout calls must always reach the network. Serving the cached shell for
@@ -160,7 +160,7 @@ writeFileSync(
 /lite/
   Cache-Control: no-cache
 
-/_astro/*
+/lite/_astro/*
   Cache-Control: public, max-age=31536000, immutable
 `,
 );

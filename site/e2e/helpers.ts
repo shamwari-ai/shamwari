@@ -24,9 +24,16 @@ export async function openAccount(page: Page) {
 
 /** Reveal the new-project form in the drawer and make a project. */
 export async function makeProject(page: Page, name: string) {
+  await openSection(page, 'Projects');
   await page.getByRole('button', { name: 'New project' }).click();
   await page.locator('#project-name').fill(name);
   await page.getByRole('button', { name: 'Create project' }).click();
+}
+
+/** Open one section of the drawer (Chat, Projects, Artifacts, Plugins) from its row at the top. */
+export async function openSection(page: Page, name: 'Chat' | 'Projects' | 'Artifacts' | 'Plugins') {
+  await openChats(page);
+  await page.locator('.side-primary').getByRole('button', { name }).click();
 }
 
 /** Open the drawer that lists the chats kept on this device. */
@@ -39,4 +46,41 @@ export async function openChats(page: Page) {
 export async function newChat(page: Page) {
   await openChats(page);
   await page.locator('#side-new').click();
+}
+
+/**
+ * Put a question on the device that an earlier version saved under another scope (a picker used to choose it), then
+ * reload so the app reads it, as it would after an update.
+ */
+export async function seedLegacyQuestion(
+  page: Page,
+  text: string,
+  scope: 'personal' | 'community',
+  status: 'queued' | 'sent' = 'queued',
+) {
+  await page.evaluate(
+    async ({ text, scope, status }) => {
+      const db = await new Promise<IDBDatabase>((ok, no) => {
+        const open = indexedDB.open('shamwari-chat', 2);
+        open.onsuccess = () => ok(open.result);
+        open.onerror = () => no(open.error);
+      });
+      const thread = {
+        id: 'legacy-thread',
+        title: text,
+        updatedAt: Date.now() + 1000,
+        messages: [{ id: 'legacy-q', role: 'user', text, at: Date.now(), scope, status }],
+      };
+      await new Promise<void>((ok, no) => {
+        const tx = db.transaction('threads', 'readwrite');
+        tx.objectStore('threads').put(thread);
+        tx.oncomplete = () => ok();
+        tx.onerror = () => no(tx.error);
+      });
+      db.close();
+    },
+    { text, scope, status },
+  );
+  await page.reload();
+  await page.waitForSelector('html[data-ready="true"]');
 }

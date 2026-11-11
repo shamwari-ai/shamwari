@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { ask, makeProject, newChat, openAccount, openChat, openChats } from './helpers';
+import { ask, makeProject, newChat, openAccount, openChat, openChats, seedLegacyQuestion, openSection } from './helpers';
 
 const scan = async (page: Page) =>
   (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze()).violations;
@@ -25,8 +25,7 @@ for (const scheme of ['light', 'dark'] as const) {
 
     test('personal-scope explanation and an error have no violations', async ({ page }) => {
       await openChat(page);
-      await page.getByLabel('Asking about').selectOption('personal');
-      await ask(page, 'How much do I earn?');
+      await seedLegacyQuestion(page, 'How much do I earn?', 'personal');
       await expect(page.locator('article.refusal')).toBeVisible();
       expect(summary(await scan(page))).toEqual([]);
     });
@@ -218,9 +217,14 @@ test('the drawer with a project, a pinned chat and a saved answer meets the Bund
   await page.locator('#pin-chat').click();
   await expect(page.locator('#chat-tools')).toBeVisible();
   expect(await underTheFloor(page), 'chat tools').toEqual([]);
-  await openChats(page);
+  await openSection(page, 'Projects');
   await page.locator('#project-list summary').click();
   expect(await underTheFloor(page), 'drawer with a project open').toEqual([]);
+  // Every other section of the drawer is held to the same floor.
+  for (const name of ['Chat', 'Artifacts', 'Plugins'] as const) {
+    await openSection(page, name);
+    expect(await underTheFloor(page), `drawer: ${name}`).toEqual([]);
+  }
 });
 
 test('works with the keyboard alone and keeps a visible focus ring', async ({ page }) => {

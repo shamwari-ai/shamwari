@@ -3,7 +3,21 @@
   "name": "shamwari-gateway",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
-  "observability": { "enabled": true },
+  // Query strings are redacted: /lite/callback carries the OAuth code and state, and
+  // /lite/?signin=failed carries a reason; persisted invocation logs must never store them.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "redact_query_string": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true,
+    },
+    "traces": { "enabled": false, "head_sampling_rate": 1, "persist": true },
+    "issue_detection": { "enabled": true },
+  },
 
   // Embeddings only. Also the last-resort inference fallback.
   "ai": { "binding": "AI" },
@@ -87,14 +101,19 @@
     "SERVERS_API_ENABLED": "false",
 
     // WorkOS sign-in for people (docs/chat-signin.md). None of these is a secret. The
-    // Shamwari Chat AuthKit application is its own app, so the client_id check is what
-    // keeps tokens minted for any other Mukoko app out; `aud` is deliberately NOT set (the
-    // production JWT template carries none; setting it would make every token without it fail).
-    "WORKOS_CLIENT_ID": "client_01M68PCT0T5ECHKDYH45ECT0GV",
-    // Mukoko Account custom domain (accounts.mukoko.com). Two issuers are listed because the OIDC discovery document and WorkOS's user-management tokens disagree on the form; NOT yet read off a real access token
-    // (WorkOS advises copying `iss` from a decoded token; a trailing slash is tolerated). If it
-    // is wrong every WorkOS token is refused with 401 and `sk_shamwari_` keys are unaffected.
-    "WORKOS_ISSUER": "https://accounts.mukoko.com,https://accounts.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0",
+    // client_id check is what keeps tokens minted for any other Mukoko app out; `aud` is deliberately NOT set (the
+    // production JWT template carries none; setting it would make every token without it fail). Two applications
+    // are accepted, comma separated, and no others: Shamwari Chat (the mobile app) and Mukoko Account (the light
+    // chat at /lite/, which signs in there because Shamwari Chat has no API key for the Worker's code exchange).
+    // The JWKS URL is built from the first id; WorkOS signs every application of an environment with the same keys.
+    "WORKOS_CLIENT_ID": "client_01M68PCT0T5ECHKDYH45ECT0GV,client_01KQBBSMQTSMTBN7HEC9KQBJC0",
+    // The issuers a token may carry. NONE of these has been read off a real access token yet; the choice rests on the
+    // owner's statement that auth.mukoko.com is the WorkOS API (custom API domain) of the Mukoko Account environment and
+    // accounts.mukoko.com its hosted AuthKit/OIDC domain, and on WorkOS's per-client path form
+    // (<domain>/user_management/<client_id>). The WorkOS docs pages could not be read from here, so no doc line is cited.
+    // If every token is refused, Workers Logs has a "workos token refused: claim=iss iss=..." line with the real value.
+    // The signature (JWKS), client_id and exp stay required whatever the issuer. A trailing slash is tolerated.
+    "WORKOS_ISSUER": "https://auth.mukoko.com,https://auth.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0,https://accounts.mukoko.com,https://accounts.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0",
     // Tokens per person per month. About $0.20 at the economy model's blended price (pricing.json:
     // 85% input at $0.15/M, 15% output at $0.50/M is about $0.20/M, so 1M tokens), the unit-cost
     // target in docs/tiered-access-design.md. An estimate; the owner's number replaces it.
