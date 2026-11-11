@@ -271,6 +271,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     const loose = all.filter((t) => t.id !== thread.id && !t.pinned && !t.projectId);
     $('#history-list').replaceChildren(...loose.map(threadButton));
     $('#side-chats').hidden = loose.length === 0;
+    $('#chats-empty').hidden = loose.length + pinnedProjects.length + pinnedChats.length > 0;
 
     $('#artifact-list').replaceChildren(
       ...artifacts.map((a) => {
@@ -759,6 +760,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     document.querySelector<HTMLButtonElement>('#new-chat button')?.click();
   });
   $('#new-chat').addEventListener('click', () => {
+    showSection('chat'); // a new chat is a chat: the drawer's next opening shows the chats again
     if (thread.messages.length) {
       thread = fresh();
       rebuild();
@@ -779,6 +781,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     live.clear();
     thread = fresh();
     rebuild();
+    showSection('chat');
     void renderHistory();
   }
 
