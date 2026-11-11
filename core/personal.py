@@ -30,6 +30,9 @@ _RULES = [
         # English: "I" followed by something about the speaker's own situation. A bare "I" is
         # not enough ("Can I vote?" is a general question).
         r"i (?:am|was|own|owe|earn|paid|pay|receive|received|lost|bought|sold|saved|spent|uploaded)",
+        # "I have 3 rental properties", "I make $900": a first-person verb near a number or currency.
+        r"i (?:have|had|get|got|make|made|need) [^.?!]{0,20}?(?:\$|\d)",
+        r"i get paid|i work (?:at|for|as)",
         r"(?:about|for|to|on|with|from) me",
         # English: things only the person holds.
         r"payslips?|bank statements?|medical records?",

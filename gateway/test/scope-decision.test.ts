@@ -13,6 +13,7 @@ import { providerScope, resolveScope, ScopeRefusal } from '../src/scope';
 import type { ScopeResolution } from '../src/scope';
 import { needsOwnInformation, OWN_INFORMATION_NOTICE } from '../src/personal';
 import { compose } from '../src/channels/channel';
+import { conversationTrainable } from '../src/index';
 import { targets } from '../src/router';
 import cases from '../../core/scope_cases.json';
 import type { Env, GroundChunk, Scope, SinkMessage } from '../src/types';
@@ -366,6 +367,50 @@ describe('(b) a personal-looking question is never answered without the marker',
       expect(out).toContain('Answered without your own info');
     }
     expect(compose('Short answer.', [], 450, 'gateway')).not.toContain('own info');
+  });
+});
+
+describe('what review found', () => {
+  it('the Mind endpoint never says "answered without your own information", whatever Core says: the device holds it', async () => {
+    const { env } = setup({
+      mind: true,
+      scopes: ['personal', 'platform'],
+      core: (b) => ({ chunks: [{ ...CHUNK, scope: b.scope }], hit: true, scope: b.scope, needs_own_information: true }),
+    });
+    const res = await worker.fetch(
+      post('/v1/ground/context', { messages: [{ role: 'user', content: PERSONAL_Q }], scope: 'personal' }),
+      env,
+      ctx,
+    );
+    const j = (await res.json()) as any;
+    expect(j.shamwari.destination).toBe('mind');
+    expect(j.shamwari.answered_without_own_information).toBe(false);
+    expect(j.shamwari.notice).toBeNull();
+  });
+
+  it('a conversation the system judged personal is never Mind training material, in any scope', async () => {
+    const { env, wire } = setup();
+    await worker.fetch(chat(PERSONAL_Q), env, ctx);
+    await Promise.resolve();
+    const conv = wire.sink.find((m) => m.collection === 'conversations')!.doc as any;
+    expect(conv.trainingEligible).toBe(false);
+
+    const plain = setup();
+    await worker.fetch(chat(PLAIN_Q), plain.env, ctx);
+    await Promise.resolve();
+    expect((plain.wire.sink.find((m) => m.collection === 'conversations')!.doc as any).trainingEligible).toBe(true);
+  });
+
+  it('conversationTrainable says no when the question looked personal', () => {
+    expect(conversationTrainable('platform', 'open_weight', false, 'shamwari', true)).toBe(false);
+    expect(conversationTrainable('platform', 'open_weight', false, 'shamwari')).toBe(true);
+  });
+
+  it('the notice does not squeeze a USSD answer to a few words', () => {
+    const out = compose('x'.repeat(2000), [{ label: 'y'.repeat(200) }], 182, 'gateway', OWN_INFORMATION_NOTICE);
+    const body = out.split('\n')[0]!;
+    expect(out.length).toBeLessThanOrEqual(182);
+    expect(body.length).toBeGreaterThanOrEqual(70);
   });
 });
 

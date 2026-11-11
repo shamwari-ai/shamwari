@@ -53,7 +53,7 @@ there is nothing to say. A client renders `notice.message` as one line. The
 compact envelope carries `notice` (a string) only when true, and SMS/USSD replies
 append a short plain-ASCII version inside the character limit. This is never a
 silent downgrade, never a retry that hides it, and never a personal-scope call to
-a provider: the scope on the wire stays `platform` or `community`. The rules are an
+a provider (the Mind endpoint never carries the notice: the device holds the information; and a conversation flagged this way is never `trainingEligible`): the scope on the wire stays `platform` or `community`. The rules are an
 **honesty control, not the privacy control**: a miss costs the notice on one
 answer and cannot send personal content anywhere, because Cloud holds none and
 `providerScope` (below) stops anything personal at the call.

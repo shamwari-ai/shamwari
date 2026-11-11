@@ -39,6 +39,9 @@ export const OWN_INFORMATION_NOTICE =
 export const OWN_INFORMATION_NOTICE_SHORT =
   'Answered without your own info. Shamwari Mind on your phone can use it.';
 
+/** For a screen of about 180 characters (USSD): the marker alone, so the answer keeps its room. */
+export const OWN_INFORMATION_NOTICE_MIN = 'Answered without your own info.';
+
 /** Stable machine-readable name for the notice. Clients key their rendering on this. */
 export const OWN_INFORMATION_CODE = 'answered_without_your_own_information';
 
@@ -53,13 +56,16 @@ const RULES: RegExp[] = [
   W(
     'i (?:am|was|own|owe|earn|paid|pay|receive|received|lost|bought|sold|saved|spent|uploaded)',
   ),
+  // "I have 3 rental properties", "I make $900": a first-person verb near a number or currency.
+  W('i (?:have|had|get|got|make|made|need) [^.?!]{0,20}?(?:\\$|\\d)'),
+  W('i get paid|i work (?:at|for|as)'),
   W('(?:about|for|to|on|with|from) me'),
   // English: things only the person holds.
   W('payslips?|bank statements?|medical records?'),
   // Shona: possessive -ngu (wangu, yangu, dzangu, changu, zvangu, rangu, vangu, kwangu, pangu, ...) and "ini".
   W('(?:w|y|dz|ch|zv|r|v|kw|p|rw|tw|bw|sw)angu|ini'),
   // Shona: first-person verbs (ndiri, ndine, ndakabhadhara, ndichada, ndinoda, ndiku...).
-  W('ndiri|ndine|nda[ck]a\\w*|ndichi\\w*|ndino\\w*|ndiku\\w*'),
+  W('ndiri|ndine|nda[ck]a[\\p{L}\\p{N}_]*|ndichi[\\p{L}\\p{N}_]*|ndino[\\p{L}\\p{N}_]*|ndiku[\\p{L}\\p{N}_]*'),
   // Ndebele: possessive -mi (wami, yami, lami, zami, sami, bami, kwami) and "mina".
   W('(?:w|y|l|z|s|b|kw)ami|mina'),
   // Ndebele: first-person verbs.

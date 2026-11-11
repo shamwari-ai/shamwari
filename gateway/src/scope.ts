@@ -118,11 +118,10 @@ export function resolveScope(input: {
 
   // Not the client's to pick. If the caller holds neither cloud-safe scope the
   // answer is `platform`, and the caller's grant check turns that into a 403.
-  const scope: Scope = grants.includes('platform')
-    ? 'platform'
-    : grants.includes('community')
-      ? 'community'
-      : 'platform';
+  // First version: retrieval is from one scope per request. Community-only keys get
+  // community; everything else platform (Ground today is platform content).
+  const scope: Scope =
+    grants.includes('community') && !grants.includes('platform') ? 'community' : 'platform';
   return {
     scope,
     destination: 'cloud',

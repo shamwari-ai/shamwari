@@ -50,7 +50,10 @@ const citationsOf = (chunks: GroundChunk[]) =>
 function ownInformation(decision: ScopeResolution, g: GroundResult) {
   // Either side saying yes is enough, and neither can unsay the other: Core is
   // authoritative for what it returns, the gateway for what it saw first.
-  const without = decision.withoutOwnInformation || g.coreNeedsOwnInformation;
+  // Only a Cloud answer can lack the person's information. On the Mind endpoint the
+  // device holds it and uses it, so the notice there would be wrong.
+  const without =
+    decision.destination === 'cloud' && (decision.withoutOwnInformation || g.coreNeedsOwnInformation);
   return {
     answered_without_own_information: without,
     notice: without ? { code: OWN_INFORMATION_CODE, message: OWN_INFORMATION_NOTICE } : null,
@@ -84,8 +87,20 @@ export function conversationTrainable(
   licenseClass: string,
   viaChannel: boolean,
   keyType: string,
+  /**
+   * The system judged that the question needs the person's own information (#81). The text
+   * they typed is then probably about them, and it was answered without it: it is exactly
+   * the traffic that must not become Mind training material, whatever scope it travelled in.
+   */
+  looksPersonal = false,
 ): boolean {
-  return scope !== 'personal' && licenseClass === 'open_weight' && !viaChannel && keyType !== 'workos';
+  return (
+    scope !== 'personal' &&
+    licenseClass === 'open_weight' &&
+    !viaChannel &&
+    keyType !== 'workos' &&
+    !looksPersonal
+  );
 }
 
 interface ChatBody {
@@ -515,6 +530,7 @@ const worker = {
                 result.licenseClass,
                 req.headers.has('X-Shamwari-Channel'),
                 auth.keyType,
+                ownInformation(decision, g).answered_without_own_information,
               ),
             promoted: false,
             lastMessageAt: now,

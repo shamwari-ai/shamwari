@@ -1,6 +1,6 @@
 import type { Env, GroundChunk, Message } from './types';
 import { core } from './core';
-import { providerScope } from './scope';
+import { providerScope, ScopeRefusal } from './scope';
 import type { ScopeResolution } from './scope';
 
 const BASE = `You are Shamwari, an AI companion built in Zimbabwe.
@@ -76,12 +76,11 @@ export async function ground(
   // destination gets: weaker ranking over the same corpus, never a different one.
   let embedding: number[] | null = null;
   if (destination === 'cloud') {
-    // Outside the try below, which treats any failure as "Workers AI is down" and
-    // degrades. A refusal here is a caller bug and must be loud, not a quiet fallback.
-    providerScope(decision);
     try {
       embedding = await embed(env, lastUser.content, decision);
     } catch (e) {
+      // A refusal is a caller bug, not "Workers AI is down": loud, never a quiet fallback.
+      if (e instanceof ScopeRefusal) throw e;
       console.warn('embedding unavailable, searching by keyword', String(e));
     }
   }
