@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { WorkOS } from '@workos-inc/node';
 import { makePort, secret } from '../../worker/workos-port';
 import { jwt } from './helpers';
@@ -39,6 +39,44 @@ function fakeWorkos(over: Record<string, unknown> = {}) {
   };
   return { w: { userManagement: um } as unknown as WorkOS, seen, session };
 }
+
+describe('failures are logged, safely', () => {
+  it('a failed exchange logs the error name, status and WorkOS code, never the code, key or cookie password', async () => {
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => void logs.push(a.join(' ')));
+    const err = Object.assign(new Error('The code has expired or has already been used.'), {
+      name: 'OauthException',
+      status: 400,
+      error: 'invalid_grant',
+    });
+    const p = await makePort(
+      { ...env, WORKOS_API_KEY: 'sk_test_SECRETKEY' },
+      fakeWorkos({
+        authenticateWithCode: async () => {
+          throw err;
+        },
+      }).w,
+    );
+    expect(await p.exchangeCode('SECRETCODE')).toBeNull();
+    spy.mockRestore();
+    const line = logs.join('\n');
+    for (const want of ['OauthException', 'status 400', 'invalid_grant']) expect(line).toContain(want);
+    for (const secret of ['SECRETCODE', 'SECRETKEY', PASSWORD]) expect(line).not.toContain(secret);
+  });
+
+  it('a refresh that throws is logged too and stays a retry', async () => {
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a: unknown[]) => void logs.push(a.join(' ')));
+    const f = fakeWorkos();
+    f.session.refresh = async () => {
+      throw new Error('boom');
+    };
+    expect(await (await makePort(env, f.w)).refresh('SEALED-COOKIE')).toEqual({ status: 'retry' });
+    spy.mockRestore();
+    expect(logs.join('\n')).toContain('boom');
+    expect(logs.join('\n')).not.toContain('SEALED-COOKIE');
+  });
+});
 
 describe('makePort configuration', () => {
   it.each(['WORKOS_CLIENT_ID', 'WORKOS_REDIRECT_URI', 'WORKOS_API_KEY', 'COOKIE_PASSWORD'] as const)(

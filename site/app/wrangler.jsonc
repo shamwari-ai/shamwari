@@ -34,7 +34,11 @@
 
   // Public configuration, safe in git. The client id is NOT a secret.
   "vars": {
-    "WORKOS_CLIENT_ID": "client_01M68PCT0T5ECHKDYH45ECT0GV",
+    // The Mukoko Account application (the default AuthKit app of the Mukoko environment). It is the application
+    // CONSOLE_WORKOS_API_KEY belongs to; the "Shamwari Chat" application (client_01M68...) has no API key of its
+    // own, so pairing its client id with this key was refused by WorkOS on every sign-in. The gateway accepts
+    // both client ids (gateway/wrangler.jsonc).
+    "WORKOS_CLIENT_ID": "client_01KQBBSMQTSMTBN7HEC9KQBJC0",
     "WORKOS_REDIRECT_URI": "https://shamwari.ai/lite/callback",
     // The root sends everyone to /lite/ until the main chat answers at /chat/ (worker/root.ts).
     // Set to "true" in the same change that makes /chat/ live.
