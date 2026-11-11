@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { ask, openAccount, openChat, openChats } from './helpers';
+import { ask, newChat, openAccount, openChat, openChats } from './helpers';
 
 const scan = async (page: Page) =>
   (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze()).violations;
@@ -128,6 +128,56 @@ async function underTheFloor(page: Page) {
         if (gap >= 0 && gap < 6.9) out.push(`controls ${gap.toFixed(1)}px apart (floor 7px): ${label(a)} and ${label(b)}`);
       }
     }
+
+    // ---- the page layout: no overflow, 14px from the edges, 7px between neighbouring blocks -------------------------
+    const slack = 0.6;
+    if (document.documentElement.scrollWidth > innerWidth + slack) {
+      out.push(`the page scrolls sideways: ${document.documentElement.scrollWidth}px wide in a ${innerWidth}px screen`);
+    }
+    // Text is measured where it is drawn (its line boxes), controls by their hit region. Parked, clipped and
+    // screen-reader-only things are not on the page for anyone's eyes.
+    const hiddenAway = (el: Element) => !!el.closest('[hidden], .sr-only, .skip, [aria-hidden="true"], svg, script, style, noscript');
+    const insetFloor = 14;
+    const edge = (what: string, el: Element, left: number, right: number) => {
+      if (left < -slack || right > innerWidth + slack) out.push(`overflows the screen (${Math.round(left)}..${Math.round(right)} of ${innerWidth}px): ${what} ${label(el)}`);
+      else if (left < insetFloor - slack || right > innerWidth - insetFloor + slack) out.push(`closer than 14px to the edge (${Math.round(left)}..${Math.round(right)} of ${innerWidth}px): ${what} ${label(el)}`);
+    };
+    for (const el of controls) {
+      const r = el.getBoundingClientRect();
+      // The menu button and the drawer's close button sit in the top bar's own inset: Mzizi's AppShell draws that.
+      edge('control', el, r.left, r.right);
+    }
+    const walker2 = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker2.nextNode(); n; n = walker2.nextNode()) {
+      const el = n.parentElement;
+      if (!el || !n.textContent?.trim() || !seen(el) || hiddenAway(el) || !onTop(el)) continue;
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      for (const r of range.getClientRects()) {
+        if (r.width === 0) continue;
+        edge('text', el, r.left, r.right);
+        break; // one report per text node is enough to name it
+      }
+    }
+    // Blocks that follow each other in the page: 7px between them, never touching or overlapping by accident.
+    const flow = (el: Element) => {
+      const s = getComputedStyle(el);
+      return seen(el) && !hiddenAway(el) && !['fixed', 'absolute'].includes(s.position) && s.display !== 'contents' && s.display !== 'inline';
+    };
+    for (const a of document.querySelectorAll<HTMLElement>('main *, [data-slot="app-sidebar"] *, body > *')) {
+      const b = a.nextElementSibling as HTMLElement | null;
+      if (!b || !flow(a) || !flow(b) || !onTop(a) || !onTop(b)) continue;
+      const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+      const across = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+      // Padding on a plain block (no fill, no border) is space between its content and the next block's.
+      const bare = (el: Element) => {
+        const c = getComputedStyle(el);
+        const transparent = c.backgroundColor === 'rgba(0, 0, 0, 0)' || c.backgroundColor === 'transparent';
+        return transparent && ['Top', 'Right', 'Bottom', 'Left'].every((side) => parseFloat(c.getPropertyValue(`border-${side.toLowerCase()}-width`)) === 0);
+      };
+      const gap = rb.top - ra.bottom + (bare(a) ? parseFloat(getComputedStyle(a).paddingBottom) : 0) + (bare(b) ? parseFloat(getComputedStyle(b).paddingTop) : 0);
+      if (across > 1 && gap > -0.5 && gap < 6.9) out.push(`blocks ${gap.toFixed(1)}px apart (floor 7px): ${label(a)} and ${label(b)}`);
+    }
     return out;
   });
 }
@@ -148,7 +198,7 @@ test('the account menu and the chats drawer meet the Bundu floor', async ({ page
   await openChat(page);
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('.cite-link').first()).toBeVisible();
-  await page.locator('#new-chat').click(); // a second chat, so the drawer has something to list
+  await newChat(page); // a second chat, so the drawer has something to list
   await openAccount(page);
   expect(await underTheFloor(page), 'account menu open').toEqual([]);
   await page.locator('details.account summary').click();
@@ -239,3 +289,20 @@ test('a new version is offered as a pop-up, becomes a card in the drawer, and Up
   await card.getByRole('button', { name: 'Update now' }).click();
   expect(await page.evaluate(() => (window as unknown as { applied: number }).applied)).toBe(1);
 });
+
+// The same floor on the other screens people have: a very small phone, a large phone, a tablet and a desktop
+// (where the drawer is a permanent column). A long unbroken word must wrap, not widen the page.
+for (const [name, width, height] of [['320px phone', 320, 568], ['390px phone', 390, 844], ['768px tablet', 768, 1024], ['1280px desktop', 1280, 800]] as const) {
+  test(`the page layout holds at ${name}: no overflow, 14px edges, 7px between blocks, text wraps`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await openChat(page);
+    expect(await underTheFloor(page), `${name}: home`).toEqual([]);
+    await ask(page, 'x'.repeat(140));
+    await expect(page.locator('.cite-link').first()).toBeVisible();
+    expect(await underTheFloor(page), `${name}: a long word and its answer`).toEqual([]);
+    if (width < 1024) {
+      await openChats(page);
+      expect(await underTheFloor(page), `${name}: drawer`).toEqual([]);
+    }
+  });
+}
