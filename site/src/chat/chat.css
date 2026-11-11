@@ -675,7 +675,7 @@ input:not([type='checkbox']):not([type='radio']) {
 .update-popup {
   position: fixed;
   inset-inline: var(--inset-floor);
-  bottom: calc(9rem + env(safe-area-inset-bottom));
+  bottom: calc(var(--dock-h, 8rem) + var(--gap-floor));
   z-index: 20;
   max-width: 28rem;
   margin-inline: auto;
@@ -784,4 +784,8 @@ html.app body {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  /* The top bar and the composer are pinned over this scroller: scrolling to an answer, a question or a focused
+     control must stop short of them, not behind them. chrome.ts measures both into --topbar-h and --dock-h;
+     the fallbacks are their smallest heights. */
+  scroll-padding-block: calc(var(--topbar-h, 4rem) + var(--gap-floor)) calc(var(--dock-h, 8rem) + var(--gap-floor));
 }
