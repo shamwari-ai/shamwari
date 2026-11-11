@@ -197,3 +197,32 @@ variables and the Durable Object), so check these against `https://shamwari.ai` 
 `npm run deploy:app` from `site/`, which builds with `PUBLIC_CHAT_AUTH=mukoko` and then runs `wrangler deploy`.
 After a deploy, `GET /lite/auth/login` should answer 302 to the Mukoko Account sign-in page; a real sign-in
 needs a person and a registered redirect URI (`https://shamwari.ai/lite/callback`).
+
+## Automatic release to production (shamwari-ai/shamwari#201)
+
+Every merge to `staging` is released to `main` and production without a manual step. Only a major
+version is gated; it is never automatic.
+
+1. A PR merges to `staging` through the queue.
+2. **Verify:** `release-to-main.yml` runs when CI finishes on the staging head. A red head
+   releases nothing, and a head that has since been replaced is left to the newer run.
+3. **Release PR:** it keeps one branch, `release/staging-to-main`, whose tree equals staging's
+   (branch from `main`, `git read-tree -u --reset origin/staging`, commit), opens or updates the
+   PR `chore: release staging to main, DATE+n`, labels it `forward-ported`, and turns on
+   auto-merge. It moves `main` only: the gateway and Core are not deployed by this.
+4. **Deploy:** when `main` updates, Workers Builds deploys `shamwari-site` (connected) and
+   `shamwari-app` (once the owner connects it in the Cloudflare dashboard).
+5. **Smoke:** `smoke-production.yml` checks production for up to 18 minutes: `/lite/`
+   unauthenticated is a 302 to `/lite/auth/login`; `/lite/disclaimer/`,
+   `/lite/manifest.webmanifest` and `/lite/sw.js` are 200; an `/_astro/*.js` script named in
+   `sw.js` is 401 without a session; `www.shamwari.ai` is 200. On failure it opens an issue.
+
+**Rollback:** Cloudflare dashboard, Workers & Pages, the Worker, Deployments, roll back to the
+previous version (a deploy keeps the previous version ids), then fix forward on `staging`.
+
+**Needs the owner:** a GitHub App (or token) the release workflow can use, stored as the
+repository secrets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`, installed on this repository
+with Contents, Pull requests and Issues write. The built-in `GITHUB_TOKEN` is not enough: a PR it
+opens does not start the pull-request workflows, so the required checks would never run.
+Both workflows must also be on `main` before they run (`workflow_run` uses the default branch's
+copy), so the first release is cut by hand.
