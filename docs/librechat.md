@@ -362,15 +362,25 @@ route and no origin binding**; a test fails if either appears in its config.
 Attaching the route is cutover step 7. Until the origin binding exists it answers
 503 and contacts nothing.
 
-What it does, each with a test: only `/chat` and `/chat/…` are ours (`/chatter`
-is not); `/chat` redirects to `/chat/`; the prefix is stripped before the origin
-sees the path; `Location` is re-prefixed unless it is already ours or points at
-another host; every `Set-Cookie` is scoped to `Path=/chat`, loses its `Domain`,
-and a `__Host-` cookie (which must be `Path=/`) is dropped; the visitor's
-`X-Forwarded-*` are replaced by the proxy's own; only content-hashed assets are
-`immutable`, the API is `no-store`; the same-origin CSP limits
-(framing is refused by `frame-ancestors`) and `nosniff` are set; an unreachable origin is a 502
-with no detail.
+What it does, each with a test:
+
+- Only `/chat` and `/chat/…` are ours (`/chatter` is not); `/chat` redirects to `/chat/`.
+- The prefix is stripped before the origin sees the path. The origin address is built by
+  concatenation, so a path like `/chat//evil.com/x` cannot choose the host.
+- `Location`: a root-relative or relative redirect is re-prefixed (a relative one is
+  resolved against the path the origin was asked for). An absolute URL is left as the
+  origin wrote it, since LibreChat builds those from `DOMAIN_SERVER`, which carries
+  `/chat`. **To test:** which forms LibreChat actually emits.
+- Every `Set-Cookie` is scoped to `Path=/chat` and loses its `Domain`. A `__Host-`
+  cookie (it must be `Path=/`) is dropped, and its name (never its value) is logged.
+- The visitor's `X-Forwarded-*` are replaced by the proxy's own. The client address is
+  forwarded from `CF-Connecting-IP`, so LibreChat's per-IP limits see real clients.
+- The API and OAuth routes, and every non-GET request, are `no-store` (the path check is
+  case-insensitive, as Express routing is). Only a file name ending in an 8-character
+  content hash that contains a digit or a capital is `immutable`.
+- The same-origin CSP limits are _added beside_ any policy the origin sends, never in its
+  place. Framing is refused by `frame-ancestors`. `nosniff` is set.
+- An unreachable origin is a 502 with no detail.
 
 **Not yet in the proxy, and why:** `script-src` in the CSP (LibreChat's build has
 inline scripts that have to be read first), edge caching of hashed assets
@@ -798,7 +808,7 @@ fact, and each fails when a rule is broken.
 | Stub-gateway: streaming | the endpoint works against a non-streaming gateway                                                                                         |
 | Stub-gateway: citations | a response carrying `shamwari.citations` shows its sources to the person                                                                   |
 | Sub-path e2e            | page, assets, `/chat/api/...`, redirect and cookie path all work through the Worker rewrite; cookies have `Path=/chat`                     |
-| Worker unit tests       | strip prefix, `Location` and `Set-Cookie` rewrite, CSP, cache rules, no route or binding in the config (`chat/proxy/`, done, 17 tests)     |
+| Worker unit tests       | strip prefix, `Location` and `Set-Cookie` rewrite, CSP, cache rules, an allow-list for the config (`chat/proxy/`, done, 24 tests)          |
 | Old service worker      | the retiring worker unregisters and clears caches; the lite worker is scoped to `/chat/lite/`                                              |
 | Weight job              | records first-load bytes against the old page's 16.0 KB                                                                                    |
 | Theme test              | `--surface-primary` computes to the sodalite value                                                                                         |

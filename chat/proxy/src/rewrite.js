@@ -16,19 +16,22 @@ export function stripPrefix(pathname) {
 }
 
 /**
- * Re-prefix a `Location` from the origin. The origin is root-relative, so `/login` must
- * become `/chat/login`. Anything already under `/chat`, and any other host (the sign-in
- * provider), is left alone. An absolute URL on our own host is treated like a relative one.
+ * Re-prefix a `Location` from the origin. The origin sees root-relative paths, so a redirect it
+ * writes as `/login` (or `login`, resolved against the path it was asked for) must become
+ * `/chat/login`. An absolute URL is the origin saying exactly where to go (LibreChat builds
+ * them from DOMAIN_SERVER, which carries `/chat`), so it is left as it is, as is anything
+ * already under `/chat`.
  */
-export function rewriteLocation(location, publicOrigin) {
+export function rewriteLocation(location, originPath = "/") {
   if (location == null || location === "") return location;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(location) || location.startsWith("//"))
+    return location;
   let target;
   try {
-    target = new URL(location, publicOrigin);
+    target = new URL(location, "http://chat-origin.internal" + originPath);
   } catch {
     return location;
   }
-  if (target.origin !== new URL(publicOrigin).origin) return location;
   if (inScope(target.pathname))
     return target.pathname + target.search + target.hash;
   return PREFIX + target.pathname + target.search + target.hash;
@@ -80,23 +83,33 @@ export const CSP = [
   "connect-src 'self'",
 ].join("; ");
 
+// A bundler content hash is 8 base64url characters. A name like `logo-darkmode.png` also ends
+// in 8 characters, so the token must contain a digit or a capital to count as a hash. A real
+// hash that is all lowercase (rare) just gets `no-cache`, which is the safe direction.
 const HASHED_ASSET =
-  /^\/chat\/assets\/.+-[A-Za-z0-9_-]{8,}\.(?:js|css|woff2?|ttf|png|jpe?g|svg|webp|avif|ico|map)$/;
+  /^\/chat\/assets\/.+-([A-Za-z0-9_-]{8})\.(?:js|css|woff2?|ttf|png|jpe?g|svg|webp|avif|ico|map)$/;
 
 /** Cache rule by path. Only files whose name carries a content hash are immutable. */
 export function cacheControl(pathname, method, status) {
-  if (
-    pathname.startsWith(PREFIX + "/api/") ||
-    pathname.startsWith(PREFIX + "/oauth/")
-  )
+  const p = pathname.toLowerCase();
+  if (p === PREFIX + "/api" || p.startsWith(PREFIX + "/api/"))
     return "no-store";
-  if (method === "GET" && status === 200 && HASHED_ASSET.test(pathname)) {
-    return "public, max-age=31536000, immutable";
+  if (p === PREFIX + "/oauth" || p.startsWith(PREFIX + "/oauth/"))
+    return "no-store";
+  if (method !== "GET" && method !== "HEAD") return "no-store";
+  if (method === "GET" && status === 200) {
+    const m = HASHED_ASSET.exec(pathname);
+    if (m && /[0-9A-Z]/.test(m[1]))
+      return "public, max-age=31536000, immutable";
   }
   return "no-cache";
 }
 
-/** Headers the proxy sets itself, never trusting the visitor's. */
+/**
+ * Headers the proxy sets itself, never trusting the visitor's. The client address comes from
+ * `CF-Connecting-IP`, which Cloudflare sets and a visitor cannot forge; without it LibreChat's
+ * per-IP rate limits and logs would see one address (the tunnel's) for everyone.
+ */
 export function originRequestHeaders(inbound, publicOrigin) {
   const h = new Headers(inbound);
   for (const k of [...h.keys()]) {
@@ -106,5 +119,7 @@ export function originRequestHeaders(inbound, publicOrigin) {
   const pub = new URL(publicOrigin);
   h.set("x-forwarded-proto", pub.protocol.replace(":", ""));
   h.set("x-forwarded-host", pub.host);
+  const client = inbound.get("cf-connecting-ip");
+  if (client) h.set("x-forwarded-for", client);
   return h;
 }
