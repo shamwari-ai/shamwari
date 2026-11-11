@@ -31,7 +31,7 @@ test('each section opens its own list, aria-current follows, and the other lists
   await openChat(page);
   await makeProject(page, 'Harvest'); // opens Projects
   await expect(page.locator('[data-panel="projects"]')).toBeVisible();
-  await expect(page.locator('[data-panel="chat"]')).toBeHidden();
+  await expect(page.locator('[data-panel="chat"]')).toHaveJSProperty('hidden', true);
   await expect(nav(page).getByRole('button', { name: 'Projects' })).toHaveAttribute('aria-current', 'page');
   await expect(nav(page).getByRole('button', { name: 'Chat' })).not.toHaveAttribute('aria-current', 'page');
   await expect(page.getByText('Harvest (0)')).toBeVisible(); // the existing projects, reused
@@ -41,8 +41,9 @@ test('each section opens its own list, aria-current follows, and the other lists
   await expect(page.getByText('Answers you save appear here.')).toBeVisible(); // honest empty state
 
   await openSection(page, 'Chat');
-  await expect(page.locator('[data-panel="chat"]')).toBeVisible();
-  await expect(page.locator('[data-panel]:visible')).toHaveCount(1);
+  // (The Chat list is empty on a fresh device, so it has no size to see: check the panel itself.)
+  await expect(page.locator('[data-panel="chat"]')).toHaveJSProperty('hidden', false);
+  await expect(page.locator('[data-panel]:not([hidden])')).toHaveCount(1);
 });
 
 test('Plugins is an honest shell: three tabs, nothing behind them, and the third-party note; its script loads only then', async ({ page }) => {

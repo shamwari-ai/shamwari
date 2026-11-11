@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, makeProject, openAccount, openChat, openChats, newChat, seedLegacyQuestion } from './helpers';
+import { ask, makeProject, openAccount, openChat, openChats, openSection, newChat, seedLegacyQuestion } from './helpers';
 
 test('asks a question and renders the answer with its citation card', async ({ page }) => {
   await openChat(page);
@@ -347,7 +347,7 @@ test('the drawer pins a chat, files it in a project, keeps a saved answer, and d
   await page.keyboard.press('Escape');
   await page.locator('#pin-chat').click();
   await expect(page.locator('#pin-chat')).toHaveAttribute('aria-pressed', 'true');
-  await openChats(page);
+  await openSection(page, 'Chat');
   await expect(page.locator('#side-pinned')).toBeVisible();
   await expect(page.locator('#pinned-list')).toContainText('Is everyone equal');
   await page.keyboard.press('Escape');
@@ -355,7 +355,7 @@ test('the drawer pins a chat, files it in a project, keeps a saved answer, and d
   // Keep the answer: it appears under Artifacts and opens in a dialog with its source.
   await page.getByRole('button', { name: 'Save answer' }).click();
   await expect(page.locator('#toast')).toContainText('Saved to Artifacts');
-  await openChats(page);
+  await openSection(page, 'Artifacts');
   await page.locator('#artifact-list button').first().click();
   await expect(page.locator('#artifact-view')).toBeVisible();
   await expect(page.locator('#artifact-cites li').first()).toBeVisible();
@@ -364,14 +364,15 @@ test('the drawer pins a chat, files it in a project, keeps a saved answer, and d
   // It all survives a reload (it is on the device) and goes with Delete history.
   await page.reload();
   await page.waitForSelector('html[data-ready="true"]');
-  await openChats(page);
+  await openSection(page, 'Artifacts');
   await expect(page.locator('#artifact-list button')).toHaveCount(1);
+  await openSection(page, 'Projects');
   await expect(page.locator('#project-list summary')).toContainText('Know my rights');
   await page.keyboard.press('Escape');
   page.once('dialog', (d) => d.accept());
   await openAccount(page);
   await page.getByRole('button', { name: 'Delete history' }).click();
-  await openChats(page);
+  await openSection(page, 'Artifacts');
   await expect(page.locator('#artifact-list button')).toHaveCount(0);
   await expect(page.locator('#project-list li')).toHaveCount(0);
 });
