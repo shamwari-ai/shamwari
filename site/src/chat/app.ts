@@ -16,6 +16,7 @@ import {
 import { newId, openSwitchableStore, titleOf, type Artifact, type Project, type StoredMessage, type Thread } from './store';
 import { LANGUAGES, isLanguage } from './strings';
 import type { AskErrorKind, ChatMessage, Scope } from './types';
+import { setBusy } from './busy';
 
 /**
  * The only scope this client asks with. There is no control for it anywhere: the person is never asked which kind of
@@ -470,7 +471,10 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     void renderHistory();
   };
 
-  const syncBusy = () => log.setAttribute('aria-busy', String(inflight.size > 0));
+  const syncBusy = () => {
+    log.setAttribute('aria-busy', String(inflight.size > 0));
+    setBusy('send', inflight.size > 0); // a release reloads the page only when nothing is on its way
+  };
 
   // ---- asking --------------------------------------------------------------
   const contextFor = (th: Thread, target: StoredMessage): ChatMessage[] => {
@@ -666,28 +670,35 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
       showAuth();
       return;
     }
-    const m: StoredMessage = { id: newId(), role: 'user', text: clean, at: Date.now(), scope: GENERAL, status: 'sent' };
-    if (!thread.messages.length) thread.title = titleOf(clean);
-    thread.messages.push(m);
-    syncEmpty();
-    input.value = '';
-    autosize();
-    if (offlineMode) {
-      // Offline mode: written to this device and kept there. Not queued, not retried, never sent unless the person
-      // turns the mode off and chooses "Send now".
-      m.status = 'local';
-      await save(thread);
-      mount(m);
-    } else if (!navigator.onLine) {
-      // Offline: do not even try. Save it, say so, send it when the network is back.
-      m.status = 'queued';
-      // Stored first, shown second: "waiting to send" must only appear once the
-      // question is actually on the device, or a quick reload could lose it.
-      await save(thread);
-      mount(m);
-      scheduleRetry();
-    } else {
-      await deliver(thread, m);
+    // From here until the question is stored and delivered, a release must not reload the page: clearing the box below
+    // would otherwise make the page look idle for a moment before the question is marked as on its way.
+    setBusy('ask', true);
+    try {
+      const m: StoredMessage = { id: newId(), role: 'user', text: clean, at: Date.now(), scope: GENERAL, status: 'sent' };
+      if (!thread.messages.length) thread.title = titleOf(clean);
+      thread.messages.push(m);
+      syncEmpty();
+      input.value = '';
+      autosize();
+      if (offlineMode) {
+        // Offline mode: written to this device and kept there. Not queued, not retried, never sent unless the person
+        // turns the mode off and chooses "Send now".
+        m.status = 'local';
+        await save(thread);
+        mount(m);
+      } else if (!navigator.onLine) {
+        // Offline: do not even try. Save it, say so, send it when the network is back.
+        m.status = 'queued';
+        // Stored first, shown second: "waiting to send" must only appear once the
+        // question is actually on the device, or a quick reload could lose it.
+        await save(thread);
+        mount(m);
+        scheduleRetry();
+      } else {
+        await deliver(thread, m);
+      }
+    } finally {
+      setBusy('ask', false);
     }
     void renderHistory();
   }
@@ -817,6 +828,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
 
   // ---- controls ------------------------------------------------------------
   const autosize = () => {
+    setBusy('draft', input.value.trim() !== ''); // text in the question box is not reloaded away by a release
     input.style.height = 'auto';
     input.style.height = `${Math.min(input.scrollHeight, 128)}px`;
   };
