@@ -56,7 +56,9 @@ export async function closeChats(page: Page) {
   if (open) await page.keyboard.press('Escape');
   await page.waitForFunction(() => {
     const main = document.querySelector('[data-slot="app-main"]') as HTMLElement | null;
-    return !!main && !main.inert && Math.round(main.getBoundingClientRect().x) === 0 && !document.documentElement.dataset.drawer;
+    const side = document.querySelector('#chat-sidebar') as HTMLElement | null;
+    // Done sliding: the page is back, and the drawer has left the screen (display: none once its exit has finished).
+    return !!main && !main.inert && Math.round(main.getBoundingClientRect().x) === 0 && !document.documentElement.dataset.drawer && !!side && getComputedStyle(side).display === 'none';
   });
 }
 
