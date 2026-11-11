@@ -222,7 +222,9 @@ browser                    shamwari-app Worker (worker/)         WorkOS
 (`https://shamwari.ai/lite/callback`). Two **secrets**, bound from the account's Secrets Store and
 never written into git: `WORKOS_API_KEY` (the WorkOS environment's API key; the Worker is a
 confidential client) and `COOKIE_PASSWORD` (seals the cookie; at least 32 random characters).
-With either unbound the auth routes answer `503` and the page stays on developer-key mode.
+With either unbound the auth routes answer `503` and the gate fails closed: the page is a `503`, never served
+(`docs/domains-and-deploy.md`, "Before sign-in can work, and what the gate does"). The bindings are by name in
+`site/wrangler.app.jsonc` (`CONSOLE_WORKOS_API_KEY` and `SESSION_SECRET` in the shared Secrets Store).
 
 **Not verified** (nothing here has met a real WorkOS tenant; no credentials exist in this session):
 the sealed cookie must stay under the browser's size limit once it carries the access token, the
@@ -324,13 +326,13 @@ owning-entity key.
 
 ## What is built, what is not
 
-| Piece                                                  | State                                                                    |
-| ------------------------------------------------------ | ------------------------------------------------------------------------ |
-| Gateway accepts and verifies a WorkOS token            | built, 59 tests, guards mutation-checked                                 |
-| One fixed grant, no permissions, no `personal`         | built, tested                                                            |
-| Per-person metering on the canonical person id         | built; person ids must never equal entity ids (G6)                       |
-| Session Worker (`site/worker/`), `mukoko` AuthProvider | built, tested against a fake WorkOS; **not deployed**; secrets not bound |
-| Revocation by `sid` deny list                          | not built, not asked for                                                 |
+| Piece                                                                                     | State                                                                                                                                                       |
+| ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Gateway accepts and verifies a WorkOS token                                               | built, 59 tests, guards mutation-checked                                                                                                                    |
+| One fixed grant, no permissions, no `personal`                                            | built, tested                                                                                                                                               |
+| Per-person metering on the canonical person id                                            | built; person ids must never equal entity ids (G6)                                                                                                          |
+| Session Worker (`site/worker/`), `mukoko` AuthProvider, and the gate in front of `/lite/` | built, tested against a fake WorkOS and under the Workers runtime locally; secrets bound by name in `wrangler.app.jsonc`; **not deployed from this change** |
+| Revocation by `sid` deny list                                                             | not built, not asked for                                                                                                                                    |
 
 ## Needs the owner
 
