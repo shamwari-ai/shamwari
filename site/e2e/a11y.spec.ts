@@ -201,3 +201,41 @@ test('weak network: the answer still arrives and the slow hint appears', async (
   await expect(page.locator('article.msg.bot .cite').first()).toBeVisible({ timeout: 10_000 });
   await expect(page.locator('.pending')).toHaveCount(0);
 });
+
+test('a new version is offered as a pop-up, becomes a card in the drawer, and Update now applies it', async ({ page }) => {
+  await openChat(page);
+  await expect(page.locator('#update')).toBeHidden();
+  // What main.ts raises when a worker is waiting; apply is recorded instead of reloading.
+  await page.evaluate(() => {
+    (window as unknown as { applied: number }).applied = 0;
+    dispatchEvent(
+      new CustomEvent('shamwari:update', {
+        detail: { version: 'abc1234', apply: () => ((window as unknown as { applied: number }).applied += 1) },
+      }),
+    );
+  });
+  await expect(page.locator('#update')).toBeVisible();
+  await expect(page.locator('#update')).toContainText('A new version is ready.');
+  await expect(page.locator('#update')).toContainText('Version abc1234');
+
+  // The drawer opens: the pop-up goes away and the card sits at the foot, above New chat and the account.
+  await openChats(page);
+  await expect(page.locator('#update')).toBeHidden();
+  const card = page.locator('#update-card');
+  await expect(card).toBeVisible();
+  const [c, bar] = await Promise.all([card.boundingBox(), page.locator('#side-new').boundingBox()]);
+  expect(c!.y + c!.height).toBeLessThanOrEqual(bar!.y);
+  expect(await underTheFloor(page), 'drawer with the update card').toEqual([]);
+
+  // Closing it brings the pop-up back; Later hides it, the card stays.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#update')).toBeVisible();
+  expect(await underTheFloor(page), 'pop-up').toEqual([]);
+  await page.getByRole('button', { name: 'Later' }).click();
+  await expect(page.locator('#update')).toBeHidden();
+  await openChats(page);
+  await expect(card).toBeVisible();
+
+  await card.getByRole('button', { name: 'Update now' }).click();
+  expect(await page.evaluate(() => (window as unknown as { applied: number }).applied)).toBe(1);
+});

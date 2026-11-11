@@ -696,6 +696,18 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
     }, 4000);
   });
 
+  // The drawer's foot: New chat and the account, as in the top bar.
+  $('#side-new').addEventListener('click', () => {
+    closeDrawer();
+    document.querySelector<HTMLButtonElement>('#new-chat button')?.click();
+  });
+  $('#side-account').addEventListener('click', () => {
+    closeDrawer();
+    const menu = document.querySelector<HTMLDetailsElement>('details.account');
+    if (menu) menu.open = true;
+    menu?.querySelector('summary')?.focus();
+  });
+
   $('#new-chat').addEventListener('click', () => {
     if (thread.messages.length) {
       thread = fresh();
