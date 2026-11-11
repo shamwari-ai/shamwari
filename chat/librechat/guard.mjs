@@ -121,11 +121,22 @@ function checkConfig(
       v.push(`${label} scope "${scope}" is not allowed here`);
     if (e?.addParams?.stream !== false)
       v.push(`${label} must set stream: false`);
+    // The gateway does not stream, so LibreChat must not either (docs/librechat.md).
+    if (
+      e?.addParams?.streaming !== false ||
+      e?.addParams?.disableStreaming !== true
+    )
+      v.push(`${label} must set streaming: false and disableStreaming: true`);
     if (e?.headers?.["X-Shamwari-Channel"] !== "pwa")
       v.push(`${label} must send X-Shamwari-Channel: pwa`);
     for (const k of extra(e?.headers, ["X-Shamwari-Channel"]))
       v.push(`${label} header "${k}" is not allowed`);
-    for (const k of extra(e?.addParams, ["scope", "stream"]))
+    for (const k of extra(e?.addParams, [
+      "scope",
+      "stream",
+      "streaming",
+      "disableStreaming",
+    ]))
       v.push(`${label} addParams key "${k}" is not allowed`);
     for (const k of extra(e, ENDPOINT_OPTIONS))
       v.push(`${label} option "${k}" is not allowed`);

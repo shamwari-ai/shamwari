@@ -384,6 +384,17 @@ const mutants = [
     }),
     /allowedAddresses must be exactly/,
   ],
+  [
+    "streaming left on",
+    (f) => ({
+      ...f,
+      production: f.production.replace(
+        "disableStreaming: true",
+        "disableStreaming: false",
+      ),
+    }),
+    /disableStreaming: true/,
+  ],
 ];
 
 for (const [name, mutate, expected] of mutants) {
