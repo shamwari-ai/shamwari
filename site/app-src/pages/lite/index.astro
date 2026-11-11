@@ -151,7 +151,13 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
       </div>
     </div>
 
-    <!-- The top bar's actions: a new chat. #new-chat is a wrapper the script listens on. -->
+    <!-- The top bar's actions, at the right: OFFLINE MODE (a switch; on, nothing is sent and nothing replays), then a new
+         chat. #new-chat is a wrapper the script listens on. -->
+    <button slot="actions" type="button" id="offline-mode" role="switch" aria-checked="false" class="bar-action offline-switch">
+      <Icon name="globe" class="h-5 w-5" />
+      <span class="sr-only sm:not-sr-only" data-i18n="offlineMode">{en.offlineMode}</span>
+      <span class="offline-state" aria-hidden="true" data-i18n="offlineModeOff">{en.offlineModeOff}</span>
+    </button>
     <span slot="actions" id="new-chat" class="contents">
       <button type="button" class="bar-action">
         <Icon name="plus" class="h-5 w-5" />
@@ -163,6 +169,7 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
     <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
       This language is a draft and still needs review by a native speaker.
     </p>
+    <p id="offline-mode-note" class="notice" role="status" hidden data-i18n="offlineModeNote">{en.offlineModeNote}</p>
     <p id="offline" class="notice" role="status" hidden data-i18n="offlineBanner">
       You are offline. You can still write questions; they will be sent later.
     </p>

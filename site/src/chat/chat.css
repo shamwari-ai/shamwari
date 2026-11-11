@@ -969,3 +969,15 @@ html[data-view='pending'] dialog {
   background: var(--muted);
   color: var(--foreground);
 }
+
+/* ---- the OFFLINE MODE switch, top right ----------------------------------------------------------------------
+   A switch (role="switch", aria-checked), at the right of the top bar. Off it is a quiet action like the others; on, it is
+   filled, and the page says so in words (#offline-mode-note), so the state never rests on colour. Below 40rem only the
+   icon and the On/Off word show; the name stays for screen readers. */
+.offline-switch .offline-state {
+  font-weight: 600;
+}
+.offline-switch[aria-checked='true'] {
+  background: var(--muted);
+  box-shadow: inset 0 0 0 1.5px var(--foreground);
+}
