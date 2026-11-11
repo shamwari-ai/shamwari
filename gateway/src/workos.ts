@@ -67,7 +67,8 @@ export function workosEnabled(env: Env): boolean {
 }
 
 interface Config {
-  clientId: string;
+  /** Every client id whose tokens are accepted (one or more AuthKit applications). */
+  clientIds: string[];
   /** Each configured `iss`, and the same with a trailing slash added. */
   issuers: string[];
   /** Absent means the `aud` claim is not checked: `iss`, `client_id` and `exp` carry the isolation. */
@@ -79,8 +80,16 @@ interface Config {
 
 /** null when enabled but incomplete: that is 'unavailable', never "accept anyway". */
 function config(env: Env): Config | null {
-  const { WORKOS_CLIENT_ID: clientId, WORKOS_ISSUER: issuer, WORKOS_AUDIENCE: audience } = env;
+  const { WORKOS_CLIENT_ID: clientIdList, WORKOS_ISSUER: issuer, WORKOS_AUDIENCE: audience } = env;
   const cap = Number(env.WORKOS_MONTHLY_TOKEN_CAP);
+  // One or more client ids, comma separated (the mobile app signs in through Shamwari Chat, the light chat
+  // through Mukoko Account). Blank entries are dropped; a list with nothing left is a configuration error,
+  // never "accept any".
+  const clientIds = (clientIdList ?? '')
+    .split(',')
+    .map((c) => c.trim())
+    .filter((c) => c !== '');
+  const clientId = clientIds[0];
   if (!clientId || !issuer) return null;
   // Optional by owner decision: the Shamwari Chat app is its own AuthKit application, so the
   // `client_id` check already isolates it, and `aud` sits in a JWT template shared by every
@@ -119,7 +128,7 @@ function config(env: Env): Config | null {
     if (bare === '') return null;
     issuers.push(bare, `${bare}/`);
   }
-  return { clientId, issuers, audience, jwksUrl, monthlyTokenCap: cap, maxTokenAgeSeconds: maxAge };
+  return { clientIds, issuers, audience, jwksUrl, monthlyTokenCap: cap, maxTokenAgeSeconds: maxAge };
 }
 
 // One JWKS set per URL per isolate. jose caches the keys, re-fetches on an
@@ -186,7 +195,7 @@ export async function verifyWorkosToken(token: string, env: Env): Promise<Workos
 
   if (!nonEmpty(payload.sub)) return { status: 'invalid' };
   // A token minted for another WorkOS app that shares our issuer and audience.
-  if (payload.client_id !== cfg.clientId) return { status: 'invalid' };
+  if (typeof payload.client_id !== 'string' || !cfg.clientIds.includes(payload.client_id)) return { status: 'invalid' };
   // The session id is what revocation is keyed on; a token without one cannot be revoked.
   if (typeof payload.sid !== 'string' || !PERSON_ID_PATTERN.test(payload.sid)) {
     return { status: 'invalid' };

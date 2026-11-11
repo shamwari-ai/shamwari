@@ -26,6 +26,7 @@ export interface Env {
    * set; once it is, a missing or malformed value denies (503), it never relaxes a check.
    * None of these is a secret: they identify the app and the token's issuer.
    */
+  /** One client id, or several comma separated (every AuthKit application whose tokens are accepted). */
   WORKOS_CLIENT_ID?: string;
   /** The `iss` WorkOS puts in access tokens for this app. Exact match. */
   WORKOS_ISSUER?: string;
@@ -35,7 +36,7 @@ export interface Env {
    * (blank) is a configuration error, not "unset".
    */
   WORKOS_AUDIENCE?: string;
-  /** Defaults to https://api.workos.com/sso/jwks/{WORKOS_CLIENT_ID}. HTTPS only. */
+  /** Defaults to https://api.workos.com/sso/jwks/{the first id in WORKOS_CLIENT_ID}. HTTPS only. */
   WORKOS_JWKS_URL?: string;
   /** Monthly token cap per person. A positive integer; the owner sets it. */
   WORKOS_MONTHLY_TOKEN_CAP?: string;

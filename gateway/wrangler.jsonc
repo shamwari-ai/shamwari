@@ -101,10 +101,12 @@
     "SERVERS_API_ENABLED": "false",
 
     // WorkOS sign-in for people (docs/chat-signin.md). None of these is a secret. The
-    // Shamwari Chat AuthKit application is its own app, so the client_id check is what
-    // keeps tokens minted for any other Mukoko app out; `aud` is deliberately NOT set (the
-    // production JWT template carries none; setting it would make every token without it fail).
-    "WORKOS_CLIENT_ID": "client_01M68PCT0T5ECHKDYH45ECT0GV",
+    // client_id check is what keeps tokens minted for any other Mukoko app out; `aud` is deliberately NOT set (the
+    // production JWT template carries none; setting it would make every token without it fail). Two applications
+    // are accepted, comma separated, and no others: Shamwari Chat (the mobile app) and Mukoko Account (the light
+    // chat at /lite/, which signs in there because Shamwari Chat has no API key for the Worker's code exchange).
+    // The JWKS URL is built from the first id; WorkOS signs every application of an environment with the same keys.
+    "WORKOS_CLIENT_ID": "client_01M68PCT0T5ECHKDYH45ECT0GV,client_01KQBBSMQTSMTBN7HEC9KQBJC0",
     // Mukoko Account custom domain (accounts.mukoko.com). Two issuers are listed because the OIDC discovery document and WorkOS's user-management tokens disagree on the form; NOT yet read off a real access token
     // (WorkOS advises copying `iss` from a decoded token; a trailing slash is tolerated). If it
     // is wrong every WorkOS token is refused with 401 and `sk_shamwari_` keys are unaffected.
