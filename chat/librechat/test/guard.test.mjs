@@ -23,7 +23,8 @@ test("the real configuration is clean", () => {
 test("the pin is the verified release", () => {
   const pin = read("PIN");
   assert.match(pin, /^tag=v0\.8\.8$/m);
-  assert.match(pin, /^commit=e8f3be08623663d4ad7f7241e693c94469b63bb0$/m);
+  assert.match(pin, /^base=e8f3be08623663d4ad7f7241e693c94469b63bb0$/m);
+  assert.match(pin, /^commit=[0-9a-f]{40}$/m);
 });
 
 // Mutation checks: the guard must FAIL on each way of breaking a rule, or it is a
@@ -421,6 +422,19 @@ const mutants = [
       ),
     }),
     /source repository must be the Shamwari fork/,
+  ],
+  [
+    "no upstream base in the pin",
+    (f) => ({ ...f, pin: f.pin.replace(/base=.*\n/, "") }),
+    /base must be the full 40-hex/,
+  ],
+  [
+    "a build.sh that skips the ancestry check",
+    (f) => ({
+      ...f,
+      buildSh: f.buildSh.replace("merge-base --is-ancestor", "echo"),
+    }),
+    /built on the upstream base/,
   ],
 ];
 

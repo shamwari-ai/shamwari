@@ -239,6 +239,8 @@ export function check({ production, test, fly, dockerfile, buildSh, pin }) {
       v.push(`Dockerfile: FROM must be \${BASE_IMAGE}, got "${line.trim()}"`);
     if (/:latest\b/.test(line)) v.push("Dockerfile: floating :latest tag");
   }
+  const base = /^base=([0-9a-f]{40})$/m.exec(pin)?.[1];
+  if (!base) v.push("PIN: base must be the full 40-hex upstream commit");
   const commit = /^commit=([0-9a-f]{40})$/m.exec(pin)?.[1];
   const tag = /^tag=(v\d+\.\d+\.\d+)$/m.exec(pin)?.[1];
   if (!commit) v.push("PIN: commit must be a full 40-hex SHA");
@@ -248,6 +250,10 @@ export function check({ production, test, fly, dockerfile, buildSh, pin }) {
   if (!/^repo="https:\/\/github\.com\/shamwari-ai\/librechat"$/m.test(buildSh))
     v.push(
       "build.sh: the source repository must be the Shamwari fork, with no override",
+    );
+  if (!/merge-base --is-ancestor/.test(buildSh))
+    v.push(
+      "build.sh: must verify the fork commit is built on the upstream base",
     );
   if (!/refs\/tags/.test(buildSh))
     v.push(

@@ -173,25 +173,24 @@ assert.match(
   "the gateway's answer was not shown",
 );
 
-// 4. Personal scope: the gateway refuses with 409 and no answer is produced (Rule 1).
+// 4. Personal scope: the gateway refuses with 409, no answer is produced (Rule 1), and the
+// person reads why. The plain sentence comes from the fork patch (FORK.md, row 6).
 const personal = await ask("Shamwari (personal)", "What is in my payslip?");
 note("personal.shown", personal.shown.slice(0, 400));
 assert.match(
   personal.shown,
-  /scope_requires_local_inference/,
-  "the refusal did not reach the person",
+  /Personal-layer data cannot be sent to an external inference provider/,
+  "the person was not shown the plain refusal sentence",
 );
 assert.doesNotMatch(
   personal.shown,
   /STUB-ANSWER/,
   "a personal question was answered",
 );
-// The plain sentence is NOT shown yet: the OpenAI client keeps only the error code
-// from the gateway's body, so LibreChat prints the code. Tracked in docs/librechat.md
-// ("A fork patch maps the code to the sentence"); recorded here so it cannot go unseen.
-note(
-  "personal.plain_sentence_shown",
-  /Personal-layer data cannot be sent/.test(personal.shown),
+assert.doesNotMatch(
+  personal.shown,
+  /scope_requires_local_inference/,
+  "the bare error code is still shown to the person",
 );
 
 // 5. What LibreChat actually sent. This is the Rule 1 record.
