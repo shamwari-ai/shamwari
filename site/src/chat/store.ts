@@ -56,6 +56,8 @@ export interface Artifact {
 }
 
 export interface Store {
+  /** Let go of the database connection (a store that is no longer used). */
+  close?(): void;
   list(): Promise<Thread[]>;
   put(thread: Thread): Promise<void>;
   remove(id: string): Promise<void>;
@@ -100,7 +102,9 @@ export function memoryStore(): Store {
   };
 }
 
+/** The store nobody owns: developer-key mode, a device before anyone has signed in, and chats from before stores were per person. */
 const DB = 'shamwari-chat';
+const dbName = (userKey: string | null) => (userKey ? `${DB}-u-${userKey}` : DB);
 const TABLE = 'threads';
 const PROJECTS = 'projects';
 const ARTIFACTS = 'artifacts';
@@ -111,11 +115,11 @@ const wrap = <T>(req: IDBRequest<T>): Promise<T> =>
     req.onerror = () => no(req.error);
   });
 
-export async function openStore(): Promise<Store> {
+export async function openStore(userKey: string | null = null): Promise<Store> {
   if (typeof indexedDB === 'undefined') return memoryStore();
   try {
     const db = await new Promise<IDBDatabase>((ok, no) => {
-      const open = indexedDB.open(DB, 2);
+      const open = indexedDB.open(dbName(userKey), 2);
       open.onupgradeneeded = () => {
         // Version 2 adds projects and artifacts; threads from version 1 are kept as they are.
         for (const name of [TABLE, PROJECTS, ARTIFACTS]) {
@@ -128,6 +132,7 @@ export async function openStore(): Promise<Store> {
     });
     const tx = (name: string, mode: IDBTransactionMode) => db.transaction(name, mode).objectStore(name);
     return {
+      close: () => db.close(),
       list: async () =>
         ((await wrap(tx(TABLE, 'readonly').getAll())) as Thread[]).sort((a, b) => b.updatedAt - a.updatedAt),
       put: async (t) => void (await wrap(tx(TABLE, 'readwrite').put(t))),
@@ -147,4 +152,77 @@ export async function openStore(): Promise<Store> {
   } catch {
     return memoryStore();
   }
+}
+
+/**
+ * A store that can be pointed at another person's database without the code holding it being told: everything in
+ * the app keeps using one object. `switchTo` opens the other database; with `adopt` the contents of the unowned store
+ * (what a device held before stores were per person) move into it, so the first person to sign in keeps the chats
+ * that were already there and nobody else ever sees them.
+ */
+export interface SwitchableStore extends Store {
+  readonly key: string | null;
+  /** Counts every switch. A read that began under an older number belongs to someone else's store and must be dropped. */
+  readonly generation: number;
+  switchTo(userKey: string | null, adopt?: boolean): Promise<void>;
+}
+
+const ADOPTED = 'shamwari.chat.adopted';
+const adopted = (): boolean => {
+  try {
+    return localStorage.getItem(ADOPTED) === '1';
+  } catch {
+    return true; // cannot tell: do not copy anything between people
+  }
+};
+const markAdopted = (): void => {
+  try {
+    localStorage.setItem(ADOPTED, '1');
+  } catch {
+    /* adopted() then reads as true */
+  }
+};
+
+export async function openSwitchableStore(initialKey: string | null): Promise<SwitchableStore> {
+  let current = await openStore(initialKey);
+  let key = initialKey;
+  let generation = 0;
+  const delegate = <K extends keyof Store>(name: K): Store[K] => ((...a: unknown[]) => (current[name] as (...x: unknown[]) => unknown)(...a)) as Store[K];
+  return {
+    get key() {
+      return key;
+    },
+    get generation() {
+      return generation;
+    },
+    list: delegate('list'),
+    put: delegate('put'),
+    remove: delegate('remove'),
+    clear: delegate('clear'),
+    projects: delegate('projects'),
+    putProject: delegate('putProject'),
+    removeProject: delegate('removeProject'),
+    artifacts: delegate('artifacts'),
+    putArtifact: delegate('putArtifact'),
+    removeArtifact: delegate('removeArtifact'),
+    async switchTo(next, adopt = false) {
+      if (next === key) return;
+      const from = current;
+      const to = await openStore(next);
+      // Adoption happens ONCE per device. The flag is set the moment the copy has succeeded, before the unowned store is
+      // cleared: if the clear then fails, the next person to sign in still does not adopt what is left, so one person's chats
+      // are never copied to another. (What is left is cleared again, below, the next time round.)
+      if (adopt && key === null && !adopted()) {
+        for (const t of await from.list()) await to.put(t);
+        for (const p of await from.projects()) await to.putProject(p);
+        for (const a of await from.artifacts()) await to.putArtifact(a);
+        markAdopted();
+      }
+      if (key === null && adopted()) await from.clear().catch(() => undefined);
+      generation += 1;
+      current = to;
+      key = next;
+      from.close?.();
+    },
+  };
 }
