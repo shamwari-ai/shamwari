@@ -52,6 +52,7 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
     <!-- The drawer: what is kept on this device. Pinned chats and projects, then projects, loose chats and saved
          answers. The script fills the lists; with no script the page is just the empty states. -->
     <div slot="nav" class="chats">
+      <div class="side-scroll">
       <section id="side-pinned" aria-labelledby="pinned-title" hidden>
         <h2 id="pinned-title" class="chats-title" data-i18n="pinned">Pinned</h2>
         <ul id="pinned-list" class="side-list"></ul>
@@ -76,6 +77,7 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
         <h2 id="artifacts-title" class="chats-title" data-i18n="artifacts">Artifacts</h2>
         <ul id="artifact-list" class="side-list"></ul>
       </section>
+      </div>
 
       <!-- Pinned to the bottom of the drawer: a new version, when there is one, then New chat and the account. -->
       <div class="side-foot">

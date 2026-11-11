@@ -1,6 +1,5 @@
 import { developerKey } from './auth';
 import { mukokoAuth } from './auth-mukoko';
-import { trackChrome } from './chrome';
 import { createClient } from './client';
 import { applyStrings, currentLanguage, saveLanguage } from './i18n';
 import {
@@ -737,7 +736,6 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   online();
   syncAuth();
   void renderHistory();
-  trackChrome();
   document.documentElement.dataset.ready = 'true';
   const afterAuth = () => {
     document.documentElement.dataset.authReady = 'true';

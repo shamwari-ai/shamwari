@@ -143,8 +143,9 @@ body {
   flex-direction: column;
   gap: var(--gap-floor);
   min-width: 0;
-  /* Tall enough that the foot (update card, New chat, account) sits at the bottom of the drawer. */
-  min-height: calc(100dvh - 5rem);
+  /* The drawer's body is a column of fixed height: the list scrolls (.side-scroll), the foot does not. */
+  flex: 1 1 0;
+  min-height: 0;
   padding-inline: var(--gap-floor);
 }
 .chats > * {
@@ -328,9 +329,7 @@ input:not([type='checkbox']):not([type='radio']) {
 /* ---- the dock: sign-in when needed, then the composer, pinned above the device's own bottom bar ------- */
 
 .dock {
-  position: sticky;
-  bottom: 0;
-  z-index: 10;
+  flex: none;
   display: grid;
   gap: var(--gap-floor);
   padding-block: var(--gap-floor) max(var(--gap-floor), env(safe-area-inset-bottom));
@@ -673,17 +672,14 @@ input:not([type='checkbox']):not([type='radio']) {
   margin: 0;
 }
 .update-popup {
-  position: fixed;
-  inset-inline: var(--inset-floor);
-  bottom: calc(var(--dock-h, 8rem) + var(--gap-floor));
-  z-index: 20;
+  /* In the column, directly above the composer: it takes its room from the messages, never covers them. */
+  flex: none;
+  width: 100%;
   max-width: 28rem;
   margin-inline: auto;
 }
 .side-foot {
-  margin-top: auto;
-  position: sticky;
-  bottom: 0;
+  flex: none;
   display: grid;
   gap: var(--gap-floor);
   padding-block: var(--gap-floor) max(var(--gap-floor), env(safe-area-inset-bottom));
@@ -768,24 +764,73 @@ main#main :where(.thread, .dock, .ask, #empty, .panel, .chat-tools) {
   text-align: center;
 }
 
-/* ---- one scroller -------------------------------------------------------------------------------------
-   On the chat page (html.app) the page itself does not scroll; every other page, the disclaimer, scrolls as a document. The app area is a box exactly as tall as the screen and it is the only
-   thing that scrolls, so the top bar (sticky) and the composer (sticky) stay where they are on a phone,
-   whatever Chrome does with its own address bar. Scrolling the document with sticky bars inside it left the
-   bar floating below the address bar with the page scrolling past above it. */
+/* ---- the shell never scrolls -----------------------------------------------------------------------------
+   On the chat page (html.app) the document does not scroll and neither does the app area. Exactly two regions
+   scroll: the MESSAGES (#thread) and, in the drawer, the list of chats (.side-scroll). The top bar, the
+   composer with its divider, and the drawer's head and foot are fixed in the column around them, so there is
+   nothing pinned over a scroller and nothing for a scroll to slide under. Every other page (the disclaimer)
+   is an ordinary scrolling document, so none of this applies to it. Each scroller has overscroll-behavior:
+   contain, so the end of one never moves the page behind it or the other region. The regions that must not
+   scroll are `overflow: clip`, not `hidden`: a clipped box cannot be scrolled by a script or by focus, so a
+   focused control can never drift the top bar off the screen. (`hidden` is kept first, for old browsers.) */
 html.app,
 html.app body {
   height: 100%;
   overflow: hidden;
 }
-[data-slot='app-main'] {
+html.app [data-slot='app-main'] {
   height: 100dvh;
   min-height: 0;
+  overflow: hidden;
+  overflow: clip;
+}
+html.app main#main {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overflow: clip;
+}
+html.app main#main > .grid {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+html.app #thread {
+  flex: 1 1 0;
+  /* Never squeezed to nothing by the things around it, whatever they add. */
+  min-height: 6rem;
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  /* The top bar and the composer are pinned over this scroller: scrolling to an answer, a question or a focused
-     control must stop short of them, not behind them. chrome.ts measures both into --topbar-h and --dock-h;
-     the fallbacks are their smallest heights. */
-  scroll-padding-block: calc(var(--topbar-h, 4rem) + var(--gap-floor)) calc(var(--dock-h, 8rem) + var(--gap-floor));
+  /* A reply scrolled to the top, or the thinking bubble to the bottom, keeps the Bundu 7px from the edge. The
+     last message does not end flush against the composer either. */
+  scroll-padding-block: var(--gap-floor);
+  padding-block-end: var(--gap-floor);
+}
+/* The drawer: head and foot stay, the list between them scrolls. */
+[data-slot='sidebar-body'] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overflow: clip;
+}
+.side-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+}
+/* A short screen (a phone on its side, or with the keyboard up): the messages keep their room, so the things
+   that are only context give it up first. */
+@media (max-height: 32rem) {
+  .scope,
+  .footer-text {
+    display: none;
+  }
 }
