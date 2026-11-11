@@ -1,5 +1,7 @@
-import type { Env, GroundChunk, Message, Scope } from './types';
+import type { Env, GroundChunk, Message } from './types';
 import { core } from './core';
+import { providerScope, ScopeRefusal } from './scope';
+import type { ScopeResolution } from './scope';
 
 const BASE = `You are Shamwari, an AI companion built in Zimbabwe.
 
@@ -19,9 +21,18 @@ export interface GroundResult {
    * the first may be said to a person as a fact about the corpus.
    */
   unavailable: boolean;
+  /**
+   * Core's own view of whether the question needs the person's own information.
+   * Core is authoritative: the notice is shown when either side says yes. False
+   * when Core could not be asked (the gateway's own view still applies).
+   */
+  coreNeedsOwnInformation: boolean;
 }
 
-async function embed(env: Env, text: string): Promise<number[]> {
+async function embed(env: Env, text: string, decision: ScopeResolution): Promise<number[]> {
+  // The call below is a provider call. Refuse here, at the call, if the decision
+  // it was handed is not one a provider may see.
+  providerScope(decision);
   const out = (await env.AI.run(env.EMBEDDING_MODEL as never, { text: [text] } as never)) as {
     data?: number[][];
   };
@@ -34,12 +45,14 @@ export async function ground(
   env: Env,
   messages: Message[],
   ownerEntityId: string,
-  scope: Scope,
-  destination: 'cloud' | 'mind',
+  decision: ScopeResolution,
   language: string | null,
 ): Promise<GroundResult> {
+  const { scope, destination } = decision;
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-  if (!lastUser) return { chunks: [], systemPrompt: BASE, hit: false, unavailable: false };
+  if (!lastUser) {
+    return { chunks: [], systemPrompt: BASE, hit: false, unavailable: false, coreNeedsOwnInformation: false };
+  }
 
   // RULE 1, IN THE LEAK PATH.
   //
@@ -64,18 +77,26 @@ export async function ground(
   let embedding: number[] | null = null;
   if (destination === 'cloud') {
     try {
-      embedding = await embed(env, lastUser.content);
+      embedding = await embed(env, lastUser.content, decision);
     } catch (e) {
+      // A refusal is a caller bug, not "Workers AI is down": loud, never a quiet fallback.
+      if (e instanceof ScopeRefusal) throw e;
       console.warn('embedding unavailable, searching by keyword', String(e));
     }
   }
 
   let chunks: GroundChunk[] = [];
   let unavailable = false;
+  let coreNeeds = false;
   try {
     // Core runs $rankFusion over the vector and lexical indexes and applies
     // the scope filter. It also logs the miss if there is one.
-    const res = await core<{ chunks: GroundChunk[]; hit: boolean }>(env, '/ground/search', {
+    const res = await core<{
+      chunks: GroundChunk[];
+      hit: boolean;
+      scope?: string;
+      needs_own_information?: boolean;
+    }>(env, '/ground/search', {
       method: 'POST',
       body: {
         query: lastUser.content,
@@ -85,16 +106,34 @@ export async function ground(
         destination,
         language,
         top_k: Number(env.GROUND_TOP_K),
+        // Core decides again from the same facts and may refuse (Core's
+        // resolve_scope is authoritative; scope.ts is the fast path).
+        granted_scopes: decision.grants,
+        needs_own_information: decision.withoutOwnInformation,
       },
     });
+    // Core must answer for exactly the scope that was asked. A different scope, or a
+    // chunk that carries one, means the two sides disagree about a scope decision; the
+    // answer is not used. Fail closed, the same way Core does for the data API.
+    if (
+      res.scope !== scope ||
+      !Array.isArray(res.chunks) ||
+      res.chunks.some((c) => !c || typeof c !== 'object' || c.scope !== scope)
+    ) {
+      console.error('core answered with a scope other than the one asked for');
+      throw new Error('scope mismatch');
+    }
     chunks = res.chunks;
+    coreNeeds = res.needs_own_information === true;
   } catch (e) {
     // Ungrounded is degraded, not broken. Answer anyway and say so.
     console.warn('ground unavailable', String(e));
     unavailable = true;
   }
 
-  if (chunks.length === 0) return { chunks: [], systemPrompt: BASE, hit: false, unavailable };
+  if (chunks.length === 0) {
+    return { chunks: [], systemPrompt: BASE, hit: false, unavailable, coreNeedsOwnInformation: coreNeeds };
+  }
 
   const context = chunks
     .map((c, i) => {
@@ -108,6 +147,7 @@ export async function ground(
     chunks,
     hit: true,
     unavailable: false,
+    coreNeedsOwnInformation: coreNeeds,
     systemPrompt: `${BASE}\n\n--- SHAMWARI GROUND CONTEXT ---\n${context}\n--- END CONTEXT ---`,
   };
 }

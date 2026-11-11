@@ -96,7 +96,7 @@ function setup(opts: {
     if (u.includes('/rollup')) return Response.json({ total_tokens: kv.ctl.over ? 1e9 : 0 });
     if (u.includes('/ground/search')) {
       counts.ground += 1;
-      return Response.json({ chunks, hit: chunks.length > 0 });
+      return Response.json({ chunks, hit: chunks.length > 0, scope: 'platform' });
     }
     counts.inference += 1;
     if (opts.inferenceFails) return new Response('down', { status: 503 });

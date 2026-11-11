@@ -137,20 +137,46 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
 `shamwari-site` add `shamwari.ai` back. The marketing site serves both hostnames again,
 as it does today.
 
-## Before sign-in can work (owner steps; all in the dashboard)
+## Before sign-in can work, and what the gate does
 
-The session Worker (`site/worker/`, see `docs/chat-signin.md`) ships inside `shamwari-app`. It is
-inert until these are done, and the page keeps using developer-key mode (`PUBLIC_CHAT_AUTH` is off):
+The session Worker (`site/worker/`, see `docs/chat-signin.md`) ships inside `shamwari-app`, and it is also
+the **gate** in front of the light chat: it runs first for `/lite/*` and `/_astro/*`
+(`assets.run_worker_first`), and serves the page and its scripts only to someone with a session. An
+unauthenticated request for `/lite/` is sent straight to the AuthKit hosted sign-in. The only things served
+without a session are the privacy page (`/lite/disclaimer/`), the manifest, the three install icons, the
+service worker and the stylesheets (the list is in `site/worker/gate.ts` and is asserted exactly by
+`site/test/worker/gate.test.ts`), plus the two root icons (`/favicon.png`, `/apple-touch-icon.png`), which the
+Worker does not see.
 
-1. In Cloudflare, open **Secrets Store** and create two secrets: the WorkOS **API key** for the
-   Shamwari Chat environment, and a **cookie password** (32 or more random characters).
-2. Tell the next session the store id and the two secret names. They go into
-   `secrets_store_secrets` in `site/wrangler.app.jsonc` (the commented block). Nothing else is
-   needed from you: no value is ever put in git.
+1. **The two secrets are bound by name, with no values in git.** `site/wrangler.app.jsonc` binds
+   `WORKOS_API_KEY` to the Secrets Store secret `CONSOLE_WORKOS_API_KEY` and `COOKIE_PASSWORD` to
+   `SESSION_SECRET` (store `56f84bfa8a564c54a95dbf4f4b4281b4`). Both are the shared Mukoko secrets.
+   Nothing is created by hand for them.
+2. The gate **fails closed**. If either secret does not resolve, a request for the page is a `503` with a
+   `Retry-After`, never the page; the public pages above still answer.
 3. The first deploy of `shamwari-app` also creates the `SessionRefresh` Durable Object (a migration
    in the same file). It shows up under Workers & Pages > shamwari-app > Bindings.
 4. Sign-in cannot be tried on the `workers.dev` address: WorkOS accepts only
    `https://shamwari.ai/lite/callback`. Test it after the apex is attached to `shamwari-app`.
+
+### Verify after deploy
+
+The deploy is a separate, manual step. Nothing in the repository can show that the deployed Worker has the
+latest config (when this was written, `shamwari-app` as deployed listed no secret bindings, only its plain
+variables and the Durable Object), so check these against `https://shamwari.ai` after deploying:
+
+- [ ] **First, redeploy `shamwari-app` from this change, then look at the dashboard.** Workers & Pages > `shamwari-app` >
+      Settings > **Bindings** must list `WORKOS_API_KEY` and `COOKIE_PASSWORD` (Secrets Store), `SESSION_REFRESH` (Durable
+      Object) and `ASSETS` (Assets). A Worker that lists none of the secrets was deployed before they were added to
+      `wrangler.app.jsonc`: it will answer `503` to every page until it is redeployed with them. Then the Secrets Store
+      must hold `CONSOLE_WORKOS_API_KEY` and `SESSION_SECRET` (it did when this was written; names only, never values).
+- [ ] `GET /lite/` with no cookie answers `302` to `/lite/auth/login`, not `503`, and not the page.
+- [ ] `GET /_astro/<any script>.js` with no cookie answers `401`.
+- [ ] `GET /lite/disclaimer/`, `/lite/manifest.webmanifest` and `/lite/sw.js` answer `200` with no cookie.
+- [ ] Signing in from `/lite/auth/login` lands on `/lite/` and the chat loads; `/lite/auth/token` answers `200`.
+- [ ] `https://shamwari.ai/lite/callback` completes (it is the registered redirect URI).
+- [ ] With the cookie cleared, `/lite/` is a `302` to sign-in again.
+- [ ] Bindings for `WORKOS_API_KEY`, `COOKIE_PASSWORD`, `SESSION_REFRESH` and `ASSETS` are listed on the Worker.
 
 ## Things this has not verified
 

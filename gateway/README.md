@@ -19,13 +19,55 @@ queue consumers doing real computation. Not here.
 | `community` | anonymised platform data | Yes              |
 | `platform`  | base Mukoko knowledge    | Yes              |
 
-Callers declare scope; `platform` is the default. A personal-scope request
-returns **409 `scope_requires_local_inference`** while `MIND_AVAILABLE` is
-false. It is not silently downgraded — a downgrade answers confidently while
-withholding the user's own data, with no signal anything was missing.
+**The system decides the scope, never the user** (#81). The request body's
+`scope` is not read, with one exception: an explicit `"scope": "personal"`.
+Any other value (`community`, `platform`, garbage, absent) is ignored, and the
+effective scope is the narrowest cloud-safe scope the key's grants hold:
+`platform`, else `community`. `src/scope.ts` `resolveScope` is the one place that
+decides, and it does so from the question plus the caller's grants. There is no
+scope control in any client. A WorkOS person can only ever be granted `community`
+and `platform` (`FIXED_GRANT`); `personal` is never grantable to a person for Cloud.
+
+An explicit personal-scope request to a Cloud endpoint returns **409
+`scope_requires_local_inference`**, whatever `MIND_AVAILABLE` says. It is not
+silently downgraded.
+
+**A question that looks like it needs the person's own information** ("my
+payslip", "I earn…", Shona `-ngu`, Ndebele `-mi`; `src/personal.ts`, a short list
+of deterministic rules, no model, leaning towards yes) is answered from community
+and platform knowledge only, and the answer says so. Every chat and retrieval
+response carries, in `shamwari`:
+
+```json
+{
+  "answered_without_own_information": true,
+  "notice": {
+    "code": "answered_without_your_own_information",
+    "message": "Answered without your own information. On-device Shamwari Mind will use your own information."
+  }
+}
+```
+
+`answered_without_own_information` is always present; `notice` is `null` when
+there is nothing to say. A client renders `notice.message` as one line. The
+compact envelope carries `notice` (a string) only when true, and SMS/USSD replies
+append a short plain-ASCII version inside the character limit. This is never a
+silent downgrade, never a retry that hides it, and never a personal-scope call to
+a provider (the Mind endpoint never carries the notice: the device holds the information; and a conversation flagged this way is never `trainingEligible`): the scope on the wire stays `platform` or `community`. The rules are an
+**honesty control, not the privacy control**: a miss costs the notice on one
+answer and cannot send personal content anywhere, because Cloud holds none and
+`providerScope` (below) stops anything personal at the call.
 
 Enforced in `src/scope.ts` (fast fail) and again in Core's `resolve_scope`
-(authoritative). Two checks, because one is a single bug away from a leak.
+(authoritative). Two checks, because one is a single bug away from a leak. The
+decision is passed to everything that touches a provider: `ground()` and `infer()`
+take it, and `providerScope` is called at the embedding, at `viaGateway` and at
+`viaWorkersAI`, so a personal scope or a Mind destination that reaches one stops
+there. The gateway sends Core `granted_scopes` and its own `needs_own_information`;
+Core decides again, answers with the scope it was asked for and its own
+`needs_own_information`, and the notice shows if either says yes. Core answering
+for a different scope than the one asked, or with a chunk carrying one, is not used.
+Tests that count provider calls: `test/scope-decision.test.ts`.
 
 ## Setup
 
