@@ -69,34 +69,27 @@ const PRECACHE = ${JSON.stringify(precache)};
 const SCOPE = '/lite/';
 
 self.addEventListener('install', (e) => {
-  // Precache is all-or-nothing: a half-cached shell is worse than none.
+  // Precache is all-or-nothing: a half-cached shell is worse than none. Updates are FORCED: once the whole new shell is
+  // cached this worker takes over at once (skipWaiting) instead of waiting for every tab to close, and the page reloads
+  // itself once, when nothing is being sent or written (chat/update-reload.ts).
   e.waitUntil(
     // cache: 'reload' goes to the network, so a new build never precaches a stale copy from the browser's HTTP cache.
-    caches.open(CACHE).then((c) => Promise.all(PRECACHE.map((u) => c.add(new Request(u, { cache: 'reload' }))))).then(() => {
-      // First install: take over at once, so the very first visit works offline.
-      // An UPDATE waits until every open tab is closed instead: a page that is
-      // already running keeps the files (and cache) it started with, and is never
-      // switched to a worker whose cache no longer holds them.
-      if (!self.registration.active) return self.skipWaiting();
-    }),
+    caches.open(CACHE).then((c) => Promise.all(PRECACHE.map((u) => c.add(new Request(u, { cache: 'reload' }))))).then(() => self.skipWaiting()),
   );
 });
 
-// The page asks this worker for its version (to show "Version x" in the update card) and, when the person taps
-// Update now, tells it to take over.
+// The page asks this worker for its version (shown at the foot of the drawer).
 self.addEventListener('message', (e) => {
-  if (e.data === 'skip-waiting') self.skipWaiting();
   if (e.data === 'version') e.ports[0]?.postMessage(VERSION);
 });
 
 self.addEventListener('activate', (e) => {
+  // Drop every older cache and take every open page now, so no tab keeps running (or fetching) the old release.
   e.waitUntil(
-    caches.keys().then((keys) => {
-      const old = keys.filter((k) => k.startsWith('shamwari-chat-') && k !== CACHE);
-      return Promise.all(old.map((k) => caches.delete(k))).then(() => {
-        if (!old.length) return self.clients.claim();
-      });
-    }),
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith('shamwari-chat-') && k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
   );
 });
 
