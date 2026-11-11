@@ -119,11 +119,26 @@ async function underTheFloor(page: Page) {
       const inSentence = el.tagName === 'A' && !!el.closest('p, li') && getComputedStyle(el).display === 'inline';
       if (!inSentence && (r.width < 48.9 || r.height < 48.9)) out.push(`hit region ${Math.round(r.width)}x${Math.round(r.height)}: ${label(el)}`);
     }
+    // A control scrolled partly out of its column is only there where the column shows it: its neighbours are measured
+    // from that visible part, not from the part hidden under the drawer's head. (Without this, a row scrolled so its
+    // rectangle sits 6px under the head, mostly hidden, was reported as 6px from the head.)
+    const shown = (el: Element) => {
+      let r = el.getBoundingClientRect();
+      let left = r.left, top = r.top, right = r.right, bottom = r.bottom;
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        const s = getComputedStyle(p);
+        if (s.overflowX === 'visible' && s.overflowY === 'visible') continue;
+        const c = p.getBoundingClientRect();
+        left = Math.max(left, c.left); top = Math.max(top, c.top); right = Math.min(right, c.right); bottom = Math.min(bottom, c.bottom);
+      }
+      return { left, top, right, bottom };
+    };
     for (let i = 0; i < controls.length; i++) {
       for (let j = i + 1; j < controls.length; j++) {
         const a = controls[i]!, b = controls[j]!;
         if (a.contains(b) || b.contains(a)) continue;
-        const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+        const ra = shown(a), rb = shown(b);
+        if (ra.right <= ra.left || ra.bottom <= ra.top || rb.right <= rb.left || rb.bottom <= rb.top) continue; // scrolled out entirely
         const dx = Math.max(rb.left - ra.right, ra.left - rb.right);
         const dy = Math.max(rb.top - ra.bottom, ra.top - rb.bottom);
         if (dx < 0 && dy < 0) {
@@ -351,4 +366,19 @@ for (const [name, width, height] of [['320px phone', 320, 568], ['360px phone', 
     expect(await underTheFloor(page), `${name} at 200%: drawer, settings open`).toEqual([]);
   });
 }
+});
+
+test('a drawer row scrolled up under the head is measured where it is visible, at any scroll position', async ({ page }) => {
+  await openChat(page);
+  await newChat(page);
+  await openAccount(page); // Settings open makes the column tall enough to scroll that far
+  // Park the column so the Projects row's rectangle starts 6px under the drawer head, whatever the scroll position was.
+  await page.evaluate(() => {
+    const chats = document.querySelector('.chats') as HTMLElement;
+    const head = document.querySelector('[data-slot="app-sidebar"] button')!.getBoundingClientRect().bottom;
+    const row = [...chats.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Projects')!;
+    chats.style.scrollBehavior = 'auto';
+    chats.scrollTop += row.getBoundingClientRect().top - (head + 6);
+  });
+  expect(await underTheFloor(page), 'a row 6px under the head').toEqual([]);
 });
