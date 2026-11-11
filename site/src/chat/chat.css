@@ -1032,3 +1032,27 @@ html[data-view='pending'] dialog {
   background: var(--muted);
   box-shadow: inset 0 0 0 1.5px var(--foreground);
 }
+
+/* ---- large text ------------------------------------------------------------------------------------------------
+   With text at 200% the top bar's menu, brand and actions (Offline mode, New chat) no longer fit one row on a phone. The
+   bar wraps instead of pushing the last action off the screen: the actions drop to a second line, right-aligned. */
+[data-slot='app-topbar'] {
+  flex-wrap: wrap;
+  row-gap: var(--gap-floor);
+  padding-block: var(--gap-floor);
+}
+[data-slot='app-topbar'] > div.ml-auto {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* In the drawer, a label that does not fit wraps (at 200% text "Delete history" is wider than the drawer), and the
+   Plugins / Skills / MCP tabs wrap onto a second line instead of running off the screen. */
+.chats .btn,
+.chats .side-row {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.side-tabs {
+  flex-wrap: wrap;
+}
