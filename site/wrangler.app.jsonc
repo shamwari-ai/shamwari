@@ -37,15 +37,24 @@
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["SessionRefresh"] }],
 
-  // SECRETS, by name only. Add these when the owner has created the secrets in
-  // the account's Secrets Store; `store_id` and the secret names are theirs to
-  // fill in, and no value ever goes in this file or in git:
-  //   "secrets_store_secrets": [
-  //     { "binding": "WORKOS_API_KEY",  "store_id": "<store id>", "secret_name": "<name>" },
-  //     { "binding": "COOKIE_PASSWORD",  "store_id": "<store id>", "secret_name": "<name>" }
-  //   ]
-  // Until both are bound the auth routes answer 503 and the page stays on its
-  // developer-key mode. For local runs only, put both in .dev.vars (git-ignored).
+  // SECRETS, by name only. Both live in the account's Secrets Store (`default_secrets_store`); no value is
+  // ever in this file or in git. WORKOS_API_KEY is the Mukoko Account WorkOS environment's API key and
+  // COOKIE_PASSWORD (at least 32 characters) seals the session cookie. Every Mukoko app signs in through
+  // that one environment (owner, 2026-11-11), so these are the shared Mukoko secrets, not new ones.
+  // Until both resolve the auth routes answer 503 and the page stays on its developer-key mode. For local
+  // runs only, put both in .dev.vars (git-ignored).
+  "secrets_store_secrets": [
+    {
+      "binding": "WORKOS_API_KEY",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "CONSOLE_WORKOS_API_KEY",
+    },
+    {
+      "binding": "COOKIE_PASSWORD",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "SESSION_SECRET",
+    },
+  ],
 
   // Reachable on https://shamwari-app.nyuchi.workers.dev as soon as it is deployed.
   "workers_dev": true,
