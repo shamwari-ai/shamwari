@@ -64,7 +64,6 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
         <img class="mark" src="/apple-touch-icon.png" alt="" width="56" height="56" />
         <h2 id="greeting" data-i18n="greeting">Hello, friend</h2>
         <p class="lead" data-i18n="tagline">Ask a question. Get the answer with the section it came from.</p>
-        <p><button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button></p>
         <h3 id="try" class="small" data-i18n="tryAsking">Try asking</h3>
         <ul class="examples">
           <li><button type="button" class="btn chip" data-example data-i18n="example1">What does the Constitution say about equality?</button></li>
@@ -72,6 +71,7 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
           <li><button type="button" class="btn chip" data-example data-i18n="example3">Who must pay income tax in Zimbabwe?</button></li>
         </ul>
       </section>
+      <p class="install"><button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button></p>
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
       <details id="history" hidden>
         <summary data-i18n="earlierChats">Earlier chats</summary>

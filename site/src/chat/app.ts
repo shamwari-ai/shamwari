@@ -504,14 +504,22 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
   // no notifications to show yet, and the bell says so rather than doing nothing.
   $('#avatar').addEventListener('click', () => {
     if (!auth.signedIn()) return showAuth();
-    const more = document.querySelector<HTMLDetailsElement>('details.more');
-    if (more) {
-      more.open = true;
-      more.scrollIntoView({ block: 'nearest' });
-    }
+    const more = $<HTMLDetailsElement>('details.more');
+    more.open = true;
+    more.scrollIntoView({ block: 'nearest' });
+    more.querySelector<HTMLElement>('summary')?.focus();
   });
+  let bellTimer: ReturnType<typeof setTimeout> | undefined;
   $('#bell').addEventListener('click', () => {
-    $('#toast').textContent = strings().noNotifications;
+    // Clear first so a second tap is announced again, and clear after a few seconds so the line
+    // does not sit next to unrelated state.
+    const toast = $('#toast');
+    clearTimeout(bellTimer);
+    toast.textContent = '';
+    setTimeout(() => (toast.textContent = strings().noNotifications), 50);
+    bellTimer = setTimeout(() => {
+      if (toast.textContent === strings().noNotifications) toast.textContent = '';
+    }, 4000);
   });
 
   $('#new-chat').addEventListener('click', () => {
