@@ -81,6 +81,14 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
           <li><button type="button" class="side-row" data-section="plugins"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span></button></li>
         </ul>
       </nav>
+      <!-- The menu of one chat in the list (opened by its "..."): pin, project, delete. One shared popover, inside the drawer so
+           opening it does not close the drawer. -->
+      <div id="row-menu" class="chat-tools row-menu" popover role="group" aria-label={en.chatOptions} data-i18n-attr="aria-label:chatOptions">
+        <button type="button" id="row-pin" class="btn" aria-pressed="false">{en.pin}</button>
+        <label class="sr-only" for="row-project" data-i18n="project">{en.project}</label>
+        <select id="row-project"></select>
+        <button type="button" id="row-delete" class="btn danger" data-i18n="deleteChat">{en.deleteChat}</button>
+      </div>
       <div class="side-scroll">
       <div data-panel="chat">
       <details id="side-pinned" class="side-group" open hidden>

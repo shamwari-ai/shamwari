@@ -328,8 +328,72 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     );
     if (t.id === thread.id) b.setAttribute('aria-current', 'true');
     b.addEventListener('click', () => void openThread(t.id));
-    return h('li', {}, b);
+    // The row's own "...": shown on hover and on focus (always on touch), it opens the shared menu for THIS chat.
+    const more = h(
+      'button',
+      { type: 'button', class: 'row-more', 'aria-haspopup': 'true', 'aria-label': `${strings().chatOptions}: ${t.title || ''}` },
+      h('span', { 'aria-hidden': 'true' }, '…'),
+    );
+    more.addEventListener('click', () => openRowMenu(t, more));
+    return h('li', { class: 'chat-li' }, b, more);
   };
+
+  // ---- the menu of one chat in the list -------------------------------------------------------------------
+  const rowMenu = $('#row-menu') as HTMLElement & { showPopover(): void; hidePopover(): void };
+  let menuFor: Thread | null = null;
+  /** The thread a menu acts on: the open one is the live object, so a change is never written over by a stale copy. */
+  const menuThread = (): Thread | null => (menuFor && menuFor.id === thread.id ? thread : menuFor);
+  const openRowMenu = (t: Thread, anchor: HTMLElement) => {
+    const s = strings();
+    menuFor = t;
+    const pin = $('#row-pin');
+    pin.textContent = t.pinned ? s.unpin : s.pin;
+    pin.setAttribute('aria-pressed', String(!!t.pinned));
+    const sel = $<HTMLSelectElement>('#row-project');
+    sel.replaceChildren(h('option', { value: '' }, s.noProject), ...projectsNow.map((p) => h('option', { value: p.id }, p.name)));
+    sel.value = t.projectId && projectsNow.some((p) => p.id === t.projectId) ? t.projectId : '';
+    const r = anchor.getBoundingClientRect();
+    rowMenu.style.top = `${Math.round(r.bottom + 4)}px`;
+    rowMenu.style.left = `${Math.max(8, Math.min(Math.round(r.left), innerWidth - 16 * 16 - 8))}px`;
+    rowMenu.showPopover();
+    // Not off the bottom of the screen: if it does not fit under the "...", it opens above it.
+    const h2 = rowMenu.getBoundingClientRect().height;
+    if (r.bottom + 4 + h2 > innerHeight - 8) rowMenu.style.top = `${Math.max(8, Math.round(r.top - h2 - 4))}px`;
+    $('#row-pin').focus();
+  };
+  $('#row-pin').addEventListener('click', async () => {
+    const t = menuThread();
+    if (!t) return;
+    t.pinned = !t.pinned;
+    await save(t);
+    rowMenu.hidePopover();
+    void renderHistory();
+  });
+  $('#row-project').addEventListener('change', async () => {
+    const t = menuThread();
+    if (!t) return;
+    const id = $<HTMLSelectElement>('#row-project').value;
+    if (id) t.projectId = id;
+    else delete t.projectId;
+    await save(t);
+    rowMenu.hidePopover();
+    void renderHistory();
+  });
+  $('#row-delete').addEventListener('click', async () => {
+    const t = menuThread();
+    if (!t || !confirm(strings().deleteChatConfirm)) return;
+    rowMenu.hidePopover();
+    live.delete(t.id);
+    const wasOpen = t.id === thread.id;
+    t.messages = [];
+    await save(t); // an empty thread is removed from the store
+    if (wasOpen) {
+      thread = fresh();
+      rebuild();
+      input.focus();
+    }
+    void renderHistory();
+  });
 
   /** Loose chats under Today / Yesterday / Previous 7 days / Older, newest first. */
   const groupedChats = (chats: Thread[], s: ReturnType<typeof strings>): HTMLElement[] => {

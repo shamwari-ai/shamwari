@@ -64,7 +64,7 @@ test('a question queued in an earlier chat is still delivered after New chat', a
   await context.setOffline(false);
   // Delivered in the background while another chat is open; open the old one to see it.
   await openChats(page);
-  await page.locator('#history-list button').first().click();
+  await page.locator('#history-list button.chat-row').first().click();
   await expect(page.locator('article.msg.bot').first()).toBeVisible({ timeout: 15_000 });
 });
 
@@ -231,7 +231,7 @@ test('an interrupted question in an older chat is recovered and answered, not ju
   await page.waitForSelector('html[data-ready="true"]');
   // The newer chat is on screen; the older one is delivered in the background.
   await openChats(page);
-  await page.locator('#history-list button').first().click();
+  await page.locator('#history-list button.chat-row').first().click();
   await expect(page.locator('article.msg.bot .cite').first()).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('article.queued')).toHaveCount(0);
 });
