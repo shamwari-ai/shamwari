@@ -114,8 +114,8 @@ for (const width of [1000, 1280, 1440]) {
 
       if (!popover) {
         const w = await page.locator('[data-slot="app-sidebar"]').evaluate((el) => el.getBoundingClientRect().width);
-        expect(w, 'a slim sidebar column of about 260px').toBeGreaterThanOrEqual(252);
-        expect(w).toBeLessThanOrEqual(268);
+        expect(w, 'a slim sidebar column of about 270px').toBeGreaterThanOrEqual(264);
+        expect(w).toBeLessThanOrEqual(280);
       }
       // The sidebar's own labels fit their rows without being cut (no horizontal overflow inside the drawer).
       expect(await page.locator('.chats').evaluate((el) => el.scrollWidth <= el.clientWidth + 1), 'the drawer does not scroll sideways').toBe(true);

@@ -49,12 +49,6 @@ body {
   min-height: var(--target-floor);
 }
 
-/* A fixed sidebar column on a desktop: wide enough for a 14px label such as "Disclaimer and privacy" on one line. (AppShell
-   defaults to 16.25rem, which wrapped "Factory" and its chip; claude.ai's is about the same as this.) */
-html [data-slot='app-shell'] {
-  --app-sidebar-w: 17.5rem;
-}
-
 /* ---- the frame's parts ------------------------------------------------------------------------------ */
 
 .brand {
@@ -1100,7 +1094,13 @@ html[data-view='pending'] dialog {
    thin top bar, replies as plain prose, the person's own questions as a soft block, and the composer a single
    rounded container with a round send button. Sizes, colours and radii are Mzizi tokens; none is a number of ours. */
 html [data-slot='app-shell'] {
-  --app-sidebar-w: 16.25rem;
+  /* About 260px: 17rem leaves room for "Factory" and its "Coming soon" chip on one line with a wider fallback font too. */
+  --app-sidebar-w: 17rem;
+}
+@media (min-width: 64rem) {
+  .side-row.side-disabled {
+    flex-wrap: nowrap;
+  }
 }
 /* The collapse toggle moves from the drawer's foot to the top of the drawer, beside the brand. */
 [data-slot='sidebar-foot'] {
