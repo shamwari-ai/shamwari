@@ -216,3 +216,21 @@ PUBLIC_SHAMWARI_API=http://localhost:8788 npm run dev:app   # http://localhost:4
 Developer keys for the mock: `sk_shamwari_mock_ok` answers; `_402`, `_403`,
 `_429`, `_503` return those errors. Asking about `personal` scope returns the
 409, and a question containing "slow" takes 3 s.
+
+## Light and dark, and the drawer's density (2026-11-12)
+
+- **Themes are Mzizi's.** `chat.css` imports `@bundu/ui` `globals.css` (tokens and the density layer), then `color-scheme.css`, then
+  the brand overlay last. Without `color-scheme.css` nothing set `.dark` or `data-theme`, so a dark phone got a light page with
+  white text (the "before" screenshots in `docs/ui-2026-11-12/` are byte-identical in light and dark). Now the page follows
+  `prefers-color-scheme`, and an explicit `data-theme="light"` (or `"dark"`) wins. `body` takes its colour and background from the
+  tokens. Tests: `e2e/theme.spec.ts`, and the floor audit and axe run in dark.
+- **Density is Mzizi's.** `@bundu/ui` 0.14.0: the hit region is 49px always (`--target-floor`); controls are DRAWN at
+  `--size-control-sm`, which is 32px on a desktop with a mouse (64rem up, fine pointer, hover, no touch) and 49px everywhere else. The
+  drawer's rows (sections, foot rows, chat titles) use that token, a 14px label, a flat look (no border or fill at rest, a soft
+  fill on hover, a stronger one and a marker on the open section) and 7px between rows. The foot rows (Use the API, Disclaimer and
+  privacy, Settings) are text only, no icons. Tests: `e2e-desktop/density.spec.ts` (32px, flat, no icons, no overlap, light and
+  dark) and `e2e/density-touch.spec.ts` (49px on touch at any width).
+- **Why not `SideNav`:** the package's `SideNav` renders links with tooltips and 44px touch rows; the drawer needs in-page section
+  buttons (`aria-current` follows the open section), a non-interactive "coming soon" row and a different set of foot rows, so
+  the rows are the chat's own, built from the same tokens, not from numbers of its own.
+

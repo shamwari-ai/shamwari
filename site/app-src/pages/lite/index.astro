@@ -121,15 +121,14 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
              Settings holds language, delete history and sign out: the account menu, folded into the drawer. -->
         <nav class="side-nav" aria-label={en.settings} data-i18n-attr="aria-label:settings">
           <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener">
-            <Icon name="key" class="side-icon" /><span data-i18n="useApi">Use the API</span>
-            <Icon name="external" class="side-icon side-external" /><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span>
+            <span data-i18n="useApi">Use the API</span><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span>
           </a>
           <a class="side-row" href="/lite/disclaimer/">
-            <Icon name="shield-check" class="side-icon" /><span data-i18n="disclaimerLink">{en.disclaimerLink}</span>
+            <span data-i18n="disclaimerLink">{en.disclaimerLink}</span>
           </a>
           <details class="account side-settings" data-slot="account-menu">
             <summary class="side-row">
-              <Icon name="sliders" class="side-icon" /><span data-i18n="settings">Settings</span>
+              <span data-i18n="settings">Settings</span>
             </summary>
             <div class="settings-panel" data-slot="account-menu-panel">
               <div class="account-row">
