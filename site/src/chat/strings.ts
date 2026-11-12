@@ -26,9 +26,7 @@ export const en = {
   groupOlder: 'Older',
   copyAnswer: 'Copy answer',
   copied: 'Copied',
-<<<<<<< HEAD
   deleteWait: 'This chat is still sending. Delete it when it has its answer.',
-=======
   addTo: 'Add',
   uploadFile: 'Upload a file',
   recordVoice: 'Record a voice note',
@@ -44,7 +42,6 @@ export const en = {
   saveCopy: 'Save a copy',
   attachmentGone: 'That file is no longer on this device.',
   attachments: 'Attachments',
->>>>>>> 32e9bc6 (feat(lite): attachments, phase 1: a + menu with Upload a file and a voice-note microphone, kept on this device only)
   deleteHistory: 'Delete history',
   deleteConfirm: 'Delete every chat saved on this device? This cannot be undone.',
   deleted: 'History deleted from this device.',
@@ -194,9 +191,7 @@ export const sn: Strings = {
   groupOlder: 'Dzakare',
   copyAnswer: 'Kopa mhinduro',
   copied: 'Yakopwa',
-<<<<<<< HEAD
   deleteWait: 'Hurukuro uhu hucharamba huchitumira. Dzima kana hwapiwa mhinduro.',
-=======
   addTo: 'Wedzera',
   uploadFile: 'Isa faira',
   recordVoice: 'Rekodha mashoko',
@@ -212,7 +207,6 @@ export const sn: Strings = {
   saveCopy: 'Chengeta kopi',
   attachmentGone: 'Faira iri harichipo pachishandiso ichi.',
   attachments: 'Zvakasungirirwa',
->>>>>>> 32e9bc6 (feat(lite): attachments, phase 1: a + menu with Upload a file and a voice-note microphone, kept on this device only)
   deleteHistory: 'Bvisa nhoroondo',
   deleteConfirm: 'Bvisa hurukuro dzose dzakachengetwa pafoni iyi here? Hazvidzoreki.',
   deleted: 'Nhoroondo yabviswa pafoni iyi.',
@@ -359,9 +353,7 @@ export const nd: Strings = {
   groupOlder: 'Ezindala',
   copyAnswer: 'Kopisha impendulo',
   copied: 'Kokopishiwe',
-<<<<<<< HEAD
   deleteWait: 'Le ngxoxo isathumela. Isule uma isiphendulwe.',
-=======
   addTo: 'Engeza',
   uploadFile: 'Layisha ifayela',
   recordVoice: 'Rekhoda izwi',
@@ -377,7 +369,6 @@ export const nd: Strings = {
   saveCopy: 'Gcina ikhophi',
   attachmentGone: 'Leli fayela alisekho kule divayisi.',
   attachments: 'Okunamathiselweyo',
->>>>>>> 32e9bc6 (feat(lite): attachments, phase 1: a + menu with Upload a file and a voice-note microphone, kept on this device only)
   deleteHistory: 'Susa umlando',
   deleteConfirm: 'Susa zonke ingxoxo ezigcinwe kulefoni yini? Akukho ukubuyisela.',
   deleted: 'Umlando ususiwe kulefoni.',
