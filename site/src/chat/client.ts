@@ -131,6 +131,7 @@ export function createClient(config: ClientConfig) {
     const timer = setTimeout(() => timeout.abort(), config.timeoutMs ?? 45_000);
     const onAbort = () => timeout.abort();
     opts.signal?.addEventListener('abort', onAbort, { once: true });
+    if (opts.signal?.aborted) timeout.abort(); // already stopped: the listener above would never fire
 
     try {
       const res = await doFetch(`${base}/v1/chat/completions`, {
