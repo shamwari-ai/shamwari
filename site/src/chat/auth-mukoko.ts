@@ -70,9 +70,9 @@ function deadline(ms: number): { signal: AbortSignal; done: () => void } {
 
 export function mukokoAuth(opts: MukokoOptions = {}): AuthProvider & { readonly loginUrl: string } {
   const doFetch = opts.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a));
-  const tokenUrl = opts.tokenUrl ?? '/lite/auth/token';
-  const logoutUrl = opts.logoutUrl ?? '/lite/auth/logout';
-  const loginUrl = opts.loginUrl ?? '/lite/auth/login';
+  const tokenUrl = opts.tokenUrl ?? '/auth/token';
+  const logoutUrl = opts.logoutUrl ?? '/auth/logout';
+  const loginUrl = opts.loginUrl ?? '/auth/login';
   const now = opts.now ?? Date.now;
   const skew = opts.skewMs ?? 30_000;
   const timeoutMs = opts.timeoutMs ?? 10_000;

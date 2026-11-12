@@ -10,7 +10,7 @@ import { jwtClaims, type AuthKitPort, type CheckResult, type RefreshResult } fro
  * and those arrive as Secrets Store bindings (an object with get()) or, for
  * local development only, as plain strings from .dev.vars:
  *   WORKOS_CLIENT_ID      public: the AuthKit application's client id
- *   WORKOS_REDIRECT_URI   public: exactly https://shamwari.ai/lite/callback
+ *   WORKOS_REDIRECT_URI   public: exactly https://shamwari.ai/callback
  *   WORKOS_API_KEY        SECRET: the environment's API key (confidential client)
  *   COOKIE_PASSWORD       SECRET: seals the session cookie; at least 32 characters
  */

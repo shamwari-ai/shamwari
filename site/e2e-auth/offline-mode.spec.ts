@@ -22,7 +22,7 @@ test('with offline mode on, the page loads from the hint of a past sign-in and m
   // Seen from the browser context, so a request from the service worker would count too.
   context.on('request', (r) => {
     const path = new URL(r.url()).pathname;
-    if (path.startsWith('/lite/auth/')) toWorker.push(path);
+    if (path.startsWith('/auth/')) toWorker.push(path);
   });
   await page.goto('/lite/');
   await page.waitForSelector('html[data-ready="true"]');

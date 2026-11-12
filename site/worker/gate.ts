@@ -1,11 +1,11 @@
-import { COOKIE_PATH, SESSION_COOKIE, readCookie, type CheckResult } from './session';
+import { AUTH_LOGIN, clearSessionCookies, readCookies, SESSION_COOKIE, type CheckResult } from './session';
 
 /**
  * The gate in front of the light chat.
  *
  * Nothing under /lite/ (and none of the app's scripts) is served to someone with no session. An
  * unauthenticated request for the page goes straight to the AuthKit hosted sign-in
- * (/lite/auth/login); it never sees a shell with a login button on it.
+ * (/auth/login); it never sees a shell with a login button on it.
  *
  * PUBLIC is the whole list of what is served without a session, and nothing else is. Each entry
  * holds no app content and no messages:
@@ -17,7 +17,7 @@ import { COOKIE_PATH, SESSION_COOKIE, readCookie, type CheckResult } from './ses
  *
  * What this does NOT cover, on purpose: a device that has signed in has the service worker, and the service
  * worker answers /lite/ from its cache so the chat opens with no network (offline mode). On that device the
- * shell is shown without asking this Worker; the page then asks /lite/auth/token and a 401 means the session
+ * shell is shown without asking this Worker; the page then asks /auth/token and a 401 means the session
  * is over. Sending that case to sign-in (instead of showing the in-page sign-in) is a client change that comes
  * after the drawer and sign-in changes in #188. The service worker's own install and update also need a
  * session, because they fetch the gated shell: while signed out an update fails and the old worker stays.
@@ -37,11 +37,13 @@ const PUBLIC_STYLESHEET = /^\/lite\/_astro\/[A-Za-z0-9._-]+\.css$/;
 export const isPublic = (pathname: string): boolean => PUBLIC_EXACT.includes(pathname) || PUBLIC_STYLESHEET.test(pathname);
 
 /**
- * Everything this Worker gates: the light chat and the build output its page loads. All of it is under /lite/, because
- * the session cookie is scoped to /lite/ (COOKIE_PATH): a gated path outside it would never be sent the cookie.
- * (A test walks every gated path and file of the real build and fails on one outside COOKIE_PATH.)
+ * Everything this Worker gates: the light chat and the build output its page loads, all under /lite/. The sign-in routes
+ * are NOT under /lite/ (they are at the root: session.ts AUTH_ROUTES), and the session cookie is Path=/, so it reaches
+ * every gated path. When the main chat is served by this Worker, its prefix (/chat/) is added here and to
+ * `assets.run_worker_first`; until then it is not this Worker's to gate.
  */
-export const isGated = (pathname: string): boolean => pathname.startsWith(COOKIE_PATH);
+export const GATED_PREFIXES: readonly string[] = ['/lite/'];
+export const isGated = (pathname: string): boolean => GATED_PREFIXES.some((p) => pathname.startsWith(p));
 
 /** Build output, named by content hash: /lite/_astro/<name>.<hash>.<ext>. */
 const HASHED = /^\/lite\/_astro\/[A-Za-z0-9._-]+\.[A-Za-z0-9_-]{6,}\.(js|css)$/;
@@ -59,10 +61,9 @@ const noStore = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosnif
 /** The failure page is not served by the static assets, so it carries its own policy: it loads and runs nothing but its own icons (img-src 'self'). */
 const pageOnly = { 'Content-Security-Policy': "default-src 'none'; img-src 'self'; base-uri 'none'; form-action 'none'", 'Content-Language': 'en' };
 
-const clearSession = `${SESSION_COOKIE}=; Path=/lite/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
 
 /** What a failed sign-in shows. It is not the app, and it does not redirect back into sign-in (that would loop). */
-const FAILED_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign-in failed</title><link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48"><link rel="icon" type="image/png" href="/favicon.png" sizes="256x256"><link rel="apple-touch-icon" href="/apple-touch-icon.png"></head><body><main><h1>We could not sign you in</h1><p>Please try again.</p><p><a href="/lite/auth/login">Try again</a></p></main></body></html>`;
+const FAILED_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign-in failed</title><link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48"><link rel="icon" type="image/png" href="/favicon.png" sizes="256x256"><link rel="apple-touch-icon" href="/apple-touch-icon.png"></head><body><main><h1>We could not sign you in</h1><p>Please try again.</p><p><a href="/auth/login">Try again</a></p></main></body></html>`;
 
 export function failedPage(status = 401): Response {
   return new Response(FAILED_PAGE, {
@@ -88,35 +89,40 @@ export async function gate(req: Request, deps: GateDeps): Promise<Response> {
 
   const denied = (clear: boolean): Response => {
     const headers = new Headers(noStore);
-    if (clear) headers.append('Set-Cookie', clearSession);
+    if (clear) for (const c of clearSessionCookies()) headers.append('Set-Cookie', c);
     // The page goes to sign-in. A script, or anything else, is simply refused: redirecting a
     // subresource to an HTML page would only be a confusing error. A page that arrives here with
     // the failure marker stops, rather than being sent round the same loop again.
     if (SHELL.has(url.pathname) && url.searchParams.get('signin') !== 'failed') {
-      headers.set('Location', '/lite/auth/login');
+      headers.set('Location', AUTH_LOGIN);
       return new Response(null, { status: 302, headers });
     }
     if (SHELL.has(url.pathname)) {
       const res = failedPage();
-      if (clear) res.headers.append('Set-Cookie', clearSession);
+      if (clear) for (const c of clearSessionCookies()) res.headers.append('Set-Cookie', c);
       return res;
     }
     return new Response('Sign in to continue.', { status: 401, headers });
   };
 
-  const sealed = readCookie(req, SESSION_COOKIE);
-  if (!sealed) return denied(false);
+  // More than one copy can be sent while an old Path=/lite/ cookie and the new Path=/ one coexist: the first that is not
+  // plainly invalid decides, so a spent old copy never turns away a good new one.
+  const copies = readCookies(req, SESSION_COOKIE);
+  if (!copies.length) return denied(false);
 
-  let checked: CheckResult;
+  let checked: CheckResult = { status: 'invalid' };
   try {
-    checked = await deps.check(sealed);
+    for (const sealed of copies) {
+      checked = await deps.check(sealed);
+      if (checked.status !== 'invalid') break;
+    }
   } catch {
     return unavailable();
   }
   if (checked.status === 'invalid') return denied(true);
   if (checked.status === 'unavailable') return unavailable();
 
-  // 'valid' or 'expired': there is a session. An expired access token is renewed by /lite/auth/token
+  // 'valid' or 'expired': there is a session. An expired access token is renewed by /auth/token
   // when the page asks for it, so it is not a reason to turn the page away.
   const res = await deps.asset(req);
   const out = new Response(res.body, res);

@@ -2,14 +2,14 @@ import { expect, test } from '@playwright/test';
 
 // The production bug this guards: the session cookie is scoped to /lite/, the gate protected /_astro/*.js as well, and the
 // browser never sent the cookie for a path outside /lite/, so after a good sign-in every script answered 401 and the page
-// had no JavaScript. Here a real browser holds a real cookie jar (Path=/lite/) in front of a server that applies the gate.
+// had no JavaScript. Here a real browser holds a real cookie jar (Path=/) in front of a server that applies the gate.
 test.use({ baseURL: 'http://127.0.0.1:4324' });
 
 test('after sign-in the gated page loads its scripts under the cookie Path and the chat becomes interactive', async ({ page }) => {
   const responses: { url: string; status: number }[] = [];
   page.on('response', (r) => responses.push({ url: new URL(r.url()).pathname, status: r.status() }));
 
-  await page.goto('/lite/'); // no cookie: the gate sends this to /lite/auth/login, which signs in and comes back
+  await page.goto('/lite/'); // no cookie: the gate sends this to /auth/login, which signs in and comes back
   await page.waitForSelector('html[data-ready="true"]');
 
   const scripts = responses.filter((r) => r.url.endsWith('.js') && r.url !== '/lite/sw.js');

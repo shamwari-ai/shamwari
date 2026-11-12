@@ -100,12 +100,14 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+  // Sign-in is a server round trip: the login redirect, the OAuth callback and the token/logout calls must always
+  // reach the network. They are at the ROOT (/auth/*, /callback), outside this worker's scope, so the scope check below would
+  // leave them alone anyway; this explicit test comes first so it stays true if the scope ever widens, and the old
+  // /lite/ addresses (kept for a release) are listed for the same reason. Serving the cached shell for a navigation to them would make
+  // signing in impossible.
+  if (url.pathname.startsWith('/auth/') || url.pathname === '/callback' || url.pathname.startsWith('/lite/auth/') || url.pathname === '/lite/callback') return;
   if (!url.pathname.startsWith(SCOPE)) return;
   if (url.pathname === '/lite/sw.js') return;
-  // Sign-in is a server round trip: the login redirect, the OAuth callback and the
-  // token/logout calls must always reach the network. Serving the cached shell for
-  // a navigation to them would make signing in impossible.
-  if (url.pathname.startsWith('/lite/auth/') || url.pathname === '/lite/callback') return;
 
   if (req.mode === 'navigate') {
     // Shell from cache, at once. It is NOT refreshed from here: fresh HTML would

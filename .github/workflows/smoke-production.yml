@@ -31,8 +31,8 @@ jobs:
             local failed=0
             lite=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 https://shamwari.ai/lite/)
             case "$lite" in
-              "302 https://shamwari.ai/lite/auth/login"*) ;;
-              *) echo "/lite/ unauthenticated: got '$lite', want 302 to /lite/auth/login"; failed=1 ;;
+              "302 https://shamwari.ai/auth/login"*) ;;
+              *) echo "/lite/ unauthenticated: got '$lite', want 302 to /auth/login"; failed=1 ;;
             esac
             for p in /lite/disclaimer/ /lite/manifest.webmanifest /lite/sw.js; do
               c=$(code "https://shamwari.ai$p"); [ "$c" = 200 ] || { echo "$p: got $c, want 200"; failed=1; }
