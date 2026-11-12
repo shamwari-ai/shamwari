@@ -11,13 +11,15 @@
 // translates it and runs the chat.
 import '../../../src/chat/chat.css';
 import { en } from '../../../src/chat/strings';
+import { authModeOf } from '../../../src/chat/auth-mode';
 import AppShell from '@bundu/ui/app/AppShell.astro';
 import Icon from '@bundu/ui/Icon.astro';
 
 // Fixed at build time and never read from the URL (see chat/main.ts).
 const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
-// Mukoko sign-in is built but OFF: only a build that sets PUBLIC_CHAT_AUTH=mukoko turns it on.
-const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'developer-key';
+// Mukoko sign-in is the default; only a build that asks for PUBLIC_CHAT_AUTH=developer-key gets the developer-key screen
+// (chat/auth-mode.ts). check.mjs fails a build that comes out in any other mode.
+const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
 ---
 <!doctype html>
 <html lang="en" class="app">
@@ -121,15 +123,14 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
              Settings holds language, delete history and sign out: the account menu, folded into the drawer. -->
         <nav class="side-nav" aria-label={en.settings} data-i18n-attr="aria-label:settings">
           <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener">
-            <Icon name="key" class="side-icon" /><span data-i18n="useApi">Use the API</span>
-            <Icon name="external" class="side-icon side-external" /><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span>
+            <span data-i18n="useApi">Use the API</span><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span>
           </a>
           <a class="side-row" href="/lite/disclaimer/">
-            <Icon name="shield-check" class="side-icon" /><span data-i18n="disclaimerLink">{en.disclaimerLink}</span>
+            <span data-i18n="disclaimerLink">{en.disclaimerLink}</span>
           </a>
           <details class="account side-settings" data-slot="account-menu">
             <summary class="side-row">
-              <Icon name="sliders" class="side-icon" /><span data-i18n="settings">Settings</span>
+              <span data-i18n="settings">Settings</span>
             </summary>
             <div class="settings-panel" data-slot="account-menu-panel">
               <div class="account-row">
@@ -140,10 +141,14 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
                 <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
                 <button type="button" id="signout" class="btn" hidden data-i18n="authDevClear">Remove key</button>
               </div>
+              <!-- Install and the version live in Settings, not on the page or in the drawer's foot. -->
+              <div class="account-row">
+                <button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button>
+              </div>
+              <p class="version-line" data-current-version-line hidden><span data-i18n="version">Version</span> <span data-current-version></span></p>
             </div>
           </details>
         </nav>
-        <p class="version-line" data-current-version-line hidden><span data-i18n="version">Version</span> <span data-current-version></span></p>
       </div>
     </div>
 
@@ -151,13 +156,13 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
          chat. #new-chat is a wrapper the script listens on. -->
     <button slot="actions" type="button" id="offline-mode" role="switch" aria-checked="false" class="bar-action offline-switch">
       <Icon name="globe" class="h-5 w-5" />
-      <span class="sr-only sm:not-sr-only" data-i18n="offlineMode">{en.offlineMode}</span>
+      <span class="sr-only bar-label" data-i18n="offlineMode">{en.offlineMode}</span>
       <span class="offline-state" aria-hidden="true" data-i18n="offlineModeOff">{en.offlineModeOff}</span>
     </button>
     <span slot="actions" id="new-chat" class="contents">
       <button type="button" class="bar-action">
         <Icon name="plus" class="h-5 w-5" />
-        <span class="sr-only sm:not-sr-only" data-i18n="newChat">New chat</span>
+        <span class="sr-only bar-label" data-i18n="newChat">New chat</span>
       </button>
     </span>
 
@@ -191,7 +196,6 @@ const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'dev
           <li><button type="button" class="btn chip" data-example data-i18n="example3">What does the Constitution say about education?</button></li>
         </ul>
       </section>
-      <p class="install"><button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button></p>
 
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
       <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>

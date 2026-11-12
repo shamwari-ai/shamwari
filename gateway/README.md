@@ -308,6 +308,12 @@ AI Gateway custom metadata before pointing traffic at the route, or
 `tier_check` will always take the `false` branch and every request will go
 to economy.
 
+## System prompt wording
+
+The AI Gateway route runs a prompt guard (P1: BLOCK). It rejected our system prompt with a 424 when the prompt opened "You are Shamwari..." or told the model that a figure "must be verified". `ground.ts` states the persona as a fact about the conversation instead, and `test/prompt-wording.test.ts` keeps both phrasings out. Reword before you add a persona line or a verify-this instruction, and check a live request through the route.
+
+The route's models are reasoning models, so both model calls send `reasoning_effort: "low"`. Without it a normal question can spend the whole token limit thinking and return no text.
+
 ## Verify before deploy
 
 - Provider slugs in `src/router.ts` against the current AI Gateway provider list

@@ -3,11 +3,7 @@ import { openChat, openChats } from './helpers';
 
 // The drawer's foot rows (Use the API, Disclaimer and privacy, Settings) are quiet rows, not buttons.
 
-const ROWS = [
-  { name: 'Use the API', icon: 'key' },
-  { name: 'Disclaimer and privacy', icon: 'shield-check' },
-  { name: 'Settings', icon: 'sliders' },
-];
+const ROWS = [{ name: 'Use the API' }, { name: 'Disclaimer and privacy' }, { name: 'Settings' }];
 
 /**
  * Any CSS colour (rgb, oklab, color-mix results...) as 8-bit sRGB: the browser itself paints it on a canvas and the pixel
@@ -39,10 +35,10 @@ const ratio = (a: [number, number, number], b: [number, number, number]) => {
 const row = (page: Page, name: string) =>
   name === 'Settings' ? page.locator('details.account summary') : page.getByRole('link', { name });
 
-test('the foot rows are quiet rows, not buttons: no button chrome, one decorative icon each, the same names', async ({ page }) => {
+test('the foot rows are quiet text rows, not buttons: no button chrome, no icon, the same names', async ({ page }) => {
   await openChat(page);
   await openChats(page);
-  for (const { name, icon } of ROWS) {
+  for (const { name } of ROWS) {
     const r = row(page, name);
     await expect(r, name).toBeVisible();
     await expect(r, name).not.toHaveClass(/\bbtn\b/);
@@ -53,13 +49,11 @@ test('the foot rows are quiet rows, not buttons: no button chrome, one decorativ
     });
     expect(style.bg, `${name} has no fill`).toBe('rgba(0, 0, 0, 0)');
     expect(parseFloat(style.border), `${name} has no outline`).toBe(0);
-    expect(style.height, `${name} keeps the 49px hit region`).toBeGreaterThanOrEqual(49);
-    // The icon comes from the Mzizi set (the Icon component's markup), is decorative, and the label alone names the row.
-    const icons = r.locator('svg');
-    // Use the API also carries the small "opens in a new tab" mark after its label; every icon is decorative.
-    await expect(icons, name).toHaveCount(name === 'Use the API' ? 2 : 1);
-    for (const svg of await icons.all()) await expect(svg, name).toHaveAttribute('aria-hidden', 'true');
-    await expect(icons.first(), name).toHaveAttribute('data-icon', icon);
+    // On touch the row is the 49px hit region (small-android here); a desktop mouse gets Mzizi's 32px (e2e-desktop/density.spec.ts).
+    expect(style.height, `${name} keeps the 49px hit region on touch`).toBeGreaterThanOrEqual(49);
+    // Text only: the foot rows have no icon of any kind (owner, 2026-11-12), not even the "opens in a new tab" mark; the
+    // label (and, for Use the API, a screen-reader note) carries the meaning.
+    await expect(r.locator('svg'), `${name} has no icon`).toHaveCount(0);
     await expect(r, name).toContainText(name);
   }
   // The names a screen reader hears are unchanged: links are links, and Settings is still a disclosure.

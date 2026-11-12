@@ -68,6 +68,9 @@ export function buildMetadata(meta: RequestMetadata): Record<string, string> {
 
 export { DEFAULT_MAX_OUTPUT_TOKENS };
 
+/** Thinking budget for the reasoning models: low, so the token limit goes to the answer, not the reasoning. */
+export const REASONING_EFFORT = 'low';
+
 async function post(
   url: string,
   headers: Record<string, string>,
@@ -83,6 +86,10 @@ async function post(
       messages,
       temperature: 0.3,
       max_tokens: maxTokens,
+      // The route's model (glm-5.3-flash) is a reasoning model that cannot switch thinking off. At the default
+      // effort a real question spent all 2048 tokens thinking and came back with no text (checked live,
+      // 2026-11-12); at "low" it answers in about 300 tokens. The weather Worker does the same.
+      reasoning_effort: REASONING_EFFORT,
     }),
   });
 }
@@ -180,6 +187,7 @@ export async function viaWorkersAI(
     WORKERS_AI_FALLBACK_MODEL as never,
     {
       messages,
+      reasoning_effort: REASONING_EFFORT,
       // Only when a reach asks for less. A request with no reach is sent exactly
       // as it was before, so this fallback step is not exposed to a parameter it
       // has never been called with.
