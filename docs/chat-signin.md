@@ -399,3 +399,20 @@ owning-entity key.
   its prefix is added to `GATED_PREFIXES` (`worker/gate.ts`) and to `assets.run_worker_first`.
 - **Service worker:** scope is still `/lite/`, and it passes `/auth/*` and `/callback` (and the old `/lite/` addresses)
   straight to the network. `test/app/sw-signin.test.ts` runs the generated worker's fetch handler against each address.
+
+## If sign-in says the redirect address does not match
+
+Symptom: signing in lands on `accounts.mukoko.com/redirect-uri-invalid?invalid_redirect_uri=https://shamwari.ai/callback`.
+
+**Cause:** the WorkOS redirect-address list of the Mukoko Account application does not contain `https://shamwari.ai/callback`. The
+list is shared by every Mukoko app, and it can be replaced as a whole by another session or script, so this can happen with no
+deploy to shamwari.ai at all (it did on 2026-11-12, after the sign-in moved to the root).
+
+**Fix:** in the WorkOS dashboard, Mukoko Account application, Redirects, add `https://shamwari.ai/callback` (and keep
+`https://shamwari.ai/` as the sign-out return). The old `https://shamwari.ai/lite/callback` stays registered while the old
+addresses still redirect.
+
+**How it is caught:** `.github/workflows/smoke-production.yml` follows every redirect from `https://shamwari.ai/auth/login`
+and fails if the chain ends on a URL containing `redirect-uri-invalid`. It runs after every release to `main` and **every 30
+minutes**, so the break is seen without waiting for a merge. On failure it opens an issue titled "WorkOS redirect address for
+shamwari.ai/callback is not registered" (or comments on the one that is open, so there is not a new issue every half hour).
