@@ -28,14 +28,18 @@
     { "binding": "AUTH_CACHE", "id": "aef87f10881e4ba99f68045026ce18b1" },
   ],
 
-  // The AI Gateway authentication token lives in the account's Secrets Store
-  // as SHAMWARI_AI_TOKEN and is bound here, so no copy of it sits in the
+  // STOPGAP (2026-11-12): SHAMWARI_AI_TOKEN (stored 2026-10-22) is rejected by the AI Gateway (401 on every
+  // request in production; no live Cloudflare token matches it), so this binds the existing, correctly
+  // scoped NYUCHI_AI_GATEWAY_TOKEN (AI Gateway Run + Workers AI Read, an account token that works for the
+  // `shamwari` gateway). Replace it with a dedicated, Shamwari-only token and point this back at
+  // SHAMWARI_AI_TOKEN; creating or rotating that token is an owner action (#83).
+  // The AI Gateway authentication token lives in the account's Secrets Store and is bound here, so no copy of it sits in the
   // Worker's own secrets. Creating or rotating it is a Secrets Store action.
   "secrets_store_secrets": [
     {
       "binding": "CF_AIG_TOKEN",
       "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
-      "secret_name": "SHAMWARI_AI_TOKEN",
+      "secret_name": "NYUCHI_AI_GATEWAY_TOKEN",
     },
   ],
 
