@@ -104,3 +104,8 @@ export async function seedLegacyQuestion(
   await page.reload();
   await page.waitForSelector('html[data-ready="true"]');
 }
+
+/** Open the chat's "..." menu beside its title (pin, project, delete). */
+export async function openChatMenu(page: Page) {
+  if (!(await page.locator('#chat-tools').evaluate((el) => el.matches(':popover-open')))) await page.locator('#chat-menu').click();
+}

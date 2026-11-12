@@ -255,5 +255,8 @@ behaviour; the geometry tests moved with it. Screenshots (light and dark; 390, 1
   is the app name, for screen readers only). Replies are plain prose with a quiet row under them (Copy answer, Save answer); the
   person's own question is a soft block at the right. The composer is one rounded container: the text above, a round send button
   below that is muted and disabled until there is text; Enter sends, Shift+Enter is a new line.
-- **Not built yet, on purpose:** per-row "…" actions (pin, move, delete stay in the open chat's tools row), thumbs up/down (nothing
+- **Chat menu and sources:** pin, project and delete live in a "…" menu beside the chat's title (a popover; Delete still asks first). A
+  source is one compact row (Ground badge, the section, an "Open source" link) with the document, issuer and date under a disclosure.
+  The composer's container is its only edge; its focus ring is the container's.
+- **Not built yet, on purpose:** per-row "…" actions (the same menu for a row in the drawer), thumbs up/down (nothing
   stores feedback), read aloud (no Shona/Ndebele text to speech), and the "+" attach and microphone buttons (the next piece).

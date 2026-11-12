@@ -44,13 +44,23 @@ export function renderCitation(c: Citation, s: Strings, lang: Language): HTMLEle
   const meta = [c.authority, c.effective_from ? `${s.effective} ${formatDate(c.effective_from, lang)}` : '']
     .filter(Boolean)
     .join(' · ');
+  // One compact row: the Ground badge and the section (or the document's title), then a small "open" link. The rest (the
+  // document, who made it, when it took effect) opens under it, so the answer's words lead and the detail is one tap away.
   return h(
     'li',
     { class: 'cite' },
-    h('span', { class: 'badge', title: s.groundHint }, s.ground),
-    c.heading ? h('strong', { class: 'cite-heading' }, c.heading) : null,
-    h('span', { class: 'cite-title' }, c.title),
-    meta ? h('span', { class: 'cite-meta' }, meta) : null,
+    h(
+      'details',
+      { class: 'cite-more' },
+      h(
+        'summary',
+        {},
+        h('span', { class: 'badge', title: s.groundHint }, s.ground),
+        h('strong', { class: c.heading ? 'cite-heading' : 'cite-title' }, c.heading || c.title),
+      ),
+      c.heading ? h('span', { class: 'cite-title' }, c.title) : null,
+      meta ? h('span', { class: 'cite-meta' }, meta) : null,
+    ),
     c.url
       ? h('a', { class: 'cite-link', href: c.url, target: '_blank', rel: 'noopener noreferrer' }, s.openSource)
       : null,

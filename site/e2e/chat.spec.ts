@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, makeProject, openAccount, openChat, openChats, openSection, closeChats, newChat, seedLegacyQuestion } from './helpers';
+import { openChatMenu, ask, makeProject, openAccount, openChat, openChats, openSection, closeChats, newChat, seedLegacyQuestion } from './helpers';
 
 test('asks a question and renders the answer with its citation card', async ({ page }) => {
   await openChat(page);
@@ -338,12 +338,14 @@ test('the drawer pins a chat, files it in a project, keeps a saved answer, and d
   await makeProject(page, 'Know my rights');
   await expect(page.locator('#project-list summary')).toContainText('Know my rights (0)');
   await page.keyboard.press('Escape');
+  await openChatMenu(page);
   await page.locator('#chat-project').selectOption({ label: 'Know my rights' });
   await openChats(page);
   await expect(page.locator('#project-list summary')).toContainText('Know my rights (1)');
 
   // Pin the chat: it is listed under Pinned.
   await page.keyboard.press('Escape');
+  await openChatMenu(page);
   await page.locator('#pin-chat').click();
   await expect(page.locator('#pin-chat')).toHaveAttribute('aria-pressed', 'true');
   await openSection(page, 'Chat');
