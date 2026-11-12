@@ -1,6 +1,5 @@
 import type { Strings } from './strings';
 import type { AttachmentMeta, StoredMessage } from './store';
-import { sizeLabel } from './attach';
 import type { Answer, AskErrorKind, Citation, Language, Scope } from './types';
 
 /**
@@ -40,6 +39,8 @@ export function formatDate(iso: string, lang: Language): string {
   }
   return iso.slice(0, 10);
 }
+
+export const sizeLabel = (n: number): string => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
 export function renderCitation(c: Citation, s: Strings, lang: Language): HTMLElement {
   const meta = [c.authority, c.effective_from ? `${s.effective} ${formatDate(c.effective_from, lang)}` : '']

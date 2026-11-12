@@ -1,5 +1,5 @@
 import { developerKey } from './auth';
-import { initAttach } from './attach';
+import type { Attach } from './attach';
 import { mukokoAuth } from './auth-mukoko';
 import { createClient } from './client';
 import { readStoredUser, rememberUser, subjectOf, userKeyOf } from './user';
@@ -1037,11 +1037,27 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
 
   // ---- controls ------------------------------------------------------------
   const sendBtn = $<HTMLButtonElement>('#send');
-  const attach = initAttach(document, {
-    strings,
-    say: (text) => ($('#toast').textContent = text),
-    newId,
-  });
+  // Attachments load on first use (a tap on "+" or the microphone): most questions never need the code, and the first load stays small.
+  let attachImpl: Attach | null = null;
+  const attach = {
+    take: () => attachImpl?.take() ?? [],
+    clear: () => attachImpl?.clear(),
+    refresh: () => attachImpl?.refresh(),
+  };
+  $('#mic').hidden = !(typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia);
+  for (const id of ['#plus', '#mic']) {
+    const button = $(id);
+    const loadThenRepeat = async (e: Event) => {
+      if (attachImpl) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      button.removeEventListener('click', loadThenRepeat, true);
+      const { initAttach } = await import('./attach');
+      attachImpl ??= initAttach(document, { strings, say: (text) => ($('#toast').textContent = text), newId });
+      button.click(); // the tap that loaded it is now handled by it
+    };
+    button.addEventListener('click', loadThenRepeat, true);
+  }
   const autosize = () => {
     setBusy('draft', input.value.trim() !== ''); // text in the question box is not reloaded away by a release
     sendBtn.disabled = input.value.trim() === ''; // the round send button is muted until there is something to send

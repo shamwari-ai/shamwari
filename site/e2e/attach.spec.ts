@@ -9,14 +9,25 @@ const MOCK = 'http://127.0.0.1:8788';
 /** Every request the page makes from now on. */
 const watch = (page: Page) => {
   const seen: { method: string; url: string; body: string }[] = [];
-  page.on('request', (r) => seen.push({ method: r.method(), url: r.url(), body: r.postData() ?? '' }));
+  // The app's own script files (the attachments code loads on first use, from the service worker's cache) are not "requests about the
+  // attachment": everything else is.
+  page.on('request', (r) => !new URL(r.url()).pathname.startsWith('/lite/_astro/') && seen.push({ method: r.method(), url: r.url(), body: r.postData() ?? '' }));
   return seen;
+};
+
+/** The attachments code loads on the first tap of "+" or the microphone. */
+const load = async (page: Page) => {
+  await page.locator('#plus').click();
+  await expect(page.locator('#plus-menu')).toBeVisible();
+  await page.locator('#plus-menu').press('Escape');
+  await expect(page.locator('#plus-menu')).toBeHidden();
 };
 
 const file = (name: string, text: string) => ({ name, mimeType: 'text/plain', buffer: Buffer.from(text) });
 
 test('"+" opens a menu with Upload a file (no skills entry yet); a chosen file waits as a chip that says it is not sent', async ({ page }) => {
   await openChat(page);
+  await load(page);
   const seen = watch(page);
   await page.locator('#plus').click();
   await expect(page.locator('#plus-menu')).toBeVisible();
@@ -33,6 +44,7 @@ test('"+" opens a menu with Upload a file (no skills entry yet); a chosen file w
 
 test('a question sent with a file keeps the file on the device and sends only its text', async ({ page }) => {
   await openChat(page);
+  await load(page);
   const seen = watch(page);
   await page.locator('#file-input').setInputFiles(file('notes-for-my-case.txt', 'SECRET-FILE-CONTENT'));
   await page.locator('#q').fill('Is it legal to be searched?');
@@ -75,6 +87,7 @@ test('a question sent with a file keeps the file on the device and sends only it
 
 test('a file over 10 MB, or a fifth file, is refused with a plain message', async ({ page }) => {
   await openChat(page);
+  await load(page);
   await page.locator('#file-input').setInputFiles({ name: 'big.bin', mimeType: 'application/octet-stream', buffer: Buffer.alloc(10 * 1024 * 1024 + 1) });
   await expect(page.locator('#toast')).toHaveText('That file is over 10 MB. Choose a smaller one.');
   await expect(page.locator('#attach-list')).toBeHidden();
@@ -120,6 +133,7 @@ test('without a recorder in the browser the microphone button is not shown', asy
 
 test('what was being added belongs to its chat: starting another chat leaves it behind', async ({ page }) => {
   await openChat(page);
+  await load(page);
   await page.locator('#file-input').setInputFiles(file('draft.txt', 'x'));
   await expect(page.locator('#attach-list .attach-chip')).toHaveCount(1);
   await page.evaluate(() => document.querySelector<HTMLButtonElement>('#new-chat button')!.click());
