@@ -67,7 +67,7 @@ export function renderAnswer(
   const save = onSave ? h('button', { type: 'button', class: 'btn link save-answer' }, s.saveAnswer) : null;
   save?.addEventListener('click', onSave!);
   // Copy: the answer's own words, to the clipboard. Where the browser has no clipboard the button is simply not offered.
-  const copy = navigator.clipboard?.writeText ? h('button', { type: 'button', class: 'btn link copy-answer' }, s.copyAnswer) : null;
+  const copy = typeof navigator.clipboard?.writeText === 'function' ? h('button', { type: 'button', class: 'btn link copy-answer' }, s.copyAnswer) : null;
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
   copy?.addEventListener('click', () => {
     void navigator.clipboard.writeText(a.text).then(
