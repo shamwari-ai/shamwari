@@ -2,8 +2,8 @@
 # after the merge, so this retries. It only reads public URLs; it deploys and changes nothing.
 # It also runs every 30 minutes, because one thing it checks can break with no deploy at all: the WorkOS redirect-address
 # list of the shared Mukoko Account app (another session or script can overwrite it, and then sign-in lands on
-# accounts.mukoko.com/redirect-uri-invalid). On failure it opens an issue (or comments on the open one) so the owner hears about it. Rollback: Workers & Pages,
-# the Worker, Deployments, roll back to the previous version (see docs/domains-and-deploy.md).
+# accounts.mukoko.com/redirect-uri-invalid). On failure it opens an issue (or comments on the open one) so the owner hears
+# about it. Rollback: Workers & Pages, the Worker, Deployments, roll back to the previous version (see docs/domains-and-deploy.md).
 name: Smoke production
 
 on:
