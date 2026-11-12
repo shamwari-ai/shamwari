@@ -1,4 +1,5 @@
 import type { Strings } from './strings';
+import { sizeLabel } from './render';
 
 /**
  * Attachments, phase 1: a file or a voice note is kept ON THIS DEVICE and goes nowhere. Nothing here makes a network request:
@@ -19,7 +20,6 @@ const MAX_BYTES = 10 * 1024 * 1024;
 const MAX_FILES = 4;
 const MAX_VOICE_MS = 5 * 60_000;
 
-export const sizeLabel = (n: number): string => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 const clock = (ms: number): string => `${Math.floor(ms / 60_000)}:${String(Math.floor((ms % 60_000) / 1000)).padStart(2, '0')}`;
 
 interface Options {

@@ -277,4 +277,4 @@ microphone records a **voice note**. Both stay on this device and go nowhere: ad
   speech. The model never sees an attachment.
 - **CSP:** `media-src 'self' blob:` was added in `scripts/post-build.mjs` so a recording can play from a blob URL made on the device; nothing
   else may load media.
-- **Known limits:** attachments are not encrypted on the device (same as the chats); the first-load budget has about 1 KB left.
+- **Known limits:** attachments are not encrypted on the device (same as the chats); the attachments code (1.5 KB gzipped) loads on the first tap of "+" or the microphone, so the first load stays under its budget.
