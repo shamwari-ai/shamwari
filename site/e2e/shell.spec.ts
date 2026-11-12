@@ -134,3 +134,16 @@ test('a chat in the list has its own "..." menu: pin, project, delete', async ({
   await expect(page.locator('#pinned-list')).not.toContainText('What does the');
   await expect(page.locator('article.msg.user')).toHaveCount(1); // the open chat is untouched
 });
+
+test('the disclaimer and privacy notice is one tap away, in a quiet line under the composer', async ({ page }) => {
+  await openChat(page);
+  const link = page.locator('.legal-line a');
+  await expect(link).toHaveText('Not legal advice · Privacy');
+  await expect(link).toHaveAttribute('href', '/lite/disclaimer/');
+  await expect(link).toBeInViewport(); // on the screen, not clipped off by the dock
+  // Under the composer, never over the messages.
+  const [composer, line] = await page.evaluate(() => ['.composer', '.legal-line'].map((s) => document.querySelector(s)!.getBoundingClientRect().bottom));
+  expect(line!).toBeGreaterThan(composer!);
+  await link.click();
+  await expect(page).toHaveURL(/\/lite\/disclaimer\/$/);
+});

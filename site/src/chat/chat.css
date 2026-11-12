@@ -1753,3 +1753,21 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .msg.user .attach-chip {
   background: color-mix(in oklab, var(--foreground) 6%, transparent);
 }
+
+/* One quiet line under the composer, so the disclaimer and privacy notice is a tap away on every screen, not two taps deep in Settings. */
+.legal-line {
+  margin: 0;
+  text-align: center;
+  font-size: var(--fs-small);
+}
+.legal-line a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-control-sm);
+  padding-inline: var(--gap-floor);
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  text-underline-offset: 3px;
+}
+.legal-line a:hover {
+  color: var(--foreground);
+}
