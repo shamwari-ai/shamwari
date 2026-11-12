@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { ask, makeProject, newChat, openAccount, openChat, openChats, seedLegacyQuestion, openSection, closeChats } from './helpers';
+import { openChatMenu, ask, makeProject, newChat, openAccount, openChat, openChats, seedLegacyQuestion, openSection, closeChats } from './helpers';
 
 // PW_CPU_THROTTLE=4 runs every test here on a CPU four times slower, to flush out timing races (animations, async renders)
 // that a quick machine hides. Off by default.
@@ -178,7 +178,18 @@ async function underTheFloor(page: Page) {
       range.selectNodeContents(n);
       for (const r of range.getClientRects()) {
         if (r.width === 0) continue;
-        edge('text', el, r.left, r.right);
+        // Text cut by its own box or a scrolling ancestor (a long chat title with an ellipsis) is measured where it is
+        // drawn, not where the cut-off part would be.
+        let left = r.left, right = r.right;
+        for (let p: Element | null = el; p; p = p.parentElement) {
+          const st = getComputedStyle(p);
+          if (st.overflowX === 'visible') continue;
+          const c = p.getBoundingClientRect();
+          left = Math.max(left, c.left);
+          right = Math.min(right, c.right);
+        }
+        if (right <= left) continue;
+        edge('text', el, left, right);
         break; // one report per text node is enough to name it
       }
     }
@@ -237,7 +248,9 @@ test('the drawer with a project, a pinned chat and a saved answer meets the Bund
   await openChats(page);
   await makeProject(page, 'Know my rights');
   await page.keyboard.press('Escape');
+  await openChatMenu(page);
   await page.locator('#chat-project').selectOption({ label: 'Know my rights' });
+  await openChatMenu(page);
   await page.locator('#pin-chat').click();
   await expect(page.locator('#chat-tools')).toBeVisible();
   expect(await underTheFloor(page), 'chat tools').toEqual([]);

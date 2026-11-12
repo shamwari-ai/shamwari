@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, makeProject, openAccount, openChat, openChats, openSection, closeChats, newChat, seedLegacyQuestion } from './helpers';
+import { openChatMenu, ask, makeProject, openAccount, openChat, openChats, openSection, closeChats, newChat, seedLegacyQuestion } from './helpers';
 
 test('asks a question and renders the answer with its citation card', async ({ page }) => {
   await openChat(page);
@@ -141,6 +141,7 @@ test('signed out, the whole screen is the sign-in: no chat, no card, no picker, 
   // And a key typed anywhere is not a way in: "Use the API" lives in the drawer, which a signed-in person sees.
   await openChat(page);
   await openChats(page);
+  await openAccount(page);
   await expect(page.getByRole('link', { name: 'Use the API' })).toHaveAttribute('href', 'https://platform.nyuchi.com');
 });
 
@@ -243,23 +244,21 @@ test('the prompts are in the page with no network, and in Shona they are Shona',
   await expect(page.locator('#empty [data-example]').first()).toContainText('Bumbiro');
 });
 
-test('a divider sits directly above the composer and moves with it, using the hairline token', async ({ page }) => {
+test('the composer is one rounded container below the messages: no divider rule, an edge of its own, text above its actions', async ({ page }) => {
   await openChat(page);
-  const dock = page.locator('.dock');
-  const style = await dock.evaluate((el) => {
+  const dock = await page.locator('.dock').evaluate((el) => parseFloat(getComputedStyle(el).borderTopWidth));
+  expect(dock, 'no rule across the page above the composer').toBe(0);
+  const composer = await page.locator('.composer').evaluate((el) => {
     const c = getComputedStyle(el);
-    return { style: c.borderTopStyle, width: c.borderTopWidth, color: c.borderTopColor, token: c.getPropertyValue('--border').trim() };
+    const bar = document.querySelector('.composer-bar')!.getBoundingClientRect();
+    const box = document.querySelector('#q')!.getBoundingClientRect();
+    return { border: parseFloat(c.borderTopWidth), radius: parseFloat(c.borderTopLeftRadius), barBelowText: bar.top >= box.bottom - 1, bottom: el.getBoundingClientRect().bottom };
   });
-  expect(style.style).toBe('solid');
-  expect(parseFloat(style.width)).toBeGreaterThan(0);
-  expect(parseFloat(style.width)).toBeLessThanOrEqual(1);
-  expect(style.color).not.toBe('rgba(0, 0, 0, 0)');
-  // It is the top edge of the composer's own box, so it can never be left behind when the composer moves.
-  const box = await dock.evaluate((el) => ({ top: el.getBoundingClientRect().top, thread: document.querySelector('#thread')!.getBoundingClientRect().bottom }));
-  expect(box.top).toBeGreaterThanOrEqual(box.thread - 1);
-  // Raised, not dropped, for people who ask for more contrast.
-  await page.emulateMedia({ forcedColors: 'active' });
-  expect(parseFloat(await dock.evaluate((el) => getComputedStyle(el).borderTopWidth))).toBe(1);
+  expect(composer.border, 'the container has its own edge').toBeGreaterThan(0);
+  expect(composer.radius, 'rounded').toBeGreaterThanOrEqual(8);
+  expect(composer.barBelowText, 'actions sit under the text').toBe(true);
+  const thread = await page.evaluate(() => document.querySelector('#thread')!.getBoundingClientRect().bottom);
+  expect(await page.locator('.composer').evaluate((el) => el.getBoundingClientRect().top)).toBeGreaterThanOrEqual(thread - 1);
 });
 
 test('Settings is in the drawer, there is no bell, and signing out brings the sign-in panel back', async ({ page }) => {
@@ -316,6 +315,7 @@ test('the chat has no small print under it: a link opens the disclaimer and priv
   // Not under the chat: no footer is left on the page, and the link is a row in the drawer.
   await expect(page.locator('[data-slot="app-footer"]')).toHaveCount(0);
   await openChats(page);
+  await openAccount(page);
   await page.getByRole('link', { name: 'Disclaimer and privacy' }).click();
   await expect(page).toHaveURL(/\/lite\/disclaimer\/$/);
   await expect(page.getByText('not the text of your question or its answer')).toBeVisible();
@@ -338,12 +338,14 @@ test('the drawer pins a chat, files it in a project, keeps a saved answer, and d
   await makeProject(page, 'Know my rights');
   await expect(page.locator('#project-list summary')).toContainText('Know my rights (0)');
   await page.keyboard.press('Escape');
+  await openChatMenu(page);
   await page.locator('#chat-project').selectOption({ label: 'Know my rights' });
   await openChats(page);
   await expect(page.locator('#project-list summary')).toContainText('Know my rights (1)');
 
   // Pin the chat: it is listed under Pinned.
   await page.keyboard.press('Escape');
+  await openChatMenu(page);
   await page.locator('#pin-chat').click();
   await expect(page.locator('#pin-chat')).toHaveAttribute('aria-pressed', 'true');
   await openSection(page, 'Chat');

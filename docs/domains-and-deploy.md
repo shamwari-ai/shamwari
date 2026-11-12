@@ -224,7 +224,9 @@ version is gated; it is never automatic.
 5. **Smoke:** `smoke-production.yml` checks production for up to 18 minutes: `/lite/`
    unauthenticated is a 302 to `/auth/login`; `/lite/disclaimer/`,
    `/lite/manifest.webmanifest` and `/lite/sw.js` are 200; a `/lite/_astro/*.js` script named in
-   `sw.js` is 401 without a session; `www.shamwari.ai` is 200. On failure it opens an issue.
+   `sw.js` is 401 without a session; `www.shamwari.ai` is 200; and `/auth/login`, followed through every redirect, does not end on
+   `redirect-uri-invalid` (the WorkOS redirect address is registered; docs/chat-signin.md). It also runs every 30 minutes. On failure it opens an
+   issue (or comments on the one that is open).
 
 **Rollback:** Cloudflare dashboard, Workers & Pages, the Worker, Deployments, roll back to the
 previous version (a deploy keeps the previous version ids), then fix forward on `staging`.

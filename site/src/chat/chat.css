@@ -49,12 +49,6 @@ body {
   min-height: var(--target-floor);
 }
 
-/* A fixed sidebar column on a desktop: wide enough for a 14px label such as "Disclaimer and privacy" on one line. (AppShell
-   defaults to 16.25rem, which wrapped "Factory" and its chip; claude.ai's is about the same as this.) */
-html [data-slot='app-shell'] {
-  --app-sidebar-w: 17.5rem;
-}
-
 /* ---- the frame's parts ------------------------------------------------------------------------------ */
 
 .brand {
@@ -232,19 +226,6 @@ input:not([type='checkbox']):not([type='radio']) {
   white-space: nowrap;
 }
 /* The brand fill and its text come as a pair in both themes (Mzizi sodalite-brand / on-brand). */
-#side-new.btn.primary {
-  /* Hierarchy (deference): the drawer recedes and the composer is the one thing that is filled. New chat is a quiet
-     secondary button here: an outline, the foreground colour, no fill. */
-  background: transparent;
-  color: var(--foreground);
-  border: 1px solid var(--border-control, var(--border));
-  font-weight: 500;
-  min-height: var(--size-control);
-  inline-size: 100%;
-}
-#side-new.btn.primary:hover {
-  background: var(--muted);
-}
 .btn.primary {
   background: var(--color-sodalite-brand);
   color: var(--color-sodalite-on-brand);
@@ -683,12 +664,6 @@ input:not([type='checkbox']):not([type='radio']) {
   padding-block: var(--gap-floor) max(var(--gap-floor), env(safe-area-inset-bottom));
   background: var(--background);
 }
-.side-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--gap-floor);
-}
 
 /* ---- the global page layout ----------------------------------------------------------------------------
    One layout for every screen of the app, from the Bundu floor (Mzizi): 14px between content and the edge of
@@ -1109,4 +1084,473 @@ html[data-view='pending'] dialog {
 }
 .side-tabs {
   flex-wrap: wrap;
+}
+
+/* ---- the shell, rebuilt as a chat console ---------------------------------------------------------------------
+   The drawer is a slim 260px column of plain rows (New chat, Search, the sections), then the history under muted,
+   collapsible labels (Pinned, Recents, and Today / Yesterday / Previous 7 days / Older inside Recents): one line per
+   chat, the title cut with an ellipsis and its time muted at the right, a soft fill on the open one. The account row
+   is pinned at the bottom and holds everything else. The page is ONE centred column (46rem): the chat's title in a
+   thin top bar, replies as plain prose, the person's own questions as a soft block, and the composer a single
+   rounded container with a round send button. Sizes, colours and radii are Mzizi tokens; none is a number of ours. */
+html [data-slot='app-shell'] {
+  /* 17.5rem (280px) is the width CI proved holds for "Factory" and its "Coming soon" chip on one line with a wider fallback font too. */
+  --app-sidebar-w: 17.5rem;
+}
+@media (min-width: 64rem) {
+  .side-row.side-disabled {
+    flex-wrap: nowrap;
+  }
+}
+/* The collapse toggle moves from the drawer's foot to the top of the drawer, beside the brand. */
+[data-slot='sidebar-foot'] {
+  display: none !important;
+}
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-floor);
+}
+.side-collapse {
+  display: none;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--size-control-sm);
+  block-size: var(--size-control-sm);
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.side-collapse:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+@media (min-width: 64rem) {
+  .side-collapse {
+    display: inline-flex;
+  }
+}
+[data-slot='app-shell']:has([data-shell-collapse]:checked) .side-head {
+  flex-direction: column;
+}
+/* Chats whose label is a group: muted, small, and collapsible. */
+.side-group > summary,
+.chats-title {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
+  min-height: var(--size-control-sm);
+  padding-inline: var(--inset-floor);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  cursor: pointer;
+  list-style: none;
+}
+.side-group > summary::-webkit-details-marker {
+  display: none;
+}
+.side-group > summary::after {
+  content: '';
+  margin-inline-start: auto;
+  inline-size: 0.4rem;
+  block-size: 0.4rem;
+  border-inline-end: 1.5px solid currentColor;
+  border-block-end: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transition: transform 150ms ease;
+}
+.side-group[open] > summary::after {
+  transform: rotate(45deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .side-group > summary::after {
+    transition: none;
+  }
+}
+.side-date {
+  margin: 0;
+  padding: var(--gap-floor) var(--inset-floor) 0;
+  font-size: var(--fs-small);
+  font-weight: 500;
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+}
+.side-group[open] > summary {
+  margin-bottom: var(--gap-floor);
+}
+.side-date-group {
+  list-style: none;
+  display: grid;
+  gap: var(--gap-floor);
+}
+/* One line per chat: the title is cut, the time is muted at the right. */
+.side-list .chat-row {
+  text-decoration: none;
+  font-weight: 400;
+  justify-content: space-between;
+  white-space: nowrap;
+}
+.chat-row-title {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-row-when {
+  flex: none;
+  font-size: var(--fs-small);
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+}
+.chat-row[aria-current='true'] {
+  background: var(--muted);
+  color: var(--foreground);
+  font-weight: 400;
+}
+.side-filter {
+  inline-size: 100%;
+  box-sizing: border-box;
+  min-height: var(--size-control-sm);
+  border: 1px solid var(--border-control, var(--border));
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: var(--fs-small);
+}
+/* New chat is a plain row like the others: no outline, no fill. */
+#side-new.side-row {
+  border: 0;
+  color: var(--foreground);
+  font-weight: 500;
+}
+/* The account row. */
+.side-nav {
+  grid-template-columns: minmax(0, 1fr);
+}
+.side-account {
+  gap: var(--gap-floor);
+}
+.avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  border-radius: 50%;
+  background: var(--muted);
+  color: var(--foreground);
+}
+.side-account-name {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.side-gear {
+  margin-inline-start: auto;
+}
+.settings-panel .side-row {
+  padding-inline: 0;
+  justify-content: flex-start;
+}
+
+/* The top bar: thin, no rule, the chat's title at the left of the actions. */
+[data-slot='app-topbar'] {
+  border-bottom: 0;
+}
+[data-slot='app-topbar'] > div.ml-auto {
+  flex: 1 1 0;
+}
+.chat-title {
+  margin: 0;
+  flex: 1 1 6rem; /* takes the room the actions leave, and is cut with an ellipsis rather than wrapping the bar */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-small);
+  font-weight: 500;
+  line-height: var(--leading-floor);
+}
+.chat-title.sr-only {
+  /* Not drawn, but still the page's heading for a screen reader. */
+  position: absolute;
+  flex: none;
+}
+@media (max-width: 39.999rem) {
+  /* Too narrow to draw beside the menu and the brand: still the page's heading, for a screen reader. */
+  .chat-title:not(.sr-only) {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    clip-path: inset(50%);
+  }
+}
+
+/* One centred column. */
+html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
+  inline-size: 100%;
+  max-inline-size: 46rem;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+.dock {
+  border-top: 0;
+  background: transparent;
+}
+
+/* Replies are plain prose; the person's own question is a soft block at the right. */
+#log {
+  gap: calc(var(--inset-floor) * 1.5);
+}
+.msg.bot {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  margin-right: 0;
+}
+.msg.user {
+  background: var(--muted);
+  color: var(--foreground);
+  margin-left: auto;
+  max-inline-size: 85%;
+  padding: var(--gap-floor) var(--inset-floor);
+  border-radius: var(--radius-lg);
+  box-sizing: border-box;
+}
+.msg {
+  position: relative; /* the hidden name below is placed against the message, not the page */
+}
+.msg .who {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.msg .text {
+  line-height: 1.6;
+}
+.msg.refusal,
+.msg.error {
+  border: 2px solid var(--info, var(--ring));
+  border-radius: var(--radius-lg);
+  padding: var(--inset-floor);
+}
+.msg.error {
+  border-color: var(--destructive-text, var(--destructive));
+}
+/* A quiet row of actions under a reply. */
+.msg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-floor);
+  margin-top: var(--gap-floor);
+}
+.msg-actions .btn.link {
+  margin: 0;
+  min-height: var(--size-control-sm);
+  padding-inline: var(--gap-floor);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-small);
+  text-decoration: none;
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+}
+.msg-actions .btn.link:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+/* The composer: one big rounded container with the text above and its actions below. */
+.composer {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--gap-floor);
+  padding: var(--inset-floor);
+  border-radius: var(--radius-lg);
+}
+.composer textarea {
+  min-height: var(--target-floor);
+  max-height: 12rem;
+  padding: var(--gap-floor) 0;
+  border-radius: var(--radius-sm);
+}
+.composer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--gap-floor);
+}
+.send-round {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--size-control-sm);
+  block-size: var(--size-control-sm);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-sodalite-brand);
+  color: var(--color-sodalite-on-brand);
+  cursor: pointer;
+}
+.send-round:disabled {
+  background: var(--muted);
+  color: var(--muted-foreground);
+  cursor: not-allowed;
+}
+/* A short screen (a phone on its side): the text and the send button share one row, so the composer leaves room for the messages. */
+@media (max-height: 32rem) {
+  .composer {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+  .composer textarea {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+/* The open chat's tools (pin, project, delete) are a quiet row, not three bordered buttons. */
+.chat-tools {
+  padding-inline: 0;
+  justify-content: flex-start;
+}
+.chat-tools .btn,
+.chat-tools select {
+  min-height: var(--size-control-sm);
+  border-color: transparent;
+  background: transparent;
+  font-size: var(--fs-small);
+  border-radius: var(--radius-sm);
+}
+.chat-tools .btn:hover,
+.chat-tools select:hover {
+  background: var(--muted);
+}
+.side-group > summary > span {
+  flex: none;
+}
+
+/* ---- the composer's one edge, the chat's "..." menu, compact sources ------------------------------------------ */
+
+/* The container is the only edge. The text box inside has none of its own: no border, no fill. Its focus ring is the
+   container's (:focus-within); the box keeps a transparent outline, which a high-contrast mode still draws. */
+.composer textarea {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: 2px solid transparent;
+  outline-offset: 0;
+}
+.composer:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.composer-bar {
+  justify-content: space-between; /* "+" (attachments) at the left, send at the right */
+}
+.composer-bar > :only-child {
+  margin-inline-start: auto;
+}
+
+/* The title and its "..." in the top bar. */
+.chat-head {
+  display: flex;
+  align-items: center;
+  flex: 1 1 6rem;
+  min-width: 0;
+  gap: var(--gap-floor);
+}
+.chat-head .chat-title {
+  flex: 0 1 auto;
+}
+.chat-menu-btn {
+  flex: none;
+}
+/* The menu itself: a small popover under the button, not a loose toolbar above the thread. */
+#chat-tools:not(:popover-open) {
+  display: none;
+}
+#chat-tools[popover]:popover-open {
+  position: fixed;
+  inset: auto;
+  top: 3.25rem;
+  right: var(--page-inset);
+  margin: 0;
+  inline-size: min(16rem, calc(100vw - 2 * var(--page-inset)));
+  max-inline-size: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover, var(--background));
+  color: var(--popover-foreground, var(--foreground));
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+#chat-tools .btn,
+#chat-tools select {
+  justify-content: flex-start;
+  inline-size: 100%;
+  text-align: start;
+}
+
+/* Sources: one compact row each, the detail under a disclosure. */
+.cite {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gap-floor);
+  padding: 0;
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+}
+.cite-more {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+}
+.cite-more > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
+  min-height: var(--size-control-sm);
+  padding-inline: var(--inset-floor);
+  cursor: pointer;
+  list-style: none;
+  min-width: 0;
+}
+.cite-more > summary::-webkit-details-marker {
+  display: none;
+}
+.cite-more > summary > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-small);
+  font-weight: 500;
+}
+.cite-more[open] > summary > strong {
+  white-space: normal;
+}
+.cite-more > :not(summary) {
+  padding-inline: var(--inset-floor);
+  padding-block-end: var(--gap-floor);
+}
+.cite .cite-link {
+  flex: none;
+  min-height: var(--size-control-sm);
+  padding-inline: var(--gap-floor);
+  font-size: var(--fs-small);
+}
+.cite .badge {
+  flex: none;
 }
