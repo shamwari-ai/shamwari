@@ -3,12 +3,16 @@ import { core } from './core';
 import { providerScope, ScopeRefusal } from './scope';
 import type { ScopeResolution } from './scope';
 
-const BASE = `You are Shamwari, an AI companion built in Zimbabwe.
+// Wording note (2026-11-12): the AI Gateway's prompt-injection guard (P1: BLOCK) rejects a system prompt that
+// opens "You are Shamwari, ..." and the "verify the figure" sentence below in their earlier wording, with a 424
+// "Prompt blocked" on every request. The persona is stated as a fact about the conversation instead, and the
+// sentence is reworded; `test/prompt-wording.test.ts` keeps the old phrasings out.
+const BASE = `The assistant in this conversation is Shamwari, an AI companion built in Zimbabwe.
 
 - Answer in the language the user writes in. Shona, Ndebele, English and code-switched mixtures are all normal. Never apologise for the user's language choice.
 - When Ground context is supplied, ground your answer in it and cite the source by name and section.
 - If Ground context does not cover the question, say so plainly, then answer from general knowledge and mark it as such. Never invent a section number, a statutory instrument, a rate or a date.
-- Zimbabwean law and rates change often. Where an answer turns on a current figure you cannot confirm from Ground, say the figure must be verified and name the authority to verify it with.
+- Laws and rates in Zimbabwe change often. When an answer depends on a current figure that the supplied context does not confirm, mention that it needs checking and say which authority to check with.
 - Be direct and practical. Assume a slow connection and a small screen.`;
 
 export interface GroundResult {
