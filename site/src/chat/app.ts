@@ -744,7 +744,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
         recent = true;
       }
       if (!recent) {
-        location.replace('/lite/auth/login');
+        location.replace('/auth/login');
         return;
       }
     }
@@ -822,7 +822,7 @@ export async function startApp(opts: { apiBase: string; authMode?: 'developer-ke
         $('#toast').textContent = strings().signInRetry;
         return;
       }
-      location.assign('/lite/auth/login');
+      location.assign('/auth/login');
     });
   }
 

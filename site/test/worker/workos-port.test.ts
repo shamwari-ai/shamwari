@@ -6,7 +6,7 @@ import { jwt } from './helpers';
 const PASSWORD = 'p'.repeat(40);
 const env = {
   WORKOS_CLIENT_ID: 'client_01M68PCT0T5ECHKDYH45ECT0GV',
-  WORKOS_REDIRECT_URI: 'https://shamwari.ai/lite/callback',
+  WORKOS_REDIRECT_URI: 'https://shamwari.ai/callback',
   WORKOS_API_KEY: 'sk_test_x',
   COOKIE_PASSWORD: PASSWORD,
 };
@@ -112,7 +112,7 @@ describe('the WorkOS port', () => {
     expect(seen.url![0]).toEqual({
       provider: 'authkit',
       clientId: 'client_01M68PCT0T5ECHKDYH45ECT0GV',
-      redirectUri: 'https://shamwari.ai/lite/callback',
+      redirectUri: 'https://shamwari.ai/callback',
       state: 'ST',
     });
   });
