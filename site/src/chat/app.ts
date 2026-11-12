@@ -335,7 +335,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
       h('span', { 'aria-hidden': 'true' }, '…'),
     );
     more.addEventListener('click', () => openRowMenu(t, more));
-    return h('li', { class: 'chat-li' }, b, more);
+    return h('li', { class: 'chat-li', 'data-id': t.id }, b, more);
   };
 
   // ---- the menu of one chat in the list -------------------------------------------------------------------
@@ -343,6 +343,19 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   let menuFor: Thread | null = null;
   /** The thread a menu acts on: the open one is the live object, so a change is never written over by a stale copy. */
   const menuThread = (): Thread | null => (menuFor && menuFor.id === thread.id ? thread : menuFor);
+  // Closed (by an action, Escape or a click away): forget the chat, and the "..." is no longer expanded.
+  rowMenu.addEventListener('toggle', (e) => {
+    if ((e as Event & { newState?: string }).newState === 'closed') {
+      menuFor = null;
+      document.querySelectorAll('.row-more[aria-expanded="true"]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+    }
+  });
+  /** After the list is drawn again, focus goes back to that chat's "..." (or the first row), not to the top of the page. */
+  const focusRow = (id: string) =>
+    setTimeout(() => {
+      const more = [...document.querySelectorAll<HTMLElement>('#chat-sidebar li.chat-li')].find((li) => li.dataset.id === id)?.querySelector<HTMLElement>('.row-more');
+      (more ?? document.querySelector<HTMLElement>('#side-new'))?.focus();
+    }, 50);
   const openRowMenu = (t: Thread, anchor: HTMLElement) => {
     const s = strings();
     menuFor = t;
@@ -353,36 +366,35 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     sel.replaceChildren(h('option', { value: '' }, s.noProject), ...projectsNow.map((p) => h('option', { value: p.id }, p.name)));
     sel.value = t.projectId && projectsNow.some((p) => p.id === t.projectId) ? t.projectId : '';
     const r = anchor.getBoundingClientRect();
+    anchor.setAttribute('aria-expanded', 'true');
     rowMenu.style.top = `${Math.round(r.bottom + 4)}px`;
-    rowMenu.style.left = `${Math.max(8, Math.min(Math.round(r.left), innerWidth - 16 * 16 - 8))}px`;
+    rowMenu.style.left = `${Math.round(r.left)}px`;
     rowMenu.showPopover();
-    // Not off the bottom of the screen: if it does not fit under the "...", it opens above it.
-    const h2 = rowMenu.getBoundingClientRect().height;
-    if (r.bottom + 4 + h2 > innerHeight - 8) rowMenu.style.top = `${Math.max(8, Math.round(r.top - h2 - 4))}px`;
+    // Not off the screen: measured after it is shown. It opens above the "..." if there is no room below, and slides left if
+    // there is none at the right.
+    const box = rowMenu.getBoundingClientRect();
+    if (r.bottom + 4 + box.height > innerHeight - 8) rowMenu.style.top = `${Math.max(8, Math.round(r.top - box.height - 4))}px`;
+    rowMenu.style.left = `${Math.max(8, Math.min(Math.round(r.left), Math.round(innerWidth - box.width - 8)))}px`;
     $('#row-pin').focus();
   };
-  $('#row-pin').addEventListener('click', async () => {
-    const t = menuThread();
-    if (!t) return;
+  const togglePin = async (t: Thread) => {
     t.pinned = !t.pinned;
     await save(t);
-    rowMenu.hidePopover();
     void renderHistory();
-  });
-  $('#row-project').addEventListener('change', async () => {
-    const t = menuThread();
-    if (!t) return;
-    const id = $<HTMLSelectElement>('#row-project').value;
+  };
+  const moveToProject = async (t: Thread, id: string) => {
     if (id) t.projectId = id;
     else delete t.projectId;
     await save(t);
-    rowMenu.hidePopover();
     void renderHistory();
-  });
-  $('#row-delete').addEventListener('click', async () => {
-    const t = menuThread();
-    if (!t || !confirm(strings().deleteChatConfirm)) return;
-    rowMenu.hidePopover();
+  };
+  /** Delete one chat, after asking. The open one is replaced by a fresh chat. A chat that is still sending is not deleted. */
+  const deleteThread = async (t: Thread): Promise<boolean> => {
+    if (t.id !== thread.id && t.messages.some((m) => inflight.has(m.id) || m.status === 'queued')) {
+      $('#toast').textContent = strings().deleteWait; // its answer would bring it back
+      return false;
+    }
+    if (!confirm(strings().deleteChatConfirm)) return false;
     live.delete(t.id);
     const wasOpen = t.id === thread.id;
     t.messages = [];
@@ -393,6 +405,28 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
       input.focus();
     }
     void renderHistory();
+    return true;
+  };
+
+  $('#row-pin').addEventListener('click', async () => {
+    const t = menuThread();
+    if (!t) return;
+    rowMenu.hidePopover();
+    await togglePin(t);
+    focusRow(t.id);
+  });
+  $('#row-project').addEventListener('change', async () => {
+    const t = menuThread();
+    if (!t) return;
+    rowMenu.hidePopover();
+    await moveToProject(t, $<HTMLSelectElement>('#row-project').value);
+    focusRow(t.id);
+  });
+  $('#row-delete').addEventListener('click', async () => {
+    const t = menuThread();
+    if (!t) return;
+    rowMenu.hidePopover();
+    if (!(await deleteThread(t))) focusRow(t.id);
   });
 
   /** Loose chats under Today / Yesterday / Previous 7 days / Older, newest first. */
@@ -532,29 +566,11 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     sel.value = thread.projectId && projectsNow.some((p) => p.id === thread.projectId) ? thread.projectId : '';
   };
 
-  $('#pin-chat').addEventListener('click', async () => {
-    thread.pinned = !thread.pinned;
-    await save(thread);
-    void renderHistory();
-  });
-  $('#chat-project').addEventListener('change', async () => {
-    const id = $<HTMLSelectElement>('#chat-project').value;
-    if (id) thread.projectId = id;
-    else delete thread.projectId;
-    await save(thread);
-    void renderHistory();
-  });
+  $('#pin-chat').addEventListener('click', () => void togglePin(thread));
+  $('#chat-project').addEventListener('change', () => void moveToProject(thread, $<HTMLSelectElement>('#chat-project').value));
   $('#delete-chat').addEventListener('click', async () => {
-    if (!confirm(strings().deleteChatConfirm)) return;
     $('#chat-tools').hidePopover?.();
-    const gone = thread;
-    live.delete(gone.id);
-    gone.messages = [];
-    await save(gone); // an empty thread is removed from the store
-    thread = fresh();
-    rebuild();
-    void renderHistory();
-    input.focus();
+    await deleteThread(thread);
   });
   const projectForm = $<HTMLFormElement>('#project-form');
   const newProjectButton = $('#new-project');
