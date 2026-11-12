@@ -1094,8 +1094,8 @@ html[data-view='pending'] dialog {
    thin top bar, replies as plain prose, the person's own questions as a soft block, and the composer a single
    rounded container with a round send button. Sizes, colours and radii are Mzizi tokens; none is a number of ours. */
 html [data-slot='app-shell'] {
-  /* About 260px: 17rem leaves room for "Factory" and its "Coming soon" chip on one line with a wider fallback font too. */
-  --app-sidebar-w: 17rem;
+  /* 17.5rem (280px) is the width CI proved holds for "Factory" and its "Coming soon" chip on one line with a wider fallback font too. */
+  --app-sidebar-w: 17.5rem;
 }
 @media (min-width: 64rem) {
   .side-row.side-disabled {
