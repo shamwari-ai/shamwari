@@ -159,7 +159,7 @@ test('history stays on the device across reloads, new chat starts clean, delete 
   await expect(page.locator('#log article')).toHaveCount(0);
   await expect(page.locator('#q')).toBeFocused();
   await openChats(page);
-  await expect(page.locator('#history-list button')).toContainText('Is everyone equal');
+  await expect(page.locator('#history-list button.chat-row')).toContainText('Is everyone equal');
 
   page.once('dialog', (d) => d.accept());
   await openAccount(page);
@@ -304,7 +304,7 @@ test('picking an earlier chat closes the drawer, so the chat is not left covered
   await expect(page.locator('.cite-link').first()).toBeVisible();
   await newChat(page);
   await openChats(page);
-  await page.locator('#history-list button').first().click();
+  await page.locator('#history-list button.chat-row').first().click();
   await expect(page.locator('[data-slot="app-sidebar"]')).toBeHidden();
   await expect(page.locator('article.msg.bot').first()).toBeVisible();
 });

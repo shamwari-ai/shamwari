@@ -102,7 +102,7 @@ body {
 }
 [data-slot='app-topbar'] [data-slot='topbar-action'],
 [data-slot='app-topbar'] > button,
-[data-slot='app-sidebar'] button:not(.side-row, .btn, [role='tab']) {
+[data-slot='app-sidebar'] button:not(.side-row, .btn, .row-more, [role='tab']) {
   min-height: var(--target-floor);
   min-width: var(--target-floor);
 }
@@ -1553,4 +1553,89 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 }
 .cite .badge {
   flex: none;
+}
+
+/* ---- a chat row's own "..." menu --------------------------------------------------------------------------- */
+.chat-li {
+  position: relative;
+  list-style: none;
+}
+.row-more {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  font: inherit;
+  font-size: var(--fs-small);
+  line-height: 1;
+  cursor: pointer;
+}
+.row-more::after {
+  display: none;
+}
+/* A mouse: the "..." appears over the time, on hover and when anything in the row has focus. The row's own hit region and
+   this one overlap only while it is shown. */
+@media (hover: hover) and (pointer: fine) {
+  .row-more {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: var(--gap-floor);
+    inline-size: var(--size-control-sm);
+    block-size: var(--size-control-sm);
+    padding: 0;
+    display: inline-flex;
+    opacity: 0;
+    background: var(--muted);
+  }
+  .chat-li:hover .row-more,
+  .chat-li:focus-within .row-more,
+  .row-more[aria-expanded='true'] {
+    opacity: 1;
+  }
+  .chat-li:hover .chat-row-when,
+  .chat-li:focus-within .chat-row-when {
+    visibility: hidden;
+  }
+}
+/* A finger: no hover, so the "..." is always there, beside the row, not over it. */
+@media (hover: none), (pointer: coarse) {
+  .chat-li {
+    display: flex;
+    gap: var(--gap-floor);
+    align-items: stretch;
+  }
+  .chat-li > .chat-row {
+    flex: 1 1 0;
+    min-width: 0;
+    inline-size: auto;
+  }
+  .row-more {
+    flex: none;
+    display: inline-flex;
+    inline-size: var(--size-control-sm);
+    min-block-size: var(--size-control-sm);
+  }
+}
+/* The menu is the chat menu's look, anchored by script under the "...". */
+#row-menu:not(:popover-open) {
+  display: none;
+}
+#row-menu[popover]:popover-open {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  inline-size: 16rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover, var(--background));
+  color: var(--popover-foreground, var(--foreground));
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
 }
