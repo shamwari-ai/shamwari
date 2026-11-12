@@ -72,6 +72,23 @@ describe('ask()', () => {
     expect(called).toBe(false);
   });
 
+  it('stops when the caller aborts: an already stopped signal never waits for the answer, and a later one ends the wait', async () => {
+    const c = withKey('sk_shamwari_mock_ok');
+    const stopped = new AbortController();
+    stopped.abort();
+    const t0 = Date.now();
+    const r1 = await c.ask(q('hang forever'), { signal: stopped.signal });
+    expect(r1.ok).toBe(false);
+    if (!r1.ok) expect(r1.error.kind).toBe('offline'); // the shape of "the answer did not arrive"
+    expect(Date.now() - t0).toBeLessThan(5000);
+    const later = new AbortController();
+    const waiting = c.ask(q('hang forever'), { signal: later.signal });
+    setTimeout(() => later.abort(), 100);
+    const r2 = await waiting;
+    expect(r2.ok).toBe(false);
+    expect(Date.now() - t0).toBeLessThan(8000);
+  });
+
   it('treats a network failure as offline', async () => {
     const c = createClient({ baseUrl: 'http://127.0.0.1:1', getKey: () => 'sk_shamwari_x' });
     expect(await c.ask(q('hi'))).toMatchObject({ ok: false, error: { kind: 'offline' } });

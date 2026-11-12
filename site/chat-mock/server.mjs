@@ -13,6 +13,7 @@
 //   anything else not starting with sk_shamwari_  -> 401
 //   body.scope === 'personal'       -> 409 scope_requires_local_inference
 //   a question containing "slow"    -> answers after 3 s
+//   a question containing "hang"    -> answers after 60 s (a test stops it)
 //   a question containing "nosource"-> an answer with no citations
 import { createServer } from 'node:http';
 
@@ -127,6 +128,13 @@ export function createMock() {
 
     const q = String(body.messages.at(-1)?.content ?? '');
     if (/slow/i.test(q)) await new Promise((r) => setTimeout(r, 3000));
+    if (/\bhang\b/i.test(q)) {
+      // Never answers in time; a test stops it. The wait ends when the caller goes away, so it does not hold the server open.
+      await new Promise((r) => {
+        const t = setTimeout(r, 60_000);
+        req.on('close', () => (clearTimeout(t), r(undefined)));
+      });
+    }
     const fx = FIXTURES.find((f) => f.match.test(q));
     const out = {
       id: `mock-${Math.random().toString(36).slice(2, 10)}`,
