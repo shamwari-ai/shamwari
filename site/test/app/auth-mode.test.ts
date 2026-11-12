@@ -5,7 +5,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { authModeOf } from '../../src/chat/auth-mode';
-// @ts-expect-error a plain .mjs module shared with check.mjs
 import { authModeProblem, builtAuthMode } from '../../check-auth-mode.mjs';
 
 describe('authModeOf: Mukoko sign-in is the default', () => {
