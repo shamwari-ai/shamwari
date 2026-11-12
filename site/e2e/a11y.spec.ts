@@ -236,7 +236,7 @@ test('Settings and the chats drawer meet the Bundu floor', async ({ page }) => {
   await openAccount(page);
   expect(await underTheFloor(page), 'settings open').toEqual([]);
   await page.locator('details.account summary').click();
-  await expect(page.locator('#history-list button').first()).toBeVisible();
+  await expect(page.locator('#history-list button.chat-row').first()).toBeVisible();
   expect(await underTheFloor(page), 'drawer open').toEqual([]);
 });
 

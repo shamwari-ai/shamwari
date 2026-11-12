@@ -24,7 +24,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await ask(page, 'Is it legal?'); // a chat with a short title, so the history list has one row that does not wrap
       await expect(page.locator('.cite-link').first()).toBeVisible();
       await page.locator('#side-new').click();
-      await expect(page.locator('#history-list button').first()).toBeVisible();
+      await expect(page.locator('#history-list button.chat-row').first()).toBeVisible();
 
       expect(await page.evaluate(() => matchMedia('(pointer: fine) and (hover: hover)').matches)).toBe(true);
       expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--size-control-sm').trim())).toBe('2rem');
@@ -173,4 +173,21 @@ test('clutter is gone: the version line is in Settings (not the drawer foot) and
   await expect(page.locator('details.account #install')).toHaveCount(1);
   await expect(page.locator('.thread #install, #empty #install')).toHaveCount(0);
   await expect(page.locator('p.install')).toHaveCount(0);
+});
+
+test('a chat row shows its "..." on hover (over the time) and keeps a 32px hit region', async ({ page }) => {
+  await openChat(page);
+  await ask(page, 'Is it legal?');
+  await expect(page.locator('.cite-link').first()).toBeVisible();
+  await page.locator('#side-new').click();
+  const li = page.locator('#history-list li.chat-li').first();
+  const more = li.locator('.row-more');
+  expect(await more.evaluate((el) => getComputedStyle(el).opacity), 'hidden at rest').toBe('0');
+  await li.hover();
+  await expect(more).toHaveCSS('opacity', '1');
+  await expect(li.locator('.chat-row-when')).toHaveCSS('visibility', 'hidden');
+  const box = (await more.boundingBox())!;
+  expect(Math.round(box.height)).toBe(32);
+  await more.click();
+  await expect(page.locator('#row-menu')).toBeVisible();
 });

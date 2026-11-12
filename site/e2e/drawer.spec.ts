@@ -113,7 +113,7 @@ test('a long chat title wraps inside the drawer instead of widening it', async (
   const m = await page.evaluate(() => {
     const el = document.querySelector('.chats') as HTMLElement;
     const side = document.querySelector('#chat-sidebar') as HTMLElement;
-    return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth, sideRight: side.getBoundingClientRect().right, maxRight: Math.max(...[...document.querySelectorAll('#history-list button')].map((b) => b.getBoundingClientRect().right)) };
+    return { scrollWidth: el.scrollWidth, clientWidth: el.clientWidth, sideRight: side.getBoundingClientRect().right, maxRight: Math.max(...[...document.querySelectorAll('#history-list button.chat-row')].map((b) => b.getBoundingClientRect().right)) };
   });
   expect(m.scrollWidth, 'nothing in the drawer scrolls sideways').toBeLessThanOrEqual(m.clientWidth);
   expect(m.maxRight, 'every title ends inside the drawer').toBeLessThanOrEqual(m.sideRight);

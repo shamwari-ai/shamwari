@@ -81,6 +81,14 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
           <li><button type="button" class="side-row" data-section="plugins"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span></button></li>
         </ul>
       </nav>
+      <!-- The menu of one chat in the list (opened by its "..."): pin, project, delete. One shared popover, inside the drawer so
+           opening it does not close the drawer. -->
+      <div id="row-menu" class="chat-tools row-menu" popover role="group" aria-label={en.chatOptions} data-i18n-attr="aria-label:chatOptions">
+        <button type="button" id="row-pin" class="btn" aria-pressed="false">{en.pin}</button>
+        <label class="sr-only" for="row-project" data-i18n="project">{en.project}</label>
+        <select id="row-project"></select>
+        <button type="button" id="row-delete" class="btn danger" data-i18n="deleteChat">{en.deleteChat}</button>
+      </div>
       <div class="side-scroll">
       <div data-panel="chat">
       <details id="side-pinned" class="side-group" open hidden>
@@ -226,14 +234,28 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
         <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
         <form id="composer" class="composer" autocomplete="off">
           <label class="sr-only" for="q" data-i18n="placeholder">Ask a question</label>
+          <ul id="attach-list" class="attach-list" hidden aria-label={en.attachments} data-i18n-attr="aria-label:attachments"></ul>
           <textarea id="q" rows="1" enterkeyhint="send" data-i18n-attr="placeholder:placeholder" placeholder="Ask a question"></textarea>
           <div class="composer-bar">
+            <button type="button" id="plus" class="bar-icon" aria-haspopup="true" aria-expanded="false" aria-controls="plus-menu" aria-label={en.addTo} data-i18n-attr="aria-label:addTo">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
+            <span class="composer-gap"></span>
+            <button type="button" id="mic" class="bar-icon" aria-pressed="false" aria-label={en.recordVoice} data-i18n-attr="aria-label:recordVoice">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
+            </button>
             <button type="submit" id="send" class="send-round" disabled aria-label={en.send} data-i18n-attr="aria-label:send">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
               <span class="sr-only" data-i18n="send">{en.send}</span>
             </button>
           </div>
         </form>
+        <!-- The "+" menu. Upload a file is all it holds for now: a skills entry is added when Skills has something in it. Files stay
+             on this device; see chat/attach.ts. -->
+        <div id="plus-menu" class="chat-tools plus-menu" popover role="group" aria-label={en.addTo} data-i18n-attr="aria-label:addTo">
+          <button type="button" id="plus-upload" class="btn" data-i18n="uploadFile">{en.uploadFile}</button>
+        </div>
+        <input type="file" id="file-input" multiple hidden />
         <p id="toast" class="toast" role="status"></p>
       </section>
     </div>
