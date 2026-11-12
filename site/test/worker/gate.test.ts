@@ -34,7 +34,7 @@ describe('the gate: no session, no app', () => {
       const { d, log } = deps();
       const res = await gate(req(path), d);
       expect(res.status, path).toBe(302);
-      expect(res.headers.get('Location'), path).toBe('/lite/auth/login');
+      expect(res.headers.get('Location'), path).toBe('/auth/login');
       expect(res.headers.get('Cache-Control')).toBe('no-store');
       expect(await res.text()).not.toContain('APP-CONTENT');
       expect(log.filter((l) => l.startsWith('asset')), path).toEqual([]);
@@ -51,12 +51,39 @@ describe('the gate: no session, no app', () => {
     }
   });
 
+  it('with an old /lite/ cookie and a new one both sent, the first copy that is a session decides: a spent old copy never turns away a good new one', async () => {
+    const log: string[] = [];
+    const d: GateDeps = {
+      async check(sealed) {
+        log.push(`check:${sealed}`);
+        return sealed === 'OLD' ? { status: 'invalid' } : { status: 'valid', accessToken: 'a', sid: 's' };
+      },
+      async asset() {
+        return new Response('APP-CONTENT', { status: 200 });
+      },
+    };
+    const both = new Request(`${HOST}/lite/`, { headers: { Cookie: `${SESSION_COOKIE}=OLD; ${SESSION_COOKIE}=NEW` } });
+    const res = await gate(both, d);
+    expect(res.status).toBe(200);
+    expect(log).toEqual(['check:OLD', 'check:NEW']);
+    // When every copy is invalid, nothing is served and both places are cleared.
+    const none = await gate(
+      new Request(`${HOST}/lite/`, { headers: { Cookie: `${SESSION_COOKIE}=A; ${SESSION_COOKIE}=B` } }),
+      deps({ status: 'invalid' }).d,
+    );
+    expect(none.status).toBe(302);
+  });
+
   it('refuses a cookie that is not a session, clears it, and still serves nothing', async () => {
     const { d, log } = deps({ status: 'invalid' });
     const res = await gate(req('/lite/', 'FORGED'), d);
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe('/lite/auth/login');
+    expect(res.headers.get('Location')).toBe('/auth/login');
     expect(res.headers.get('Set-Cookie')).toContain('Max-Age=0');
+    // Cleared at the root and at the old /lite/ path, so no copy of the session is left behind.
+    const cleared = res.headers.getSetCookie();
+    expect(cleared.some((c) => c.includes('Path=/;'))).toBe(true);
+    expect(cleared.some((c) => c.includes('Path=/lite/;'))).toBe(true);
     expect(log).toEqual(['check:FORGED']);
   });
 
@@ -185,7 +212,7 @@ describe('the session cookie reaches everything the gate protects (the productio
     for (const p of ['/_astro/index.Abc123.js', '/assets/x.js', '/index.html', '/favicon.ico']) expect(isGated(p), p).toBe(false);
   });
 
-  it('with the cookie a browser would really hold (Path=/lite/), the real build loads: the page and every script and stylesheet it names answer 200', async () => {
+  it('with the cookie a browser would really hold (Path=/), the real build loads: the page and every script and stylesheet it names answer 200', async () => {
     let dist: string;
     try {
       dist = join(__dirname, '../../dist-app');
@@ -250,6 +277,6 @@ describe('the Worker in front of the gate', () => {
 
   it('keeps app/wrangler.jsonc routing the gated area to the Worker', () => {
     const text = readFileSync(join(__dirname, '../../app/wrangler.jsonc'), 'utf8');
-    expect(text).toContain('"run_worker_first": ["/", "/lite/*"]');
+    expect(text).toContain('"run_worker_first": ["/", "/auth/*", "/callback", "/lite/*"]');
   });
 });
