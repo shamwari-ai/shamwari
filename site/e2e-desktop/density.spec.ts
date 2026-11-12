@@ -180,14 +180,17 @@ test('a chat row shows its "..." on hover (over the time) and keeps a 32px hit r
   await ask(page, 'Is it legal?');
   await expect(page.locator('.cite-link').first()).toBeVisible();
   await page.locator('#side-new').click();
+  // The list is drawn again when a question finishes (after its answer is on the screen), which can land just around this click and
+  // REPLACES the row. An element read in that moment is detached, and a detached element has no computed style (opacity reads as
+  // ""). So every check below is an assertion that looks the row up again each time it tries, never a value read once.
   const li = page.locator('#history-list li.chat-li').first();
   const more = li.locator('.row-more');
-  expect(await more.evaluate((el) => getComputedStyle(el).opacity), 'hidden at rest').toBe('0');
+  await expect(li).toBeVisible();
+  await expect(more, 'hidden at rest').toHaveCSS('opacity', '0');
   await li.hover();
-  await expect(more).toHaveCSS('opacity', '1');
+  await expect(more, 'shown on hover').toHaveCSS('opacity', '1');
   await expect(li.locator('.chat-row-when')).toHaveCSS('visibility', 'hidden');
-  const box = (await more.boundingBox())!;
-  expect(Math.round(box.height)).toBe(32);
+  await expect.poll(async () => Math.round((await more.boundingBox())?.height ?? 0), 'a 32px hit region').toBe(32);
   await more.click();
   await expect(page.locator('#row-menu')).toBeVisible();
 });
