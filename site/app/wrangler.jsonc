@@ -56,7 +56,7 @@
   // ever in this file or in git. WORKOS_API_KEY is the Mukoko Account WorkOS environment's API key and
   // COOKIE_PASSWORD (at least 32 characters) seals the session cookie. Every Mukoko app signs in through
   // that one environment (owner, 2026-11-11), so these are the shared Mukoko secrets, not new ones.
-  // Until both resolve the auth routes answer 503 and the page stays on its developer-key mode. For local
+  // Until both resolve the auth routes answer 503 and the page cannot sign anyone in (the page is built in Mukoko sign-in mode, the default). For local
   // runs only, put both in .dev.vars (git-ignored).
   "secrets_store_secrets": [
     {

@@ -1,5 +1,6 @@
 import { startApp } from './app';
 import { LANGUAGES } from './strings';
+import { authModeOf } from './auth-mode';
 import { whenIdle } from './busy';
 import { reloadOnTakeover, startUpdateChecks } from './update-reload';
 
@@ -18,8 +19,8 @@ if (select) {
     select.append(o);
   }
 }
-// Off unless the build says otherwise (PUBLIC_CHAT_AUTH=mukoko).
-const authMode = document.querySelector<HTMLMetaElement>('meta[name="shamwari-auth"]')?.content === 'mukoko' ? 'mukoko' : 'developer-key';
+// Mukoko unless the build asked for the developer-key screen by name (chat/auth-mode.ts).
+const authMode = authModeOf(document.querySelector<HTMLMetaElement>('meta[name="shamwari-auth"]')?.content);
 if (apiBase) {
   void startApp({ apiBase, authMode });
 }

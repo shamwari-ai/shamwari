@@ -172,7 +172,7 @@ the second replaces the first without touching the chat:
    in from the cookie. Being offline is not being signed out: a non-secret
    "signed in before" yes/no (`shamwari.mukoko.hint`) is the only thing kept, so
    an offline reload does not throw a signed-in person at the sign-in screen.
-   **The flag is a build setting, `PUBLIC_CHAT_AUTH=mukoko`, and is off.** The
+   **Mukoko sign-in is the default build mode** (`site/src/chat/auth-mode.ts`); the developer-key screen is built only by `PUBLIC_CHAT_AUTH=developer-key`, and `node check.mjs app` plus `test/app/auth-mode.test.ts` fail a build that comes out in any other mode. The
    session Worker itself (login, callback, cookie, refresh) is a design in
    `docs/chat-signin.md` on #130, not code; the e2e tests run against a stand-in
    for it (`e2e/serve.mjs --stub-auth`). A found-and-fixed detail: the service
