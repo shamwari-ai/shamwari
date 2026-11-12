@@ -80,7 +80,7 @@ test('the shell opens from the service worker with no network at all', async ({ 
   await context.setOffline(true);
   await page.reload();
   await page.waitForSelector('html[data-ready="true"]');
-  await expect(page.getByRole('heading', { name: 'Shamwari Chat' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('Is everyone equal'); // the chat's title is the page's heading
   // History is on the device, so the earlier answer is there too.
   await expect(page.locator('.cite').first()).toBeVisible();
   await expect(page.locator('#offline')).toBeVisible();
@@ -266,7 +266,8 @@ test('asking is never blocked by a question already on its way', async ({ page }
   await openChat(page);
   await ask(page, 'slow answer please'); // held for 3 s
   await expect(page.locator('.pending')).toBeVisible();
-  await expect(page.locator('#send')).toBeEnabled();
+  await page.locator('#q').fill('Is everyone equal under the law?');
+  await expect(page.locator('#send')).toBeEnabled(); // an answer on its way does not hold the button; only an empty box does
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('article.msg.bot:not(.pending) .cite')).toHaveCount(2 + 1, { timeout: 15_000 }); // 1 + 2 sources
 });

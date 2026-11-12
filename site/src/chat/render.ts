@@ -44,13 +44,23 @@ export function renderCitation(c: Citation, s: Strings, lang: Language): HTMLEle
   const meta = [c.authority, c.effective_from ? `${s.effective} ${formatDate(c.effective_from, lang)}` : '']
     .filter(Boolean)
     .join(' · ');
+  // One compact row: the Ground badge and the section (or the document's title), then a small "open" link. The rest (the
+  // document, who made it, when it took effect) opens under it, so the answer's words lead and the detail is one tap away.
   return h(
     'li',
     { class: 'cite' },
-    h('span', { class: 'badge', title: s.groundHint }, s.ground),
-    c.heading ? h('strong', { class: 'cite-heading' }, c.heading) : null,
-    h('span', { class: 'cite-title' }, c.title),
-    meta ? h('span', { class: 'cite-meta' }, meta) : null,
+    h(
+      'details',
+      { class: 'cite-more' },
+      h(
+        'summary',
+        {},
+        h('span', { class: 'badge', title: s.groundHint }, s.ground),
+        h('strong', { class: c.heading ? 'cite-heading' : 'cite-title' }, c.heading || c.title),
+      ),
+      c.heading ? h('span', { class: 'cite-title' }, c.title) : null,
+      meta ? h('span', { class: 'cite-meta' }, meta) : null,
+    ),
     c.url
       ? h('a', { class: 'cite-link', href: c.url, target: '_blank', rel: 'noopener noreferrer' }, s.openSource)
       : null,
@@ -66,6 +76,19 @@ export function renderAnswer(
 ): HTMLElement {
   const save = onSave ? h('button', { type: 'button', class: 'btn link save-answer' }, s.saveAnswer) : null;
   save?.addEventListener('click', onSave!);
+  // Copy: the answer's own words, to the clipboard. Where the browser has no clipboard the button is simply not offered.
+  const copy = typeof navigator.clipboard?.writeText === 'function' ? h('button', { type: 'button', class: 'btn link copy-answer' }, s.copyAnswer) : null;
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+  copy?.addEventListener('click', () => {
+    void navigator.clipboard.writeText(a.text).then(
+      () => {
+        copy.textContent = s.copied;
+        clearTimeout(copiedTimer);
+        copiedTimer = setTimeout(() => (copy.textContent = s.copyAnswer), 1500);
+      },
+      () => undefined,
+    );
+  });
   return h(
     'article',
     { class: 'msg bot', 'data-id': m.id, 'aria-label': s.shamwari },
@@ -81,7 +104,7 @@ export function renderAnswer(
         )
       : h('p', { class: 'note' }, s.noSources),
     h('p', { class: 'meta' }, `${s.scopeLabel}: ${s.scope[a.scope]}`),
-    save,
+    copy || save ? h('div', { class: 'msg-actions' }, copy, save) : null,
   );
 }
 
