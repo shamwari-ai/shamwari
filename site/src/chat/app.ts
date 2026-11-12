@@ -203,6 +203,18 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
 
   const syncEmpty = () => {
     $('#empty').hidden = thread.messages.length > 0;
+    // The page's one heading. With no messages it is the app's name, for screen readers only; with messages it is the
+    // chat's title, shown in the top bar. data-i18n is dropped while it shows a title so a language change leaves it alone.
+    const heading = $('#chat-title');
+    const titled = thread.messages.length > 0;
+    heading.classList.toggle('sr-only', !titled);
+    if (titled) {
+      heading.removeAttribute('data-i18n');
+      heading.textContent = thread.title || strings().appName; // never an empty heading
+    } else {
+      heading.setAttribute('data-i18n', 'appName');
+      heading.textContent = strings().appName;
+    }
   };
 
   const rebuild = () => {
@@ -288,12 +300,77 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   };
   document.querySelectorAll<HTMLElement>('[data-section]').forEach((b) => b.addEventListener('click', () => showSection(b.dataset.section as Section)));
 
+  /** The muted time at the right of a history row: the hour today, the weekday this week, else the day and month. */
+  const whenOf = (at: number): string => {
+    const d = new Date(at);
+    const days = daysAgo(at);
+    try {
+      if (days <= 0) return d.toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' });
+      if (days < 7) return d.toLocaleDateString(lang, { weekday: 'short' });
+      return d.toLocaleDateString(lang, { day: 'numeric', month: 'short' });
+    } catch {
+      return '';
+    }
+  };
+  const startOfDay = (at: number): number => {
+    const d = new Date(at);
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  };
+  /** Whole calendar days from `at` to now. Rounded, not floored: a day with a clock change is 23 or 25 hours long. */
+  const daysAgo = (at: number): number => Math.round((startOfDay(Date.now()) - startOfDay(at)) / 86_400_000);
+
   const threadButton = (t: Thread): HTMLElement => {
-    const b = h('button', { type: 'button', class: 'btn link' }, t.title || '…');
+    const b = h(
+      'button',
+      { type: 'button', class: 'btn link side-row chat-row', title: t.title || '' },
+      h('span', { class: 'chat-row-title' }, t.title || '…'),
+      h('span', { class: 'chat-row-when', 'aria-hidden': 'true' }, whenOf(t.updatedAt)),
+    );
     if (t.id === thread.id) b.setAttribute('aria-current', 'true');
     b.addEventListener('click', () => void openThread(t.id));
     return h('li', {}, b);
   };
+
+  /** Loose chats under Today / Yesterday / Previous 7 days / Older, newest first. */
+  const groupedChats = (chats: Thread[], s: ReturnType<typeof strings>): HTMLElement[] => {
+    const buckets: [string, Thread[]][] = [
+      [s.groupToday, []],
+      [s.groupYesterday, []],
+      [s.groupWeek, []],
+      [s.groupOlder, []],
+    ];
+    for (const t of chats) {
+      const days = daysAgo(t.updatedAt);
+      buckets[days <= 0 ? 0 : days === 1 ? 1 : days < 7 ? 2 : 3]![1].push(t);
+    }
+    return buckets
+      .filter(([, list]) => list.length)
+      .map(([name, list]) => h('li', { class: 'side-date-group' }, h('h2', { class: 'side-date' }, name), h('ul', { class: 'side-list' }, ...list.map(threadButton))));
+  };
+
+  // Search: a row that opens a field; typing narrows the chat lists to titles that contain the words.
+  let filterText = '';
+  const filterWrap = $('#side-filter-wrap');
+  const filterBox = $<HTMLInputElement>('#side-filter');
+  const searchRow = $('#side-search');
+  searchRow.addEventListener('click', () => {
+    const open = filterWrap.hidden;
+    filterWrap.hidden = !open;
+    searchRow.setAttribute('aria-expanded', String(open));
+    if (open) filterBox.focus();
+    else {
+      filterBox.value = '';
+      filterText = '';
+      void renderHistory();
+    }
+  });
+  filterBox.addEventListener('input', () => {
+    filterText = filterBox.value.trim().toLowerCase();
+    void renderHistory();
+  });
+  filterBox.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') searchRow.click();
+  });
 
   const saveProject = async (p: Project) => {
     p.updatedAt = Date.now();
@@ -309,7 +386,8 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   const renderHistory = async () => {
     const s = strings();
     const gen = store.generation;
-    const all = (await listThreads()).filter((t) => t.messages.length);
+    const everyChat = (await listThreads()).filter((t) => t.messages.length);
+    const all = filterText ? everyChat.filter((t) => (t.title || '').toLowerCase().includes(filterText)) : everyChat;
     projectsNow = await store.projects().catch(() => [] as Project[]);
     const artifacts = await store.artifacts().catch(() => [] as Artifact[]);
     if (gen !== store.generation) return; // a switch happened while this was reading: the next render is the right one
@@ -318,19 +396,21 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     const pinnedProjects = projectsNow.filter((p) => p.pinned);
     const pinnedChats = all.filter((t) => t.pinned);
     $('#pinned-list').replaceChildren(
-      ...pinnedProjects.map((p) => projectItem(p, all, s)),
+      ...pinnedProjects.map((p) => projectItem(p, everyChat, s)),
       ...pinnedChats.map(threadButton),
     );
     $('#side-pinned').hidden = pinnedProjects.length + pinnedChats.length === 0;
 
     // Projects (the pinned ones are listed again here: Pinned is a shortcut, not a move).
-    $('#project-list').replaceChildren(...projectsNow.map((p) => projectItem(p, all, s)));
+    $('#project-list').replaceChildren(...projectsNow.map((p) => projectItem(p, everyChat, s)));
 
-    // Loose chats: not pinned, not in a project, not the one on screen.
-    const loose = all.filter((t) => t.id !== thread.id && !t.pinned && !t.projectId);
-    $('#history-list').replaceChildren(...loose.map(threadButton));
+    // Loose chats: not pinned, not in a project. The one on screen is among them, marked as the current one.
+    const loose = all.filter((t) => !t.pinned && !t.projectId);
+    $('#history-list').replaceChildren(...groupedChats(loose, s));
     $('#side-chats').hidden = loose.length === 0;
-    $('#chats-empty').hidden = loose.length + pinnedProjects.length + pinnedChats.length > 0;
+    const none = loose.length + pinnedProjects.length + pinnedChats.length === 0;
+    $('#chats-empty').hidden = !none;
+    $('#chats-empty').textContent = filterText && none ? s.noMatches : s.chatsEmpty;
 
     $('#artifact-list').replaceChildren(
       ...artifacts.map((a) => {
@@ -827,8 +907,10 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   }
 
   // ---- controls ------------------------------------------------------------
+  const sendBtn = $<HTMLButtonElement>('#send');
   const autosize = () => {
     setBusy('draft', input.value.trim() !== ''); // text in the question box is not reloaded away by a release
+    sendBtn.disabled = input.value.trim() === ''; // the round send button is muted until there is something to send
     input.style.height = 'auto';
     input.style.height = `${Math.min(input.scrollHeight, 128)}px`;
   };
@@ -863,6 +945,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     document.querySelector<HTMLButtonElement>('#new-chat button')?.click();
   });
   $('#new-chat').addEventListener('click', () => {
+    if (filterText) searchRow.click(); // a new chat starts with the whole list, not a search for the last one
     showSection('chat'); // a new chat is a chat: the drawer's next opening shows the chats again
     if (thread.messages.length) {
       thread = fresh();

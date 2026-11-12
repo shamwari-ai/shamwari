@@ -29,8 +29,8 @@ for (const scheme of ['light', 'dark'] as const) {
       expect(await page.evaluate(() => matchMedia('(pointer: fine) and (hover: hover)').matches)).toBe(true);
       expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--size-control-sm').trim())).toBe('2rem');
 
-      const list = [...(await rows(page, '.side-row')), ...(await rows(page, '#history-list .btn.link'))].sort((a, b) => a.top - b.top);
-      expect(list.length, 'section rows, foot rows and a chat title').toBeGreaterThanOrEqual(9);
+      const list = (await rows(page, '.side-row')).sort((a, b) => a.top - b.top);
+      expect(list.length, 'new chat, search, section rows, a chat title and the account row').toBeGreaterThanOrEqual(8);
       for (const r of list) expect(r.h, r.text).toBeGreaterThanOrEqual(31.5);
       for (const r of list) expect(r.h, `${r.text} is drawn at 32px, not 49`).toBeLessThanOrEqual(33);
       for (let i = 1; i < list.length; i++) {
@@ -63,11 +63,13 @@ for (const scheme of ['light', 'dark'] as const) {
       expect((await style('button.side-row[data-section="projects"]')).bg).not.toBe('rgba(0, 0, 0, 0)');
     });
 
-    test(`the foot rows are text only: no icon of any kind (${scheme})`, async ({ page }) => {
+    test(`the account row is the only thing in the foot; the links inside Settings are text only (${scheme})`, async ({ page }) => {
       await openChat(page);
-      const foot = await rows(page, '.side-nav .side-row');
-      expect(foot.map((r) => r.text.replace(/\(opens in a new tab\)/, '').trim())).toEqual(['Use the API', 'Disclaimer and privacy', 'Settings']);
-      for (const r of foot) expect(r.svgs, `${r.text} has no icon`).toBe(0);
+      expect((await rows(page, '.side-foot > .side-nav > details > summary')).map((r) => r.text)).toEqual(['Settings']);
+      await page.locator('details.account summary').click();
+      const links = await rows(page, '.settings-panel a.side-row');
+      expect(links.map((r) => r.text.replace(/\(opens in a new tab\)/, '').trim())).toEqual(['Use the API', 'Disclaimer and privacy']);
+      for (const r of links) expect(r.svgs, `${r.text} has no icon`).toBe(0);
     });
   });
 }
@@ -104,16 +106,16 @@ for (const width of [1000, 1280, 1440]) {
 
       // Every row label and chip is one line: "Factory" is not "Factor / y", "Coming soon" is not two lines.
       // (the visible spans only: the screen-reader-only note on Use the API is clipped text, not a drawn line)
-      const labels = await lines(page, '.side-row > span:not(.sr-only)');
-      expect(labels.length).toBeGreaterThanOrEqual(8);
+      const labels = await lines(page, '.side-row > span:not(.sr-only, .chat-row-title, .chat-row-when)');
+      expect(labels.length).toBeGreaterThanOrEqual(7);
       for (const l of labels) expect(l.lines, `"${l.text}" is on one line`).toBe(1);
       const factory = await page.locator('.side-row.side-disabled').evaluate((el) => el.getBoundingClientRect().height);
       expect(factory, 'the Factory row is one row high, chip included').toBeLessThanOrEqual(popover ? 50 : 33);
 
       if (!popover) {
         const w = await page.locator('[data-slot="app-sidebar"]').evaluate((el) => el.getBoundingClientRect().width);
-        expect(w, 'a fixed sidebar column of about 280px').toBeGreaterThanOrEqual(272);
-        expect(w).toBeLessThanOrEqual(288);
+        expect(w, 'a slim sidebar column of about 260px').toBeGreaterThanOrEqual(252);
+        expect(w).toBeLessThanOrEqual(268);
       }
       // The sidebar's own labels fit their rows without being cut (no horizontal overflow inside the drawer).
       expect(await page.locator('.chats').evaluate((el) => el.scrollWidth <= el.clientWidth + 1), 'the drawer does not scroll sideways').toBe(true);
@@ -137,14 +139,14 @@ for (const width of [1000, 1280, 1440]) {
   }
 }
 
-test('no control is a marketing pill: buttons, suggestion chips, Send and New chat use the small radius', async ({ page }) => {
+test('no control is a marketing pill: buttons and suggestion chips use the small radius, the composer a soft one; only Send is round', async ({ page }) => {
   await openChat(page);
   const radii = await page.evaluate(() => {
     const r = (sel: string) => {
       const el = document.querySelector(sel);
       return el ? parseFloat(getComputedStyle(el).borderTopLeftRadius) : null;
     };
-    return { newChat: r('#side-new'), send: r('#send'), chip: r('.btn.chip'), composer: r('.composer') };
+    return { newChat: r('#side-new'), chip: r('.btn.chip'), composer: r('.composer') };
   });
   for (const [name, v] of Object.entries(radii)) {
     expect(v, name).not.toBeNull();
@@ -152,15 +154,16 @@ test('no control is a marketing pill: buttons, suggestion chips, Send and New ch
   }
 });
 
-test('hierarchy: New chat is a quiet outline, the composer is the filled control, the foot rows sit under one hairline', async ({ page }) => {
+test('hierarchy: New chat is a plain row, the round send button is the one filled control and is muted until there is text', async ({ page }) => {
   await openChat(page);
   const bg = (sel: string) => page.locator(sel).first().evaluate((el) => getComputedStyle(el).backgroundColor);
   expect(await bg('#side-new'), 'New chat has no fill').toBe('rgba(0, 0, 0, 0)');
-  expect(await bg('#send'), 'Send is the filled control').not.toBe('rgba(0, 0, 0, 0)');
-  const border = await page.locator('.side-nav').evaluate((el) => ({ w: parseFloat(getComputedStyle(el).borderTopWidth), s: getComputedStyle(el).borderTopStyle }));
-  expect(border.s).toBe('solid');
-  expect(border.w, 'one hairline').toBeGreaterThan(0);
-  expect(border.w).toBeLessThanOrEqual(1);
+  await expect(page.locator('#send')).toBeDisabled();
+  const muted = await bg('#send');
+  await page.locator('#q').fill('hello');
+  await expect(page.locator('#send')).toBeEnabled();
+  expect(await bg('#send'), 'Send fills in once there is text').not.toBe(muted);
+  expect(await page.locator('#send').evaluate((el) => getComputedStyle(el).borderTopLeftRadius), 'a round button').toBe('50%');
 });
 
 test('clutter is gone: the version line is in Settings (not the drawer foot) and Install is in Settings (not above the composer)', async ({ page }) => {
