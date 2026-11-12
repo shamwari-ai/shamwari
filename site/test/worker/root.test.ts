@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import worker, { SESSION_PATHS } from '../../worker/index';
+import { GATED_PREFIXES } from '../../worker/gate';
+import { AUTH_ROUTES, LEGACY_ROUTES, SESSION_COOKIE } from '../../worker/session';
 import { CHAT, LITE, chooseDestination, rootResponse } from '../../worker/root';
 
 const get = (headers: Record<string, string> = {}, cf?: { clientTcpRtt?: number }) => {
@@ -63,7 +65,7 @@ describe('the root answer', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('Location')).toBe(CHAT);
     expect(res.headers.get('Cache-Control')).toBe('no-store');
-    expect(res.headers.get('Vary')).toBe('Save-Data, ECT, Downlink, RTT');
+    expect(res.headers.get('Vary')).toBe('Save-Data, ECT, Downlink, RTT, Cookie');
     expect(res.headers.get('Accept-CH')).toBe('ECT, Downlink, RTT');
     expect(res.headers.get('Critical-CH')).toBe('ECT, Downlink, RTT');
   });
@@ -71,27 +73,36 @@ describe('the root answer', () => {
 
 describe('the Worker', () => {
   const ctx = { waitUntil: () => {} };
+  /** A visitor who carries a session cookie. With no secrets bound the Worker cannot check it and sends them on to the app (whose own gate decides). */
+  const withCookie = (headers: Record<string, string> = {}) => get({ ...headers, Cookie: `${SESSION_COOKIE}=sealed` });
 
-  it('answers the root with no secrets bound, which sign-in cannot do', async () => {
+  it('sends a visitor with no session cookie straight to sign-in, before any secret or WorkOS is touched', async () => {
     const res = await worker.fetch(get(), {}, ctx);
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe(LITE);
+    expect(res.headers.get('Location')).toBe('/auth/login');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
     // Sign-in with nothing configured is a 503, not the root's business (and not a redirect to the app: the gate would loop).
-    const login = await worker.fetch(new Request('https://shamwari.ai/lite/auth/login'), {}, ctx);
+    const login = await worker.fetch(new Request('https://shamwari.ai/auth/login'), {}, ctx);
     expect(login.status).toBe(503);
     expect(login.headers.get('Location')).toBeNull();
   });
 
+  it('sends a visitor with a session cookie to the app; if the session cannot be checked it still goes on (the app gate fails closed)', async () => {
+    const res = await worker.fetch(withCookie(), {}, ctx);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toBe(LITE);
+  });
+
   it('only CHAT_LIVE="true" turns the main chat on', async () => {
     const fast = { ECT: '4g', Downlink: '10', RTT: '30' };
-    expect((await worker.fetch(get(fast), { CHAT_LIVE: 'true' }, ctx)).headers.get('Location')).toBe(CHAT);
+    expect((await worker.fetch(withCookie(fast), { CHAT_LIVE: 'true' }, ctx)).headers.get('Location')).toBe(CHAT);
     for (const v of [undefined, 'false', 'TRUE', '1', '']) {
-      expect((await worker.fetch(get(fast), { CHAT_LIVE: v }, ctx)).headers.get('Location'), String(v)).toBe(LITE);
+      expect((await worker.fetch(withCookie(fast), { CHAT_LIVE: v }, ctx)).headers.get('Location'), String(v)).toBe(LITE);
     }
   });
 
   it('answers a path with no asset and no route with a plain 404, never a 503 from sign-in', async () => {
-    for (const path of ['/chat/', '/chat', '/nope', '/liteness', '/astro/x.js']) {
+    for (const path of ['/chat/', '/chat', '/nope', '/liteness', '/astro/x.js', '/auth/other', '/callbacks']) {
       for (const method of ['GET', 'HEAD', 'POST']) {
         const res = await worker.fetch(new Request(`https://shamwari.ai${path}`, { method }), {}, ctx);
         expect(res.status, `${method} ${path}`).toBe(404);
@@ -106,29 +117,51 @@ describe('the Worker', () => {
   it('still hands each of the four sign-in routes to sign-in, not the 404', async () => {
     // With nothing configured, sign-in cannot work and every route says "unavailable" (503) with a Retry-After. None
     // is the 404, and none redirects back to the app: the gate would send that straight back to sign-in (a loop).
-    for (const path of ['/lite/auth/login', '/lite/callback', '/lite/auth/token', '/lite/auth/logout']) {
+    for (const path of AUTH_ROUTES) {
       const res = await worker.fetch(new Request(`https://shamwari.ai${path}`), {}, ctx);
       expect(res.status, path).toBe(503);
     }
   });
 
-  it('keeps its list of Worker-only paths in step with app/wrangler.jsonc', () => {
+  it('keeps the old /lite/ sign-in addresses working for a release: login, callback and logout redirect, token is answered', async () => {
+    const login = await worker.fetch(new Request('https://shamwari.ai/lite/auth/login'), {}, ctx);
+    expect([login.status, login.headers.get('Location')]).toEqual([302, '/auth/login']);
+    const cb = await worker.fetch(new Request('https://shamwari.ai/lite/callback?code=c&state=s'), {}, ctx);
+    expect([cb.status, cb.headers.get('Location')]).toEqual([302, '/callback?code=c&state=s']);
+    const out = await worker.fetch(new Request('https://shamwari.ai/lite/auth/logout', { method: 'POST' }), {}, ctx);
+    expect([out.status, out.headers.get('Location')]).toEqual([307, '/auth/logout']);
+    const token = await worker.fetch(new Request('https://shamwari.ai/lite/auth/token'), {}, ctx);
+    expect(token.status).toBe(503); // handled as /auth/token (unavailable with nothing configured), not redirected, not a 404
+    expect(token.headers.get('Location')).toBeNull();
+  });
+
+  it('keeps its list of Worker-only paths in step with app/wrangler.jsonc, and no sign-in route lives under /lite/', () => {
     // The same comment-line and trailing-comma stripping check.mjs uses: the file is JSONC.
     const text = readFileSync(new URL('../../app/wrangler.jsonc', import.meta.url), 'utf8')
       .split('\n')
       .filter((l) => !/^\s*\/\//.test(l))
       .join('\n')
       .replace(/,(\s*[}\]])/g, '$1');
-    const assets = JSON.parse(text).assets;
-    // The Worker is the gate: it runs first for the root, the whole of /lite/ (which includes the sign-in routes
-    // in SESSION_PATHS) and the build output, and reads the static files through the ASSETS binding.
-    expect(assets.run_worker_first).toEqual(['/', '/lite/*']);
+    const config = JSON.parse(text);
+    const assets = config.assets;
+    // The Worker is the gate: it runs first for the root, the sign-in routes at the root, and the whole of /lite/ (the
+    // build output and the old /lite/ sign-in addresses), and reads the static files through the ASSETS binding.
+    expect(assets.run_worker_first).toEqual(['/', '/auth/*', '/callback', '/lite/*']);
     expect(assets.binding).toBe('ASSETS');
-    for (const p of SESSION_PATHS) expect(p.startsWith('/lite/')).toBe(true);
+    // Every path the Worker answers as sign-in is one the platform sends to it.
+    const matches = (pattern: string, path: string) => (pattern.endsWith('*') ? path.startsWith(pattern.slice(0, -1)) : path === pattern);
+    for (const p of SESSION_PATHS) expect(assets.run_worker_first.some((g: string) => matches(g, p)), p).toBe(true);
+    // Every gated prefix is one the platform sends to the Worker first; otherwise its files would be served ungated.
+    for (const prefix of GATED_PREFIXES) expect(assets.run_worker_first.some((g: string) => matches(g, `${prefix}x`)), prefix).toBe(true);
+    // The new sign-in is at the root: a route moved back under /lite/ fails here.
+    for (const r of AUTH_ROUTES) expect(r.startsWith('/lite/'), r).toBe(false);
+    for (const r of LEGACY_ROUTES) expect(r.startsWith('/lite/'), r).toBe(true);
+    // The redirect URI WorkOS sends people back to is the root callback.
+    expect(config.vars.WORKOS_REDIRECT_URI).toBe('https://shamwari.ai/callback');
   });
 
   it('answers HEAD like GET, and refuses other methods without reaching sign-in', async () => {
-    const head = await worker.fetch(new Request('https://shamwari.ai/', { method: 'HEAD' }), {}, ctx);
+    const head = await worker.fetch(new Request('https://shamwari.ai/', { method: 'HEAD', headers: { Cookie: `${SESSION_COOKIE}=sealed` } }), {}, ctx);
     expect(head.status).toBe(302);
     expect(head.headers.get('Location')).toBe(LITE);
     for (const method of ['POST', 'PUT', 'DELETE', 'OPTIONS']) {

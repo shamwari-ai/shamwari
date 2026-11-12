@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { handle, SESSION_COOKIE, STATE_COOKIE, MAX_COOKIE_VALUE, jwtClaims, jwtExp } from '../../worker/session';
+import type { CheckResult } from '../../worker/session';
+import {
+  AUTH_CALLBACK,
+  AUTH_LOGIN,
+  AUTH_LOGOUT,
+  AUTH_ROUTES,
+  AUTH_TOKEN,
+  COOKIE_PATH,
+  LEGACY_COOKIE_PATH,
+  LEGACY_ROUTES,
+  MAX_COOKIE_VALUE,
+  SESSION_COOKIE,
+  STATE_COOKIE,
+  handle,
+  jwtClaims,
+  jwtExp,
+  legacyRedirect,
+} from '../../worker/session';
 import { NOW, b64, deps, fakePort, jwt, req, setCookies } from './helpers';
 
 const secs = NOW / 1000;
@@ -8,7 +25,7 @@ const aboutToLapse = jwt({ exp: secs + 20, sid: 's1' });
 
 describe('login and callback', () => {
   it('starts sign-in with a one-time state cookie, HttpOnly, Secure, SameSite=Lax', async () => {
-    const res = await handle(req('/lite/auth/login'), deps(fakePort()));
+    const res = await handle(req('/auth/login'), deps(fakePort()));
     expect(res.status).toBe(302);
     expect(res.headers.get('Location')).toBe('https://auth.example/authorize?state=STATE123');
     const c = setCookies(res)[0]!;
@@ -18,28 +35,28 @@ describe('login and callback', () => {
   });
 
   it('has no return parameter: nothing in the request decides where a person lands', async () => {
-    const res = await handle(req('/lite/auth/login?return=https://evil.example'), deps(fakePort()));
+    const res = await handle(req('/auth/login?return=https://evil.example'), deps(fakePort()));
     expect(res.headers.get('Location')).not.toContain('evil');
     const cb = fakePort();
     const ok = await handle(
-      req('/lite/callback?code=c1&state=STATE123&return=https://evil.example', {
+      req('/callback?code=c1&state=STATE123&return=https://evil.example', {
         cookie: `${STATE_COOKIE}=STATE123`,
       }),
       deps(cb),
     );
-    expect(ok.headers.get('Location')).toBe('/lite/');
+    expect(ok.headers.get('Location')).toBe('/');
   });
 
-  it('on a good callback: exchanges the code, sets the session cookie, spends the state, lands on /lite/', async () => {
+  it('on a good callback: exchanges the code, sets the session cookie, spends the state, lands on / (the root then picks the app)', async () => {
     const port = fakePort();
     const res = await handle(
-      req('/lite/callback?code=c1&state=STATE123', {
+      req('/callback?code=c1&state=STATE123', {
         cookie: `${STATE_COOKIE}=STATE123`,
       }),
       deps(port),
     );
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe('/lite/');
+    expect(res.headers.get('Location')).toBe('/');
     const cookies = setCookies(res);
     expect(cookies.find((c) => c.startsWith(`${STATE_COOKIE}=;`))).toContain('Max-Age=0');
     const s = cookies.find((c) => c.startsWith(`${SESSION_COOKIE}=SEALED-NEW`))!;
@@ -48,11 +65,11 @@ describe('login and callback', () => {
   });
 
   it.each([
-    ['a missing state cookie', '/lite/callback?code=c1&state=STATE123', undefined],
-    ['a different state', '/lite/callback?code=c1&state=OTHER', `${STATE_COOKIE}=STATE123`],
-    ['no state in the URL', '/lite/callback?code=c1', `${STATE_COOKIE}=STATE123`],
-    ['an error from AuthKit', '/lite/callback?error=access_denied&state=STATE123', `${STATE_COOKIE}=STATE123`],
-    ['no code', '/lite/callback?state=STATE123', `${STATE_COOKIE}=STATE123`],
+    ['a missing state cookie', '/callback?code=c1&state=STATE123', undefined],
+    ['a different state', '/callback?code=c1&state=OTHER', `${STATE_COOKIE}=STATE123`],
+    ['no state in the URL', '/callback?code=c1', `${STATE_COOKIE}=STATE123`],
+    ['an error from AuthKit', '/callback?error=access_denied&state=STATE123', `${STATE_COOKIE}=STATE123`],
+    ['no code', '/callback?state=STATE123', `${STATE_COOKIE}=STATE123`],
   ])('refuses %s without calling WorkOS or setting a session', async (_n, path, cookie) => {
     const port = fakePort();
     const res = await handle(req(path, { cookie }), deps(port));
@@ -67,7 +84,7 @@ describe('login and callback', () => {
     const port = fakePort();
     port.codeResult = null;
     const res = await handle(
-      req('/lite/callback?code=bad&state=STATE123', {
+      req('/callback?code=bad&state=STATE123', {
         cookie: `${STATE_COOKIE}=STATE123`,
       }),
       deps(port),
@@ -77,39 +94,152 @@ describe('login and callback', () => {
   });
 
   it('login and callback are GET only', async () => {
-    for (const p of ['/lite/auth/login', '/lite/callback']) {
+    for (const p of ['/auth/login', '/callback']) {
       expect((await handle(req(p, { method: 'POST' }), deps(fakePort()))).status).toBe(405);
     }
   });
 });
 
 describe('cookie scope', () => {
-  it('every cookie the Worker sets is scoped to /lite/, so the main chat at /chat/ never receives it', async () => {
+  it('the session is one cookie for the whole origin (Path=/), so /lite/ and /chat/ share it; the old /lite/ copy is expired alongside', async () => {
     const port = fakePort();
-    const login = await handle(req('/lite/auth/login'), deps(port));
     const callback = await handle(
-      req('/lite/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
+      req('/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
       deps(port),
     );
-    const out = await handle(req('/lite/auth/logout', { method: 'POST', cookie: `${SESSION_COOKIE}=S` }), deps(port));
+    const sessions = setCookies(callback).filter((c) => c.startsWith(`${SESSION_COOKIE}=`));
+    expect(sessions).toHaveLength(2);
+    expect(sessions[0]).toContain('SEALED-NEW');
+    expect(sessions[0]).toContain(`Path=${COOKIE_PATH};`);
+    expect(COOKIE_PATH).toBe('/');
+    expect(sessions[1]).toContain(`${SESSION_COOKIE}=;`);
+    expect(sessions[1]).toContain(`Path=${LEGACY_COOKIE_PATH};`);
+    expect(sessions[1]).toContain('Max-Age=0');
+  });
+
+  it('every cookie is HttpOnly, Secure, SameSite=Lax, __Secure- prefixed and has no Domain; the state cookie is only sent to the callback', async () => {
+    const port = fakePort();
+    const login = await handle(req('/auth/login'), deps(port));
+    const callback = await handle(
+      req('/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
+      deps(port),
+    );
+    const out = await handle(req('/auth/logout', { method: 'POST', cookie: `${SESSION_COOKIE}=S` }), deps(port));
     const all = [...setCookies(login), ...setCookies(callback), ...setCookies(out)];
-    expect(all.length).toBeGreaterThanOrEqual(5);
+    expect(all.length).toBeGreaterThanOrEqual(7);
     for (const c of all) {
-      expect(c).toContain('Path=/lite/;');
-      expect(c).not.toMatch(/Path=\/;/);
+      for (const a of ['HttpOnly', 'Secure', 'SameSite=Lax']) expect(c).toContain(a);
       expect(c).not.toContain('Domain');
-      expect(c.startsWith('__Secure-')).toBe(true); // requires HTTPS; allows a narrow Path (unlike __Host-)
+      expect(c.startsWith('__Secure-')).toBe(true);
     }
+    expect(setCookies(login)[0]).toContain('Path=/callback;');
+  });
+
+  it('sign-out clears the session cookie in both places (root and the old /lite/ one)', async () => {
+    const out = await handle(req('/auth/logout', { method: 'POST', cookie: `${SESSION_COOKIE}=S` }), deps(fakePort()));
+    const cleared = setCookies(out).filter((c) => c.startsWith(`${SESSION_COOKIE}=;`));
+    expect(cleared.some((c) => c.includes('Path=/;'))).toBe(true);
+    expect(cleared.some((c) => c.includes('Path=/lite/;'))).toBe(true);
+    for (const c of cleared) expect(c).toContain('Max-Age=0');
+  });
+
+  it('a renewal also expires the old /lite/ copy, so a device never holds a spent one next to the new one', async () => {
+    const port = fakePort();
+    port.checkResult = { status: 'expired', sid: 's1' };
+    const res = await handle(
+      req('/auth/token', { cookie: `${SESSION_COOKIE}=SEALED` }),
+      deps(port, async () => ({ status: 'ok', sealed: 'SEALED2', accessToken: jwt({ exp: secs + 300 }) })),
+    );
+    expect(res.status).toBe(200);
+    const cs = setCookies(res);
+    expect(cs.find((c) => c.startsWith(`${SESSION_COOKIE}=SEALED2`))).toContain('Path=/;');
+    expect(cs.find((c) => c.startsWith(`${SESSION_COOKIE}=;`))).toContain('Path=/lite/;');
+  });
+});
+
+describe('a device holding both an old /lite/ session cookie and a new one', () => {
+  it('the token route uses the first copy that is not invalid, so a spent old copy never signs out a good new one', async () => {
+    const port = fakePort();
+    const results: Record<string, CheckResult> = {
+      OLD: { status: 'invalid' },
+      NEW: { status: 'valid', accessToken: live, sid: 's1' },
+    };
+    port.check = async (sealed: string) => results[sealed]!;
+    const res = await handle(req('/auth/token', { cookie: `${SESSION_COOKIE}=OLD; ${SESSION_COOKIE}=NEW` }), deps(port));
+    expect(res.status).toBe(200);
+    // And when every copy is invalid the session really is over, and both places are cleared.
+    results.NEW = { status: 'invalid' };
+    const gone = await handle(req('/auth/token', { cookie: `${SESSION_COOKIE}=OLD; ${SESSION_COOKIE}=NEW` }), deps(port));
+    expect(gone.status).toBe(401);
+    expect(setCookies(gone).some((c) => c.includes('Path=/lite/;'))).toBe(true);
+  });
+});
+
+describe('the sign-in routes are at the root, never under /lite/', () => {
+  it('AUTH_ROUTES are /auth/login, /callback, /auth/token and /auth/logout, and none starts with /lite/', () => {
+    expect([...AUTH_ROUTES].sort()).toEqual([AUTH_CALLBACK, AUTH_LOGIN, AUTH_LOGOUT, AUTH_TOKEN].sort());
+    expect(AUTH_LOGIN).toBe('/auth/login');
+    expect(AUTH_CALLBACK).toBe('/callback');
+    for (const r of AUTH_ROUTES) expect(r.startsWith('/lite/'), r).toBe(false);
+  });
+
+  it('the handler answers the root routes, and the session cookie it sets is not under /lite/', async () => {
+    for (const [path, method] of [[AUTH_LOGIN, 'GET'], [AUTH_TOKEN, 'GET'], [AUTH_LOGOUT, 'POST']] as const) {
+      const res = await handle(req(path, { method, cookie: `${SESSION_COOKIE}=S` }), deps(fakePort()));
+      expect(res.status, path).not.toBe(404);
+    }
+  });
+});
+
+describe('the old /lite/ addresses live on for one release', () => {
+  const at = (path: string, init: RequestInit = {}) => new Request(`https://shamwari.ai${path}`, init);
+
+  it('/lite/auth/login and /lite/callback redirect to the root routes, keeping the query', () => {
+    const login = legacyRedirect(at('/lite/auth/login'))!;
+    expect(login.status).toBe(302);
+    expect(login.headers.get('Location')).toBe('/auth/login');
+    const cb = legacyRedirect(at('/lite/callback?code=c1&state=S'))!;
+    expect(cb.status).toBe(302);
+    expect(cb.headers.get('Location')).toBe('/callback?code=c1&state=S');
+  });
+
+  it('a non-GET to the old login or callback is refused (405), not turned into a GET', () => {
+    for (const path of ['/lite/auth/login', '/lite/callback?code=c&state=s']) {
+      const res = legacyRedirect(at(path, { method: 'POST' }))!;
+      expect(res.status, path).toBe(405);
+      expect(res.headers.get('Location'), path).toBeNull();
+    }
+  });
+
+  it('/lite/auth/logout is a 307, so a POST stays a POST', () => {
+    const out = legacyRedirect(at('/lite/auth/logout', { method: 'POST' }))!;
+    expect(out.status).toBe(307);
+    expect(out.headers.get('Location')).toBe('/auth/logout');
+  });
+
+  it('the redirects are never cached, and nothing else is redirected', () => {
+    expect(legacyRedirect(at('/lite/auth/login'))!.headers.get('Cache-Control')).toBe('no-store');
+    for (const p of ['/auth/login', '/callback', '/lite/', '/lite/auth/other']) expect(legacyRedirect(at(p)), p).toBeNull();
+    expect(LEGACY_ROUTES).toContain('/lite/auth/token');
+  });
+
+  it('/lite/auth/token is answered in place, exactly like /auth/token', async () => {
+    const port = fakePort();
+    port.checkResult = { status: 'valid', accessToken: live, sid: 's1' };
+    const a = await handle(req('/lite/auth/token', { cookie: `${SESSION_COOKIE}=S` }), deps(port));
+    const b = await handle(req('/auth/token', { cookie: `${SESSION_COOKIE}=S` }), deps(port));
+    expect(a.status).toBe(200);
+    expect(await a.json()).toEqual(await b.json());
   });
 });
 
 describe('token', () => {
   const withCookie = (extra: { site?: string } = {}) =>
-    req('/lite/auth/token', { cookie: `${SESSION_COOKIE}=SEALED`, ...extra });
+    req('/auth/token', { cookie: `${SESSION_COOKIE}=SEALED`, ...extra });
 
   it('401 and no WorkOS call when there is no cookie', async () => {
     const port = fakePort();
-    const res = await handle(req('/lite/auth/token'), deps(port));
+    const res = await handle(req('/auth/token'), deps(port));
     expect(res.status).toBe(401);
     expect(port.calls).toEqual([]);
   });
@@ -262,7 +392,7 @@ describe('token', () => {
     const port = fakePort();
     port.codeResult = { sealed: big };
     const cb = await handle(
-      req('/lite/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
+      req('/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
       deps(port),
     );
     expect(cb.headers.get('Location')).toBe('/lite/?signin=failed');
@@ -280,10 +410,10 @@ describe('token', () => {
     const p3 = fakePort();
     p3.codeResult = { sealed: 'y'.repeat(MAX_COOKIE_VALUE) };
     const ok = await handle(
-      req('/lite/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
+      req('/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
       deps(p3),
     );
-    expect(ok.headers.get('Location')).toBe('/lite/');
+    expect(ok.headers.get('Location')).toBe('/');
   });
 
   it('refuses a request the browser says is cross-site, before reading the cookie', async () => {
@@ -303,7 +433,7 @@ describe('token', () => {
 
   it('is GET only', async () => {
     const res = await handle(
-      req('/lite/auth/token', {
+      req('/auth/token', {
         method: 'POST',
         cookie: `${SESSION_COOKIE}=S`,
       }),
@@ -327,7 +457,7 @@ describe('logout', () => {
     const port = fakePort();
     const d = deps(port);
     const res = await handle(
-      req('/lite/auth/logout', {
+      req('/auth/logout', {
         method: 'POST',
         cookie: `${SESSION_COOKIE}=SEALED`,
       }),
@@ -335,7 +465,8 @@ describe('logout', () => {
     );
     expect(res.status).toBe(204);
     expect(setCookies(res).every((c) => c.includes('Max-Age=0'))).toBe(true);
-    expect(setCookies(res)).toHaveLength(2);
+    // The session and the state cookie, each at the root and at the old /lite/ path.
+    expect(setCookies(res)).toHaveLength(4);
     await Promise.all(d.waited);
     expect(port.calls).toEqual(['revoke:SEALED']);
   });
@@ -347,7 +478,7 @@ describe('logout', () => {
     expect(
       (
         await handle(
-          req('/lite/auth/logout', {
+          req('/auth/logout', {
             method: 'POST',
             cookie: `${SESSION_COOKIE}=S`,
           }),
@@ -356,7 +487,7 @@ describe('logout', () => {
       ).status,
     ).toBe(204);
     await Promise.all(d.waited); // must not reject
-    expect((await handle(req('/lite/auth/logout', { method: 'POST' }), deps(fakePort()))).status).toBe(204);
+    expect((await handle(req('/auth/logout', { method: 'POST' }), deps(fakePort()))).status).toBe(204);
   });
 
   it('refuses a cross-site POST and a GET', async () => {
@@ -364,7 +495,7 @@ describe('logout', () => {
     expect(
       (
         await handle(
-          req('/lite/auth/logout', {
+          req('/auth/logout', {
             method: 'POST',
             site: 'cross-site',
             cookie: `${SESSION_COOKIE}=S`,
@@ -373,14 +504,14 @@ describe('logout', () => {
         )
       ).status,
     ).toBe(403);
-    expect((await handle(req('/lite/auth/logout'), deps(port))).status).toBe(405);
+    expect((await handle(req('/auth/logout'), deps(port))).status).toBe(405);
     expect(port.calls).toEqual([]);
   });
 });
 
 describe('other', () => {
   it('answers 404 to anything else', async () => {
-    expect((await handle(req('/lite/auth/other'), deps(fakePort()))).status).toBe(404);
+    expect((await handle(req('/auth/other'), deps(fakePort()))).status).toBe(404);
   });
   it('jwtClaims reads the payload and nothing else', () => {
     expect(jwtClaims(jwt({ sid: 's', exp: 5 }))).toEqual({ sid: 's', exp: 5 });

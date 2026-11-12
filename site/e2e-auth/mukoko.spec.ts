@@ -319,7 +319,7 @@ test('a failed sign-in sends the person back with a kind message on the sign-in 
   await SIGNIN_SCREEN_ONLY(page); // and it does not bounce straight back to sign-in
   expect(new URL(page.url()).search).toBe(''); // the parameter is gone, so the message is said once
   // A reload is a new try: it goes to the hosted sign-in again, and does not repeat the old failure on the way.
-  await page.route('**/lite/auth/login', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><p id="hosted">HOSTED</p>' }));
+  await page.route('**/auth/login', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><p id="hosted">HOSTED</p>' }));
   await page.reload();
   await expect(page.locator('#hosted')).toBeVisible();
 });
@@ -328,20 +328,20 @@ test('a device whose session has ended goes straight to the hosted sign-in: no c
   await steer(page, { session: false });
   // The hosted sign-in, stood in for: it records that it was reached and shows only itself.
   let reached = 0;
-  await page.route('**/lite/auth/login', (route) => {
+  await page.route('**/auth/login', (route) => {
     reached += 1;
     return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>hosted</title><p id="hosted">HOSTED SIGN-IN</p>' });
   });
   await page.goto('/lite/');
   await expect(page.locator('#hosted')).toBeVisible();
-  expect(new URL(page.url()).pathname).toBe('/lite/auth/login');
+  expect(new URL(page.url()).pathname).toBe('/auth/login');
   expect(reached).toBe(1);
 });
 
 test('if that sign-in comes straight back signed out, it stops on the sign-in screen and does not loop', async ({ page }) => {
   await steer(page, { session: false });
   let reached = 0;
-  await page.route('**/lite/auth/login', (route) => {
+  await page.route('**/auth/login', (route) => {
     reached += 1;
     return route.fulfill({ status: 302, headers: { Location: '/lite/' } }); // back, still no session
   });

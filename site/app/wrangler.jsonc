@@ -2,7 +2,7 @@
   "$schema": "../node_modules/wrangler/config-schema.json",
   "name": "shamwari-app",
   "compatibility_date": "2026-08-01",
-  // Query strings are redacted: /lite/callback carries the OAuth code and state, and
+  // Query strings are redacted: /callback carries the OAuth code and state, and
   // /lite/?signin=failed carries a reason; persisted invocation logs must never store them.
   "observability": {
     "enabled": true,
@@ -25,11 +25,11 @@
   "main": "../worker/index.ts",
   "assets": {
     "directory": "../dist-app",
-    // The Worker is the gate: it runs first for the root, everything under /lite/ (the build output is
-    // under /lite/_astro/, inside the session cookie's path), and serves the static asset only to someone signed in (worker/gate.ts). The ASSETS binding
+    // The Worker is the gate: it runs first for the root, the sign-in routes (/auth/*, /callback, at the root so the
+    // light and the main chat share one session) and everything under /lite/ (the build output is under /lite/_astro/), and serves the static asset only to someone signed in (worker/gate.ts). The ASSETS binding
     // is how it reads them. Only the favicon and apple-touch icon are served without it.
     "binding": "ASSETS",
-    "run_worker_first": ["/", "/lite/*"],
+    "run_worker_first": ["/", "/auth/*", "/callback", "/lite/*"],
   },
 
   // Public configuration, safe in git. The client id is NOT a secret.
@@ -39,7 +39,7 @@
     // own, so pairing its client id with this key was refused by WorkOS on every sign-in. The gateway accepts
     // both client ids (gateway/wrangler.jsonc).
     "WORKOS_CLIENT_ID": "client_01KQBBSMQTSMTBN7HEC9KQBJC0",
-    "WORKOS_REDIRECT_URI": "https://shamwari.ai/lite/callback",
+    "WORKOS_REDIRECT_URI": "https://shamwari.ai/callback",
     // The root sends everyone to /lite/ until the main chat answers at /chat/ (worker/root.ts).
     // Set to "true" in the same change that makes /chat/ live.
     "CHAT_LIVE": "false",

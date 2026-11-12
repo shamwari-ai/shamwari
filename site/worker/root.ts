@@ -14,6 +14,8 @@
  *  - Nothing at all: light. A slow link pays for a heavy page far more than a fast one loses
  *    by getting the light one, so "unknown" is not a reason to send anyone to the big app.
  *
+ * (Signed-out visitors never get here: worker/index.ts sends them to sign-in first.)
+ *
  * Until the main chat is live (`CHAT_LIVE`), everyone goes to /lite/: the root must never send a
  * visitor to a page that does not exist yet.
  */
@@ -73,7 +75,7 @@ export function rootResponse(req: Request, chatLive: boolean): Response {
       Location: chooseDestination(req, chatLive),
       // Never cached: the answer depends on this visitor's connection, today.
       'Cache-Control': 'no-store',
-      Vary: 'Save-Data, ECT, Downlink, RTT',
+      Vary: 'Save-Data, ECT, Downlink, RTT, Cookie',
       // Ask Chromium for the connection hints and have it repeat the request with them once.
       'Accept-CH': 'ECT, Downlink, RTT',
       'Critical-CH': 'ECT, Downlink, RTT',

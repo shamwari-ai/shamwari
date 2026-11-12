@@ -1,5 +1,5 @@
 // The same checks as gateway/test/observability.test.ts, for the site Workers: logs persist, so
-// shamwari-app redacts query strings (/lite/callback carries the OAuth code and state) and no
+// shamwari-app redacts query strings (/callback carries the OAuth code and state) and no
 // log line passes a header, cookie, body, prompt, token or answer.
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";

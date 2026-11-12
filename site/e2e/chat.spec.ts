@@ -214,7 +214,7 @@ test('the home screen greets and offers exactly three suggested prompts; a tap f
   await expect(chips).toHaveCount(3); // exactly three, and nothing else to choose from
   await expect(page.locator('#empty [data-example]')).toHaveCount(3);
   // Rendering them made no network request: they are in the app, so they are there offline too.
-  expect(requests.filter((u) => !u.includes('/lite/auth/'))).toEqual([]);
+  expect(requests.filter((u) => !u.includes('/auth/'))).toEqual([]);
 
   // A tap fills the box and puts the cursor in it. Nothing is sent until the person presses send.
   await chips.first().click();

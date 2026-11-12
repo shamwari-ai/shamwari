@@ -163,7 +163,7 @@ the second replaces the first without touching the chat:
    (shamwari-ai/shamwari#130). **Nothing here mints or stores a per-user key.**
    The page holds the short-lived access token **in memory only** (never
    localStorage, sessionStorage, IndexedDB, a cookie or the Cache API), gets it
-   from the session Worker's cookie-authenticated `GET /lite/auth/token`, and
+   from the session Worker's cookie-authenticated `GET /auth/token`, and
    sends it as `Authorization: Bearer`. Renewals are serialised, because the
    session behind it rotates single-use refresh tokens. A `401` from the gateway
    triggers **one** silent renewal and one repeat of the ask under the same
@@ -176,7 +176,7 @@ the second replaces the first without touching the chat:
    session Worker itself (login, callback, cookie, refresh) is a design in
    `docs/chat-signin.md` on #130, not code; the e2e tests run against a stand-in
    for it (`e2e/serve.mjs --stub-auth`). A found-and-fixed detail: the service
-   worker passes `/lite/auth/*` and `/lite/callback` straight to the network, or
+   worker passes `/auth/*` and `/callback` (and the old `/lite/auth/*`, `/lite/callback`) straight to the network, or
    it would answer the sign-in redirect from the cached shell.
    **Rollout note:** that pass-through is in the service worker, and a worker
    update waits until every tab is closed. A returning installed-app user who

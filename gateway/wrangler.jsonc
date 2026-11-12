@@ -3,7 +3,7 @@
   "name": "shamwari-gateway",
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
-  // Query strings are redacted: /lite/callback carries the OAuth code and state, and
+  // Query strings are redacted: /callback carries the OAuth code and state, and
   // /lite/?signin=failed carries a reason; persisted invocation logs must never store them.
   "observability": {
     "enabled": true,

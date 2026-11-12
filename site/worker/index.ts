@@ -1,4 +1,17 @@
-import { handle, type Deps, type RefreshResult } from './session';
+import {
+  AUTH_CALLBACK,
+  AUTH_LOGIN,
+  AUTH_ROUTES,
+  LEGACY_ROUTES,
+  SESSION_COOKIE,
+  clearSessionCookies,
+  handle,
+  legacyRedirect,
+  findSession,
+  readCookie,
+  type Deps,
+  type RefreshResult,
+} from './session';
 import { rootResponse } from './root';
 import { gate, isGated, unavailable } from './gate';
 import { makePort, type Port, type WorkerEnv } from './workos-port';
@@ -6,10 +19,11 @@ import { makePort, type Port, type WorkerEnv } from './workos-port';
 export { SessionRefresh } from './refresh-do';
 
 /**
- * Entry point of the `shamwari-app` Worker. It runs first for the root, for everything under /lite/ and for the
- * build output in /lite/_astro/ (`assets.run_worker_first`, app/wrangler.jsonc): the sign-in routes are answered here,
- * and every other path is passed through the gate (gate.ts), which serves the static asset only to someone with
- * a session (or, for the short public list, to anyone).
+ * Entry point of the `shamwari-app` Worker. It runs first for the root, for the sign-in routes at the root (/auth/*,
+ * /callback), and for everything under /lite/ including the build output in /lite/_astro/
+ * (`assets.run_worker_first`, app/wrangler.jsonc): the sign-in routes are answered here, and every other path is passed
+ * through the gate (gate.ts), which serves the static asset only to someone with a session (or, for the short public
+ * list, to anyone). Signed-out visitors at the root go straight to sign-in; signed-in ones are sent to the app.
  */
 interface Ctx {
   waitUntil(p: Promise<unknown>): void;
@@ -21,9 +35,10 @@ export interface AssetsBinding {
 }
 export type Env = WorkerEnv & { ASSETS?: AssetsBinding };
 
-/** The only paths (besides the root) that reach this Worker on purpose: `assets.run_worker_first`.
+/** The sign-in paths: the root routes, and the old /lite/ ones kept for a release (redirected or answered in place).
+ *  Besides these and the root, only /lite/* reaches this Worker on purpose: `assets.run_worker_first`.
  *  test/worker/root.test.ts fails if this and app/wrangler.jsonc disagree. */
-export const SESSION_PATHS = new Set(['/lite/auth/login', '/lite/auth/token', '/lite/auth/logout', '/lite/callback']);
+export const SESSION_PATHS = new Set([...AUTH_ROUTES, ...LEGACY_ROUTES]);
 
 function randomState(): string {
   const b = crypto.getRandomValues(new Uint8Array(32));
@@ -43,11 +58,38 @@ function portFor(env: Env): Promise<Port> {
   return p;
 }
 
+/**
+ * The root. Someone with no session cookie goes straight to sign-in without any WorkOS call (so the root works with the
+ * sign-in secrets unbound, up to the redirect); one with a cookie that is no longer a session is sent there too, with
+ * the cookie cleared; anyone else is sent to the app by connection quality (root.ts). If the session cannot be checked
+ * (a fault, secrets unbound) the visitor is still sent on to the app: the app's own gate decides, and it fails closed.
+ */
+async function root(req: Request, env: Env): Promise<Response> {
+  const live = env.CHAT_LIVE === 'true';
+  if (req.method !== 'GET' && req.method !== 'HEAD') return rootResponse(req, live); // 405
+  const toSignIn = (clearCookies: boolean): Response => {
+    const h = new Headers({ Location: AUTH_LOGIN, 'Cache-Control': 'no-store', Vary: 'Cookie' });
+    if (clearCookies) for (const c of clearSessionCookies()) h.append('Set-Cookie', c);
+    return new Response(null, { status: 302, headers: h });
+  };
+  const sealed = readCookie(req, SESSION_COOKIE);
+  if (!sealed) return toSignIn(false);
+  try {
+    if ((await findSession(await portFor(env), req))?.checked.status === 'invalid') return toSignIn(true);
+  } catch (err) {
+    // Could not tell (see above). Said in the logs, message only: never the request, cookies or tokens.
+    console.error('root session check failed:', err instanceof Error ? err.message : 'unknown error');
+  }
+  return rootResponse(req, live);
+}
+
 export default {
   async fetch(req: Request, env: Env, ctx: Ctx): Promise<Response> {
-    // The root needs no secrets and no WorkOS, so it is answered before either is touched.
     const pathname = new URL(req.url).pathname;
-    if (pathname === '/') return rootResponse(req, env.CHAT_LIVE === 'true');
+    if (pathname === '/') return root(req, env);
+    // The old /lite/ sign-in addresses are redirects: no secrets, no WorkOS.
+    const legacy = legacyRedirect(req);
+    if (legacy) return legacy;
     // Under /lite/ and not a sign-in route: the gate decides. Anything else that reached here is a
     // path with no asset and no route: a plain 404, decided before sign-in is touched, so a missing page is
     // never answered with a 503 "unavailable" when the sign-in secrets are unbound.
@@ -96,7 +138,7 @@ export default {
       console.error('session worker failed:', err instanceof Error ? err.message : 'unknown error');
       // Sign-in itself does NOT redirect back to the app on failure from here: the gate would send it straight
       // back to sign-in, a loop. It answers 503 with a Retry-After, like the two JSON routes.
-      if (req.method === 'GET' && (pathname === '/lite/auth/login' || pathname === '/lite/callback')) {
+      if (req.method === 'GET' && (pathname === AUTH_LOGIN || pathname === AUTH_CALLBACK)) {
         return unavailable();
       }
       return new Response(JSON.stringify({ error: 'unavailable' }), {

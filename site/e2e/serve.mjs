@@ -32,12 +32,13 @@ async function stubRoute(req, res, path) {
     }
     return json(res, 200, { tokenCalls: stub.tokenCalls, logoutCalls: stub.logoutCalls, session: stub.session });
   }
-  if (path === '/lite/auth/login') {
+  if (path === '/auth/login') {
     stub.session = true;
-    res.writeHead(302, { Location: '/lite/', 'Set-Cookie': 'stub_session=1; Path=/lite/; HttpOnly; SameSite=Lax' });
+    // Like the real Worker: the sign-in is at the root and the session cookie is Path=/ (shared by /lite/ and /chat/); it lands on the app.
+    res.writeHead(302, { Location: '/lite/', 'Set-Cookie': 'stub_session=1; Path=/; HttpOnly; SameSite=Lax' });
     return res.end();
   }
-  if (path === '/lite/auth/token') {
+  if (path === '/auth/token' || path === '/lite/auth/token') {
     stub.tokenCalls += 1;
     if (stub.tokenDelayMs) await sleep(stub.tokenDelayMs); // a slow link to the Worker
     if (stub.tokenStatus) return json(res, stub.tokenStatus, { error: 'session_ended' });
@@ -46,11 +47,11 @@ async function stubRoute(req, res, path) {
     const token = stub.tokens.length ? stub.tokens.shift() : `eyJhbGciOiJSUzI1NiJ9.valid-${stub.tokenCalls}.sig`;
     return json(res, 200, { access_token: token, expires_at: Math.floor(Date.now() / 1000) + 300 });
   }
-  if (path === '/lite/auth/logout' && req.method === 'POST') {
+  if (path === '/auth/logout' && req.method === 'POST') {
     stub.logoutCalls += 1;
     if (stub.logoutDelayMs) await sleep(stub.logoutDelayMs); // a request that hangs
     stub.session = false;
-    res.writeHead(204, { 'Set-Cookie': 'stub_session=; Path=/lite/; Max-Age=0; HttpOnly' });
+    res.writeHead(204, { 'Set-Cookie': 'stub_session=; Path=/; Max-Age=0; HttpOnly' });
     return res.end();
   }
   return false;
@@ -111,13 +112,13 @@ createServer(async (req, res) => {
     res.writeHead(redirect.status, { Location: redirect.location });
     return res.end();
   }
-  if (stubAuth && (path.startsWith('/__stub/') || path.startsWith('/lite/auth/'))) {
+  if (stubAuth && (path.startsWith('/__stub/') || path.startsWith('/auth/') || path === '/lite/auth/token')) {
     if ((await stubRoute(req, res, path)) !== false) return;
   }
   if (gated && (path.startsWith('/lite/') || path.startsWith('/_astro/')) && !PUBLIC.test(path)) {
     if (!/(^|;\s*)stub_session=1/.test(req.headers.cookie ?? '')) {
       const shell = path === '/lite/' || path === '/lite/index.html';
-      res.writeHead(shell ? 302 : 401, shell ? { Location: '/lite/auth/login', 'Cache-Control': 'no-store' } : { 'Cache-Control': 'no-store' });
+      res.writeHead(shell ? 302 : 401, shell ? { Location: '/auth/login', 'Cache-Control': 'no-store' } : { 'Cache-Control': 'no-store' });
       return res.end();
     }
   }

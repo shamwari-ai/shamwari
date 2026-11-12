@@ -160,7 +160,7 @@ person out. So the part that holds the session is a server.
 
 **Built in `site/worker/`, as part of the `shamwari-app` Worker** (not a third Worker): static
 assets answer everything, and `assets.run_worker_first` in `site/app/wrangler.jsonc` sends only
-`/lite/auth/login`, `/lite/auth/token`, `/lite/auth/logout` and `/lite/callback` to the script.
+the sign-in routes at the ROOT of the origin, `/auth/login`, `/auth/token`, `/auth/logout` and `/callback` (not under `/lite/`, so the light chat and the main chat share one sign-in), to the script, plus `/` and `/lite/*`. The old `/lite/auth/login`, `/lite/callback` and `/lite/auth/logout` addresses redirect to the root routes for one release (so open tabs and installed PWAs keep working) and `/lite/auth/token` is answered as `/auth/token`; `test/worker/root.test.ts` and `session.test.ts` fail if a route moves back under `/lite/`.
 It uses the **WorkOS SDK** (`@workos-inc/node`, its `workerd` build) for the authorization URL,
 the code exchange, cookie sealing, JWT verification, refresh and session revocation. There is no
 PKCE, sealing or token-refresh code of our own. (The Console's own pattern in
@@ -168,19 +168,19 @@ PKCE, sealing or token-refresh code of our own. (The Console's own pattern in
 
 ```
 browser                    shamwari-app Worker (worker/)         WorkOS
-  | GET /lite/auth/login --->| state (random, one-time cookie); SDK authorization URL
+  | GET /auth/login -------->| state (random, one-time cookie); SDK authorization URL
   |<-- 302 to WorkOS --------|
   | ...person signs in...    |
-  | GET /lite/callback?code ->| state checked; SDK exchanges the code and SEALS the session
-  |<-- Set-Cookie __Secure-shamwari_session (Path=/lite/) (HttpOnly, Secure, SameSite=Lax), 302 /lite/
-  | GET /lite/auth/token --->| SDK verifies; refreshes if < 60 s left (one at a time per session)
+  | GET /callback?code ----->| state checked; SDK exchanges the code and SEALS the session
+  |<-- Set-Cookie __Secure-shamwari_session (Path=/) (HttpOnly, Secure, SameSite=Lax), 302 /  (the root then sends a signed-in visitor to the app)
+  | GET /auth/token -------->| SDK verifies; refreshes if < 60 s left (one at a time per session)
   |<-- { access_token, expires_at }   Cache-Control: no-store, Vary: Cookie
   | POST api.shamwari.ai/v1/chat/completions   Authorization: Bearer <access_token>
 ```
 
 - The **refresh token never leaves the Worker**: it exists only inside the sealed cookie. The page
   gets the short-lived access token, keeps it in memory, and asks again on expiry or reload.
-- **What the page expects** (`site/src/chat/auth-mukoko.ts`): `GET /lite/auth/token` returns
+- **What the page expects** (`site/src/chat/auth-mukoko.ts`): `GET /auth/token` returns
   `{ "access_token": "<jwt>", "expires_at": <epoch seconds> }`. **401 means the session is over**
   (the Worker also clears the cookie); anything else (403, 5xx, a network failure) is "not now",
   never a sign-out. The page reads no claim from the token.
@@ -208,18 +208,18 @@ browser                    shamwari-app Worker (worker/)         WorkOS
   30 s.
 - **Failures are logged** (the message only, never the request, cookies or tokens) and a browser
   navigation to sign-in lands back on the app with `?signin=failed` instead of a JSON page.
-- **No open redirect:** after sign-in the person always lands on `/lite/`; the request cannot choose.
+- **No open redirect:** after sign-in the person always lands on `/` (which sends a signed-in visitor to the app); the request cannot choose.
   The login `state` is random, single-use and compared in constant time. A failed sign-in returns to
   `/lite/?signin=failed` (the page does not show a message for it yet).
-- `/lite/auth/token` and `/lite/auth/logout` refuse requests the browser marks `Sec-Fetch-Site: cross-site`.
-- Sign-out is `POST /lite/auth/logout`: it clears both cookies at once and revokes the WorkOS session
+- `/auth/token` and `/auth/logout` refuse requests the browser marks `Sec-Fetch-Site: cross-site`.
+- Sign-out is `POST /auth/logout`: it clears both cookies at once (and the old `/lite/`-path copy of the session cookie) and revokes the WorkOS session
   in the background; a failed revocation does not stop the sign-out.
 - The CSP already restricts `connect-src` to the site and the API origin and `script-src` to `'self'`,
   which is what protects an in-memory token from injected script.
 
 **Configuration, by name only.** Public vars in `app/wrangler.jsonc`: `WORKOS_CLIENT_ID`
 (`client_01KQBBSMQTSMTBN7HEC9KQBJC0`, the Mukoko Account application that `CONSOLE_WORKOS_API_KEY` belongs to; not a secret) and `WORKOS_REDIRECT_URI`
-(`https://shamwari.ai/lite/callback`). Two **secrets**, bound from the account's Secrets Store and
+(`https://shamwari.ai/callback`). Two **secrets**, bound from the account's Secrets Store and
 never written into git: `WORKOS_API_KEY` (the WorkOS environment's API key; the Worker is a
 confidential client) and `COOKIE_PASSWORD` (seals the cookie; at least 32 random characters).
 With either unbound the auth routes answer `503` and the gate fails closed: the page is a `503`, never served
@@ -342,7 +342,7 @@ owning-entity key.
   logout `https://shamwari.ai/chat/`, web origin `https://shamwari.ai`. **The sign-in page is now the light
   chat at `/lite/` (owner, 2026-11-01), so the app also needs the redirect URI
   `https://shamwari.ai/lite/callback`, the sign-in start `https://shamwari.ai/lite/auth/login` and the
-  logout return `https://shamwari.ai/lite/`; the `/chat/` values are for the main chat and are left alone.** So
+  logout return `https://shamwari.ai/lite/` (since 2026-11-12 these are `https://shamwari.ai/callback`, `https://shamwari.ai/auth/login` and `https://shamwari.ai/`; the `/lite/` ones stay registered while the old addresses redirect); the `/chat/` values are for the main chat and are left alone.** So
   `WORKOS_CLIENT_ID=client_01M68PCT0T5ECHKDYH45ECT0GV`, and the revocation window is about five
   minutes. The shared "Mukoko Account" app was not used because it has about forty redirect URIs
   and a five-hour access-token lifetime.
@@ -380,3 +380,22 @@ owning-entity key.
   the verifier for the token; nothing else new).
 - **A yes to the `chat-auth` Worker** (a new deployment) and where its cookie-sealing secret
   and WorkOS client secret live.
+
+## Sign-in at the root, one session for the whole origin (2026-11-12, owner's decision)
+
+- **Routes** are at the root: `GET /auth/login`, `GET /callback`, `GET /auth/token`, `POST /auth/logout`. None is under
+  `/lite/`; a test fails if one is. The WorkOS redirect URI is `https://shamwari.ai/callback` and the logout return
+  `https://shamwari.ai/`. `/lite/auth/login`, `/lite/callback` and `/lite/auth/logout` redirect to them for one release
+  (a callback started before the move fails once, because its state cookie was set for `/lite/`; signing in again works),
+  and `/lite/auth/token` is answered in place.
+- **Cookie:** `__Secure-shamwari_session` is `Path=/`, so the light chat (`/lite/`) and the main chat (`/chat/`) share one
+  session. The old `Path=/lite/` copy is expired every time the session cookie is set or cleared, so a device never holds
+  two copies (a spent one next to a fresh one would sign the person out on the next refresh). The one-time OAuth state
+  cookie is `Path=/callback`: only the callback ever needs it.
+- **Gate rule:** a signed-out visitor at `/` or anywhere under `/lite/` goes straight to `/auth/login` (the whole sign-in
+  screen, no shell); a signed-in visitor at `/` is sent to the app by connection quality (`worker/root.ts`). A cookie that
+  is no longer a session is cleared on the way. If the session cannot be checked at `/` (a fault, secrets unbound) the
+  visitor is still sent on to the app, whose own gate fails closed. `/chat/` is not served by this Worker yet; when it is,
+  its prefix is added to `GATED_PREFIXES` (`worker/gate.ts`) and to `assets.run_worker_first`.
+- **Service worker:** scope is still `/lite/`, and it passes `/auth/*` and `/callback` (and the old `/lite/` addresses)
+  straight to the network. `test/app/sw-signin.test.ts` runs the generated worker's fetch handler against each address.

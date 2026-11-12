@@ -52,12 +52,13 @@ say the chat is ready when it is not. Do not set the variable before `/chat/` an
   origin, so the chat works the day the gateway with this change is deployed. `www` is not
   listed: the marketing site makes no API calls. Until that deploy, the deployed gateway
   still lists both origins, which is harmless.
-- **Service worker** scope `/lite/` on the app origin; it passes `/lite/auth/*` and
-  `/lite/callback` straight to the network.
-- **WorkOS redirect URI**: `https://shamwari.ai/lite/callback` (moved from `/chat/callback` on
-  2026-11-01 when the PWA became the light chat at `/lite/`; the callback is on the app origin, as
-  the Console's own pattern requires). The WorkOS application must also allow the sign-in start
-  `https://shamwari.ai/lite/auth/login` and the logout return `https://shamwari.ai/lite/`.
+- **Service worker** scope `/lite/` on the app origin; it passes `/auth/*` and `/callback` (and the old
+  `/lite/auth/*`, `/lite/callback`) straight to the network.
+- **WorkOS redirect URI**: `https://shamwari.ai/callback` (the sign-in is at the root of the origin since 2026-11-12, so
+  the light and the main chat share one session; it was `/lite/callback` from 2026-11-01 and `/chat/callback` before
+  that). The WorkOS application must also allow the sign-in start `https://shamwari.ai/auth/login` and the logout
+  return `https://shamwari.ai/`. The old `https://shamwari.ai/lite/callback` and `/lite/` stay registered while the
+  old addresses redirect (one release); remove them after.
 - **The shared brand overlay** `site/src/styles/brand-shamwari.css` is imported by both.
 
 ## Switching it on: the order matters
@@ -134,7 +135,7 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
    Nothing in this build can check that `/chat/` is served by another build, so confirm
    `https://shamwari.ai/chat/` answers 200 first; flipping the switch early turns the root into a 404
    for fast connections.
-8. **Later, not now:** register the WorkOS redirect URI `https://shamwari.ai/lite/callback`;
+8. **Later, not now:** register the WorkOS redirect URI `https://shamwari.ai/callback`;
    set `PUBLIC_CHAT_AUTH=mukoko` on the app build only when the session Worker exists; set
    `PUBLIC_CHAT_LIVE=true` on the marketing build when the app is released.
 
@@ -162,7 +163,7 @@ Worker does not see.
 3. The first deploy of `shamwari-app` also creates the `SessionRefresh` Durable Object (a migration
    in the same file). It shows up under Workers & Pages > shamwari-app > Bindings.
 4. Sign-in cannot be tried on the `workers.dev` address: WorkOS accepts only
-   `https://shamwari.ai/lite/callback`. Test it after the apex is attached to `shamwari-app`.
+   `https://shamwari.ai/callback`. Test it after the apex is attached to `shamwari-app`.
 
 ### Verify after deploy
 
@@ -175,11 +176,12 @@ variables and the Durable Object), so check these against `https://shamwari.ai` 
       Object) and `ASSETS` (Assets). A Worker that lists none of the secrets was deployed before they were added to
       `site/app/wrangler.jsonc`: it will answer `503` to every page until it is redeployed with them. Then the Secrets Store
       must hold `CONSOLE_WORKOS_API_KEY` and `SESSION_SECRET` (it did when this was written; names only, never values).
-- [ ] `GET /lite/` with no cookie answers `302` to `/lite/auth/login`, not `503`, and not the page.
+- [ ] `GET /lite/` and `GET /` with no cookie answer `302` to `/auth/login`, not `503`, and not the page.
 - [ ] `GET /lite/_astro/<any script>.js` with no cookie answers `401`.
 - [ ] `GET /lite/disclaimer/`, `/lite/manifest.webmanifest` and `/lite/sw.js` answer `200` with no cookie.
-- [ ] Signing in from `/lite/auth/login` lands on `/lite/` and the chat loads; `/lite/auth/token` answers `200`.
-- [ ] `https://shamwari.ai/lite/callback` completes (it is the registered redirect URI).
+- [ ] Signing in from `/auth/login` lands on `/` (then the app) and the chat loads; `/auth/token` answers `200`; the session cookie is `Path=/`.
+- [ ] The old addresses redirect: `/lite/auth/login` is a `302` to `/auth/login`, `/lite/callback` a `302` to `/callback`, `POST /lite/auth/logout` a `307` to `/auth/logout`.
+- [ ] `https://shamwari.ai/callback` completes (it is the registered redirect URI).
 - [ ] With the cookie cleared, `/lite/` is a `302` to sign-in again.
 - [ ] Bindings for `WORKOS_API_KEY`, `COOKIE_PASSWORD`, `SESSION_REFRESH` and `ASSETS` are listed on the Worker.
 
@@ -200,8 +202,8 @@ variables and the Durable Object), so check these against `https://shamwari.ai` 
 `site/app/wrangler.jsonc` binds `WORKOS_API_KEY` (from `CONSOLE_WORKOS_API_KEY`) and `COOKIE_PASSWORD` (from
 `SESSION_SECRET`) out of the account's Secrets Store, the shared Mukoko secrets. Deploy with
 `npm run deploy:app` from `site/`, which builds with `PUBLIC_CHAT_AUTH=mukoko` and then runs `wrangler deploy`.
-After a deploy, `GET /lite/auth/login` should answer 302 to the Mukoko Account sign-in page; a real sign-in
-needs a person and a registered redirect URI (`https://shamwari.ai/lite/callback`).
+After a deploy, `GET /auth/login` should answer 302 to the Mukoko Account sign-in page; a real sign-in
+needs a person and a registered redirect URI (`https://shamwari.ai/callback`).
 
 ## Automatic release to production (shamwari-ai/shamwari#201)
 
@@ -218,7 +220,7 @@ version is gated; it is never automatic.
 4. **Deploy:** when `main` updates, Workers Builds deploys `shamwari-site` (connected) and
    `shamwari-app` (once the owner connects it in the Cloudflare dashboard).
 5. **Smoke:** `smoke-production.yml` checks production for up to 18 minutes: `/lite/`
-   unauthenticated is a 302 to `/lite/auth/login`; `/lite/disclaimer/`,
+   unauthenticated is a 302 to `/auth/login`; `/lite/disclaimer/`,
    `/lite/manifest.webmanifest` and `/lite/sw.js` are 200; a `/lite/_astro/*.js` script named in
    `sw.js` is 401 without a session; `www.shamwari.ai` is 200. On failure it opens an issue.
 
