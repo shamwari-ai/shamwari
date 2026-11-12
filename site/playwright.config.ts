@@ -24,6 +24,8 @@ export default defineConfig({
   projects: [
     // A low-end Android on a small screen is the device this is built for.
     { name: 'small-android', testDir: 'e2e', use: { ...devices['Pixel 5'], viewport: { width: 360, height: 640 } } },
+    // A desktop with a mouse: Mzizi's density layer draws controls smaller here (64rem up, fine pointer, hover, no touch).
+    { name: 'desktop', testDir: 'e2e-desktop', use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } } },
     {
       name: 'mukoko-auth',
       testDir: 'e2e-auth',

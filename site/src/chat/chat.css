@@ -10,6 +10,11 @@
  */
 @import 'tailwindcss';
 @import '@bundu/ui/styles/globals.css';
+/* Light and dark: tokens.css switches to dark only under .dark or [data-theme='dark'], and nothing here sets either, so
+   without this file the page stayed light on a dark phone while the browser turned the text white. color-scheme.css repeats
+   the dark tokens under prefers-color-scheme, and an explicit data-theme='light' still wins. Order matters: theme and
+   tokens (globals), then this, then the brand overlay last. */
+@import '@bundu/ui/styles/color-scheme.css';
 @import '@bundu/ui/styles/brand-shamwari.css';
 
 @config '../../tailwind.app.config.mjs';
@@ -25,6 +30,9 @@ html {
 body {
   font-size: var(--fs-body);
   line-height: var(--lh-body);
+  /* From the theme, not the browser's default: that is black or white by colour-scheme, whatever the tokens say. */
+  color: var(--foreground);
+  background-color: var(--background);
 }
 
 .skip {
@@ -94,7 +102,7 @@ body {
 }
 [data-slot='app-topbar'] [data-slot='topbar-action'],
 [data-slot='app-topbar'] > button,
-[data-slot='app-sidebar'] button {
+[data-slot='app-sidebar'] button:not(.side-row, .btn, [role='tab']) {
   min-height: var(--target-floor);
   min-width: var(--target-floor);
 }
@@ -569,6 +577,8 @@ input:not([type='checkbox']):not([type='radio']) {
   gap: var(--gap-floor);
 }
 .side-list .btn.link {
+  min-height: var(--size-control-sm);
+  font-size: var(--fs-small);
   max-width: 100%;
   justify-content: flex-start;
   text-align: start;
@@ -843,28 +853,40 @@ html[data-view='pending'] dialog {
   margin: 0;
 }
 
-/* ---- the drawer's foot rows ---------------------------------------------------------------------------------
-   Use the API, Disclaimer and privacy, Settings: quiet rows, not buttons. No fill and no outline; muted text with a
-   muted leading icon from the Mzizi set (the label carries the meaning, so the icon is decorative). The hit region is
-   the Bundu floor, hover adds a soft fill and the text steps up to full strength, and the focus ring is the page's. */
+/* ---- the drawer's rows ---------------------------------------------------------------------------------------
+   Chat, Projects, Factory, Artifacts, Plugins at the top; Use the API, Disclaimer and privacy, Settings at the foot;
+   chat and project titles in the lists. They read as text, not as buttons: no border and no fill at rest, a soft fill
+   on hover and a stronger one (with a marker) on the open section. Every size is a Mzizi token, none is a number of
+   ours: the row is DRAWN at --size-control-sm, which @bundu/ui's density layer sets to 32px on a desktop with a mouse
+   (64rem up, fine pointer, hover, no touch) and 49px everywhere else, and the label is the 14px caption size. The
+   49px hit region is never lowered on touch: there the row IS 49px. On a desktop the row is a composite list item, so
+   the transparent 49px overlay a button gets from the density layer is turned off here: it would overlap the next
+   row (Mzizi's own guidance: list rows take their height instead). The foot rows have no icons; the section rows keep
+   a 16px one in the label's colour. Colours are tokens, so they follow the light and dark themes. */
 .side-row {
   box-sizing: border-box;
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--gap-floor);
+  gap: calc(var(--gap-floor) * 1.5);
   width: 100%;
-  min-height: var(--target-floor);
+  min-height: var(--size-control-sm);
   padding-inline: var(--inset-floor);
+  border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
-  /* Muted, but not the muted token: that one is 6:1 on this surface, under the Bundu floor's 7:1 for body-size text.
-     This is the foreground eased toward the surface, built from the two tokens (no colour of its own), so it follows
-     light and dark and stays above the floor. */
+  /* Not the muted token: that one is about 6:1 on this surface, under the Bundu floor's 7:1 for text. This is the
+     foreground eased toward the surface, built from the two tokens (no colour of its own), so it follows light and dark. */
   color: color-mix(in oklab, var(--foreground) 80%, var(--background));
   font: inherit;
+  font-size: var(--fs-small);
+  line-height: var(--leading-floor);
   text-decoration: none;
   cursor: pointer;
   list-style: none;
+}
+.side-row::after {
+  display: none;
 }
 .side-row::-webkit-details-marker {
   display: none;
@@ -875,13 +897,9 @@ html[data-view='pending'] dialog {
 }
 .side-row .side-icon {
   flex: none;
-  width: 1.25rem;
-  height: 1.25rem;
-}
-.side-row .side-external {
-  margin-inline-start: auto;
   width: 1rem;
   height: 1rem;
+  color: currentColor;
 }
 .side-settings[open] > .side-row {
   color: var(--foreground);
@@ -908,18 +926,33 @@ html[data-view='pending'] dialog {
 .side-row[aria-current='page'] {
   background: var(--muted);
   color: var(--foreground);
-  font-weight: 600;
+  font-weight: 500;
+}
+.side-row[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  inset-block: var(--gap-floor);
+  inset-inline-start: 0;
+  inline-size: 0.125rem;
+  border-radius: 9999px;
+  background: var(--app-accent, var(--primary));
 }
 .side-row.side-disabled {
   cursor: default;
+  /* At large text the chip does not fit beside the label: it goes to a second line rather than off the screen. */
+  flex-wrap: wrap;
+  row-gap: var(--gap-floor);
 }
 .side-row.side-disabled:hover {
   background: transparent;
   color: color-mix(in oklab, var(--foreground) 80%, var(--background));
 }
 .side-chip {
+  flex: none;
+  white-space: nowrap;
   margin-inline-start: auto;
-  padding: 0 var(--gap-floor);
+  /* Tight on purpose: on a desktop the drawer is 260px wide, and the icon, "Factory" and this chip must share one 32px row. */
+  padding: 0 calc(var(--gap-floor) / 2);
   border: 0.5px solid var(--border-control, var(--border));
   border-radius: 999px;
   font-size: 0.875rem;
