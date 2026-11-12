@@ -716,8 +716,12 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     syncBusy();
     let pending: HTMLElement | null = null;
     let slow: ReturnType<typeof setTimeout> | undefined;
+    const stopper = new AbortController();
     try {
+      // A question that was stopped is on its way again, under a fresh key: the gateway may still be working on the first try.
+      const key = m.hint === 'stopped' ? `${m.id}.${Date.now().toString(36)}` : m.id;
       delete m.error;
+      delete m.hint;
       m.status = 'sent';
       // Written down BEFORE the request. A reload or a killed tab mid-flight
       // would otherwise lose the question; on load a `sent` question with no
@@ -738,12 +742,17 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
           pending.tabIndex = -1;
           pending.focus({ preventScroll: true });
         }
-        slow = setTimeout(() => pending?.append(h('p', { class: 'note' }, s.slow)), SLOW_AFTER_MS);
+        // After a while the person is told it is slow and can stop it: the question stays on this device, unanswered.
+        slow = setTimeout(() => {
+          const stop = h('button', { type: 'button', class: 'btn stop-answer' }, s.stop);
+          stop.addEventListener('click', () => stopper.abort());
+          pending?.append(h('p', { class: 'note' }, s.slow), stop);
+        }, SLOW_AFTER_MS);
       }
 
       let res = await client.ask(
         { messages: contextFor(th, m), scope: m.scope === 'community' ? 'community' : GENERAL },
-        { idempotencyKey: m.id },
+        { idempotencyKey: key, signal: stopper.signal },
       );
       // No credential could be obtained (the renewal failed on the network, say) for
       // someone who IS signed in: that is "the answer did not arrive", and the
@@ -756,6 +765,20 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
       // Delete history ran while this was in flight: the thread it belongs to is
       // gone, and writing it back would bring the deleted conversation back.
       if (startedIn !== epoch) return;
+
+      if (stopper.signal.aborted && !res.ok) {
+        // The person stopped it and nothing came back: the question stays here, not sent again by itself (it is not queued),
+        // and can be sent now or discarded. (An answer that did arrive in the same moment is shown as usual.)
+        m.status = 'local';
+        m.hint = 'stopped';
+        delete m.error;
+        await save(th);
+        if (shown()) {
+          mount(m);
+          input.focus();
+        }
+        return;
+      }
 
       if (res.ok) {
         const reply: StoredMessage = {
