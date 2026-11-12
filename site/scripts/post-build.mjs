@@ -142,6 +142,8 @@ const csp = [
   "script-src 'self'",
   "style-src 'self'",
   "img-src 'self'",
+  // A voice note the person recorded is played from a blob: URL made on this device; nothing else may load media.
+  "media-src 'self' blob:",
   `connect-src 'self' ${api}`,
   "manifest-src 'self'",
   "worker-src 'self'",
