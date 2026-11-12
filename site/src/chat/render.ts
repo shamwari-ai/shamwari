@@ -1,5 +1,5 @@
 import type { Strings } from './strings';
-import type { StoredMessage } from './store';
+import type { AttachmentMeta, StoredMessage } from './store';
 import type { Answer, AskErrorKind, Citation, Language, Scope } from './types';
 
 /**
@@ -39,6 +39,8 @@ export function formatDate(iso: string, lang: Language): string {
   }
   return iso.slice(0, 10);
 }
+
+export const sizeLabel = (n: number): string => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 
 export function renderCitation(c: Citation, s: Strings, lang: Language): HTMLElement {
   const meta = [c.authority, c.effective_from ? `${s.effective} ${formatDate(c.effective_from, lang)}` : '']
@@ -113,12 +115,39 @@ export interface QueueActions {
   discard(): void;
 }
 
-export function renderUser(m: StoredMessage, s: Strings, queue?: QueueActions): HTMLElement {
+export interface AttachmentActions {
+  /** Play a voice note or save a copy of a file, from the copy kept on this device. */
+  open(a: AttachmentMeta): void;
+}
+
+/** The files and voice notes kept with a question: each says plainly that it stayed on this device. */
+function renderAttachments(m: StoredMessage, s: Strings, files?: AttachmentActions): HTMLElement | null {
+  if (!m.attachments?.length) return null;
+  return h(
+    'ul',
+    { class: 'attachments', 'aria-label': s.attachments },
+    ...m.attachments.map((a) => {
+      const open = h('button', { type: 'button', class: 'attach-open' }, a.kind === 'voice' ? s.playVoice : s.saveCopy);
+      open.setAttribute('aria-label', `${a.kind === 'voice' ? s.playVoice : s.saveCopy}: ${a.name}`);
+      open.addEventListener('click', () => files?.open(a));
+      return h(
+        'li',
+        { class: 'attach-chip' },
+        h('span', { class: 'attach-name' }, a.name),
+        h('span', { class: 'attach-meta' }, `${sizeLabel(a.size)} · ${s.attachKept}`),
+        files ? open : null,
+      );
+    }),
+  );
+}
+
+export function renderUser(m: StoredMessage, s: Strings, queue?: QueueActions, files?: AttachmentActions): HTMLElement {
   const el = h(
     'article',
     { class: 'msg user', 'data-id': m.id, 'aria-label': s.you },
     h('p', { class: 'who' }, s.you),
     h('p', { class: 'text' }, m.text),
+    renderAttachments(m, s, files),
   );
   updateUser(el, m, s, queue);
   return el;

@@ -81,7 +81,7 @@ export async function seedLegacyQuestion(
   await page.evaluate(
     async ({ text, scope, status }) => {
       const db = await new Promise<IDBDatabase>((ok, no) => {
-        const open = indexedDB.open('shamwari-chat', 2);
+        const open = indexedDB.open('shamwari-chat');
         open.onsuccess = () => ok(open.result);
         open.onerror = () => no(open.error);
       });

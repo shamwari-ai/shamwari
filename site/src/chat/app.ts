@@ -1,4 +1,5 @@
 import { developerKey } from './auth';
+import type { Attach } from './attach';
 import { mukokoAuth } from './auth-mukoko';
 import { createClient } from './client';
 import { readStoredUser, rememberUser, subjectOf, userKeyOf } from './user';
@@ -171,6 +172,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   const queueActions = (m: StoredMessage): QueueActions => ({
     sendNow: () => void deliver(thread, m),
     discard: async () => {
+      for (const a of m.attachments ?? []) void store.removeFile(a.id).catch(() => undefined);
       thread.messages = thread.messages.filter((x) => x !== m);
       nodes.get(m.id)?.remove();
       nodes.delete(m.id);
@@ -189,6 +191,34 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     return el;
   };
 
+  /** Open an attachment from the copy on this device: a voice note plays, a file is offered as a download. No request is made. */
+  let voice: HTMLAudioElement | null = null;
+  let voiceUrl = '';
+  const attachmentActions = {
+    open: async (a: { id: string; kind: 'file' | 'voice'; name: string }) => {
+      const f = await store.getFile(a.id).catch(() => undefined);
+      if (!f) {
+        $('#toast').textContent = strings().attachmentGone;
+        return;
+      }
+      const url = URL.createObjectURL(f.blob);
+      if (a.kind === 'voice') {
+        // One player: a second tap stops the first, so nothing overlaps and no URL is left behind.
+        voice?.pause();
+        if (voiceUrl) URL.revokeObjectURL(voiceUrl);
+        voiceUrl = url;
+        voice = new Audio(url);
+        void voice.play().catch(() => undefined);
+      } else {
+        const link = h('a', { href: url, download: a.name });
+        document.body.append(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      }
+    },
+  };
+
   const mount = (m: StoredMessage) => {
     const s = strings();
     if (m.role === 'assistant' && m.answer) {
@@ -197,7 +227,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     }
     const existing = nodes.get(m.id);
     if (existing) updateUser(existing, m, s, queueActionsFor(m));
-    else place(m.id, renderUser(m, s, queueActionsFor(m)));
+    else place(m.id, renderUser(m, s, queueActionsFor(m), attachmentActions));
     if (m.error) place(`${m.id}:error`, renderError(m.id, m.error, s, actionsFor(m)), m.id);
   };
 
@@ -276,6 +306,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     const found = (await listThreads()).find((x) => x.id === id);
     if (!found) return;
     thread = found;
+    attach.clear(); // what was being added belongs to the chat it was added in
     rebuild();
     void renderHistory();
     showSection('chat');
@@ -328,8 +359,108 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     );
     if (t.id === thread.id) b.setAttribute('aria-current', 'true');
     b.addEventListener('click', () => void openThread(t.id));
-    return h('li', {}, b);
+    // The row's own "...": shown on hover and on focus (always on touch), it opens the shared menu for THIS chat.
+    const more = h(
+      'button',
+      { type: 'button', class: 'row-more', 'aria-haspopup': 'true', 'aria-label': `${strings().chatOptions}: ${t.title || ''}` },
+      h('span', { 'aria-hidden': 'true' }, '…'),
+    );
+    more.addEventListener('click', () => openRowMenu(t, more));
+    return h('li', { class: 'chat-li', 'data-id': t.id }, b, more);
   };
+
+  // ---- the menu of one chat in the list -------------------------------------------------------------------
+  const rowMenu = $('#row-menu') as HTMLElement & { showPopover(): void; hidePopover(): void };
+  let menuFor: Thread | null = null;
+  /** The thread a menu acts on: the open one is the live object, so a change is never written over by a stale copy. */
+  const menuThread = (): Thread | null => (menuFor && menuFor.id === thread.id ? thread : menuFor);
+  // Closed (by an action, Escape or a click away): forget the chat, and the "..." is no longer expanded.
+  rowMenu.addEventListener('toggle', (e) => {
+    if ((e as Event & { newState?: string }).newState === 'closed') {
+      menuFor = null;
+      document.querySelectorAll('.row-more[aria-expanded="true"]').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+    }
+  });
+  /** After the list is drawn again, focus goes back to that chat's "..." (or the first row), not to the top of the page. */
+  const focusRow = (id: string) =>
+    setTimeout(() => {
+      const more = [...document.querySelectorAll<HTMLElement>('#chat-sidebar li.chat-li')].find((li) => li.dataset.id === id)?.querySelector<HTMLElement>('.row-more');
+      (more ?? document.querySelector<HTMLElement>('#side-new'))?.focus();
+    }, 50);
+  const openRowMenu = (t: Thread, anchor: HTMLElement) => {
+    const s = strings();
+    menuFor = t;
+    const pin = $('#row-pin');
+    pin.textContent = t.pinned ? s.unpin : s.pin;
+    pin.setAttribute('aria-pressed', String(!!t.pinned));
+    const sel = $<HTMLSelectElement>('#row-project');
+    sel.replaceChildren(h('option', { value: '' }, s.noProject), ...projectsNow.map((p) => h('option', { value: p.id }, p.name)));
+    sel.value = t.projectId && projectsNow.some((p) => p.id === t.projectId) ? t.projectId : '';
+    const r = anchor.getBoundingClientRect();
+    anchor.setAttribute('aria-expanded', 'true');
+    rowMenu.style.top = `${Math.round(r.bottom + 4)}px`;
+    rowMenu.style.left = `${Math.round(r.left)}px`;
+    rowMenu.showPopover();
+    // Not off the screen: measured after it is shown. It opens above the "..." if there is no room below, and slides left if
+    // there is none at the right.
+    const box = rowMenu.getBoundingClientRect();
+    if (r.bottom + 4 + box.height > innerHeight - 8) rowMenu.style.top = `${Math.max(8, Math.round(r.top - box.height - 4))}px`;
+    rowMenu.style.left = `${Math.max(8, Math.min(Math.round(r.left), Math.round(innerWidth - box.width - 8)))}px`;
+    $('#row-pin').focus();
+  };
+  const togglePin = async (t: Thread) => {
+    t.pinned = !t.pinned;
+    await save(t);
+    void renderHistory();
+  };
+  const moveToProject = async (t: Thread, id: string) => {
+    if (id) t.projectId = id;
+    else delete t.projectId;
+    await save(t);
+    void renderHistory();
+  };
+  /** Delete one chat, after asking. The open one is replaced by a fresh chat. A chat that is still sending is not deleted. */
+  const deleteThread = async (t: Thread): Promise<boolean> => {
+    if (t.id !== thread.id && t.messages.some((m) => inflight.has(m.id) || m.status === 'queued')) {
+      $('#toast').textContent = strings().deleteWait; // its answer would bring it back
+      return false;
+    }
+    if (!confirm(strings().deleteChatConfirm)) return false;
+    live.delete(t.id);
+    void store.removeFilesOf(t.id).catch(() => undefined); // its attachments go with it
+    const wasOpen = t.id === thread.id;
+    if (wasOpen) attach.clear();
+    t.messages = [];
+    await save(t); // an empty thread is removed from the store
+    if (wasOpen) {
+      thread = fresh();
+      rebuild();
+      input.focus();
+    }
+    void renderHistory();
+    return true;
+  };
+
+  $('#row-pin').addEventListener('click', async () => {
+    const t = menuThread();
+    if (!t) return;
+    rowMenu.hidePopover();
+    await togglePin(t);
+    focusRow(t.id);
+  });
+  $('#row-project').addEventListener('change', async () => {
+    const t = menuThread();
+    if (!t) return;
+    rowMenu.hidePopover();
+    await moveToProject(t, $<HTMLSelectElement>('#row-project').value);
+    focusRow(t.id);
+  });
+  $('#row-delete').addEventListener('click', async () => {
+    const t = menuThread();
+    if (!t) return;
+    rowMenu.hidePopover();
+    if (!(await deleteThread(t))) focusRow(t.id);
+  });
 
   /** Loose chats under Today / Yesterday / Previous 7 days / Older, newest first. */
   const groupedChats = (chats: Thread[], s: ReturnType<typeof strings>): HTMLElement[] => {
@@ -468,29 +599,11 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     sel.value = thread.projectId && projectsNow.some((p) => p.id === thread.projectId) ? thread.projectId : '';
   };
 
-  $('#pin-chat').addEventListener('click', async () => {
-    thread.pinned = !thread.pinned;
-    await save(thread);
-    void renderHistory();
-  });
-  $('#chat-project').addEventListener('change', async () => {
-    const id = $<HTMLSelectElement>('#chat-project').value;
-    if (id) thread.projectId = id;
-    else delete thread.projectId;
-    await save(thread);
-    void renderHistory();
-  });
+  $('#pin-chat').addEventListener('click', () => void togglePin(thread));
+  $('#chat-project').addEventListener('change', () => void moveToProject(thread, $<HTMLSelectElement>('#chat-project').value));
   $('#delete-chat').addEventListener('click', async () => {
-    if (!confirm(strings().deleteChatConfirm)) return;
     $('#chat-tools').hidePopover?.();
-    const gone = thread;
-    live.delete(gone.id);
-    gone.messages = [];
-    await save(gone); // an empty thread is removed from the store
-    thread = fresh();
-    rebuild();
-    void renderHistory();
-    input.focus();
+    await deleteThread(thread);
   });
   const projectForm = $<HTMLFormElement>('#project-form');
   const newProjectButton = $('#new-project');
@@ -759,6 +872,18 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     setBusy('ask', true);
     try {
       const m: StoredMessage = { id: newId(), role: 'user', text: clean, at: Date.now(), scope: GENERAL, status: 'sent' };
+      // Files and voice notes are written to this device with the question and go no further: only `clean` is ever sent.
+      const added = attach.take();
+      if (added.length) {
+        try {
+          for (const f of added) await store.putFile({ id: f.id, kind: f.kind, name: f.name, type: f.type, size: f.size, blob: f.blob, threadId: thread.id, at: m.at });
+          m.attachments = added.map(({ id, kind, name, type, size }) => ({ id, kind, name, type, size }));
+        } catch {
+          // All or none: a half-saved set would leave files that no message shows.
+          for (const f of added) void store.removeFile(f.id).catch(() => undefined);
+          $('#toast').textContent = strings().storageFailed;
+        }
+      }
       if (!thread.messages.length) thread.title = titleOf(clean);
       thread.messages.push(m);
       syncEmpty();
@@ -912,6 +1037,27 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
 
   // ---- controls ------------------------------------------------------------
   const sendBtn = $<HTMLButtonElement>('#send');
+  // Attachments load on first use (a tap on "+" or the microphone): most questions never need the code, and the first load stays small.
+  let attachImpl: Attach | null = null;
+  const attach = {
+    take: () => attachImpl?.take() ?? [],
+    clear: () => attachImpl?.clear(),
+    refresh: () => attachImpl?.refresh(),
+  };
+  $('#mic').hidden = !(typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia);
+  for (const id of ['#plus', '#mic']) {
+    const button = $(id);
+    const loadThenRepeat = async (e: Event) => {
+      if (attachImpl) return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      button.removeEventListener('click', loadThenRepeat, true);
+      const { initAttach } = await import('./attach');
+      attachImpl ??= initAttach(document, { strings, say: (text) => ($('#toast').textContent = text), newId });
+      button.click(); // the tap that loaded it is now handled by it
+    };
+    button.addEventListener('click', loadThenRepeat, true);
+  }
   const autosize = () => {
     setBusy('draft', input.value.trim() !== ''); // text in the question box is not reloaded away by a release
     sendBtn.disabled = input.value.trim() === ''; // the round send button is muted until there is something to send
@@ -951,6 +1097,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   $('#new-chat').addEventListener('click', () => {
     if (filterText) searchRow.click(); // a new chat starts with the whole list, not a search for the last one
     showSection('chat'); // a new chat is a chat: the drawer's next opening shows the chats again
+    attach.clear();
     if (thread.messages.length) {
       thread = fresh();
       rebuild();
@@ -1024,6 +1171,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   $('#delete-history').addEventListener('click', async () => {
     if (!confirm(strings().deleteConfirm)) return;
     closeAccount();
+    attach.clear();
     await deleteMessagesFromDevice();
     $('#toast').textContent = strings().deleted;
     input.focus();
@@ -1036,6 +1184,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     lang = langSelect.value;
     saveLanguage(lang);
     applyStrings(document, lang);
+    attach.refresh();
     labelShell();
     syncOfflineMode();
     rebuild();

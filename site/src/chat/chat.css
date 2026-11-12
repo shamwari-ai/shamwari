@@ -102,7 +102,7 @@ body {
 }
 [data-slot='app-topbar'] [data-slot='topbar-action'],
 [data-slot='app-topbar'] > button,
-[data-slot='app-sidebar'] button:not(.side-row, .btn, [role='tab']) {
+[data-slot='app-sidebar'] button:not(.side-row, .btn, .row-more, [role='tab']) {
   min-height: var(--target-floor);
   min-width: var(--target-floor);
 }
@@ -1382,8 +1382,8 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 }
 .composer-bar {
   display: flex;
+  flex-wrap: wrap; /* at large text the three buttons do not fit one row: they wrap instead of leaving the screen */
   align-items: center;
-  justify-content: flex-end;
   gap: var(--gap-floor);
 }
 .send-round {
@@ -1451,12 +1451,6 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .composer:focus-within {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
-}
-.composer-bar {
-  justify-content: space-between; /* "+" (attachments) at the left, send at the right */
-}
-.composer-bar > :only-child {
-  margin-inline-start: auto;
 }
 
 /* The title and its "..." in the top bar. */
@@ -1553,4 +1547,209 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 }
 .cite .badge {
   flex: none;
+}
+
+/* ---- a chat row's own "..." menu --------------------------------------------------------------------------- */
+.chat-li {
+  position: relative;
+  list-style: none;
+}
+.row-more {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  font: inherit;
+  font-size: var(--fs-small);
+  line-height: 1;
+  cursor: pointer;
+}
+.row-more::after {
+  display: none;
+}
+/* A mouse: the "..." appears over the time, on hover and when anything in the row has focus. The row's own hit region and
+   this one overlap only while it is shown. */
+@media (hover: hover) and (pointer: fine) {
+  .row-more {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: var(--gap-floor);
+    inline-size: var(--size-control-sm);
+    block-size: var(--size-control-sm);
+    padding: 0;
+    display: inline-flex;
+    opacity: 0;
+    background: var(--muted);
+  }
+  .chat-li:hover .row-more,
+  .chat-li:focus-within .row-more,
+  .row-more[aria-expanded='true'] {
+    opacity: 1;
+  }
+  .chat-li:hover .chat-row-when,
+  .chat-li:focus-within .chat-row-when {
+    visibility: hidden;
+  }
+}
+/* A finger: no hover, so the "..." is always there, beside the row, not over it. */
+@media (hover: none), (pointer: coarse) {
+  .chat-li {
+    display: flex;
+    gap: var(--gap-floor);
+    align-items: stretch;
+  }
+  .chat-li > .chat-row {
+    flex: 1 1 0;
+    min-width: 0;
+    inline-size: auto;
+  }
+  .row-more {
+    flex: none;
+    display: inline-flex;
+    inline-size: var(--size-control-sm);
+    min-block-size: var(--size-control-sm);
+  }
+}
+/* The menu is the chat menu's look, anchored by script under the "...". */
+#row-menu:not(:popover-open) {
+  display: none;
+}
+#row-menu[popover]:popover-open {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  inline-size: 16rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover, var(--background));
+  color: var(--popover-foreground, var(--foreground));
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+
+/* ---- attachments: "+", the microphone, and what has been added ------------------------------------------------- */
+.composer-gap {
+  flex: 1 1 0; /* "+" at the left, the microphone and send at the right */
+}
+.bar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--size-control-sm);
+  block-size: var(--size-control-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  cursor: pointer;
+}
+.bar-icon:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.bar-icon[aria-pressed='true'] {
+  background: var(--destructive-text, var(--destructive));
+  color: var(--background);
+}
+.bar-icon[hidden] {
+  display: none;
+}
+/* The "+" menu: opens upward from the button, placed by script. */
+#plus-menu:not(:popover-open) {
+  display: none;
+}
+#plus-menu[popover]:popover-open {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  inline-size: 16rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover, var(--background));
+  color: var(--popover-foreground, var(--foreground));
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+#plus-menu .btn {
+  justify-content: flex-start;
+  inline-size: 100%;
+}
+/* What is waiting to be sent, above the text, and what a sent question kept. Each says it stayed on this device. */
+.attach-list,
+.attachments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.attach-list[hidden] {
+  display: none;
+}
+.attach-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--gap-floor);
+  padding: var(--gap-floor) var(--inset-floor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  font-size: var(--fs-small);
+  min-width: 0;
+}
+.attach-name {
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.attach-meta {
+  flex: 2 1 12rem;
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+}
+.attach-remove,
+.attach-open {
+  flex: none;
+  min-inline-size: var(--size-control-sm);
+  min-block-size: var(--size-control-sm);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.attach-remove:hover,
+.attach-open:hover {
+  background: color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.attach-open {
+  text-decoration: underline;
+  padding-inline: var(--gap-floor);
+}
+.attach-remove::after,
+.attach-open::after {
+  display: none;
+}
+.msg.user .attachments {
+  margin-top: var(--gap-floor);
+}
+.msg.user .attach-chip {
+  background: color-mix(in oklab, var(--foreground) 6%, transparent);
 }

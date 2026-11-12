@@ -18,7 +18,7 @@ test('history is grouped by day, one line per chat with its time, and Search nar
   await expect(rows.first().locator('.chat-row-when')).not.toHaveText('');
   // One line each: the title is cut with an ellipsis, never wrapped.
   for (const h of await rows.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height))) expect(h).toBeLessThanOrEqual(50);
-  await expect(page.locator('#history-list button[aria-current="true"]')).toHaveCount(1);
+  await expect(page.locator('#history-list button.chat-row[aria-current="true"]')).toHaveCount(1);
 
   await page.locator('#side-search').click();
   await page.locator('#side-filter').fill('searched');
@@ -106,4 +106,31 @@ test('a source is one compact row, with the detail under it', async ({ page }) =
   await expect(cite.locator('.cite-link')).toBeVisible();
   await cite.locator('summary').click();
   await expect(cite.locator('.cite-meta')).toBeVisible();
+});
+
+test('a chat in the list has its own "..." menu: pin, project, delete', async ({ page }) => {
+  await openChat(page);
+  await ask(page, 'What does the Constitution say about equality?');
+  await expect(page.locator('.cite').first()).toBeVisible();
+  await newChat(page);
+  await ask(page, 'Is it legal to be searched?');
+  await expect(page.locator('article.msg.bot:not(.pending) .cite').first()).toBeVisible();
+  await openChats(page);
+  const first = page.locator('#history-list li.chat-li').filter({ hasText: 'What does the' });
+  await first.locator('.row-more').click();
+  await expect(page.locator('#row-menu')).toBeVisible();
+  // Pin: the chat moves under Pinned.
+  await page.locator('#row-pin').click();
+  await expect(page.locator('#pinned-list')).toContainText('What does the');
+  await expect(page.locator('#row-menu')).toBeHidden();
+  // Delete asks first; declining keeps it, accepting removes only that chat.
+  await page.locator('#pinned-list li.chat-li .row-more').click();
+  page.once('dialog', (d) => void d.dismiss());
+  await page.locator('#row-delete').click();
+  await expect(page.locator('#pinned-list')).toContainText('What does the');
+  await page.locator('#pinned-list li.chat-li .row-more').click();
+  page.once('dialog', (d) => void d.accept());
+  await page.locator('#row-delete').click();
+  await expect(page.locator('#pinned-list')).not.toContainText('What does the');
+  await expect(page.locator('article.msg.user')).toHaveCount(1); // the open chat is untouched
 });

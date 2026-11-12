@@ -258,5 +258,23 @@ behaviour; the geometry tests moved with it. Screenshots (light and dark; 390, 1
 - **Chat menu and sources:** pin, project and delete live in a "…" menu beside the chat's title (a popover; Delete still asks first). A
   source is one compact row (Ground badge, the section, an "Open source" link) with the document, issuer and date under a disclosure.
   The composer's container is its only edge; its focus ring is the container's.
-- **Not built yet, on purpose:** per-row "…" actions (the same menu for a row in the drawer), thumbs up/down (nothing
+- **Row menu:** each chat in the list has its own "…" (pin, project, delete). With a mouse it shows over the time on hover and on focus;
+  on touch it is always there, beside the row. One shared popover, inside the drawer so opening it does not close the drawer.
+- **Not built yet, on purpose:** thumbs up/down (nothing
   stores feedback), read aloud (no Shona/Ndebele text to speech), and the "+" attach and microphone buttons (the next piece).
+
+## Attachments, phase 1: on this device only (2026-11-12)
+
+A "+" at the left of the composer opens a menu with **Upload a file** (a skills entry is not shown until Skills has something in it), and a
+microphone records a **voice note**. Both stay on this device and go nowhere: adding, recording and removing make no network request
+(`e2e/attach.spec.ts` watches every request), and what is sent with the question is its text and nothing about the attachment.
+
+- **Where they live:** until the question is sent they are in memory only (up to 4 per question, 10 MB each, a voice note up to
+  5 minutes). On send they are written to IndexedDB (`files`, database version 3) next to the question, and every chip says
+  "Kept on this device. Not sent." A voice note plays from the copy on the device; a file is offered as "Save a copy". Deleting a chat,
+  discarding a queued question or deleting history removes its files; starting another chat leaves unsent ones behind.
+- **What it does not do:** no transcription (we promise nothing for Shona or Ndebele speech), no reading of a file's contents, no text to
+  speech. The model never sees an attachment.
+- **CSP:** `media-src 'self' blob:` was added in `scripts/post-build.mjs` so a recording can play from a blob URL made on the device; nothing
+  else may load media.
+- **Known limits:** attachments are not encrypted on the device (same as the chats); the attachments code (1.5 KB gzipped) loads on the first tap of "+" or the microphone, so the first load stays under its budget.
