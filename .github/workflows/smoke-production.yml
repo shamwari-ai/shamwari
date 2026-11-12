@@ -60,7 +60,8 @@ jobs:
             # accounts.mukoko.com/redirect-uri-invalid and nobody can sign in, with no deploy to blame.
             final=$(curl -sL -o /dev/null -w '%{url_effective}' --max-time 30 https://shamwari.ai/auth/login)
             case "$final" in
-              *redirect-uri-invalid*) fail "WorkOS redirect address for shamwari.ai/callback is not registered: /auth/login ended at $final" ;;
+              *redirect-uri-invalid*)
+                fail "WorkOS redirect address for shamwari.ai/callback is not registered: /auth/login ended at $final" ;;
             esac
             return $failed
           }
@@ -80,13 +81,16 @@ jobs:
         run: |
           if grep -q 'redirect address for shamwari.ai/callback is not registered' failures.txt 2>/dev/null; then
             title="WorkOS redirect address for shamwari.ai/callback is not registered"
-            fix="Sign-in ends on accounts.mukoko.com/redirect-uri-invalid. In the WorkOS dashboard, Mukoko Account application, Redirects, add https://shamwari.ai/callback (the list is shared: another session or script may have replaced it). See docs/chat-signin.md, 'If sign-in says the redirect address does not match'."
+            fix="Sign-in ends on accounts.mukoko.com/redirect-uri-invalid. In the WorkOS dashboard, Mukoko Account application, \
+          Redirects, add https://shamwari.ai/callback (the list is shared: another session or script may have replaced it). \
+          See docs/chat-signin.md, 'If sign-in says the redirect address does not match'."
           elif [ "$EVENT" = schedule ]; then
             title="production smoke check failed (scheduled)"
             fix="Look at what failed below, then roll back the affected Worker in the Cloudflare dashboard if a release caused it."
           else
             title="production smoke check failed after the release of ${GITHUB_SHA::7}"
-            fix="Roll back the affected Worker to its previous version in the Cloudflare dashboard (Workers & Pages, Deployments), then fix forward."
+            fix="Roll back the affected Worker to its previous version in the Cloudflare dashboard \
+          (Workers & Pages, Deployments), then fix forward."
           fi
           body="The smoke check failed. Run: $RUN_URL
 
@@ -97,7 +101,8 @@ jobs:
 
           No issue: automatic report from smoke-production.yml (shamwari-ai/shamwari#201)."
           # One issue per problem, not one every 30 minutes: comment on the open one if there is one.
-          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number,title --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" \
+            --json number,title --jq "map(select(.title == \"$title\")) | .[0].number // empty")
           if [ -n "$existing" ]; then
             gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "Still failing. Run: $RUN_URL"
           else
