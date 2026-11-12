@@ -3,30 +3,32 @@
 // the model's output under an open-weight label and flagged trainable. Both
 // steps now treat "no text" as a failure so the next rung engages and the
 // degradation probe sees it.
-import { describe, expect, it, vi, afterEach } from 'vitest';
-import { viaGateway, viaWorkersAI } from '../src/gateway';
-import type { RequestMetadata } from '../src/gateway';
-import type { Env, Message } from '../src/types';
-import { targets } from '../src/router';
+import { describe, expect, it, vi, afterEach } from "vitest";
+import { viaGateway, viaWorkersAI } from "../src/gateway";
+import type { RequestMetadata } from "../src/gateway";
+import type { Env, Message } from "../src/types";
+import { targets } from "../src/router";
 
-const messages: Message[] = [{ role: 'user', content: 'What is the VAT rate?' }];
+const messages: Message[] = [
+  { role: "user", content: "What is the VAT rate?" },
+];
 const meta: RequestMetadata = {
-  tier: 'economy',
-  scope: 'platform',
-  ownerEntityId: 'e-1',
-  surface: 'shamwari.ai',
-  requestId: 'r-1',
+  tier: "economy",
+  scope: "platform",
+  ownerEntityId: "e-1",
+  surface: "shamwari.ai",
+  requestId: "r-1",
 };
 
 function env(response: unknown) {
   return {
     AI: { run: vi.fn(async () => response) },
-    CF_ACCOUNT_ID: 'a',
-    CF_GATEWAY_ID: 'g',
-    CF_ROUTE_NAME: 'shamwari',
-    CF_AIG_TOKEN: { get: async () => 't' },
-    ECONOMY_MODEL: '@cf/zai-org/glm-5.3-flash',
-    STANDARD_MODEL: '@cf/zai-org/glm-5.3',
+    CF_ACCOUNT_ID: "a",
+    CF_GATEWAY_ID: "g",
+    CF_ROUTE_NAME: "shamwari",
+    CF_AIG_TOKEN: { get: async () => "t" },
+    ECONOMY_MODEL: "@cf/zai-org/glm-5.3-flash",
+    STANDARD_MODEL: "@cf/zai-org/glm-5.3",
   } as unknown as Env;
 }
 
@@ -35,31 +37,64 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('no text is a failure, not an answer', () => {
-  it('the gateway step returns null for a 200 with no content', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.stubGlobal('fetch', async () =>
-      Response.json({ choices: [{ message: { content: '  ' } }] }),
+describe("no text is a failure, not an answer", () => {
+  it("the gateway step returns null for a 200 with no content", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.stubGlobal("fetch", async () =>
+      Response.json({ choices: [{ message: { content: "  " } }] }),
     );
     const e = env({});
     expect(await viaGateway(e, targets(e).economy, messages, meta)).toBeNull();
   });
 
-  it('the gateway step still returns a real answer', async () => {
-    vi.stubGlobal('fetch', async () =>
-      Response.json({ choices: [{ message: { content: 'ok' } }] }),
+  it("the gateway step still returns a real answer", async () => {
+    vi.stubGlobal("fetch", async () =>
+      Response.json({ choices: [{ message: { content: "ok" } }] }),
     );
     const e = env({});
-    expect((await viaGateway(e, targets(e).economy, messages, meta))?.text).toBe('ok');
+    expect(
+      (await viaGateway(e, targets(e).economy, messages, meta))?.text,
+    ).toBe("ok");
   });
 
-  it('the Workers AI step throws rather than substituting an apology', async () => {
+  it("the Workers AI step throws rather than substituting an apology", async () => {
     const e = env({});
-    await expect(viaWorkersAI(e, targets(e).economy, messages, 'platform')).rejects.toThrow(/no text/);
+    await expect(
+      viaWorkersAI(e, targets(e).economy, messages, "platform"),
+    ).rejects.toThrow(/no text/);
   });
 
-  it('the Workers AI step still returns a real answer', async () => {
-    const e = env({ response: 'ok' });
-    expect((await viaWorkersAI(e, targets(e).economy, messages, 'platform')).text).toBe('ok');
+  it("the Workers AI step still returns a real answer", async () => {
+    const e = env({ response: "ok" });
+    expect(
+      (await viaWorkersAI(e, targets(e).economy, messages, "platform")).text,
+    ).toBe("ok");
+  });
+
+  // Production, 2026-11-12: glm-5.3-flash answers in the OpenAI shape and has no `response` field, so
+  // every answer from this step looked empty and the request ended in a 500.
+  it("the Workers AI step reads the OpenAI-style answer the GLM models give", async () => {
+    const e = env({
+      choices: [
+        {
+          message: { role: "assistant", content: "Hello there!" },
+          finish_reason: "stop",
+        },
+      ],
+      usage: { prompt_tokens: 19, completion_tokens: 5 },
+    });
+    const out = await viaWorkersAI(e, targets(e).economy, messages, "platform");
+    expect(out.text).toBe("Hello there!");
+    expect(out.inputTokens).toBe(19);
+    expect(out.outputTokens).toBe(5);
+  });
+
+  it("an OpenAI-style reply with no content is still a failure, not an answer", async () => {
+    const e = env({
+      choices: [{ message: { role: "assistant", content: null } }],
+    });
+    await expect(
+      viaWorkersAI(e, targets(e).economy, messages, "platform"),
+    ).rejects.toThrow(/no text/);
   });
 });
