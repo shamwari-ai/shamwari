@@ -6,6 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { findClaimProblems, selfTest } from './claims.mjs';
+import { authModeProblem } from './check-auth-mode.mjs';
 
 const walk = (dir) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
@@ -92,6 +93,13 @@ if (TARGET === 'app') {
     if (!p.endsWith('/lite/index.html') && !p.endsWith('/lite/disclaimer/index.html')) fail.push(`app build contains a page that is not the chat: ${p.slice(DIST.length)}`);
   }
   if (!pages.some((p) => p.endsWith('/lite/index.html'))) fail.push('app build has no /lite/ page');
+  // The sign-in mode is part of the build: a build that comes out in the developer-key mode (the default used to be that,
+  // and a Workers Build without the flag shipped "Mukoko sign-in is coming soon" to everyone) fails here.
+  const litePage = pages.find((p) => p.endsWith('/lite/index.html'));
+  if (litePage) {
+    const problem = authModeProblem(readFileSync(litePage, 'utf8'));
+    if (problem) fail.push(`app build: ${problem}`);
+  }
   const redirects = files.includes(`${DIST}/_redirects`) ? readFileSync(`${DIST}/_redirects`, 'utf8') : '';
   // The apex root is answered by the Worker (worker/root.ts), which chooses /chat/ or /lite/ by
   // the visitor's connection. A static rule for it in _redirects would be a second, silent

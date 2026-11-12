@@ -8,8 +8,8 @@ connected to GitHub as a Workers Build, so it is redeployed by hand with
 `npx wrangler deploy --config app/wrangler.jsonc` from `site/`). The apex `shamwari.ai` was moved to it
 with the Workers custom-domains API (`override_existing_origin`), `www.shamwari.ai` stays on
 `shamwari-site`, and `api.shamwari.ai` is the gateway. The root `/` sends visitors to `/lite/` for now
-(`CHAT_LIVE` is `false`). The sign-in secrets are not bound yet, so sign-in answers 503 and the chat
-stays in developer-key mode. To undo the apex move, point `shamwari.ai` back at `shamwari-site` with the
+(`CHAT_LIVE` is `false`). The sign-in secrets are not bound yet, so sign-in answers 503 (the chat
+is built in Mukoko sign-in mode, the default, so it shows the sign-in screen). To undo the apex move, point `shamwari.ai` back at `shamwari-site` with the
 same API call, restore the apex line in `site/wrangler.jsonc` and **remove it from
 `site/app/wrangler.jsonc`** (otherwise the next hand deploy of `shamwari-app` takes the apex back).
 
@@ -96,8 +96,10 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
    reads the default `wrangler.jsonc` in the root directory and checks its `name` against the Worker's
    name, so the app's config is `site/app/wrangler.jsonc` (name `shamwari-app`) and `site/wrangler.jsonc`
    stays the marketing site's. Build command
-   `cd .. && npm ci && PUBLIC_CHAT_AUTH=mukoko npm run build:app` (the `mukoko` flag is required: a plain
-   build is developer-key mode and breaks the sign-in screen). Deploy command `npx wrangler deploy`.
+   `cd .. && npm ci && npm run build:app` (no flag: Mukoko sign-in is the default, and `check.mjs app` fails a build
+   that comes out in the developer-key mode, which is only built by `PUBLIC_CHAT_AUTH=developer-key` for local work;
+   an earlier version made `mukoko` an opt-in flag, and a build without it shipped "Mukoko sign-in is coming soon"
+   to everyone). Do not set `PUBLIC_CHAT_AUTH` on the Workers Build. Deploy command `npx wrangler deploy`.
    Non-production branch deploy command `npx wrangler preview` (needs the `previews` block already in the
    file). Production branch `main`.
    (It is the same repository as `shamwari-site`; it is a second Workers Builds project.)
@@ -136,7 +138,7 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
    `https://shamwari.ai/chat/` answers 200 first; flipping the switch early turns the root into a 404
    for fast connections.
 8. **Later, not now:** register the WorkOS redirect URI `https://shamwari.ai/callback`;
-   set `PUBLIC_CHAT_AUTH=mukoko` on the app build only when the session Worker exists; set
+   (Mukoko sign-in is on by default now and needs no build setting); set
    `PUBLIC_CHAT_LIVE=true` on the marketing build when the app is released.
 
 **If something is wrong after step 5:** in `shamwari-app` remove `shamwari.ai`, then in
@@ -201,7 +203,7 @@ variables and the Durable Object), so check these against `https://shamwari.ai` 
 
 `site/app/wrangler.jsonc` binds `WORKOS_API_KEY` (from `CONSOLE_WORKOS_API_KEY`) and `COOKIE_PASSWORD` (from
 `SESSION_SECRET`) out of the account's Secrets Store, the shared Mukoko secrets. Deploy with
-`npm run deploy:app` from `site/`, which builds with `PUBLIC_CHAT_AUTH=mukoko` and then runs `wrangler deploy`.
+`npm run deploy:app` from `site/`, which builds (Mukoko sign-in is the default; nothing to set) and then runs `wrangler deploy`.
 After a deploy, `GET /auth/login` should answer 302 to the Mukoko Account sign-in page; a real sign-in
 needs a person and a registered redirect URI (`https://shamwari.ai/callback`).
 

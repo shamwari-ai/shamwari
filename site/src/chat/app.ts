@@ -17,6 +17,7 @@ import { newId, openSwitchableStore, titleOf, type Artifact, type Project, type 
 import { LANGUAGES, isLanguage } from './strings';
 import type { AskErrorKind, ChatMessage, Scope } from './types';
 import { setBusy } from './busy';
+import type { AuthMode } from './auth-mode';
 
 /**
  * The only scope this client asks with. There is no control for it anywhere: the person is never asked which kind of
@@ -45,11 +46,10 @@ const $ = <T extends HTMLElement>(sel: string): T => {
 const saveData = (): boolean =>
   (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
 
-export async function startApp(opts: { apiBase: string; authMode?: 'developer-key' | 'mukoko' }): Promise<void> {
+export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): Promise<void> {
   // One store per signed-in person (see user.ts). A device that has not been told who is using it holds the unowned store.
   const store = await openSwitchableStore(opts.authMode === 'mukoko' ? readStoredUser() : null);
-  // The Mukoko provider is behind a build flag and off by default; the developer
-  // key stays exactly as it was until the session Worker ships.
+  // Mukoko sign-in is the default mode (chat/auth-mode.ts); the developer key is built only on request, for local work.
   const auth = opts.authMode === 'mukoko' ? mukokoAuth() : developerKey();
   const client = createClient({
     baseUrl: opts.apiBase,

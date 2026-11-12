@@ -11,13 +11,15 @@
 // translates it and runs the chat.
 import '../../../src/chat/chat.css';
 import { en } from '../../../src/chat/strings';
+import { authModeOf } from '../../../src/chat/auth-mode';
 import AppShell from '@bundu/ui/app/AppShell.astro';
 import Icon from '@bundu/ui/Icon.astro';
 
 // Fixed at build time and never read from the URL (see chat/main.ts).
 const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
-// Mukoko sign-in is built but OFF: only a build that sets PUBLIC_CHAT_AUTH=mukoko turns it on.
-const authMode = import.meta.env.PUBLIC_CHAT_AUTH === 'mukoko' ? 'mukoko' : 'developer-key';
+// Mukoko sign-in is the default; only a build that asks for PUBLIC_CHAT_AUTH=developer-key gets the developer-key screen
+// (chat/auth-mode.ts). check.mjs fails a build that comes out in any other mode.
+const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
 ---
 <!doctype html>
 <html lang="en" class="app">
