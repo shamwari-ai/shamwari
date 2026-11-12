@@ -233,4 +233,3 @@ Developer keys for the mock: `sk_shamwari_mock_ok` answers; `_402`, `_403`,
 - **Why not `SideNav`:** the package's `SideNav` renders links with tooltips and 44px touch rows; the drawer needs in-page section
   buttons (`aria-current` follows the open section), a non-interactive "coming soon" row and a different set of foot rows, so
   the rows are the chat's own, built from the same tokens, not from numbers of its own.
-
