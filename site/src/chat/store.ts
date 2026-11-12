@@ -23,6 +23,24 @@ export interface StoredMessage {
   attempts?: number;
   /** user messages whose ask failed: why, so a reload still shows it. */
   error?: Pick<AskError, 'kind' | 'retryAfterSec' | 'upgradeUrl'>;
+  /** Files and voice notes the person added. Kept on this device only: never sent anywhere (the bytes are in `files`). */
+  attachments?: AttachmentMeta[];
+}
+
+/** What a message remembers about an attachment; the bytes are stored apart, in `files`. */
+export interface AttachmentMeta {
+  id: string;
+  kind: 'file' | 'voice';
+  name: string;
+  type: string;
+  size: number;
+}
+
+/** An attachment's bytes, on this device (IndexedDB) and nowhere else. */
+export interface StoredFile extends AttachmentMeta {
+  threadId: string;
+  at: number;
+  blob: Blob;
 }
 
 export interface Thread {
@@ -68,6 +86,12 @@ export interface Store {
   artifacts(): Promise<Artifact[]>;
   putArtifact(artifact: Artifact): Promise<void>;
   removeArtifact(id: string): Promise<void>;
+  files(): Promise<StoredFile[]>;
+  putFile(file: StoredFile): Promise<void>;
+  getFile(id: string): Promise<StoredFile | undefined>;
+  removeFile(id: string): Promise<void>;
+  /** Every attachment of one chat (when the chat is deleted). */
+  removeFilesOf(threadId: string): Promise<void>;
 }
 
 export const newId = (): string =>
@@ -84,6 +108,7 @@ export function memoryStore(): Store {
   const threads = new Map<string, Thread>();
   const projects = new Map<string, Project>();
   const artifacts = new Map<string, Artifact>();
+  const files = new Map<string, StoredFile>();
   return {
     list: async () => [...threads.values()].sort((a, b) => b.updatedAt - a.updatedAt),
     put: async (t) => void threads.set(t.id, structuredClone(t)),
@@ -92,6 +117,7 @@ export function memoryStore(): Store {
       threads.clear();
       projects.clear();
       artifacts.clear();
+      files.clear();
     },
     projects: async () => [...projects.values()].sort((a, b) => b.updatedAt - a.updatedAt),
     putProject: async (p) => void projects.set(p.id, structuredClone(p)),
@@ -99,6 +125,13 @@ export function memoryStore(): Store {
     artifacts: async () => [...artifacts.values()].sort((a, b) => b.savedAt - a.savedAt),
     putArtifact: async (a) => void artifacts.set(a.id, structuredClone(a)),
     removeArtifact: async (id) => void artifacts.delete(id),
+    files: async () => [...files.values()],
+    putFile: async (f) => void files.set(f.id, f),
+    getFile: async (id) => files.get(id),
+    removeFile: async (id) => void files.delete(id),
+    removeFilesOf: async (threadId) => {
+      for (const [id, f] of files) if (f.threadId === threadId) files.delete(id);
+    },
   };
 }
 
@@ -108,6 +141,7 @@ const dbName = (userKey: string | null) => (userKey ? `${DB}-u-${userKey}` : DB)
 const TABLE = 'threads';
 const PROJECTS = 'projects';
 const ARTIFACTS = 'artifacts';
+const FILES = 'files';
 
 const wrap = <T>(req: IDBRequest<T>): Promise<T> =>
   new Promise((ok, no) => {
@@ -119,10 +153,10 @@ export async function openStore(userKey: string | null = null): Promise<Store> {
   if (typeof indexedDB === 'undefined') return memoryStore();
   try {
     const db = await new Promise<IDBDatabase>((ok, no) => {
-      const open = indexedDB.open(dbName(userKey), 2);
+      const open = indexedDB.open(dbName(userKey), 3);
       open.onupgradeneeded = () => {
-        // Version 2 adds projects and artifacts; threads from version 1 are kept as they are.
-        for (const name of [TABLE, PROJECTS, ARTIFACTS]) {
+        // Version 2 adds projects and artifacts, version 3 the files (attachments); what is already there is kept as it is.
+        for (const name of [TABLE, PROJECTS, ARTIFACTS, FILES]) {
           if (!open.result.objectStoreNames.contains(name)) open.result.createObjectStore(name, { keyPath: 'id' });
         }
       };
@@ -138,7 +172,7 @@ export async function openStore(userKey: string | null = null): Promise<Store> {
       put: async (t) => void (await wrap(tx(TABLE, 'readwrite').put(t))),
       remove: async (id) => void (await wrap(tx(TABLE, 'readwrite').delete(id))),
       clear: async () => {
-        await Promise.all([TABLE, PROJECTS, ARTIFACTS].map((n) => wrap(tx(n, 'readwrite').clear())));
+        await Promise.all([TABLE, PROJECTS, ARTIFACTS, FILES].map((n) => wrap(tx(n, 'readwrite').clear())));
       },
       projects: async () =>
         ((await wrap(tx(PROJECTS, 'readonly').getAll())) as Project[]).sort((a, b) => b.updatedAt - a.updatedAt),
@@ -148,6 +182,24 @@ export async function openStore(userKey: string | null = null): Promise<Store> {
         ((await wrap(tx(ARTIFACTS, 'readonly').getAll())) as Artifact[]).sort((a, b) => b.savedAt - a.savedAt),
       putArtifact: async (a) => void (await wrap(tx(ARTIFACTS, 'readwrite').put(a))),
       removeArtifact: async (id) => void (await wrap(tx(ARTIFACTS, 'readwrite').delete(id))),
+      files: async () => (await wrap(tx(FILES, 'readonly').getAll())) as StoredFile[],
+      putFile: async (f) => void (await wrap(tx(FILES, 'readwrite').put(f))),
+      getFile: async (id) => (await wrap(tx(FILES, 'readonly').get(id))) as StoredFile | undefined,
+      removeFile: async (id) => void (await wrap(tx(FILES, 'readwrite').delete(id))),
+      // One transaction and a cursor: the files are not all read into memory to find one chat's.
+      removeFilesOf: (threadId) =>
+        new Promise<void>((ok, no) => {
+          const t = db.transaction(FILES, 'readwrite');
+          const req = t.objectStore(FILES).openCursor();
+          req.onsuccess = () => {
+            const c = req.result;
+            if (!c) return;
+            if ((c.value as StoredFile).threadId === threadId) c.delete();
+            c.continue();
+          };
+          t.oncomplete = () => ok();
+          t.onerror = () => no(t.error);
+        }),
     };
   } catch {
     return memoryStore();
@@ -205,6 +257,11 @@ export async function openSwitchableStore(initialKey: string | null): Promise<Sw
     artifacts: delegate('artifacts'),
     putArtifact: delegate('putArtifact'),
     removeArtifact: delegate('removeArtifact'),
+    files: delegate('files'),
+    putFile: delegate('putFile'),
+    getFile: delegate('getFile'),
+    removeFile: delegate('removeFile'),
+    removeFilesOf: delegate('removeFilesOf'),
     async switchTo(next, adopt = false) {
       if (next === key) return;
       const from = current;
@@ -216,6 +273,7 @@ export async function openSwitchableStore(initialKey: string | null): Promise<Sw
         for (const t of await from.list()) await to.put(t);
         for (const p of await from.projects()) await to.putProject(p);
         for (const a of await from.artifacts()) await to.putArtifact(a);
+        for (const f of await from.files()) await to.putFile(f);
         markAdopted();
       }
       if (key === null && adopted()) await from.clear().catch(() => undefined);

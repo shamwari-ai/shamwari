@@ -1382,8 +1382,8 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 }
 .composer-bar {
   display: flex;
+  flex-wrap: wrap; /* at large text the three buttons do not fit one row: they wrap instead of leaving the screen */
   align-items: center;
-  justify-content: flex-end;
   gap: var(--gap-floor);
 }
 .send-round {
@@ -1451,12 +1451,6 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .composer:focus-within {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
-}
-.composer-bar {
-  justify-content: space-between; /* "+" (attachments) at the left, send at the right */
-}
-.composer-bar > :only-child {
-  margin-inline-start: auto;
 }
 
 /* The title and its "..." in the top bar. */
@@ -1638,4 +1632,124 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   background: var(--popover, var(--background));
   color: var(--popover-foreground, var(--foreground));
   box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+
+/* ---- attachments: "+", the microphone, and what has been added ------------------------------------------------- */
+.composer-gap {
+  flex: 1 1 0; /* "+" at the left, the microphone and send at the right */
+}
+.bar-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--size-control-sm);
+  block-size: var(--size-control-sm);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  cursor: pointer;
+}
+.bar-icon:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.bar-icon[aria-pressed='true'] {
+  background: var(--destructive-text, var(--destructive));
+  color: var(--background);
+}
+.bar-icon[hidden] {
+  display: none;
+}
+/* The "+" menu: opens upward from the button, placed by script. */
+#plus-menu:not(:popover-open) {
+  display: none;
+}
+#plus-menu[popover]:popover-open {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  inline-size: 16rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover, var(--background));
+  color: var(--popover-foreground, var(--foreground));
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+#plus-menu .btn {
+  justify-content: flex-start;
+  inline-size: 100%;
+}
+/* What is waiting to be sent, above the text, and what a sent question kept. Each says it stayed on this device. */
+.attach-list,
+.attachments {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.attach-list[hidden] {
+  display: none;
+}
+.attach-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--gap-floor);
+  padding: var(--gap-floor) var(--inset-floor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  font-size: var(--fs-small);
+  min-width: 0;
+}
+.attach-name {
+  flex: 1 1 8rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.attach-meta {
+  flex: 2 1 12rem;
+  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+}
+.attach-remove,
+.attach-open {
+  flex: none;
+  min-inline-size: var(--size-control-sm);
+  min-block-size: var(--size-control-sm);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.attach-remove:hover,
+.attach-open:hover {
+  background: color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.attach-open {
+  text-decoration: underline;
+  padding-inline: var(--gap-floor);
+}
+.attach-remove::after,
+.attach-open::after {
+  display: none;
+}
+.msg.user .attachments {
+  margin-top: var(--gap-floor);
+}
+.msg.user .attach-chip {
+  background: color-mix(in oklab, var(--foreground) 6%, transparent);
 }

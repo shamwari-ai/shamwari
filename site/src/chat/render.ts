@@ -1,5 +1,6 @@
 import type { Strings } from './strings';
-import type { StoredMessage } from './store';
+import type { AttachmentMeta, StoredMessage } from './store';
+import { sizeLabel } from './attach';
 import type { Answer, AskErrorKind, Citation, Language, Scope } from './types';
 
 /**
@@ -113,12 +114,39 @@ export interface QueueActions {
   discard(): void;
 }
 
-export function renderUser(m: StoredMessage, s: Strings, queue?: QueueActions): HTMLElement {
+export interface AttachmentActions {
+  /** Play a voice note or save a copy of a file, from the copy kept on this device. */
+  open(a: AttachmentMeta): void;
+}
+
+/** The files and voice notes kept with a question: each says plainly that it stayed on this device. */
+function renderAttachments(m: StoredMessage, s: Strings, files?: AttachmentActions): HTMLElement | null {
+  if (!m.attachments?.length) return null;
+  return h(
+    'ul',
+    { class: 'attachments', 'aria-label': s.attachments },
+    ...m.attachments.map((a) => {
+      const open = h('button', { type: 'button', class: 'attach-open' }, a.kind === 'voice' ? s.playVoice : s.saveCopy);
+      open.setAttribute('aria-label', `${a.kind === 'voice' ? s.playVoice : s.saveCopy}: ${a.name}`);
+      open.addEventListener('click', () => files?.open(a));
+      return h(
+        'li',
+        { class: 'attach-chip' },
+        h('span', { class: 'attach-name' }, a.name),
+        h('span', { class: 'attach-meta' }, `${sizeLabel(a.size)} · ${s.attachKept}`),
+        files ? open : null,
+      );
+    }),
+  );
+}
+
+export function renderUser(m: StoredMessage, s: Strings, queue?: QueueActions, files?: AttachmentActions): HTMLElement {
   const el = h(
     'article',
     { class: 'msg user', 'data-id': m.id, 'aria-label': s.you },
     h('p', { class: 'who' }, s.you),
     h('p', { class: 'text' }, m.text),
+    renderAttachments(m, s, files),
   );
   updateUser(el, m, s, queue);
   return el;

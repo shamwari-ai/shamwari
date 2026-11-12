@@ -1,4 +1,5 @@
 import { developerKey } from './auth';
+import { initAttach } from './attach';
 import { mukokoAuth } from './auth-mukoko';
 import { createClient } from './client';
 import { readStoredUser, rememberUser, subjectOf, userKeyOf } from './user';
@@ -171,6 +172,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   const queueActions = (m: StoredMessage): QueueActions => ({
     sendNow: () => void deliver(thread, m),
     discard: async () => {
+      for (const a of m.attachments ?? []) void store.removeFile(a.id).catch(() => undefined);
       thread.messages = thread.messages.filter((x) => x !== m);
       nodes.get(m.id)?.remove();
       nodes.delete(m.id);
@@ -189,6 +191,34 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     return el;
   };
 
+  /** Open an attachment from the copy on this device: a voice note plays, a file is offered as a download. No request is made. */
+  let voice: HTMLAudioElement | null = null;
+  let voiceUrl = '';
+  const attachmentActions = {
+    open: async (a: { id: string; kind: 'file' | 'voice'; name: string }) => {
+      const f = await store.getFile(a.id).catch(() => undefined);
+      if (!f) {
+        $('#toast').textContent = strings().attachmentGone;
+        return;
+      }
+      const url = URL.createObjectURL(f.blob);
+      if (a.kind === 'voice') {
+        // One player: a second tap stops the first, so nothing overlaps and no URL is left behind.
+        voice?.pause();
+        if (voiceUrl) URL.revokeObjectURL(voiceUrl);
+        voiceUrl = url;
+        voice = new Audio(url);
+        void voice.play().catch(() => undefined);
+      } else {
+        const link = h('a', { href: url, download: a.name });
+        document.body.append(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      }
+    },
+  };
+
   const mount = (m: StoredMessage) => {
     const s = strings();
     if (m.role === 'assistant' && m.answer) {
@@ -197,7 +227,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     }
     const existing = nodes.get(m.id);
     if (existing) updateUser(existing, m, s, queueActionsFor(m));
-    else place(m.id, renderUser(m, s, queueActionsFor(m)));
+    else place(m.id, renderUser(m, s, queueActionsFor(m), attachmentActions));
     if (m.error) place(`${m.id}:error`, renderError(m.id, m.error, s, actionsFor(m)), m.id);
   };
 
@@ -276,6 +306,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     const found = (await listThreads()).find((x) => x.id === id);
     if (!found) return;
     thread = found;
+    attach.clear(); // what was being added belongs to the chat it was added in
     rebuild();
     void renderHistory();
     showSection('chat');
@@ -396,7 +427,9 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     }
     if (!confirm(strings().deleteChatConfirm)) return false;
     live.delete(t.id);
+    void store.removeFilesOf(t.id).catch(() => undefined); // its attachments go with it
     const wasOpen = t.id === thread.id;
+    if (wasOpen) attach.clear();
     t.messages = [];
     await save(t); // an empty thread is removed from the store
     if (wasOpen) {
@@ -839,6 +872,18 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     setBusy('ask', true);
     try {
       const m: StoredMessage = { id: newId(), role: 'user', text: clean, at: Date.now(), scope: GENERAL, status: 'sent' };
+      // Files and voice notes are written to this device with the question and go no further: only `clean` is ever sent.
+      const added = attach.take();
+      if (added.length) {
+        try {
+          for (const f of added) await store.putFile({ id: f.id, kind: f.kind, name: f.name, type: f.type, size: f.size, blob: f.blob, threadId: thread.id, at: m.at });
+          m.attachments = added.map(({ id, kind, name, type, size }) => ({ id, kind, name, type, size }));
+        } catch {
+          // All or none: a half-saved set would leave files that no message shows.
+          for (const f of added) void store.removeFile(f.id).catch(() => undefined);
+          $('#toast').textContent = strings().storageFailed;
+        }
+      }
       if (!thread.messages.length) thread.title = titleOf(clean);
       thread.messages.push(m);
       syncEmpty();
@@ -992,6 +1037,11 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
 
   // ---- controls ------------------------------------------------------------
   const sendBtn = $<HTMLButtonElement>('#send');
+  const attach = initAttach(document, {
+    strings,
+    say: (text) => ($('#toast').textContent = text),
+    newId,
+  });
   const autosize = () => {
     setBusy('draft', input.value.trim() !== ''); // text in the question box is not reloaded away by a release
     sendBtn.disabled = input.value.trim() === ''; // the round send button is muted until there is something to send
@@ -1031,6 +1081,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   $('#new-chat').addEventListener('click', () => {
     if (filterText) searchRow.click(); // a new chat starts with the whole list, not a search for the last one
     showSection('chat'); // a new chat is a chat: the drawer's next opening shows the chats again
+    attach.clear();
     if (thread.messages.length) {
       thread = fresh();
       rebuild();
@@ -1104,6 +1155,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   $('#delete-history').addEventListener('click', async () => {
     if (!confirm(strings().deleteConfirm)) return;
     closeAccount();
+    attach.clear();
     await deleteMessagesFromDevice();
     $('#toast').textContent = strings().deleted;
     input.focus();
@@ -1116,6 +1168,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     lang = langSelect.value;
     saveLanguage(lang);
     applyStrings(document, lang);
+    attach.refresh();
     labelShell();
     syncOfflineMode();
     rebuild();
