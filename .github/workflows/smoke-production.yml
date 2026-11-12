@@ -1,12 +1,16 @@
 # Post-deploy smoke check (shamwari-ai/shamwari#201). Workers Builds deploys main a few minutes
 # after the merge, so this retries. It only reads public URLs; it deploys and changes nothing.
-# On failure it opens an issue so the owner hears about it. Rollback: Workers & Pages,
+# It also runs every 30 minutes, because one thing it checks can break with no deploy at all: the WorkOS redirect-address
+# list of the shared Mukoko Account app (another session or script can overwrite it, and then sign-in lands on
+# accounts.mukoko.com/redirect-uri-invalid). On failure it opens an issue (or comments on the open one) so the owner hears about it. Rollback: Workers & Pages,
 # the Worker, Deployments, roll back to the previous version (see docs/domains-and-deploy.md).
 name: Smoke production
 
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -14,7 +18,8 @@ permissions:
   issues: write
 
 concurrency:
-  group: smoke-production
+  # One per kind of trigger: a scheduled check must not cancel a release's check while it waits for the deploy.
+  group: smoke-production-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -24,46 +29,77 @@ jobs:
     timeout-minutes: 25
     steps:
       - name: Check production, retrying while the deploy lands
+        env:
+          # After a release the deploy may still be landing: retry for a while. The scheduled check is one look.
+          ATTEMPTS: ${{ github.event_name == 'schedule' && '1' || '12' }}
         run: |
           set -u
+          : > failures.txt
+          fail() { echo "$1"; echo "$1" >> failures.txt; failed=1; }
           code() { curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$@"; }
           check() {
             local failed=0
             lite=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 https://shamwari.ai/lite/)
             case "$lite" in
               "302 https://shamwari.ai/auth/login"*) ;;
-              *) echo "/lite/ unauthenticated: got '$lite', want 302 to /auth/login"; failed=1 ;;
+              *) fail "/lite/ unauthenticated: got '$lite', want 302 to /auth/login" ;;
             esac
             for p in /lite/disclaimer/ /lite/manifest.webmanifest /lite/sw.js; do
-              c=$(code "https://shamwari.ai$p"); [ "$c" = 200 ] || { echo "$p: got $c, want 200"; failed=1; }
+              c=$(code "https://shamwari.ai$p"); [ "$c" = 200 ] || fail "$p: got $c, want 200"
             done
             # A script asset needs a session: take one named in the public service worker.
             js=$(curl -s --max-time 20 https://shamwari.ai/lite/sw.js | grep -o '/lite/_astro/[A-Za-z0-9._-]*\.js' | head -1)
-            if [ -z "$js" ]; then echo "no /lite/_astro script named in sw.js"; failed=1
+            if [ -z "$js" ]; then fail "no /lite/_astro script named in sw.js"
             else
               c=$(code "https://shamwari.ai$js")
-              [ "$c" = 401 ] || { echo "$js without a session: got $c, want 401"; failed=1; }
+              [ "$c" = 401 ] || fail "$js without a session: got $c, want 401"
             fi
-            c=$(code https://www.shamwari.ai/); [ "$c" = 200 ] || { echo "www.shamwari.ai: got $c, want 200"; failed=1; }
+            c=$(code https://www.shamwari.ai/); [ "$c" = 200 ] || fail "www.shamwari.ai: got $c, want 200"
+            # Sign-in must reach the hosted sign-in page. Follow every redirect from /auth/login: if WorkOS does not have
+            # https://shamwari.ai/callback registered for the Mukoko Account app, the chain ends on
+            # accounts.mukoko.com/redirect-uri-invalid and nobody can sign in, with no deploy to blame.
+            final=$(curl -sL -o /dev/null -w '%{url_effective}' --max-time 30 https://shamwari.ai/auth/login)
+            case "$final" in
+              *redirect-uri-invalid*) fail "WorkOS redirect address for shamwari.ai/callback is not registered: /auth/login ended at $final" ;;
+            esac
             return $failed
           }
-          for attempt in $(seq 1 12); do
+          for attempt in $(seq 1 "$ATTEMPTS"); do
+            : > failures.txt
             if check; then echo "production is as expected (attempt $attempt)"; exit 0; fi
-            echo "attempt $attempt failed; waiting 90s for the deploy"; sleep 90
+            [ "$attempt" -lt "$ATTEMPTS" ] && { echo "attempt $attempt failed; waiting 90s for the deploy"; sleep 90; }
           done
           exit 1
 
-      - name: Open an issue on failure
+      - name: Open an issue on failure (or comment on the one that is open)
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
         run: |
-          gh issue create --repo "$GITHUB_REPOSITORY" \
-            --title "production smoke check failed after the release of ${GITHUB_SHA::7}" \
-            --body "The post-deploy smoke check failed. Run: $RUN_URL
+          if grep -q 'redirect address for shamwari.ai/callback is not registered' failures.txt 2>/dev/null; then
+            title="WorkOS redirect address for shamwari.ai/callback is not registered"
+            fix="Sign-in ends on accounts.mukoko.com/redirect-uri-invalid. In the WorkOS dashboard, Mukoko Account application, Redirects, add https://shamwari.ai/callback (the list is shared: another session or script may have replaced it). See docs/chat-signin.md, 'If sign-in says the redirect address does not match'."
+          elif [ "$EVENT" = schedule ]; then
+            title="production smoke check failed (scheduled)"
+            fix="Look at what failed below, then roll back the affected Worker in the Cloudflare dashboard if a release caused it."
+          else
+            title="production smoke check failed after the release of ${GITHUB_SHA::7}"
+            fix="Roll back the affected Worker to its previous version in the Cloudflare dashboard (Workers & Pages, Deployments), then fix forward."
+          fi
+          body="The smoke check failed. Run: $RUN_URL
 
-          Roll back the affected Worker to its previous version in the Cloudflare dashboard
-          (Workers & Pages, Deployments), then fix forward.
+          $fix
+
+          What failed:
+          $(sed 's/^/- /' failures.txt 2>/dev/null)
 
           No issue: automatic report from smoke-production.yml (shamwari-ai/shamwari#201)."
+          # One issue per problem, not one every 30 minutes: comment on the open one if there is one.
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" --json number,title --jq "map(select(.title == \"$title\")) | .[0].number // empty")
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --repo "$GITHUB_REPOSITORY" --body "Still failing. Run: $RUN_URL"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          fi
