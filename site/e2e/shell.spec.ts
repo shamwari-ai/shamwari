@@ -67,3 +67,43 @@ test('the round send button waits for text; Enter sends and Shift+Enter is a new
   await expect(page.locator('article.msg.user')).toHaveCount(1);
   await expect(page.locator('#send')).toBeDisabled();
 });
+
+test('the composer has one edge: the container, not the text box inside it', async ({ page }) => {
+  await openChat(page);
+  const box = await page.locator('#q').evaluate((el) => ({ border: parseFloat(getComputedStyle(el).borderTopWidth), bg: getComputedStyle(el).backgroundColor }));
+  expect(box.border).toBe(0);
+  expect(box.bg).toBe('rgba(0, 0, 0, 0)');
+  await page.locator('#q').focus();
+  expect(await page.locator('.composer').evaluate((el) => getComputedStyle(el).outlineStyle), 'the ring is the container\'s').toBe('solid');
+});
+
+test('the chat\'s "..." menu sits by its title and holds pin, project and delete', async ({ page }) => {
+  await openChat(page);
+  await expect(page.locator('#chat-menu')).toBeHidden(); // no chat yet
+  await ask(page, 'Is it legal to be searched?');
+  await expect(page.locator('article.msg.bot:not(.pending)')).toBeVisible();
+  await expect(page.locator('#chat-tools')).toBeHidden(); // closed: not a toolbar over the thread
+  await page.locator('#chat-menu').click();
+  await expect(page.locator('#chat-tools')).toBeVisible();
+  for (const sel of ['#pin-chat', '#chat-project', '#delete-chat']) await expect(page.locator(sel)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#chat-tools')).toBeHidden();
+  // Delete asks first: declining keeps the chat.
+  page.once('dialog', (d) => void d.dismiss());
+  await page.locator('#chat-menu').click();
+  await page.locator('#delete-chat').click();
+  await expect(page.locator('article.msg.user')).toHaveCount(1);
+});
+
+test('a source is one compact row, with the detail under it', async ({ page }) => {
+  await openChat(page);
+  await ask(page, 'Is everyone equal under the law?');
+  const cite = page.locator('.cite').first();
+  await expect(cite).toBeVisible();
+  await expect(cite.locator('.badge')).toHaveText('Ground');
+  expect(await cite.evaluate((el) => el.getBoundingClientRect().height), 'one row').toBeLessThanOrEqual(56);
+  await expect(cite.locator('.cite-meta')).toBeHidden();
+  await expect(cite.locator('.cite-link')).toBeVisible();
+  await cite.locator('summary').click();
+  await expect(cite.locator('.cite-meta')).toBeVisible();
+});

@@ -166,7 +166,13 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
 
     <!-- The top bar's actions, at the right: OFFLINE MODE (a switch; on, nothing is sent and nothing replays), then a new
          chat. #new-chat is a wrapper the script listens on. -->
-    <h1 slot="actions" id="chat-title" class="chat-title sr-only" data-i18n="appName">{en.appName}</h1>
+    <!-- The chat's title and, beside it, its "..." menu (pin, project, delete). The menu shows once there is a chat. -->
+    <div slot="actions" class="chat-head">
+      <h1 id="chat-title" class="chat-title sr-only" data-i18n="appName">{en.appName}</h1>
+      <button type="button" id="chat-menu" class="bar-action chat-menu-btn" popovertarget="chat-tools" aria-haspopup="true" hidden data-i18n-attr="aria-label:chatOptions" aria-label={en.chatOptions}>
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
+      </button>
+    </div>
     <button slot="actions" type="button" id="offline-mode" role="switch" aria-checked="false" class="bar-action offline-switch">
       <Icon name="globe" class="h-5 w-5" />
       <span class="sr-only bar-label" data-i18n="offlineMode">{en.offlineMode}</span>
@@ -187,8 +193,8 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
       You are offline. You can still write questions; they will be sent later.
     </p>
 
-    <!-- What can be done with the open chat: pin it, file it in a project, delete it. Shown once it has a question. -->
-    <div id="chat-tools" class="chat-tools" role="group" aria-labelledby="chat-tools-title" hidden>
+    <!-- What can be done with the open chat: pin it, file it in a project, delete it. A popover opened by the "..." beside the chat's title. -->
+    <div id="chat-tools" class="chat-tools" popover role="group" aria-labelledby="chat-tools-title" hidden>
       <h2 id="chat-tools-title" class="sr-only" data-i18n="chatOptions">Chat options</h2>
       <button type="button" id="pin-chat" class="btn" aria-pressed="false" data-i18n="pin">Pin this chat</button>
       <label class="sr-only" for="chat-project" data-i18n="project">Project</label>

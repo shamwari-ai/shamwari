@@ -453,7 +453,10 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   const syncChatTools = () => {
     const s = strings();
     const tools = $('#chat-tools');
-    tools.hidden = thread.messages.length === 0;
+    const none = thread.messages.length === 0;
+    if (none && tools.matches(':popover-open')) (tools as HTMLElement & { hidePopover(): void }).hidePopover();
+    tools.hidden = none;
+    $('#chat-menu').hidden = none;
     const pin = $('#pin-chat');
     pin.textContent = thread.pinned ? s.unpin : s.pin;
     pin.setAttribute('aria-pressed', String(!!thread.pinned));
@@ -479,6 +482,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   });
   $('#delete-chat').addEventListener('click', async () => {
     if (!confirm(strings().deleteChatConfirm)) return;
+    $('#chat-tools').hidePopover?.();
     const gone = thread;
     live.delete(gone.id);
     gone.messages = [];

@@ -1,6 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { ask, makeProject, newChat, openAccount, openChat, openChats, seedLegacyQuestion, openSection, closeChats } from './helpers';
+import { openChatMenu, ask, makeProject, newChat, openAccount, openChat, openChats, seedLegacyQuestion, openSection, closeChats } from './helpers';
 
 // PW_CPU_THROTTLE=4 runs every test here on a CPU four times slower, to flush out timing races (animations, async renders)
 // that a quick machine hides. Off by default.
@@ -248,7 +248,9 @@ test('the drawer with a project, a pinned chat and a saved answer meets the Bund
   await openChats(page);
   await makeProject(page, 'Know my rights');
   await page.keyboard.press('Escape');
+  await openChatMenu(page);
   await page.locator('#chat-project').selectOption({ label: 'Know my rights' });
+  await openChatMenu(page);
   await page.locator('#pin-chat').click();
   await expect(page.locator('#chat-tools')).toBeVisible();
   expect(await underTheFloor(page), 'chat tools').toEqual([]);

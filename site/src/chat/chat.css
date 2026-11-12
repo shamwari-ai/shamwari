@@ -1436,3 +1436,121 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .side-group > summary > span {
   flex: none;
 }
+
+/* ---- the composer's one edge, the chat's "..." menu, compact sources ------------------------------------------ */
+
+/* The container is the only edge. The text box inside has none of its own: no border, no fill. Its focus ring is the
+   container's (:focus-within); the box keeps a transparent outline, which a high-contrast mode still draws. */
+.composer textarea {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: 2px solid transparent;
+  outline-offset: 0;
+}
+.composer:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.composer-bar {
+  justify-content: space-between; /* "+" (attachments) at the left, send at the right */
+}
+.composer-bar > :only-child {
+  margin-inline-start: auto;
+}
+
+/* The title and its "..." in the top bar. */
+.chat-head {
+  display: flex;
+  align-items: center;
+  flex: 1 1 6rem;
+  min-width: 0;
+  gap: var(--gap-floor);
+}
+.chat-head .chat-title {
+  flex: 0 1 auto;
+}
+.chat-menu-btn {
+  flex: none;
+}
+/* The menu itself: a small popover under the button, not a loose toolbar above the thread. */
+#chat-tools:not(:popover-open) {
+  display: none;
+}
+#chat-tools[popover]:popover-open {
+  position: fixed;
+  inset: auto;
+  top: 3.25rem;
+  right: var(--page-inset);
+  margin: 0;
+  inline-size: min(16rem, calc(100vw - 2 * var(--page-inset)));
+  max-inline-size: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--popover, var(--background));
+  color: var(--popover-foreground, var(--foreground));
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
+}
+#chat-tools .btn,
+#chat-tools select {
+  justify-content: flex-start;
+  inline-size: 100%;
+  text-align: start;
+}
+
+/* Sources: one compact row each, the detail under a disclosure. */
+.cite {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gap-floor);
+  padding: 0;
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+}
+.cite-more {
+  flex: 1 1 0;
+  min-width: 0;
+  display: grid;
+}
+.cite-more > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
+  min-height: var(--size-control-sm);
+  padding-inline: var(--inset-floor);
+  cursor: pointer;
+  list-style: none;
+  min-width: 0;
+}
+.cite-more > summary::-webkit-details-marker {
+  display: none;
+}
+.cite-more > summary > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-small);
+  font-weight: 500;
+}
+.cite-more[open] > summary > strong {
+  white-space: normal;
+}
+.cite-more > :not(summary) {
+  padding-inline: var(--inset-floor);
+  padding-block-end: var(--gap-floor);
+}
+.cite .cite-link {
+  flex: none;
+  min-height: var(--size-control-sm);
+  padding-inline: var(--gap-floor);
+  font-size: var(--fs-small);
+}
+.cite .badge {
+  flex: none;
+}
