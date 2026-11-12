@@ -85,7 +85,7 @@ npm run dev
 `wrangler.jsonc` (an id and a name authorise nothing). There is no provider
 key: inference runs on Workers AI and is billed through Cloudflare.
 
-The AI Gateway authentication token is `SHAMWARI_AI_TOKEN` in the account's
+The AI Gateway authentication token is `NYUCHI_AI_GATEWAY_TOKEN` (a stopgap since 2026-11-12: the stored `SHAMWARI_AI_TOKEN` is rejected by the AI Gateway; see `wrangler.jsonc`) in the account's
 Secrets Store, bound to the Worker as `CF_AIG_TOKEN` in `wrangler.jsonc`. It is
 read at request time with `env.CF_AIG_TOKEN.get()`; there is no `wrangler secret
 put` for it.
