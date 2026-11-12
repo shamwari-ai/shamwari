@@ -344,3 +344,17 @@ test('a drawer row scrolled up under the head is measured where it is visible, a
   });
   expect(await underTheFloor(page), 'a row 6px under the head').toEqual([]);
 });
+
+// The same floors in dark. Dark used to be a no-op (the page stayed light), so none of this was ever measured in it.
+test('the floor holds in dark: the home screen, every drawer section and Settings', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await openChat(page);
+  expect(await underTheFloor(page), 'dark: home').toEqual([]);
+  for (const section of ['Chat', 'Projects', 'Artifacts', 'Plugins'] as const) {
+    await openSection(page, section);
+    expect(await underTheFloor(page), `dark: drawer, ${section}`).toEqual([]);
+  }
+  await openSection(page, 'Chat');
+  await openAccount(page);
+  expect(await underTheFloor(page), 'dark: drawer, settings open').toEqual([]);
+});

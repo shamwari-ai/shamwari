@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { copyFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { authModeProblem } from '../check-auth-mode.mjs';
 
 const out = process.argv[2] ?? 'dist-app';
 
@@ -37,6 +38,12 @@ const release = releaseVersion();
 for (const icon of ['favicon.ico', 'favicon.png', 'apple-touch-icon.png']) copyFileSync(fileURLToPath(new URL(`../public/${icon}`, import.meta.url)), join(out, icon));
 const read = (p) => readFileSync(join(out, p));
 const html = read('lite/index.html').toString('utf8');
+
+// The sign-in mode is checked HERE, in the build itself, so every way of building the app (npm run build:app, the Workers Build,
+// deploy:app) refuses a page in the wrong mode, not only CI's `node check.mjs app`. Mukoko sign-in is the default; the developer-key
+// screen is built only by PUBLIC_CHAT_AUTH=developer-key (chat/auth-mode.ts).
+const modeProblem = authModeProblem(html);
+if (modeProblem) throw new Error(`post-build: ${modeProblem}`);
 
 const refs = [...html.matchAll(/(?:href|src)="(\/[^"#?]+)"/g)].map((m) => m[1]);
 

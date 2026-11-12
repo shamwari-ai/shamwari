@@ -172,7 +172,7 @@ the second replaces the first without touching the chat:
    in from the cookie. Being offline is not being signed out: a non-secret
    "signed in before" yes/no (`shamwari.mukoko.hint`) is the only thing kept, so
    an offline reload does not throw a signed-in person at the sign-in screen.
-   **The flag is a build setting, `PUBLIC_CHAT_AUTH=mukoko`, and is off.** The
+   **Mukoko sign-in is the default build mode** (`site/src/chat/auth-mode.ts`); the developer-key screen is built only by `PUBLIC_CHAT_AUTH=developer-key`, and `node check.mjs app` plus `test/app/auth-mode.test.ts` fail a build that comes out in any other mode. The
    session Worker itself (login, callback, cookie, refresh) is a design in
    `docs/chat-signin.md` on #130, not code; the e2e tests run against a stand-in
    for it (`e2e/serve.mjs --stub-auth`). A found-and-fixed detail: the service
@@ -216,3 +216,25 @@ PUBLIC_SHAMWARI_API=http://localhost:8788 npm run dev:app   # http://localhost:4
 Developer keys for the mock: `sk_shamwari_mock_ok` answers; `_402`, `_403`,
 `_429`, `_503` return those errors. Asking about `personal` scope returns the
 409, and a question containing "slow" takes 3 s.
+
+## Light and dark, and the drawer's density (2026-11-12)
+
+- **Themes are Mzizi's.** `chat.css` imports `@bundu/ui` `globals.css` (tokens and the density layer), then `color-scheme.css`, then
+  the brand overlay last. Without `color-scheme.css` nothing set `.dark` or `data-theme`, so a dark phone got a light page with
+  white text (the "before" screenshots in `docs/ui-2026-11-12/` are byte-identical in light and dark). Now the page follows
+  `prefers-color-scheme`, and an explicit `data-theme="light"` (or `"dark"`) wins. `body` takes its colour and background from the
+  tokens. Tests: `e2e/theme.spec.ts`, and the floor audit and axe run in dark.
+- **Density is Mzizi's.** `@bundu/ui` 0.14.0: the hit region is 49px always (`--target-floor`); controls are DRAWN at
+  `--size-control-sm`, which is 32px on a desktop with a mouse (64rem up, fine pointer, hover, no touch) and 49px everywhere else. The
+  drawer's rows (sections, foot rows, chat titles) use that token, a 14px label, a flat look (no border or fill at rest, a soft
+  fill on hover, a stronger one and a marker on the open section) and 7px between rows. The foot rows (Use the API, Disclaimer and
+  privacy, Settings) are text only, no icons. Tests: `e2e-desktop/density.spec.ts` (32px, flat, no icons, no overlap, light and
+  dark) and `e2e/density-touch.spec.ts` (49px on touch at any width).
+- **Owner's list (2026-11-12), each with a test:** labels never break inside a word (rows wrap at spaces only, the chip stays on one
+  line, `e2e-desktop/density.spec.ts` at 1000, 1280 and 1440, light and dark); a fixed sidebar column of 17.5rem; the version line and
+  the Install button live in Settings, not the drawer's foot or above the composer; the top bar says "Offline mode" and "New chat"
+  from 40rem up; controls use the small radius, not the marketing pill; New chat is a quiet outline and the composer is the filled
+  control; the foot rows sit under one hairline; muted text is held to 4.5:1 in both themes (`e2e/theme.spec.ts`).
+- **Why not `SideNav`:** the package's `SideNav` renders links with tooltips and 44px touch rows; the drawer needs in-page section
+  buttons (`aria-current` follows the open section), a non-interactive "coming soon" row and a different set of foot rows, so
+  the rows are the chat's own, built from the same tokens, not from numbers of its own.
