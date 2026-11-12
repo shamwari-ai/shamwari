@@ -141,10 +141,14 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
                 <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
                 <button type="button" id="signout" class="btn" hidden data-i18n="authDevClear">Remove key</button>
               </div>
+              <!-- Install and the version live in Settings, not on the page or in the drawer's foot. -->
+              <div class="account-row">
+                <button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button>
+              </div>
+              <p class="version-line" data-current-version-line hidden><span data-i18n="version">Version</span> <span data-current-version></span></p>
             </div>
           </details>
         </nav>
-        <p class="version-line" data-current-version-line hidden><span data-i18n="version">Version</span> <span data-current-version></span></p>
       </div>
     </div>
 
@@ -152,13 +156,13 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
          chat. #new-chat is a wrapper the script listens on. -->
     <button slot="actions" type="button" id="offline-mode" role="switch" aria-checked="false" class="bar-action offline-switch">
       <Icon name="globe" class="h-5 w-5" />
-      <span class="sr-only sm:not-sr-only" data-i18n="offlineMode">{en.offlineMode}</span>
+      <span class="sr-only bar-label" data-i18n="offlineMode">{en.offlineMode}</span>
       <span class="offline-state" aria-hidden="true" data-i18n="offlineModeOff">{en.offlineModeOff}</span>
     </button>
     <span slot="actions" id="new-chat" class="contents">
       <button type="button" class="bar-action">
         <Icon name="plus" class="h-5 w-5" />
-        <span class="sr-only sm:not-sr-only" data-i18n="newChat">New chat</span>
+        <span class="sr-only bar-label" data-i18n="newChat">New chat</span>
       </button>
     </span>
 
@@ -192,7 +196,6 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
           <li><button type="button" class="btn chip" data-example data-i18n="example3">What does the Constitution say about education?</button></li>
         </ul>
       </section>
-      <p class="install"><button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button></p>
 
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
       <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>

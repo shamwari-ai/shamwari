@@ -71,3 +71,103 @@ for (const scheme of ['light', 'dark'] as const) {
     });
   });
 }
+
+// ---- the geometry guard: widths a desktop browser really has, light and dark ------------------------------------------------
+// No label wraps (a word is never broken, a chip stays on one line), nothing scrolls sideways, the sidebar is a fixed column wide
+// enough for its labels, the top bar's actions say what they are, and nothing is a marketing pill. At 1000px the drawer is a
+// popover (below 64rem) and keeps the touch size; from 1024px it is a column of 32px rows.
+
+/** How many lines a piece of text is drawn on: the number of distinct tops among its client rects. */
+const lines = (page: Page, selector: string) =>
+  page.locator(selector).evaluateAll((els) =>
+    els
+      .filter((e) => (e as HTMLElement).offsetParent !== null || getComputedStyle(e).position === 'fixed')
+      .map((e) => {
+        const range = document.createRange();
+        range.selectNodeContents(e);
+        const tops = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
+        return { text: (e.textContent || '').trim().slice(0, 40), lines: tops.size };
+      }),
+  );
+
+for (const width of [1000, 1280, 1440]) {
+  for (const scheme of ['light', 'dark'] as const) {
+    test(`at ${width}px (${scheme}): no label wraps, nothing scrolls sideways, the sidebar and top bar are right`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 800 });
+      await openChat(page);
+      const popover = width < 1024;
+      if (popover) await page.getByRole('button', { name: 'Open chats' }).click();
+      await page.waitForTimeout(400); // the drawer's slide
+
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'no horizontal scroll').toBe(true);
+
+      // Every row label and chip is one line: "Factory" is not "Factor / y", "Coming soon" is not two lines.
+      // (the visible spans only: the screen-reader-only note on Use the API is clipped text, not a drawn line)
+      const labels = await lines(page, '.side-row > span:not(.sr-only)');
+      expect(labels.length).toBeGreaterThanOrEqual(8);
+      for (const l of labels) expect(l.lines, `"${l.text}" is on one line`).toBe(1);
+      const factory = await page.locator('.side-row.side-disabled').evaluate((el) => el.getBoundingClientRect().height);
+      expect(factory, 'the Factory row is one row high, chip included').toBeLessThanOrEqual(popover ? 50 : 33);
+
+      if (!popover) {
+        const w = await page.locator('[data-slot="app-sidebar"]').evaluate((el) => el.getBoundingClientRect().width);
+        expect(w, 'a fixed sidebar column of about 280px').toBeGreaterThanOrEqual(272);
+        expect(w).toBeLessThanOrEqual(288);
+      }
+      // The sidebar's own labels fit their rows without being cut (no horizontal overflow inside the drawer).
+      expect(await page.locator('.chats').evaluate((el) => el.scrollWidth <= el.clientWidth + 1), 'the drawer does not scroll sideways').toBe(true);
+
+      // The top bar says what its actions are (from 40rem up).
+      // Really drawn, not just present: a 1px clipped box counts as "visible" to Playwright, so measure the box and the clipping.
+      for (const sel of ['#offline-mode .bar-label', '#new-chat .bar-label']) {
+        const drawn = await page.locator(sel).evaluate((el) => {
+          const c = getComputedStyle(el);
+          const r = el.getBoundingClientRect();
+          return { w: r.width, h: r.height, clipPath: c.clipPath, overflow: c.overflow, clip: c.clip };
+        });
+        expect(drawn.w, `${sel} is drawn`).toBeGreaterThan(40);
+        expect(drawn.h, `${sel} is a line of text`).toBeGreaterThan(14);
+        expect(drawn.clipPath, `${sel} is not clipped away`).toBe('none');
+        expect(drawn.overflow).toBe('visible');
+      }
+      await expect(page.locator('#offline-mode')).toContainText('Offline mode');
+      await expect(page.locator('#offline-mode')).toContainText('Off');
+    });
+  }
+}
+
+test('no control is a marketing pill: buttons, suggestion chips, Send and New chat use the small radius', async ({ page }) => {
+  await openChat(page);
+  const radii = await page.evaluate(() => {
+    const r = (sel: string) => {
+      const el = document.querySelector(sel);
+      return el ? parseFloat(getComputedStyle(el).borderTopLeftRadius) : null;
+    };
+    return { newChat: r('#side-new'), send: r('#send'), chip: r('.btn.chip'), composer: r('.composer') };
+  });
+  for (const [name, v] of Object.entries(radii)) {
+    expect(v, name).not.toBeNull();
+    expect(v!, `${name} is not a pill`).toBeLessThanOrEqual(16);
+  }
+});
+
+test('hierarchy: New chat is a quiet outline, the composer is the filled control, the foot rows sit under one hairline', async ({ page }) => {
+  await openChat(page);
+  const bg = (sel: string) => page.locator(sel).first().evaluate((el) => getComputedStyle(el).backgroundColor);
+  expect(await bg('#side-new'), 'New chat has no fill').toBe('rgba(0, 0, 0, 0)');
+  expect(await bg('#send'), 'Send is the filled control').not.toBe('rgba(0, 0, 0, 0)');
+  const border = await page.locator('.side-nav').evaluate((el) => ({ w: parseFloat(getComputedStyle(el).borderTopWidth), s: getComputedStyle(el).borderTopStyle }));
+  expect(border.s).toBe('solid');
+  expect(border.w, 'one hairline').toBeGreaterThan(0);
+  expect(border.w).toBeLessThanOrEqual(1);
+});
+
+test('clutter is gone: the version line is in Settings (not the drawer foot) and Install is in Settings (not above the composer)', async ({ page }) => {
+  await openChat(page);
+  await expect(page.locator('.side-foot > .version-line')).toHaveCount(0);
+  await expect(page.locator('details.account .version-line')).toHaveCount(1);
+  await expect(page.locator('details.account #install')).toHaveCount(1);
+  await expect(page.locator('.thread #install, #empty #install')).toHaveCount(0);
+  await expect(page.locator('p.install')).toHaveCount(0);
+});
