@@ -66,6 +66,19 @@ export function renderAnswer(
 ): HTMLElement {
   const save = onSave ? h('button', { type: 'button', class: 'btn link save-answer' }, s.saveAnswer) : null;
   save?.addEventListener('click', onSave!);
+  // Copy: the answer's own words, to the clipboard. Where the browser has no clipboard the button is simply not offered.
+  const copy = navigator.clipboard?.writeText ? h('button', { type: 'button', class: 'btn link copy-answer' }, s.copyAnswer) : null;
+  let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+  copy?.addEventListener('click', () => {
+    void navigator.clipboard.writeText(a.text).then(
+      () => {
+        copy.textContent = s.copied;
+        clearTimeout(copiedTimer);
+        copiedTimer = setTimeout(() => (copy.textContent = s.copyAnswer), 1500);
+      },
+      () => undefined,
+    );
+  });
   return h(
     'article',
     { class: 'msg bot', 'data-id': m.id, 'aria-label': s.shamwari },
@@ -81,7 +94,7 @@ export function renderAnswer(
         )
       : h('p', { class: 'note' }, s.noSources),
     h('p', { class: 'meta' }, `${s.scopeLabel}: ${s.scope[a.scope]}`),
-    save,
+    copy || save ? h('div', { class: 'msg-actions' }, copy, save) : null,
   );
 }
 

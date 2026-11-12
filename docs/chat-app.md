@@ -238,3 +238,22 @@ Developer keys for the mock: `sk_shamwari_mock_ok` answers; `_402`, `_403`,
 - **Why not `SideNav`:** the package's `SideNav` renders links with tooltips and 44px touch rows; the drawer needs in-page section
   buttons (`aria-current` follows the open section), a non-interactive "coming soon" row and a different set of foot rows, so
   the rows are the chat's own, built from the same tokens, not from numbers of its own.
+
+## The shell as a chat console (2026-11-12)
+
+The drawer and the page were rebuilt to read like the chat consoles people already know. `e2e/shell.spec.ts` covers the new
+behaviour; the geometry tests moved with it. Screenshots (light and dark; 390, 1000, 1280 and 1440px): `docs/ui-2026-11-12/shell-*.png`.
+
+- **Drawer** (a slim 16.25rem column from 64rem): the brand and a collapse toggle at the top; plain rows, 16px icons, no fill: New
+  chat, Search chats, then the sections (Chat, Projects, Factory, Artifacts, Plugins); the history under muted, collapsible labels
+  (Pinned, Recents) and, inside Recents, Today / Yesterday / Previous 7 days / Older; one line per chat, the title cut with an
+  ellipsis and the time muted at the right (the hour today, the weekday this week, else the day and month); the open chat has a
+  soft fill. Search opens a field and narrows the lists by title; Escape closes it. The account row is pinned at the bottom: Settings
+  holds language, Use the API, Disclaimer and privacy, Delete history, Install and the version. There is no version line, Install
+  pill or big button in the drawer itself.
+- **Page:** one centred column (46rem). The top bar is thin and shows the chat's title (it is the page's `h1`; with no messages it
+  is the app name, for screen readers only). Replies are plain prose with a quiet row under them (Copy answer, Save answer); the
+  person's own question is a soft block at the right. The composer is one rounded container: the text above, a round send button
+  below that is muted and disabled until there is text; Enter sends, Shift+Enter is a new line.
+- **Not built yet, on purpose:** per-row "…" actions (pin, move, delete stay in the open chat's tools row), thumbs up/down (nothing
+  stores feedback), read aloud (no Shona/Ndebele text to speech), and the "+" attach and microphone buttons (the next piece).

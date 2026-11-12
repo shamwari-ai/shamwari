@@ -178,7 +178,18 @@ async function underTheFloor(page: Page) {
       range.selectNodeContents(n);
       for (const r of range.getClientRects()) {
         if (r.width === 0) continue;
-        edge('text', el, r.left, r.right);
+        // Text cut by its own box or a scrolling ancestor (a long chat title with an ellipsis) is measured where it is
+        // drawn, not where the cut-off part would be.
+        let left = r.left, right = r.right;
+        for (let p: Element | null = el; p; p = p.parentElement) {
+          const st = getComputedStyle(p);
+          if (st.overflowX === 'visible') continue;
+          const c = p.getBoundingClientRect();
+          left = Math.max(left, c.left);
+          right = Math.min(right, c.right);
+        }
+        if (right <= left) continue;
+        edge('text', el, left, right);
         break; // one report per text node is enough to name it
       }
     }

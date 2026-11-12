@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openChat, openChats } from './helpers';
+import { openAccount, openChat, openChats } from './helpers';
 
-// The drawer's foot rows (Use the API, Disclaimer and privacy, Settings) are quiet rows, not buttons.
+// The account row and the links in Settings (Use the API, Disclaimer and privacy) are quiet rows, not buttons.
 
 const ROWS = [{ name: 'Use the API' }, { name: 'Disclaimer and privacy' }, { name: 'Settings' }];
 
@@ -38,6 +38,8 @@ const row = (page: Page, name: string) =>
 test('the foot rows are quiet text rows, not buttons: no button chrome, no icon, the same names', async ({ page }) => {
   await openChat(page);
   await openChats(page);
+  await openAccount(page);
+  await page.mouse.move(0, 0); // not over a row: a hovered row is filled
   for (const { name } of ROWS) {
     const r = row(page, name);
     await expect(r, name).toBeVisible();
@@ -53,7 +55,7 @@ test('the foot rows are quiet text rows, not buttons: no button chrome, no icon,
     expect(style.height, `${name} keeps the 49px hit region on touch`).toBeGreaterThanOrEqual(49);
     // Text only: the foot rows have no icon of any kind (owner, 2026-11-12), not even the "opens in a new tab" mark; the
     // label (and, for Use the API, a screen-reader note) carries the meaning.
-    await expect(r.locator('svg'), `${name} has no icon`).toHaveCount(0);
+    if (name !== 'Settings') await expect(r.locator('svg'), `${name} has no icon`).toHaveCount(0); // the account row has its avatar and gear
     await expect(r, name).toContainText(name);
   }
   // The names a screen reader hears are unchanged: links are links, and Settings is still a disclosure.
@@ -67,6 +69,7 @@ test('muted text on the drawer surface keeps its contrast, in light and in dark,
     await page.emulateMedia({ colorScheme: scheme });
     await openChat(page);
     await openChats(page);
+    await openAccount(page);
     const surface = await toRgb(page, await page.locator('[data-slot="app-sidebar"]').evaluate((el) => getComputedStyle(el).backgroundColor));
     for (const { name } of ROWS) {
       const r = row(page, name);
@@ -83,8 +86,8 @@ test('muted text on the drawer surface keeps its contrast, in light and in dark,
     expect(hovered.bg).not.toBe('rgba(0, 0, 0, 0)');
     expect(hovered.color).not.toBe(before);
     expect(ratio(await toRgb(page, hovered.color), await toRgb(page, hovered.bg)), `hover in ${scheme}`).toBeGreaterThanOrEqual(7);
-    // Focus by keyboard (so it is :focus-visible): from New chat, Tab lands on Use the API, and the page's ring is on it.
-    await page.locator('#side-new').focus();
+    // Focus by keyboard (so it is :focus-visible): from the language field, Tab lands on Use the API, and the page's ring is on it.
+    await page.locator('#lang').focus();
     await page.keyboard.press('Tab');
     await expect(r).toBeFocused();
     expect(await r.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('solid');
