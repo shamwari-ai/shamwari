@@ -230,6 +230,11 @@ Developer keys for the mock: `sk_shamwari_mock_ok` answers; `_402`, `_403`,
   fill on hover, a stronger one and a marker on the open section) and 7px between rows. The foot rows (Use the API, Disclaimer and
   privacy, Settings) are text only, no icons. Tests: `e2e-desktop/density.spec.ts` (32px, flat, no icons, no overlap, light and
   dark) and `e2e/density-touch.spec.ts` (49px on touch at any width).
+- **Owner's list (2026-11-12), each with a test:** labels never break inside a word (rows wrap at spaces only, the chip stays on one
+  line, `e2e-desktop/density.spec.ts` at 1000, 1280 and 1440, light and dark); a fixed sidebar column of 17.5rem; the version line and
+  the Install button live in Settings, not the drawer's foot or above the composer; the top bar says "Offline mode" and "New chat"
+  from 40rem up; controls use the small radius, not the marketing pill; New chat is a quiet outline and the composer is the filled
+  control; the foot rows sit under one hairline; muted text is held to 4.5:1 in both themes (`e2e/theme.spec.ts`).
 - **Why not `SideNav`:** the package's `SideNav` renders links with tooltips and 44px touch rows; the drawer needs in-page section
   buttons (`aria-current` follows the open section), a non-interactive "coming soon" row and a different set of foot rows, so
   the rows are the chat's own, built from the same tokens, not from numbers of its own.

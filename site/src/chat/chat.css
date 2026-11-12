@@ -45,8 +45,14 @@ body {
   z-index: 50;
   background: var(--card);
   padding: var(--inset-floor);
-  border-radius: 9999px;
+  border-radius: var(--radius-sm);
   min-height: var(--target-floor);
+}
+
+/* A fixed sidebar column on a desktop: wide enough for a 14px label such as "Disclaimer and privacy" on one line. (AppShell
+   defaults to 16.25rem, which wrapped "Factory" and its chip; claude.ai's is about the same as this.) */
+html [data-slot='app-shell'] {
+  --app-sidebar-w: 17.5rem;
 }
 
 /* ---- the frame's parts ------------------------------------------------------------------------------ */
@@ -207,7 +213,8 @@ select,
 input:not([type='checkbox']):not([type='radio']) {
   min-height: var(--target-floor);
   min-width: var(--target-floor);
-  border-radius: 9999px;
+  /* The small radius, as Mzizi's product controls have it: the pill is the marketing shape, not the app's. */
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-control, var(--border));
   background: var(--card);
   padding-inline: var(--inset-floor);
@@ -225,6 +232,19 @@ input:not([type='checkbox']):not([type='radio']) {
   white-space: nowrap;
 }
 /* The brand fill and its text come as a pair in both themes (Mzizi sodalite-brand / on-brand). */
+#side-new.btn.primary {
+  /* Hierarchy (deference): the drawer recedes and the composer is the one thing that is filled. New chat is a quiet
+     secondary button here: an outline, the foreground colour, no fill. */
+  background: transparent;
+  color: var(--foreground);
+  border: 1px solid var(--border-control, var(--border));
+  font-weight: 500;
+  min-height: var(--size-control);
+  inline-size: 100%;
+}
+#side-new.btn.primary:hover {
+  background: var(--muted);
+}
 .btn.primary {
   background: var(--color-sodalite-brand);
   color: var(--color-sodalite-on-brand);
@@ -381,7 +401,7 @@ input:not([type='checkbox']):not([type='radio']) {
   gap: var(--gap-floor);
   padding: var(--gap-floor) var(--gap-floor) var(--gap-floor) var(--inset-floor);
   border: 1px solid var(--border-control, var(--border));
-  border-radius: 24px;
+  border-radius: var(--radius-md);
   background: var(--card);
 }
 .composer textarea {
@@ -392,7 +412,7 @@ input:not([type='checkbox']):not([type='radio']) {
   border: 0;
   background: transparent;
   padding: var(--inset-floor) var(--gap-floor);
-  border-radius: 24px;
+  border-radius: var(--radius-md);
   line-height: var(--leading-floor);
 }
 .toast {
@@ -598,6 +618,9 @@ input:not([type='checkbox']):not([type='radio']) {
 .side-nav {
   display: grid;
   gap: var(--gap-floor);
+  /* The foot rows are muted and sit under one hairline (the same token as the composer's divider), no heavy container. */
+  border-top: 0.5px solid var(--border);
+  padding-top: var(--gap-floor);
 }
 .project > summary {
   display: flex;
@@ -605,7 +628,7 @@ input:not([type='checkbox']):not([type='radio']) {
   min-height: var(--target-floor);
   padding-inline: var(--inset-floor);
   cursor: pointer;
-  border-radius: 9999px;
+  border-radius: var(--radius-sm);
 }
 .project > .side-list,
 .project > .row {
@@ -736,7 +759,6 @@ main#main :where(.thread, .dock, .ask, #empty, .panel, .chat-tools) {
   margin: 0;
   font-size: var(--fs-caption);
   color: var(--muted-foreground);
-  text-align: center;
 }
 
 /* ---- the shell never scrolls -----------------------------------------------------------------------------
@@ -1032,6 +1054,21 @@ html[data-view='pending'] dialog {
   }
 }
 
+/* The top bar's actions say what they are from 40rem up ("Offline mode", "New chat"); below that only the icon shows and the
+   name stays for screen readers (the labels carry Tailwind's sr-only below that). The Tailwind sm:not-sr-only these used was
+   not in the build, so the labels never showed. */
+@media (min-width: 40rem) {
+  .sr-only.bar-label {
+    position: static;
+    inline-size: auto;
+    block-size: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    clip-path: none;
+  }
+}
+
 /* ---- the OFFLINE MODE switch, top right ----------------------------------------------------------------------
    A switch (role="switch", aria-checked), at the right of the top bar. Off it is a quiet action like the others; on, it is
    filled, and the page says so in words (#offline-mode-note), so the state never rests on colour. Below 40rem only the
@@ -1059,10 +1096,16 @@ html[data-view='pending'] dialog {
 
 /* In the drawer, a label that does not fit wraps (at 200% text "Delete history" is wider than the drawer), and the
    Plugins / Skills / MCP tabs wrap onto a second line instead of running off the screen. */
-.chats .btn,
-.chats .side-row {
+.chats .btn {
   white-space: normal;
   overflow-wrap: anywhere;
+}
+/* A row's label wraps at spaces when it must (large text) and never breaks inside a word: "Factory" is not "Factor / y". */
+.chats .side-row {
+  white-space: normal;
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: manual;
 }
 .side-tabs {
   flex-wrap: wrap;

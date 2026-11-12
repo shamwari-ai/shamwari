@@ -289,7 +289,7 @@ test('a brief 503 while the queue drains keeps the question queued and sends it 
   expect(tries).toBe(2);
 });
 
-test('the install button is in plain view, survives a dismissed dialog, and goes when installed', async ({ page }) => {
+test('the install button is in Settings, survives a dismissed dialog, and goes when installed', async ({ page }) => {
   await openChat(page);
   await expect(page.locator('#install')).toBeHidden();
   const offer = () =>
@@ -299,9 +299,10 @@ test('the install button is in plain view, survives a dismissed dialog, and goes
       window.dispatchEvent(e);
     });
   await offer();
-  // Visible without opening Settings.
+  // It lives in Settings (not floating above the composer, not in the drawer's foot): open Settings to see it.
+  await expect(page.locator('#install')).toBeHidden();
+  await openAccount(page);
   await expect(page.locator('#install')).toBeVisible();
-  await expect(page.locator('details.account')).not.toHaveAttribute('open', '');
   await page.locator('#install').click(); // dialog dismissed: the event is spent
   await expect(page.locator('#install')).toBeHidden();
   await offer(); // the browser offers again later

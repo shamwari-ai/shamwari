@@ -96,3 +96,34 @@ test('the brand colour is the same sodalite family in both themes (the overlay c
     expect(c, `${scheme}: --primary is sodalite`).toBe(sod);
   }
 });
+
+// Muted text (captions, the group labels, the placeholder) must be readable in BOTH themes: at least 4.5:1 on the page and on
+// the hover fill. (The drawer's row labels use a stronger mix, held to 7:1 in drawer.spec.ts.) The values are asserted, not assumed.
+test('muted text is at least 4.5:1 on the background and on the hover fill, in light and in dark', async ({ page }) => {
+  await openChat(page);
+  const lum = (rgb: string) => {
+    const [r, g, b] = (rgb.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number).map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+  };
+  const ratio = (a: string, b: string) => {
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (hi! + 0.05) / (lo! + 0.05);
+  };
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    const c = await page.evaluate(() => {
+      const resolve = (v: string) => {
+        const probe = document.createElement('i');
+        probe.style.color = `var(${v})`;
+        document.body.append(probe);
+        const out = getComputedStyle(probe).color;
+        probe.remove();
+        return out;
+      };
+      return { muted: resolve('--muted-foreground'), bg: resolve('--background'), fill: resolve('--muted'), fg: resolve('--foreground') };
+    });
+    expect(ratio(c.muted, c.bg), `${scheme}: muted text on the page`).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(c.muted, c.fill), `${scheme}: muted text on the hover fill`).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(c.fg, c.bg), `${scheme}: body text on the page`).toBeGreaterThanOrEqual(7);
+  }
+});
