@@ -55,7 +55,7 @@ export const en = {
   you: 'You',
   shamwari: 'Shamwari',
   sources: 'Sources',
-  ground: 'Ground',
+  ground: 'Source',
   groundHint: 'Taken from a cited source, not guessed.',
   effective: 'In effect from',
   openSource: 'Open source',
@@ -135,7 +135,7 @@ export const en = {
   signInRetry: 'We could not finish signing you out of the last session. Check your connection and try again.',
   askRegion: 'Ask a question',
   install: 'Install app',
-  scopeLabel: 'Asking about',
+  scopeLabel: 'Kind of question',
   scope: {
     platform: 'General knowledge',
     community: 'Community knowledge',

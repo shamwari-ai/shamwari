@@ -517,6 +517,7 @@ input:not([type='checkbox']):not([type='radio']) {
 .cite-title {
   font-size: var(--fs-body);
 }
+.cite-explain,
 .cite-meta {
   font-size: var(--fs-caption);
   color: var(--muted-foreground);
