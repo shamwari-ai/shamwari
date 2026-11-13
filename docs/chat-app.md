@@ -154,7 +154,9 @@ account menu open and the drawer open. A control that falls under it fails the b
   questions need Shamwari Mind on the device, which is not shipped yet. It is
   never rendered as a generic error.
 - **Language claims.** The footer says "Answered by Shamwari Cloud (a routed
-  model). This is not legal advice." No sovereignty or residency claim is made
+  model). Answers can be wrong, so check anything important." Shamwari is a
+  general-purpose assistant (agriculture, weather, news and places first), not a legal
+  or government tool, so the wording does not frame it as legal advice. No sovereignty or residency claim is made
   for Cloud.
 
 ## Sign-in

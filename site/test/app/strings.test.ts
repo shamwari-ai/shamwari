@@ -39,6 +39,18 @@ describe('strings', () => {
     expect(all).not.toMatch(/stays in africa|sovereign|ubuntu ai|open source model/i);
   });
 
+  it('leads with agriculture, weather, news and places, and never calls Shamwari a legal or government tool (#267)', () => {
+    for (const s of [en, sn, nd]) {
+      for (const text of [s.tagline, s.example1, s.example2, s.example3, s.footer]) {
+        expect(text).not.toMatch(/constitution|legal|bumbiro|mutemo|simiso|mthetho|law\b/i);
+      }
+    }
+    expect(en.tagline).toMatch(/farming/i);
+    expect(en.example1).toMatch(/plant|rain/i); // agriculture first
+    expect(en.example2).toMatch(/price|news|weather/i);
+    expect(en.example3).toMatch(/where|nearest/i); // a place
+  });
+
   it('picks the first supported browser language', () => {
     expect(pickLanguage(['fr-FR', 'sn-ZW', 'en'])).toBe('sn');
     expect(pickLanguage(['nr'])).toBe('nd');

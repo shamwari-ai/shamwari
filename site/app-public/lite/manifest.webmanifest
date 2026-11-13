@@ -1,7 +1,7 @@
 {
   "name": "Shamwari Chat",
   "short_name": "Shamwari",
-  "description": "Ask in Shona, Ndebele or English and get the answer with the section it came from.",
+  "description": "Ask in Shona, Ndebele or English about farming, weather, news and places, and get the answer with its source.",
   "id": "/lite/",
   "start_url": "/lite/",
   "scope": "/lite/",
