@@ -3,7 +3,7 @@ import type { Attach } from './attach';
 import { mukokoAuth } from './auth-mukoko';
 import { createClient } from './client';
 import { readStoredUser, rememberUser, subjectOf, userKeyOf } from './user';
-import { applyStrings, currentLanguage, saveLanguage } from './i18n';
+import { applyStrings, currentLanguage, hasSavedLanguage, saveLanguage } from './i18n';
 import {
   h,
   plainText,
@@ -61,6 +61,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   document.documentElement.dataset.auth = auth.kind;
 
   let lang = currentLanguage();
+  const firstLang = document.getElementById('first-lang')!; // the first-run language line (see below)
   let languageFailed = false;
   // Shona and Ndebele are separate files, kept out of the first load (English is always in the page). If the saved one cannot be fetched, show English.
   try {
@@ -926,6 +927,9 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
       showAuth();
       return;
     }
+    // A first question is an answer to the first-run language line: keep the language that is showing and do not offer it again.
+    if (!hasSavedLanguage()) saveLanguage(lang);
+    firstLang.hidden = true;
     // From here until the question is stored and delivered, a release must not reload the page: clearing the box below
     // would otherwise make the page look idle for a moment before the question is marked as on its way.
     setBusy('ask', true);
@@ -1136,6 +1140,15 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     void ask(input.value);
   });
 
+  // One tap on the first-run line is the same as picking the radio in Settings: set it and let its handler do the rest.
+  firstLang.querySelectorAll<HTMLButtonElement>('[data-first-lang]').forEach((b) =>
+    b.addEventListener('click', () => {
+      langSelect.value = b.dataset.firstLang!;
+      langGroup.dispatchEvent(new Event('change', { bubbles: true }));
+      input.focus();
+    }),
+  );
+
   // The three suggested prompts fill the box and put the cursor in it: one tap less than typing, and nothing is sent
   // until the person presses send (a prompt tapped by accident on a phone must not become a question).
   document.querySelectorAll<HTMLButtonElement>('[data-example]').forEach((b) =>
@@ -1248,6 +1261,8 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     },
   };
   langSelect.value = lang;
+  // The first-run line (declared above, with its tap handlers): only until a language has been chosen (in it or in Settings) or a first question asked, and only on the empty screen.
+  firstLang.hidden = hasSavedLanguage();
   langGroup.addEventListener('change', async () => {
     if (!isLanguage(langSelect.value)) return;
     const next = langSelect.value;
@@ -1263,6 +1278,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     }
     lang = next;
     saveLanguage(lang);
+    firstLang.hidden = true;
     applyStrings(document, lang);
     attach.refresh();
     labelShell();

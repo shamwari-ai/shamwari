@@ -289,6 +289,16 @@ input:not([type='checkbox']):not([type='radio']) {
   font-weight: 500;
   line-height: 1.2;
 }
+.first-lang {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--gap-floor);
+  margin: var(--inset-floor) 0 0;
+}
+.first-lang[hidden] {
+  display: none;
+}
 .try {
   margin: var(--inset-floor) 0 var(--gap-floor);
   font-size: var(--fs-caption);
