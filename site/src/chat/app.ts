@@ -277,6 +277,8 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     closeDrawer();
     settingsDialog.showModal();
   });
+  // The badge in the top bar (shown only while offline mode is on) opens Settings, where the switch is.
+  document.getElementById('offline-badge')?.addEventListener('click', () => settingsDialog.showModal());
   document.getElementById('settings-close')?.addEventListener('click', () => settingsDialog.close());
   // A tap on the dim edge closes it: the dialog element itself is only the area outside its box. A drag that began inside
   // (selecting text, a select list) and ended out there must not close it, so the press has to start on the edge too.
@@ -1234,9 +1236,19 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     input.focus();
   });
 
-  const langSelect = $<HTMLSelectElement>('#lang');
+  // The language choice is a group of radio buttons. `langSelect.value` reads and sets which one is selected (it stands where the old select was).
+  const langGroup = $('#lang');
+  const langInputs = () => [...langGroup.querySelectorAll<HTMLInputElement>('input[type="radio"]')];
+  const langSelect = {
+    get value() {
+      return langInputs().find((i) => i.checked)?.value ?? '';
+    },
+    set value(v: string) {
+      for (const i of langInputs()) i.checked = i.value === v;
+    },
+  };
   langSelect.value = lang;
-  langSelect.addEventListener('change', async () => {
+  langGroup.addEventListener('change', async () => {
     if (!isLanguage(langSelect.value)) return;
     const next = langSelect.value;
     try {
@@ -1280,6 +1292,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     offlineSwitch.dataset.state = offlineMode ? 'on' : 'off';
     offlineSwitch.querySelector('.offline-state')!.textContent = offlineMode ? s.offlineModeOn : s.offlineModeOff;
     $('#offline-mode-note').hidden = !offlineMode;
+    $('#offline-badge').hidden = !offlineMode; // the top bar says so only while it is on
     document.documentElement.toggleAttribute('data-offline-mode', offlineMode);
   };
   offlineSwitch.addEventListener('click', () => {

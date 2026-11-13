@@ -161,10 +161,9 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
       </button>
     </div>
-    <button slot="actions" type="button" id="offline-mode" role="switch" aria-checked="false" class="bar-action offline-switch">
+    <button slot="actions" type="button" id="offline-badge" class="bar-action offline-badge" hidden>
       <Icon name="globe" class="h-5 w-5" />
-      <span class="sr-only bar-label" data-i18n="offlineMode">{en.offlineMode}</span>
-      <span class="offline-state" aria-hidden="true" data-i18n="offlineModeOff">{en.offlineModeOff}</span>
+      <span data-i18n="offlineMode">{en.offlineMode}</span>
     </button>
     <span slot="actions" id="new-chat" class="contents">
       <button type="button" class="bar-action">
@@ -272,10 +271,18 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
     <div class="settings-body">
       <section class="settings-section" aria-labelledby="settings-lang-title">
         <h3 id="settings-lang-title" data-i18n="language">Language</h3>
-        <select id="lang" aria-describedby="review" data-i18n-attr="aria-label:language"></select>
+        <div id="lang" class="radio-group" role="radiogroup" aria-labelledby="settings-lang-title" aria-describedby="review"></div>
         <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
           This language is a draft and still needs review by a native speaker.
         </p>
+      </section>
+      <section class="settings-section" aria-labelledby="settings-conn-title">
+        <h3 id="settings-conn-title" data-i18n="settingsConnection">{en.settingsConnection}</h3>
+        <button type="button" id="offline-mode" role="switch" aria-checked="false" class="btn offline-switch">
+          <span data-i18n="offlineMode">{en.offlineMode}</span>
+          <span class="offline-state" aria-hidden="true" data-i18n="offlineModeOff">{en.offlineModeOff}</span>
+        </button>
+        <p class="settings-hint" data-i18n="offlineModeHelp">{en.offlineModeHelp}</p>
       </section>
       <section class="settings-section" aria-labelledby="settings-data-title">
         <h3 id="settings-data-title" data-i18n="settingsData">{en.settingsData}</h3>

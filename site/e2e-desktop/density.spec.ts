@@ -123,7 +123,7 @@ for (const width of [1000, 1280, 1440]) {
 
       // The top bar says what its actions are (from 40rem up).
       // Really drawn, not just present: a 1px clipped box counts as "visible" to Playwright, so measure the box and the clipping.
-      for (const sel of ['#offline-mode .bar-label', '#new-chat .bar-label']) {
+      for (const sel of ['#new-chat .bar-label']) {
         const drawn = await page.locator(sel).evaluate((el) => {
           const c = getComputedStyle(el);
           const r = el.getBoundingClientRect();
@@ -134,8 +134,7 @@ for (const width of [1000, 1280, 1440]) {
         expect(drawn.clipPath, `${sel} is not clipped away`).toBe('none');
         expect(drawn.overflow).toBe('visible');
       }
-      await expect(page.locator('#offline-mode')).toContainText('Offline mode');
-      await expect(page.locator('#offline-mode')).toContainText('Off');
+      await expect(page.locator('#offline-badge')).toBeHidden(); // the badge is for offline mode being ON; the switch is in Settings
     });
   }
 }
@@ -178,7 +177,7 @@ test('clutter is gone: the version line is in Settings (not the drawer foot) and
   await expect(page.locator('p.install')).toHaveCount(0);
 });
 
-test('a chat row shows its "..." on hover (over the time) and keeps a 32px hit region', async ({ page }) => {
+test('a chat row shows its "..." on hover (beside the row, the time stays) and keeps a 32px hit region', async ({ page }) => {
   await openChat(page);
   await ask(page, 'Is it legal?');
   await expect(page.locator('.cite-link').first()).toBeVisible();
@@ -192,7 +191,7 @@ test('a chat row shows its "..." on hover (over the time) and keeps a 32px hit r
   await expect(more, 'hidden at rest').toHaveCSS('opacity', '0');
   await li.hover();
   await expect(more, 'shown on hover').toHaveCSS('opacity', '1');
-  await expect(li.locator('.chat-row-when')).toHaveCSS('visibility', 'hidden');
+  await expect(li.locator('.chat-row-when'), 'the time stays').toHaveCSS('visibility', 'visible');
   await expect.poll(async () => Math.round((await more.boundingBox())?.height ?? 0), 'a 32px hit region').toBe(32);
   await more.click();
   await expect(page.locator('#row-menu')).toBeVisible();

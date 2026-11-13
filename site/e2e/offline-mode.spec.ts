@@ -1,10 +1,17 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ask, openChat } from './helpers';
+import { ask, openAccount, openChat } from './helpers';
 
-// OFFLINE MODE: a switch at the top right. While it is on nothing is sent, no queue replays, and it is remembered.
+// OFFLINE MODE: a switch in Settings, with a badge in the top bar only while it is on. While it is on nothing is sent, no queue replays, and it is remembered.
 
 const OFFLINE_KEY = 'shamwari.offlineMode';
-const sw = (page: Page) => page.getByRole('switch', { name: /offline mode/i });
+const state = (page: Page) => page.locator('#offline-mode');
+/** Flip the switch in Settings, then close Settings so the page is reachable again. */
+const toggle = async (page: Page) => {
+  await openAccount(page);
+  await page.getByRole('switch', { name: /offline mode/i }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#settings-dialog')).toBeHidden();
+};
 
 /** Every request the page itself makes with fetch, XHR, a beacon, an event stream or a socket. */
 const watchNetwork = (page: Page) => {
@@ -15,46 +22,54 @@ const watchNetwork = (page: Page) => {
   return seen;
 };
 
-test('the switch is at the top right of the top bar, a real switch, with the floor size and a visible state', async ({ page }) => {
+test('the switch is in Settings, a real switch with the floor size and a visible state; the top bar shows a badge only while it is on', async ({ page }) => {
   await openChat(page);
-  const s = sw(page);
+  await expect(page.locator('#offline-badge'), 'no badge while it is off').toBeHidden();
+  await openAccount(page);
+  const s = page.getByRole('switch', { name: /offline mode/i });
   await expect(s).toBeVisible();
   await expect(s).toHaveAttribute('aria-checked', 'false');
-  const [b, bar] = await Promise.all([s.boundingBox(), page.locator('[data-slot="app-topbar"]').boundingBox()]);
-  const width = page.viewportSize()!.width;
-  expect(b!.x + b!.width / 2, 'in the right half').toBeGreaterThan(width / 2);
-  expect(b!.y).toBeGreaterThanOrEqual(bar!.y);
-  expect(b!.y + b!.height).toBeLessThanOrEqual(bar!.y + bar!.height);
-  expect(b!.height).toBeGreaterThanOrEqual(49);
-  expect(b!.width).toBeGreaterThanOrEqual(49);
-  expect(b!.x + b!.width, 'inside the screen with a 14px edge').toBeLessThanOrEqual(width - 14);
+  const b = await s.boundingBox();
+  expect(b!.height).toBeGreaterThanOrEqual(32);
   await expect(s).toContainText('Off');
   await s.click();
   await expect(s).toHaveAttribute('aria-checked', 'true');
   await expect(s).toContainText('On');
+  await page.keyboard.press('Escape');
   await expect(page.locator('#offline-mode-note')).toBeVisible();
   await expect(page.locator('#offline-mode-note')).toContainText('Nothing is sent');
+  const badge = page.locator('#offline-badge');
+  await expect(badge).toBeVisible();
+  await expect(badge).toContainText('Offline mode');
+  const bar = (await page.locator('[data-slot="app-topbar"]').boundingBox())!;
+  const bb = (await badge.boundingBox())!;
+  expect(bb.height).toBeGreaterThanOrEqual(49);
+  expect(bb.x + bb.width, 'inside the screen with a 14px edge').toBeLessThanOrEqual(page.viewportSize()!.width - 14);
+  expect(bb.y).toBeGreaterThanOrEqual(bar.y);
+  // The badge opens Settings, where the switch is.
+  await badge.click();
+  await expect(page.locator('#settings-dialog')).toBeVisible();
 });
 
 test('it is remembered across reloads', async ({ page }) => {
   await openChat(page);
-  await sw(page).click();
+  await toggle(page);
   await page.reload();
   await page.waitForSelector('html[data-ready="true"]');
-  await expect(sw(page)).toHaveAttribute('aria-checked', 'true');
+  await expect(state(page)).toHaveAttribute('aria-checked', 'true');
   await expect(page.locator('#offline-mode-note')).toBeVisible();
   expect(await page.evaluate((k) => localStorage.getItem(k), OFFLINE_KEY)).toBe('1');
-  await sw(page).click();
+  await toggle(page);
   await page.reload();
   await page.waitForSelector('html[data-ready="true"]');
-  await expect(sw(page)).toHaveAttribute('aria-checked', 'false');
+  await expect(state(page)).toHaveAttribute('aria-checked', 'false');
 });
 
 test('while it is on, nothing is sent: not on load, not when asking, not when the network comes back', async ({ page, context }) => {
   await page.addInitScript((k) => localStorage.setItem(k, '1'), OFFLINE_KEY);
   const seen = watchNetwork(page);
   await openChat(page);
-  await expect(sw(page)).toHaveAttribute('aria-checked', 'true');
+  await expect(state(page)).toHaveAttribute('aria-checked', 'true');
   await ask(page, 'Is everyone equal under the law?');
   const q = page.locator('article.msg.user').first();
   await expect(q).toContainText('Is everyone equal');
@@ -71,7 +86,7 @@ test('while it is on, nothing is sent: not on load, not when asking, not when th
 
 test('a question written in the mode is kept on the device across a reload, still not sent, with no button that sends it', async ({ page }) => {
   await openChat(page);
-  await sw(page).click();
+  await toggle(page);
   await ask(page, 'Is everyone equal under the law?');
   // The note appears only once the question is written to the device, so a reload after it cannot lose the question.
   await expect(page.locator('article.msg.user').first()).toContainText('Saved on this device only. Not sent.');
@@ -88,12 +103,12 @@ test('a question written in the mode is kept on the device across a reload, stil
 
 test('turning it off sends nothing by itself; "Send now" is the person\'s own act, and Discard removes it', async ({ page }) => {
   await openChat(page);
-  await sw(page).click();
+  await toggle(page);
   await ask(page, 'Is everyone equal under the law?');
   await ask(page, 'to be discarded');
   const seen = watchNetwork(page);
-  await sw(page).click(); // off
-  await expect(sw(page)).toHaveAttribute('aria-checked', 'false');
+  await toggle(page); // off
+  await expect(state(page)).toHaveAttribute('aria-checked', 'false');
   await page.waitForTimeout(1200);
   expect(seen.filter((s) => s.includes('/v1/')), 'turning the mode off does not send what was written in it').toEqual([]);
   const first = page.locator('article.msg.user').first();
@@ -110,11 +125,11 @@ test('a question queued before the mode went on does not replay while it is on, 
   await context.setOffline(true);
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('article.msg.user.queued')).toHaveCount(1);
-  await sw(page).click(); // on
+  await toggle(page); // on
   const seen = watchNetwork(page);
   await context.setOffline(false);
   await page.waitForTimeout(2500);
   expect(seen.filter((s) => s.includes('/v1/')), 'nothing replays while the mode is on').toEqual([]);
-  await sw(page).click(); // off: the normal retry resumes for what was queued before
+  await toggle(page); // off: the normal retry resumes for what was queued before
   await expect(page.locator('article.msg.bot .cite').first()).toBeVisible();
 });
