@@ -3,7 +3,8 @@
 # It also runs every 30 minutes, because one thing it checks can break with no deploy at all: the WorkOS redirect-address
 # list of the shared Mukoko Account app (another session or script can overwrite it, and then sign-in lands on
 # accounts.mukoko.com/redirect-uri-invalid). On failure it opens an issue (or comments on the open one) so the owner hears
-# about it. Rollback: Workers & Pages, the Worker, Deployments, roll back to the previous version (see docs/domains-and-deploy.md).
+# about it. Rollback: Workers & Pages, the Worker, Deployments, roll back to the previous version (see docs/domains-and-deploy.md);
+# for the gateway and Core, see docs/core-fly-runbook.md, Rollback.
 name: Smoke production
 
 on:
@@ -55,6 +56,12 @@ jobs:
               [ "$c" = 401 ] || fail "$js without a session: got $c, want 401"
             fi
             c=$(code https://www.shamwari.ai/); [ "$c" = 200 ] || fail "www.shamwari.ai: got $c, want 200"
+            # The gateway Worker and Core are deployed by Cloudflare Workers Builds and Fly's GitHub deployment, not by a
+            # job here, so nothing else looks at them after a release. Core answers 200 only while its data API
+            # answers Core's key. Rollback: docs/core-fly-runbook.md.
+            for u in https://api.shamwari.ai/health https://shamwari-core.fly.dev/health; do
+              c=$(code "$u"); [ "$c" = 200 ] || fail "$u: got $c, want 200"
+            done
             # Sign-in must reach the hosted sign-in page. Follow every redirect from /auth/login: if WorkOS does not have
             # https://shamwari.ai/callback registered for the Mukoko Account app, the chain ends on
             # accounts.mukoko.com/redirect-uri-invalid and nobody can sign in, with no deploy to blame.
@@ -90,7 +97,8 @@ jobs:
           else
             title="production smoke check failed after the release of ${GITHUB_SHA::7}"
             fix="Roll back the affected Worker to its previous version in the Cloudflare dashboard \
-          (Workers & Pages, Deployments), then fix forward."
+          (Workers & Pages, Deployments), then fix forward. If the failing address is api.shamwari.ai or \
+          shamwari-core.fly.dev, the rollback commands are in docs/core-fly-runbook.md, Rollback."
           fi
           body="The smoke check failed. Run: $RUN_URL
 
