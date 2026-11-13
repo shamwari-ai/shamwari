@@ -962,10 +962,13 @@ html[data-view='pending'] dialog {
    on the dim part or Esc closes it. Only the drawer's own transform animates, and the dim fades in; with reduced motion
    the change is instant. */
 :root {
-  --drawer-w: min(18rem, 86vw);
+  /* One sidebar width, as the drawer on a phone and as the column from 64rem, so crossing 64rem does not make it jump. */
+  --sidebar-w: 17.5rem;
+  --drawer-w: min(var(--sidebar-w), 86vw);
 }
 @media (max-width: 63.999rem) {
-  [data-slot='app-sidebar'] {
+  /* `html` raises the specificity above AppShell's own width (min(18rem, 86vw)), which would otherwise win by coming later. */
+  html [data-slot='app-sidebar'] {
     width: var(--drawer-w);
     transform: translateX(-100%);
   }
@@ -1064,7 +1067,7 @@ html[data-view='pending'] dialog {
    rounded container with a round send button. Sizes, colours and radii are Mzizi tokens; none is a number of ours. */
 html [data-slot='app-shell'] {
   /* 17.5rem (280px) is the width CI proved holds for "Factory" and its "Coming soon" chip on one line with a wider fallback font too. */
-  --app-sidebar-w: 17.5rem;
+  --app-sidebar-w: var(--sidebar-w);
 }
 @media (min-width: 64rem) {
   .side-row.side-disabled {
@@ -1544,17 +1547,29 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .row-more::after {
   display: none;
 }
-/* A mouse: the "..." appears over the time, on hover and when anything in the row has focus. The row's own hit region and
-   this one overlap only while it is shown. */
+/* The "..." sits beside the row, never over it: the row's hit region stops short of it. */
+.chat-li {
+  display: flex;
+  gap: var(--gap-floor);
+  align-items: stretch;
+}
+.chat-li > .chat-row {
+  flex: 1 1 0;
+  min-width: 0;
+  inline-size: auto;
+}
+.row-more {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  inline-size: var(--size-control-sm);
+  min-block-size: var(--size-control-sm);
+}
+/* A mouse: the slot is always kept, and the "..." appears on hover and when anything in the row has focus. The time stays. */
 @media (hover: hover) and (pointer: fine) {
   .row-more {
-    position: absolute;
-    inset-block: 0;
-    inset-inline-end: var(--gap-floor);
-    inline-size: var(--size-control-sm);
     block-size: var(--size-control-sm);
     padding: 0;
-    display: inline-flex;
     opacity: 0;
     background: var(--muted);
   }
@@ -1562,29 +1577,6 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   .chat-li:focus-within .row-more,
   .row-more[aria-expanded='true'] {
     opacity: 1;
-  }
-  .chat-li:hover .chat-row-when,
-  .chat-li:focus-within .chat-row-when {
-    visibility: hidden;
-  }
-}
-/* A finger: no hover, so the "..." is always there, beside the row, not over it. */
-@media (hover: none), (pointer: coarse) {
-  .chat-li {
-    display: flex;
-    gap: var(--gap-floor);
-    align-items: stretch;
-  }
-  .chat-li > .chat-row {
-    flex: 1 1 0;
-    min-width: 0;
-    inline-size: auto;
-  }
-  .row-more {
-    flex: none;
-    display: inline-flex;
-    inline-size: var(--size-control-sm);
-    min-block-size: var(--size-control-sm);
   }
 }
 /* The menu is the chat menu's look, anchored by script under the "...". */
