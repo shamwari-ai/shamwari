@@ -268,7 +268,32 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
 
   /** Close the chats drawer (a popover below 64rem) and the account menu: after an action they must not stay over the page. */
   const closeDrawer = () => (document.getElementById('chat-sidebar') as (HTMLElement & { hidePopover?: () => void }) | null)?.hidePopover?.();
-  const closeAccount = () => document.querySelector('details.account')?.removeAttribute('open');
+  const settingsDialog = document.getElementById('settings-dialog') as HTMLDialogElement;
+  const closeAccount = () => {
+    if (settingsDialog.open) settingsDialog.close();
+  };
+  // Settings is a modal: the drawer closes first, so nothing is left under it. Esc, the close button and a tap on the dim edge close it.
+  document.getElementById('open-settings')?.addEventListener('click', () => {
+    closeDrawer();
+    settingsDialog.showModal();
+  });
+  document.getElementById('settings-close')?.addEventListener('click', () => settingsDialog.close());
+  // A tap on the dim edge closes it: the dialog element itself is only the area outside its box. A drag that began inside
+  // (selecting text, a select list) and ended out there must not close it, so the press has to start on the edge too.
+  let pressedOutside = false;
+  settingsDialog.addEventListener('pointerdown', (e) => {
+    pressedOutside = e.target === settingsDialog;
+  });
+  settingsDialog.addEventListener('click', (e) => {
+    if (e.target === settingsDialog && pressedOutside) settingsDialog.close();
+  });
+  settingsDialog.addEventListener('close', () => {
+    // The button that opened it sat in a drawer that has closed; focus goes to the chat box rather than nowhere.
+    setTimeout(() => {
+      const at = document.activeElement as HTMLElement | null;
+      if (!at || at === document.body || !at.checkVisibility()) document.getElementById('q')?.focus();
+    }, 0); // after the browser has put focus back where it was
+  });
   /**
    * The drawer is a popover below 64rem, laid over the page with a dim backdrop (CSS; the page does not move). While it is
    * open, html[data-drawer] is set and the page frame is inert so nothing behind the drawer can be reached by keyboard or screen reader, the opening button says it is expanded, and

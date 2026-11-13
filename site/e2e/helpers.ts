@@ -1,4 +1,4 @@
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 export const OK_KEY = 'sk_shamwari_mock_ok';
 
@@ -16,10 +16,11 @@ export async function ask(page: Page, text: string) {
 
 /** Open Settings (language, delete history, sign out): in the drawer's foot, so the drawer opens first. */
 export async function openAccount(page: Page) {
+  if (await page.locator('#settings-dialog[open]').count()) return;
   const open = await page.locator('#chat-sidebar').evaluate((el) => el.matches(':popover-open'));
   if (!open) await openChats(page);
-  const menu = page.locator('details.account');
-  if ((await menu.getAttribute('open')) === null) await menu.locator('summary').click();
+  await page.locator('#open-settings').click();
+  await expect(page.locator('#settings-dialog')).toBeVisible();
 }
 
 /** Reveal the new-project form in the drawer and make a project. */

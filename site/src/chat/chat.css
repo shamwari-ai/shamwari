@@ -110,33 +110,6 @@ body {
    floor is a 49px hit region, so they are lifted to it here. Worth raising upstream (mzizi-registry), where
    the same 44px rows are listed as pending (HIT_AREA_GAPS). */
 
-.account {
-  position: relative;
-}
-.account-panel {
-  position: absolute;
-  right: 0;
-  z-index: 40;
-  margin-top: var(--gap-floor);
-  width: min(20rem, calc(100vw - 1rem));
-  padding: var(--inset-floor);
-  display: grid;
-  gap: var(--gap-floor);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--popover);
-  color: var(--popover-foreground);
-  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
-}
-.account-title {
-  margin: 0;
-  font-weight: 600;
-}
-.account-note {
-  margin: 0;
-  font-size: var(--fs-caption);
-  color: var(--muted-foreground);
-}
 .account-row {
   display: flex;
   flex-wrap: wrap;
@@ -557,11 +530,6 @@ input:not([type='checkbox']):not([type='radio']) {
 #new-project {
   margin-block-start: var(--gap-floor);
 }
-.settings-panel {
-  display: grid;
-  gap: var(--gap-floor);
-  padding-block: var(--gap-floor);
-}
 
 /* The drawer's lists: pinned, projects, loose chats, saved answers. */
 .side-list {
@@ -893,9 +861,6 @@ html[data-view='pending'] dialog {
   width: 1rem;
   height: 1rem;
   color: currentColor;
-}
-.side-settings[open] > .side-row {
-  color: var(--foreground);
 }
 
 /* ---- the drawer's sections ---------------------------------------------------------------------------------
@@ -1248,10 +1213,6 @@ html [data-slot='app-shell'] {
 }
 .side-gear {
   margin-inline-start: auto;
-}
-.settings-panel .side-row {
-  padding-inline: 0;
-  justify-content: flex-start;
 }
 
 /* The top bar: thin, no rule, the chat's title at the left of the actions. */
@@ -1759,4 +1720,90 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .msg.user .attach-chip {
   font-weight: 400; /* the question's weight is for its words, not its attachments */
   background: color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+
+/* ---- Settings: a modal ----------------------------------------------------------------------------------
+   A native dialog (focus trap, Esc, inert page behind it). Full screen below 40rem with the close button pinned
+   at the top; centred and capped above. Sizes are tokens: 49px hit regions, 7px gaps, 14px inset. */
+.settings-dialog {
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  max-width: none;
+  max-height: none;
+}
+.settings-dialog:not([open]) {
+  display: none;
+}
+.settings-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  inset: 0;
+  margin: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: 0;
+  border: 0;
+}
+.settings-dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+.settings-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor) var(--page-inset);
+  border-bottom: 1px solid var(--border);
+}
+.settings-head h2 {
+  margin: 0;
+  font-size: var(--fs-body, 1rem);
+}
+.settings-head .btn {
+  min-height: var(--target-floor);
+  min-width: var(--target-floor);
+}
+.settings-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: var(--inset-floor);
+  padding: var(--inset-floor) var(--page-inset) max(var(--inset-floor), env(safe-area-inset-bottom));
+}
+.settings-section {
+  display: grid;
+  gap: var(--gap-floor);
+  min-width: 0;
+}
+.settings-section h3 {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+.settings-dialog :is(h2, h3) {
+  font-family: inherit;
+}
+.settings-section .btn {
+  max-inline-size: 100%;
+  white-space: normal; /* at 200% text a long label wraps inside the dialog instead of running to its edge */
+}
+.settings-section .side-row {
+  padding-inline: 0;
+  justify-content: flex-start;
+}
+@media (min-width: 40rem) {
+  .settings-dialog[open] {
+    inset: 0;
+    margin: auto;
+    inline-size: min(32rem, calc(100vw - 2 * var(--page-inset)));
+    block-size: auto;
+    max-block-size: calc(100dvh - 2 * var(--page-inset));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg, 1rem);
+  }
 }

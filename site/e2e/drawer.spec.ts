@@ -33,7 +33,7 @@ const ratio = (a: [number, number, number], b: [number, number, number]) => {
 };
 
 const row = (page: Page, name: string) =>
-  name === 'Settings' ? page.locator('details.account summary') : page.getByRole('link', { name });
+  name === 'Settings' ? page.locator('#open-settings') : page.getByRole('link', { name });
 
 test('the foot rows are quiet text rows, not buttons: no button chrome, no icon, the same names', async ({ page }) => {
   await openChat(page);
@@ -58,10 +58,10 @@ test('the foot rows are quiet text rows, not buttons: no button chrome, no icon,
     if (name !== 'Settings') await expect(r.locator('svg'), `${name} has no icon`).toHaveCount(0); // the account row has its avatar and gear
     await expect(r, name).toContainText(name);
   }
-  // The names a screen reader hears are unchanged: links are links, and Settings is still a disclosure.
+  // The names a screen reader hears are unchanged: links are links, and Settings is a button that opens a dialog.
   await expect(page.getByRole('link', { name: 'Use the API' })).toHaveAttribute('href', 'https://platform.nyuchi.com');
   await expect(page.getByRole('link', { name: 'Disclaimer and privacy' })).toHaveAttribute('href', '/lite/disclaimer/');
-  await expect(page.locator('details.account summary')).toHaveText('Settings');
+  await expect(page.locator('#open-settings')).toHaveText('Settings');
 });
 
 test('muted text on the drawer surface keeps its contrast, in light and in dark, and hover and focus are clear', async ({ page }) => {
@@ -86,8 +86,8 @@ test('muted text on the drawer surface keeps its contrast, in light and in dark,
     expect(hovered.bg).not.toBe('rgba(0, 0, 0, 0)');
     expect(hovered.color).not.toBe(before);
     expect(ratio(await toRgb(page, hovered.color), await toRgb(page, hovered.bg)), `hover in ${scheme}`).toBeGreaterThanOrEqual(7);
-    // Focus by keyboard (so it is :focus-visible): from the language field, Tab lands on Use the API, and the page's ring is on it.
-    await page.locator('#lang').focus();
+    // Focus by keyboard (so it is :focus-visible): from the disclaimer row, Tab lands on Use the API, and the page's ring is on it.
+    await row(page, 'Disclaimer and privacy').focus();
     await page.keyboard.press('Tab');
     await expect(r).toBeFocused();
     expect(await r.evaluate((el) => getComputedStyle(el).outlineStyle)).toBe('solid');

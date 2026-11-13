@@ -40,8 +40,8 @@ for (const [name, size] of [['a phone', { width: 360, height: 640 }], ['a touch 
 test('on a phone the links inside Settings have no icon', async ({ page }) => {
   await openChat(page);
   await openChats(page);
-  await page.locator('details.account summary').click();
-  const foot = await page.locator('.settings-panel a.side-row').evaluateAll((els) => els.map((e) => ({ text: (e.textContent || '').trim(), svgs: e.querySelectorAll('svg').length })));
+  await page.locator('#open-settings').click();
+  const foot = await page.locator('.settings-dialog a.side-row').evaluateAll((els) => els.map((e) => ({ text: (e.textContent || '').trim(), svgs: e.querySelectorAll('svg').length })));
   expect(foot).toHaveLength(2);
   for (const r of foot) expect(r.svgs, r.text).toBe(0);
 });
