@@ -58,9 +58,12 @@ while (queue.length) {
   if (!/\.(js|css)$/.test(f)) continue;
   const code = read(f).toString('utf8');
   const found = f.endsWith('.js')
-    ? [...code.matchAll(/(?:from|import)\s*\(?\s*["']\.\/([^"']+)["']/g)].map((m) => `/lite/_astro/${m[1]}`)
+    ? [...code.matchAll(/(?:from|import)\s*\(?\s*["'`]\.\/([^"'`]+)["'`]/g)].map((m) => `/lite/_astro/${m[1]}`)
     : [...code.matchAll(/url\(\s*["']?(\/[^"')?#]+)/g)].map((m) => m[1]);
   for (const g of found) if (!wanted.has(g)) { wanted.add(g); queue.push(g); }
+}
+for (const need of ['strings-sn', 'strings-nd']) {
+  if (![...wanted].some((w) => w.includes(`/${need}.`))) throw new Error(`post-build: ${need} chunk is not in the precache; the language would not work offline`);
 }
 const precache = [...new Set(['/lite/', '/lite/disclaimer/', '/lite/manifest.webmanifest', ...wanted, '/lite/icons/icon-192.png'])].sort();
 

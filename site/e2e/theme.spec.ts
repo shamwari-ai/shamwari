@@ -127,3 +127,17 @@ test('muted text is at least 4.5:1 on the background and on the hover fill, in l
     expect(ratio(c.fg, c.bg), `${scheme}: body text on the page`).toBeGreaterThanOrEqual(7);
   }
 });
+
+test('the browser bar takes the page colour in each scheme (theme-color has a light and a dark variant that equal the page background)', async ({ page }) => {
+  await openChat(page);
+  const metas = await page.evaluate(() => [...document.querySelectorAll('meta[name="theme-color"]')].map((m) => ({ media: m.getAttribute('media'), content: m.getAttribute('content') })));
+  expect(metas).toHaveLength(2);
+  const toHex = (rgb: string) => '#' + (rgb.match(/\d+/g) ?? []).slice(0, 3).map((n) => Number(n).toString(16).padStart(2, '0')).join('');
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    const bg = toHex(await page.evaluate(() => getComputedStyle(document.body).backgroundColor));
+    expect(metas.find((m) => m.media === `(prefers-color-scheme: ${scheme})`)?.content, `${scheme} theme-color equals the page background`).toBe(bg);
+  }
+  const manifest = await (await page.request.get('/lite/manifest.webmanifest')).json();
+  expect(manifest.theme_color).toBe(metas.find((m) => m.media?.includes('light'))?.content);
+});
