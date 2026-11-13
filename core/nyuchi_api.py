@@ -105,6 +105,7 @@ class DataApi:
         json: Any = None,
         params: dict[str, Any] | None = None,
         retry: bool = True,
+        headers: dict[str, str] | None = None,
     ) -> Any:
         attempts = 1 + (self._retries if retry else 0)
         last = "unreachable"
@@ -113,7 +114,7 @@ class DataApi:
                 await asyncio.sleep(self._backoff * attempt)
             try:
                 res = await self._http.request(
-                    method, path, json=json, params=params, headers=self._headers
+                    method, path, json=json, params=params, headers={**self._headers, **(headers or {})}
                 )
             except (httpx.TransportError, httpx.TimeoutException) as e:
                 last = type(e).__name__
@@ -151,10 +152,7 @@ class DataApi:
         return _object(await self._request("GET", "/v1/shamwari/whoami"))
 
     async def ground_search(self, body: dict[str, Any]) -> dict[str, Any]:
-        out = _object(await self._request("POST", "/v1/shamwari/ground/search", json=body))
-        if not isinstance(out.get("chunks"), list) or "scope" not in out:
-            raise DataApiUnavailable("malformed")
-        return out
+        return _ground(await self._request("POST", "/v1/shamwari/ground/search", json=body))
 
     async def sink(self, database: str, collections: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
         # Safe to retry: the API gives each record a content-derived id, so a repeat is a counted
@@ -185,8 +183,114 @@ def _detail(res: httpx.Response) -> Any:
         body = res.json()
     except ValueError:
         return {"error": "refused", "status": res.status_code}
-    # FastAPI wraps an HTTPException's detail; pass that on, not the wrapper.
-    return body.get("detail", body) if isinstance(body, dict) else body
+    if not isinstance(body, dict):
+        return body
+    # The Servers API sends RFC 9457 problem+json with the machine-readable reason in the
+    # `error` extension member: {type, title, status, detail, error}. Pass that on in the
+    # shape callers already read ({"error": ...}); `detail` there is prose, not the reason.
+    if isinstance(body.get("error"), str):
+        out: dict[str, Any] = {"error": body["error"]}
+        if isinstance(body.get("detail"), str):
+            out["message"] = body["detail"]
+        return out
+    if ("type" in body or "title" in body) and "status" in body and not isinstance(body.get("detail"), dict):
+        return {"error": "refused", "status": res.status_code}
+    # FastAPI (the Nyuchi API) wraps an HTTPException's detail; pass that on, not the wrapper.
+    return body.get("detail", body)
+
+
+def _ground(value: Any) -> dict[str, Any]:
+    out = _object(value)
+    if not isinstance(out.get("chunks"), list) or "scope" not in out:
+        raise DataApiUnavailable("malformed")
+    return out
+
+
+def _is_internal(url: str) -> bool:
+    """A Fly private-network name: `<app>.internal`. Decided by the host, never by a header."""
+    host = (httpx.URL(url).host or "").lower().rstrip(".")
+    return host.endswith(".internal") and len(host) > len(".internal")
+
+
+class ServersApi(DataApi):
+    """
+    The Servers API (nyuchi/nyuchi-servers-api): the internal gateway Core and the Worker
+    reach data through. The Nyuchi API is the external B2B gateway and is not on this path.
+
+    Auth follows where the caller sits. A Fly app in the same org reaches `<app>.internal`
+    over the private network with NO key and NO token: none is sent, even if one is
+    configured. A caller outside (the gateway Worker) must present both the internal key
+    and the bearer token, and construction fails without them. The host decides, so a name
+    that merely contains "internal" is treated as outside.
+
+    For a personal-scope search the owner travels in the `x-shamwari-person` header and
+    never in the body (owner decision, 2026-11-13). Core refuses personal scope before any
+    call goes to Cloud; this only changes how the owner is named to the data layer.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        key: str | None = None,
+        token: str | None = None,
+        http: httpx.AsyncClient | None = None,
+        retries: int = 1,
+        backoff: float = 0.2,
+    ) -> None:
+        internal = _is_internal(base_url)
+        if not internal and not (key and token):
+            raise ValueError("a Servers API host outside the Fly private network needs an internal key and a token")
+        # Bypass DataApi.__init__'s key requirement; the client and retry state are the same.
+        self._http = http or httpx.AsyncClient(
+            base_url=base_url.rstrip("/"),
+            timeout=httpx.Timeout(10.0, connect=3.0),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+        self._headers = {"Accept": "application/json", "User-Agent": "shamwari-core"}
+        if not internal:
+            self._headers["Authorization"] = f"Bearer {token}"
+            self._headers["x-nyuchi-internal-key"] = str(key)
+        self._retries = retries
+        self._backoff = backoff
+
+    @classmethod
+    def from_env(cls) -> "ServersApi":
+        # Core runs on Fly and reaches `<app>.internal`, so it reads no key or token. An
+        # outside host therefore refuses to start; the key+token path is for the Worker's
+        # client, built with explicit arguments.
+        return cls(base_url=os.environ["SERVERS_API_URL"].strip())
+
+    async def whoami(self) -> dict[str, Any]:
+        # Core's readiness check: "the Servers API answers". /ready is unauthenticated.
+        return _object(await self._request("GET", "/ready"))
+
+    async def ground_search(self, body: dict[str, Any]) -> dict[str, Any]:
+        body = dict(body)
+        owner = body.pop("owner_entity_id", None)
+        headers: dict[str, str] = {}
+        if body.get("scope") == "personal":
+            if not owner:
+                raise ValueError("a personal search must name its owner")
+            headers["x-shamwari-person"] = str(owner)
+        elif owner is not None:
+            body["owner_entity_id"] = owner
+        return _ground(
+            await self._request("POST", "/v1/shamwari/ground/search", json=body, headers=headers)
+        )
+
+    async def guardrails(self, surface: str) -> dict[str, Any]:
+        return _object(await self._request("GET", "/v1/shamwari/guardrails", params={"applies_to": surface}))
+
+
+def data_api_from_env() -> DataApi:
+    """
+    SERVERS_API_URL unset (or blank): the Nyuchi API client, as before, so merging this
+    changes nothing in production. Set: the Servers API client, and no Nyuchi key is needed.
+    """
+    if os.environ.get("SERVERS_API_URL", "").strip():
+        return ServersApi.from_env()
+    return DataApi.from_env()
 
 
 def _object(value: Any) -> dict[str, Any]:

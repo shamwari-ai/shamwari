@@ -47,7 +47,7 @@ from typing import Any, Literal
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
-from nyuchi_api import DataApi, DataApiRefusal, DataApiUnavailable
+from nyuchi_api import DataApiRefusal, DataApiUnavailable, data_api_from_env
 from personal import needs_own_information
 
 log = logging.getLogger("shamwari.core")
@@ -60,7 +60,7 @@ OPS_TOKEN = os.environ.get("SHAMWARI_OPS_TOKEN", "")
 
 #: Built from the environment at import, so a missing key stops Core at boot, loudly,
 #: rather than at the first request. Tests replace it.
-api = DataApi.from_env()
+api = data_api_from_env()
 
 
 @asynccontextmanager

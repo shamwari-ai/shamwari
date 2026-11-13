@@ -31,6 +31,15 @@ Plain settings, in `fly.toml` `[env]` (not secrets): `NYUCHI_API_URL`
 (`http://nyuchi-api.internal:8080`, Fly's private network) and `NYUCHI_API_HOST`
 (`api.nyuchi.com`; the API trusts a list of hosts and `.internal` is not on it).
 
+`SERVERS_API_URL` is a third plain setting and is **not set** in `fly.toml`: unset (the
+default) means Core uses the Nyuchi API exactly as above. When the Servers API routes are
+deployed (nyuchi-servers-api#42, #43), the owner sets it to the Servers API's Fly private
+address (`http://<app>.internal:<port>`). Core then reaches it with **no key and no token**
+(same Fly org), sends the owner in the `x-shamwari-person` header for a personal-scope
+search, never in the body, and reads the refusal reason from the RFC 9457 `error` member.
+An address that is not `*.internal` makes Core refuse to start: outside callers (the
+gateway Worker) use the key and token, Core holds neither for this. To turn it off, unset it.
+
 The Cloudflare Secrets Store is for Workers only; Fly cannot read it. Core's secrets
 are Fly secrets, whose values come from the owner's vault.
 
