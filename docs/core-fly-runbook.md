@@ -1,7 +1,9 @@
 # Core on Fly: deploy runbook
 
-Tracking: #81 (deploy), #17 (Ground). Everything here that creates, sets or
-deploys is **owner-only**; nothing in the repo does it. Commands follow Fly's
+Tracking: #81 (deploy), #17 (Ground), #266 (deploy on release). Releases to `main`
+deploy **automatically** (see Deploy). Everything else that creates or sets
+(the app, its secrets, the Actions secrets) is **owner-only**; nothing in the repo
+does it. The manual commands below are the break-glass path. They follow Fly's
 documented CLI and were **not run from the build session** (no `flyctl`, no
 Fly credential there), so read each once before running it.
 
@@ -86,8 +88,49 @@ memory in `fly logs` and `fly status` for the first week before shrinking it.
 
 ## Deploy
 
-Run from a clean checkout of `staging` at the commit you mean to ship.
-Values come from your environment or a secret manager; nothing below prints one.
+**Automatic on release.** Every push to `main` (the release PR that
+`release-to-main.yml` merges) runs CI; when CI is green on that commit,
+`.github/workflows/deploy.yml` deploys it. Nothing is switched on or off by hand.
+Two independent jobs, each behind the `production` GitHub Environment:
+
+| Job     | What it does                                                                                                      | Health check after                     |
+| ------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| gateway | `npm ci`, then `npx --no wrangler deploy` in `gateway/` (the wrangler version `package-lock.json` pins)           | `https://api.shamwari.ai/health`       |
+| core    | `flyctl deploy --app shamwari-core --ha=false --remote-only --env SERVERS_API_URL=...` in `core/`, one machine on | `https://shamwari-core.fly.dev/health` |
+
+`app/` and `site/` are not here: Workers Builds deploys those from `main` itself.
+
+- Each health check retries 6 times, 10 seconds apart, and fails the job unless it
+  gets 200. A failed check means the new version **is live**; the job names the
+  rollback command in its error. Nothing rolls back by itself (see Rollback).
+- A deploy in flight is never cancelled: a newer release waits for it.
+- `SERVERS_API_URL=http://nyuchi-servers-api.internal:8081` is passed at deploy time
+  as a plain variable, not set in `fly.toml`, so a break-glass deploy without the flag
+  still uses the Nyuchi API client. Add the same `--env` flag to a manual deploy if you
+  want the Servers API client. It is not a secret.
+- If a secret below is missing, the job **fails** with an error naming it. It never
+  skips and never reports success without deploying.
+
+Secrets the owner provides to this repository (**names only**; values never go in the
+repo, an issue or a PR; `core/test_deploy_workflow.py` fails if the workflow reads any
+other or carries a literal):
+
+| Name                    | Used by | What it is                                                            |
+| ----------------------- | ------- | --------------------------------------------------------------------- |
+| `FLY_API_TOKEN`         | core    | A Fly deploy token scoped to the `shamwari-core` app only.            |
+| `CLOUDFLARE_API_TOKEN`  | gateway | A Cloudflare token allowed to deploy Workers in the Nyuchi account.   |
+| `CLOUDFLARE_ACCOUNT_ID` | gateway | The Nyuchi Web Services account id (an identifier, not a credential). |
+
+Put them in the `production` Environment of `shamwari-ai/shamwari`. The Worker's own
+runtime secrets (including `SHAMWARI_CORE_TOKEN`) stay in Cloudflare; Core's stay in
+Fly. Neither is touched by the workflow.
+
+### Break-glass: deploy from a shell
+
+Use only when Actions is unavailable or a release must go out ahead of CI. Run from a
+clean checkout of `main` at the commit you mean to ship. The first four steps are also
+the one-time setup of a Fly app that does not exist yet. Values come from your
+environment or a secret manager; nothing below prints one.
 
 ```bash
 set -euo pipefail
@@ -97,7 +140,7 @@ fly auth whoami
 fly apps list --org nyuchi-web-services | grep -c '^shamwari-core ' || true   # 0 = not created yet
 git rev-parse --short HEAD
 
-# 1. Create the app. No machines yet.
+# 1. Create the app. No machines yet. (First time only.)
 fly apps create shamwari-core --org nyuchi-web-services
 
 # 2. Secrets. `fly secrets import` reads NAME=value lines from stdin, so a value
@@ -115,13 +158,16 @@ printf 'NYUCHI_API_INTERNAL_KEY=%s\nSHAMWARI_CORE_TOKEN=%s\nSHAMWARI_OPS_TOKEN=%
 #    Core"), so do not lose it. Then drop them from this shell.
 unset SHAMWARI_CORE_TOKEN SHAMWARI_OPS_TOKEN NYUCHI_API_INTERNAL_KEY
 
-# 4. Deploy. Remote builder; CI builds this image on every PR, so a Dockerfile or lock
+# 4. Deploy Core. Remote builder; CI builds this image on every PR, so a Dockerfile or lock
 #    problem has already failed there. One machine (fly.toml: min_machines_running = 1).
 cd core
 fly deploy --app shamwari-core --ha=false
 
 # 5. Names only (never values): confirm what is set.
 fly secrets list --app shamwari-core
+
+# 6. Deploy the gateway Worker (needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in this shell).
+cd ../gateway && npm ci && npx --no wrangler deploy
 ```
 
 Core reaches `nyuchi-api.internal` only if both apps are in the same Fly organisation
@@ -207,6 +253,10 @@ Cloudflare dashboard. Until it is, the controls are the bearer token, `/health`
 being the only open route, and rule 1/2 enforced inside Core.
 
 ## Rollback
+
+A failed health check in the deploy workflow leaves the new version live and says so;
+a person rolls back with the commands below. They are deliberately not automated:
+CI cannot test them, and a wrong automatic rollback is worse than a red job.
 
 Code (Core):
 

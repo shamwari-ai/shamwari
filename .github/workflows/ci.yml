@@ -69,7 +69,7 @@ jobs:
             echo "gateway=$(hit '^(gateway/|core/|docs/)')"
             echo "chat_guard=$(hit '^chat/')"
             # Core's end-to-end contract runs the gateway Worker against Core.
-            echo "core=$(hit '^(core/|gateway/|scripts/|db/)')"
+            echo "core=$(hit '^(core/|gateway/|scripts/|db/|\.github/workflows/deploy\.yml)')"
             echo "docs_site=$(hit '^docs-site/')"
             echo "site=$(hit '^(site/|docs/)')"
             echo "app=$(hit '^site/')"

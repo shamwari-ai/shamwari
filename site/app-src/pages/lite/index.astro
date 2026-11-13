@@ -178,10 +178,6 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
       </button>
     </span>
 
-    <p id="offline-mode-note" class="notice" role="status" hidden data-i18n="offlineModeNote">{en.offlineModeNote}</p>
-    <p id="offline" class="notice" role="status" hidden data-i18n="offlineBanner">
-      You are offline. You can still write questions; they will be sent later.
-    </p>
 
     <!-- What can be done with the open chat: pin it, file it in a project, delete it. A popover opened by the "..." beside the chat's title. -->
     <div id="chat-tools" class="chat-tools" popover role="group" aria-labelledby="chat-tools-title" hidden>
@@ -224,6 +220,17 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
       <section class="ask" aria-labelledby="ask-title">
         <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
         <form id="composer" class="composer" autocomplete="off">
+          <!-- The status chip slot: the top of the card. Offline and offline-mode notices sit here, one quiet line each, with an X. -->
+          <div class="status-chips">
+            <div id="offline-mode-note" class="status-chip" role="status" hidden>
+              <span data-i18n="offlineModeNote">{en.offlineModeNote}</span>
+              <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+            </div>
+            <div id="offline" class="status-chip" role="status" hidden>
+              <span data-i18n="offlineBanner">{en.offlineBanner}</span>
+              <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
+            </div>
+          </div>
           <label class="sr-only" for="q" data-i18n="placeholder">Ask a question</label>
           <ul id="attach-list" class="attach-list" hidden aria-label={en.attachments} data-i18n-attr="aria-label:attachments"></ul>
           <textarea id="q" rows="1" enterkeyhint="send" data-i18n-attr="placeholder:placeholder" placeholder="Ask a question"></textarea>
