@@ -80,7 +80,7 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
           <li><button type="button" class="side-row" data-section="projects"><Icon name="layers" class="side-icon" /><span data-i18n="projects">{en.projects}</span></button></li>
           <li><span class="side-row side-disabled" aria-disabled="true"><Icon name="workflow" class="side-icon" /><span data-i18n="navFactory">{en.navFactory}</span><span class="side-chip" data-i18n="comingSoon">{en.comingSoon}</span></span></li>
           <li><button type="button" class="side-row" data-section="artifacts"><Icon name="clipboard" class="side-icon" /><span data-i18n="artifacts">{en.artifacts}</span></button></li>
-          <li><button type="button" class="side-row" data-section="plugins"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span></button></li>
+          <li><span class="side-row side-disabled" aria-disabled="true"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span><span class="side-chip" data-i18n="comingSoon">{en.comingSoon}</span></span></li>
         </ul>
       </nav>
       <!-- The menu of one chat in the list (opened by its "..."): pin, project, delete. One shared popover, inside the drawer so
@@ -139,37 +139,15 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
       </div>
       </div>
 
-      <!-- Pinned to the bottom of the drawer: the account row. Settings opens upward from it; the API link, the disclaimer,
-           language, delete history, install and the version all live in that panel, none in the drawer itself. -->
+      <!-- Pinned to the bottom of the drawer: the account row. It opens the Settings dialog (language, delete history, install,
+           the disclaimer, the API link and the version), none of which sit in the drawer itself. -->
       <div class="side-foot">
         <nav class="side-nav" aria-label={en.settings} data-i18n-attr="aria-label:settings">
-          <details class="account side-settings" data-slot="account-menu">
-            <summary class="side-row side-account">
-              <span class="avatar" aria-hidden="true"><Icon name="user" class="h-4 w-4" /></span>
-              <span class="side-account-name" data-i18n="settings">{en.settings}</span>
-              <Icon name="sliders" class="side-icon side-gear" />
-            </summary>
-            <div class="settings-panel" data-slot="account-menu-panel">
-              <div class="account-row">
-                <label for="lang" data-i18n="language">Language</label>
-                <select id="lang" aria-describedby="review"></select>
-              </div>
-              <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener">
-                <span data-i18n="useApi">Use the API</span><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span>
-              </a>
-              <a class="side-row" href="/lite/disclaimer/">
-                <span data-i18n="disclaimerLink">{en.disclaimerLink}</span>
-              </a>
-              <div class="account-row">
-                <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
-                <button type="button" id="signout" class="btn" hidden data-i18n="authDevClear">Remove key</button>
-              </div>
-              <div class="account-row">
-                <button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button>
-              </div>
-              <p class="version-line" data-current-version-line hidden><span data-i18n="version">Version</span> <span data-current-version></span></p>
-            </div>
-          </details>
+          <button type="button" id="open-settings" class="side-row side-account" aria-haspopup="dialog">
+            <span class="avatar" aria-hidden="true"><Icon name="user" class="h-4 w-4" /></span>
+            <span class="side-account-name" data-i18n="settings">{en.settings}</span>
+            <Icon name="sliders" class="side-icon side-gear" />
+          </button>
         </nav>
       </div>
     </div>
@@ -195,9 +173,6 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
       </button>
     </span>
 
-    <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
-      This language is a draft and still needs review by a native speaker.
-    </p>
     <p id="offline-mode-note" class="notice" role="status" hidden data-i18n="offlineModeNote">{en.offlineModeNote}</p>
     <p id="offline" class="notice" role="status" hidden data-i18n="offlineBanner">
       You are offline. You can still write questions; they will be sent later.
@@ -218,11 +193,11 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
         <h2 id="greeting" data-i18n="greeting">Hello, friend</h2>
         <p class="lead" data-i18n="tagline">Ask a question. Get the answer with the section it came from.</p>
         <h3 id="try" class="try" data-i18n="tryAsking">Try asking</h3>
-        <ul class="examples">
-          <li><button type="button" class="btn chip" data-example data-i18n="example1">What does the Constitution say about equality?</button></li>
-          <li><button type="button" class="btn chip" data-example data-i18n="example2">What are my rights if I am arrested?</button></li>
-          <li><button type="button" class="btn chip" data-example data-i18n="example3">What does the Constitution say about education?</button></li>
-        </ul>
+        <div class="examples" role="group" aria-label={en.suggestedPrompts} data-i18n-attr="aria-label:suggestedPrompts">
+          <button type="button" class="btn chip" data-example data-i18n="example1">What does the Constitution say about equality?</button>
+          <button type="button" class="btn chip" data-example data-i18n="example2">What are my rights if I am arrested?</button>
+          <button type="button" class="btn chip" data-example data-i18n="example3">What does the Constitution say about education?</button>
+        </div>
       </section>
 
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
@@ -285,6 +260,41 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
       <button type="button" id="artifact-open" class="btn" data-i18n="openChat">Open the chat</button>
       <button type="button" id="artifact-remove" class="btn danger" data-i18n="removeArtifact">Remove</button>
       <button type="button" id="artifact-close" class="btn primary" data-i18n="close">Close</button>
+    </div>
+  </dialog>
+  <!-- Settings: a modal of its own (native dialog: focus is held inside, Esc closes, the page behind is inert). It opens from
+       the drawer's foot; the drawer closes first. Full screen below 40rem, centred above. -->
+  <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
+    <div class="settings-head">
+      <h2 id="settings-title" data-i18n="settings">{en.settings}</h2>
+      <button type="button" id="settings-close" class="btn" data-i18n="close">{en.close}</button>
+    </div>
+    <div class="settings-body">
+      <section class="settings-section" aria-labelledby="settings-lang-title">
+        <h3 id="settings-lang-title" data-i18n="language">Language</h3>
+        <select id="lang" aria-describedby="review" data-i18n-attr="aria-label:language"></select>
+        <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
+          This language is a draft and still needs review by a native speaker.
+        </p>
+      </section>
+      <section class="settings-section" aria-labelledby="settings-data-title">
+        <h3 id="settings-data-title" data-i18n="settingsData">{en.settingsData}</h3>
+        <div class="account-row">
+          <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
+          <button type="button" id="signout" class="btn" hidden data-i18n="authDevClear">Remove key</button>
+        </div>
+        <div class="account-row">
+          <button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button>
+        </div>
+      </section>
+      <section class="settings-section" aria-labelledby="settings-about-title">
+        <h3 id="settings-about-title" data-i18n="about">{en.about}</h3>
+        <a class="side-row" href="/lite/disclaimer/"><span data-i18n="disclaimerLink">{en.disclaimerLink}</span></a>
+        <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener">
+          <span data-i18n="useApi">Use the API</span><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span>
+        </a>
+        <p class="version-line" data-current-version-line hidden><span data-i18n="version">Version</span> <span data-current-version></span></p>
+      </section>
     </div>
   </dialog>
   <!-- Signing out of a Mukoko account: the messages stay on this device unless the person also chooses to delete them. -->
