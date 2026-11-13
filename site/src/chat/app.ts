@@ -16,7 +16,7 @@ import {
   type QueueActions,
 } from './render';
 import { newId, openSwitchableStore, titleOf, type Artifact, type Project, type StoredMessage, type Thread } from './store';
-import { LANGUAGES, isLanguage } from './strings';
+import { LANGUAGES, isLanguage, loadStrings } from './strings';
 import type { AskErrorKind, ChatMessage, Scope } from './types';
 import { setBusy } from './busy';
 import type { AuthMode } from './auth-mode';
@@ -61,6 +61,14 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   document.documentElement.dataset.auth = auth.kind;
 
   let lang = currentLanguage();
+  let languageFailed = false;
+  // Shona and Ndebele are separate files, kept out of the first load (English is always in the page). If the saved one cannot be fetched, show English.
+  try {
+    await loadStrings(lang);
+  } catch {
+    lang = 'en';
+    languageFailed = true;
+  }
   /** Messages with a request in flight. Replaces one global lock, so asking and the queue never block each other. */
   const inflight = new Set<string>();
   let flushing = false;
@@ -1203,9 +1211,20 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
 
   const langSelect = $<HTMLSelectElement>('#lang');
   langSelect.value = lang;
-  langSelect.addEventListener('change', () => {
+  langSelect.addEventListener('change', async () => {
     if (!isLanguage(langSelect.value)) return;
-    lang = langSelect.value;
+    const next = langSelect.value;
+    try {
+      await loadStrings(next);
+      if (langSelect.value !== next) return; // a newer choice was made while this one loaded
+    } catch {
+      if (langSelect.value !== next) return;
+      // The words could not be fetched (no connection and not yet cached): stay in the language that is showing.
+      langSelect.value = lang;
+      $('#toast').textContent = strings().languageUnavailable;
+      return;
+    }
+    lang = next;
     saveLanguage(lang);
     applyStrings(document, lang);
     attach.refresh();
@@ -1270,6 +1289,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   void renderHistory();
   // Before the first renewal answers: the chat only for a device that holds (or held) a session, else the sign-in screen.
   setView(auth.signedIn() ? 'app' : auth.kind === 'mukoko' ? 'pending' : 'signin');
+  if (languageFailed) $('#toast').textContent = strings().languageUnavailable;
   document.documentElement.dataset.ready = 'true';
   const afterAuth = () => {
     document.documentElement.dataset.authReady = 'true';
