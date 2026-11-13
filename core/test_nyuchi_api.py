@@ -4,12 +4,15 @@ No network: httpx's MockTransport stands in for the Nyuchi API.
 """
 
 import asyncio
+import json
 import logging
+import os
 import unittest
+from unittest import mock
 
 import httpx
 
-from nyuchi_api import DataApi, DataApiRefusal, DataApiUnavailable
+from nyuchi_api import DataApi, DataApiRefusal, DataApiUnavailable, ServersApi, data_api_from_env
 
 KEY = "nyk_abc123.nys_SECRETVALUE"
 
@@ -156,6 +159,160 @@ class NoSecretsInLogs(unittest.TestCase):
     def test_a_missing_key_refuses_to_start(self):
         with self.assertRaises(ValueError):
             DataApi(key="")
+
+
+def servers(handler, **kw):
+    http = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://core-data.internal:8080")
+    return ServersApi(base_url="http://core-data.internal:8080", http=http, backoff=0, **kw)
+
+
+OWNER = "person_abc"
+GROUND = {"scope": "platform", "chunks": []}
+
+
+class ServersApiRequests(unittest.TestCase):
+    def test_routes_are_the_servers_api_ones(self):
+        seen = []
+
+        def handler(req):
+            seen.append((req.method, req.url.path, dict(req.url.params)))
+            return httpx.Response(200, json={**GROUND, "written": {}})
+
+        c = servers(handler)
+        run(c.ground_search({"query": "q", "scope": "platform", "owner_entity_id": "e1"}))
+        run(c.sink("shamwari", {"groundMisses": [{"a": 1}]}))
+        run(c.guardrails("shamwari"))
+        self.assertEqual(
+            seen,
+            [
+                ("POST", "/v1/shamwari/ground/search", {}),
+                ("POST", "/v1/shamwari/sink", {}),
+                ("GET", "/v1/shamwari/guardrails", {"applies_to": "shamwari"}),
+            ],
+        )
+
+    def test_a_personal_search_names_the_owner_in_the_header_and_never_in_the_body(self):
+        seen = []
+
+        def handler(req):
+            seen.append(req)
+            return httpx.Response(200, json={"scope": "personal", "chunks": []})
+
+        run(servers(handler).ground_search({"query": "q", "scope": "personal", "destination": "mind", "owner_entity_id": OWNER}))
+        self.assertEqual(seen[0].headers["x-shamwari-person"], OWNER)
+        self.assertNotIn("owner_entity_id", json.loads(seen[0].content))
+        self.assertNotIn(OWNER, seen[0].content.decode())
+
+    def test_a_personal_search_with_no_owner_is_refused_before_any_call(self):
+        seen = []
+
+        def handler(req):
+            seen.append(req)
+            return httpx.Response(200, json=GROUND)
+
+        with self.assertRaises(ValueError):
+            run(servers(handler).ground_search({"query": "q", "scope": "personal"}))
+        self.assertEqual(seen, [])
+
+    def test_a_non_personal_search_sends_no_person_header(self):
+        seen = []
+
+        def handler(req):
+            seen.append(req)
+            return httpx.Response(200, json=GROUND)
+
+        run(servers(handler).ground_search({"query": "q", "scope": "community", "owner_entity_id": "e1"}))
+        self.assertNotIn("x-shamwari-person", seen[0].headers)
+
+    def test_the_old_guardrails_path_is_not_used(self):
+        seen = []
+
+        def handler(req):
+            seen.append(req.url.path)
+            return httpx.Response(200, json={})
+
+        run(servers(handler).guardrails("shamwari"))
+        self.assertNotIn("/v1/ai/guardrails", seen)
+
+
+class ServersApiAuth(unittest.TestCase):
+    def _headers(self, **kw):
+        seen = []
+
+        def handler(req):
+            seen.append(req)
+            return httpx.Response(200, json=GROUND)
+
+        run(kw.pop("make")(handler).ground_search({"query": "q", "scope": "platform", "owner_entity_id": "e1"}))
+        return seen[0].headers
+
+    def test_an_internal_host_gets_no_key_and_no_token_even_if_some_are_configured(self):
+        h = self._headers(make=lambda handler: servers(handler, key=KEY, token="TOKENVALUE"))
+        for name in ("authorization", "x-nyuchi-internal-key", "x-api-key"):
+            self.assertNotIn(name, h)
+
+    def test_internal_means_the_dot_internal_suffix_not_a_lookalike(self):
+        for url in ("http://x.internal.example.com", "http://internal", "https://api.nyuchiservers.com"):
+            with self.assertRaises(ValueError, msg=url):
+                ServersApi(base_url=url)
+
+    def test_a_non_internal_host_sends_the_key_and_the_token(self):
+        def make(handler):
+            http = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="https://api.nyuchiservers.com")
+            return ServersApi(base_url="https://api.nyuchiservers.com", key=KEY, token="TOKENVALUE", http=http, backoff=0)
+
+        h = self._headers(make=make)
+        self.assertEqual(h["authorization"], "Bearer TOKENVALUE")
+        self.assertEqual(h["x-nyuchi-internal-key"], KEY)
+
+    def test_a_non_internal_host_needs_both(self):
+        for kw in ({}, {"key": KEY}, {"token": "t"}):
+            with self.assertRaises(ValueError):
+                ServersApi(base_url="https://api.nyuchiservers.com", **kw)
+
+    def test_a_lookalike_never_gets_the_credentials_sent_as_if_internal(self):
+        # the host decides, so a name merely containing "internal" must be treated as outside
+        with self.assertRaises(ValueError):
+            ServersApi(base_url="https://core.internal.evil.test")
+
+
+class ServersApiRefusals(unittest.TestCase):
+    def test_the_error_member_of_a_problem_json_body_is_what_the_caller_sees(self):
+        body = {"type": "about:blank", "title": "Conflict", "status": 409, "detail": "no", "error": "scope_requires_local_inference"}
+        with self.assertRaises(DataApiRefusal) as cm:
+            run(servers(lambda r: httpx.Response(409, json=body)).ground_search({"query": "q", "scope": "platform"}))
+        self.assertEqual(cm.exception.status_code, 409)
+        self.assertEqual(cm.exception.detail["error"], "scope_requires_local_inference")
+
+    def test_a_problem_body_without_error_still_says_it_was_refused(self):
+        with self.assertRaises(DataApiRefusal) as cm:
+            run(servers(lambda r: httpx.Response(422, json={"title": "x", "status": 422})).guardrails("shamwari"))
+        self.assertEqual(cm.exception.detail["error"], "refused")
+
+    def test_the_nyuchi_api_shape_still_unwraps(self):
+        with self.assertRaises(DataApiRefusal) as cm:
+            run(client(lambda r: httpx.Response(409, json={"detail": {"error": "x"}})).guardrails("s"))
+        self.assertEqual(cm.exception.detail, {"error": "x"})
+
+
+class Selection(unittest.TestCase):
+    def test_unset_means_the_nyuchi_api_client(self):
+        with mock.patch.dict(os.environ, {"NYUCHI_API_INTERNAL_KEY": KEY}, clear=True):
+            self.assertIsInstance(data_api_from_env(), DataApi)
+            self.assertNotIsInstance(data_api_from_env(), ServersApi)
+
+    def test_a_blank_value_is_unset(self):
+        with mock.patch.dict(os.environ, {"NYUCHI_API_INTERNAL_KEY": KEY, "SERVERS_API_URL": "  "}, clear=True):
+            self.assertNotIsInstance(data_api_from_env(), ServersApi)
+
+    def test_set_selects_the_servers_api_and_needs_no_nyuchi_key(self):
+        with mock.patch.dict(os.environ, {"SERVERS_API_URL": "http://servers.internal:8080"}, clear=True):
+            self.assertIsInstance(data_api_from_env(), ServersApi)
+
+    def test_set_to_an_outside_host_refuses_to_start_core_holds_no_key_for_it(self):
+        with mock.patch.dict(os.environ, {"SERVERS_API_URL": "https://api.nyuchiservers.com"}, clear=True):
+            with self.assertRaises(ValueError):
+                data_api_from_env()
 
 
 if __name__ == "__main__":
