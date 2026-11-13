@@ -63,7 +63,7 @@ test('asking a first question without choosing counts as an answer: the line is 
 test.describe('words that cannot load', () => {
   test.use({ serviceWorkers: 'block' });
 test('if the words of a language cannot be loaded, the line stays so the person can try again', async ({ page }) => {
-  await openChat(page);
+  await openChat(page, undefined, { settle: false }); // service workers are blocked here: none will control the page
   await page.route('**/strings-sn*', (r) => r.abort());
   await row(page).getByRole('button', { name: 'ChiShona' }).click();
   await expect(page.locator('#toast')).toContainText('could not be loaded');
