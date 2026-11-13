@@ -113,6 +113,8 @@ export const sn: Strings = {
   useApi: 'Shandisa API',
   opensNewTab: '(inovhurika patab itsva)',
   disclaimerLink: 'Chinyorwa chekuzivisa nekuvanzika',
+  wrongNote: 'Mhinduro dzinogona kukanganisa',
+  privacyLink: 'Kuvanzika',
   disclaimerTitle: 'Chinyorwa chekuzivisa nekuvanzika',
   backToChat: 'Dzokera kuhurukuro',
   signedOutCleared: 'Mabuda. Hurukuro dzenyu dzabviswa pafoni iyi.',

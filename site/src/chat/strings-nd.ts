@@ -113,6 +113,8 @@ export const nd: Strings = {
   useApi: 'Sebenzisa i-API',
   opensNewTab: '(ivulwa kuthebhu entsha)',
   disclaimerLink: 'Isaziso nobumfihlo',
+  wrongNote: 'Impendulo zingaphutha',
+  privacyLink: 'Ubumfihlo',
   disclaimerTitle: 'Isaziso nobumfihlo',
   backToChat: 'Buyela engxoxweni',
   signedOutCleared: 'Usuphumile. Ingxoxo zakho zisusiwe kulefoni.',

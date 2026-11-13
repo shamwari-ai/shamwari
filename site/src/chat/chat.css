@@ -382,6 +382,15 @@ input:not([type='checkbox']):not([type='radio']) {
   font-size: var(--fs-caption);
   color: var(--muted-foreground);
 }
+.trust {
+  margin: var(--inset-floor) 0 0;
+  font-size: var(--fs-caption);
+  color: var(--muted-text);
+}
+.trust .footer-link {
+  display: inline-flex;
+  padding-inline: var(--gap-floor);
+}
 .footer-link {
   display: inline-flex;
   align-items: center;
