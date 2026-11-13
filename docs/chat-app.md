@@ -61,7 +61,9 @@ Where the chat departs from the library, and why:
   box of at most 32rem above. Its markup is in the page, not a lazy chunk: the handlers it needs
   (language, delete, install, sign out) are bound at start, and the markup is the same bytes the old
   panel had. There is no Appearance section: the page follows the device's light or dark setting and
-  there is no override to choose yet.
+  there is no override to choose yet. Language is a radio group (all three in view, one tap each) and
+  the Offline mode switch lives here too; the top bar shows an Offline mode badge only while it is on, and the
+  badge opens Settings.
 - **The menu, close and top-bar action buttons are lifted from 44 px to the 49 px floor** in
   `chat.css`; `AppShell` draws them at 44 px. Worth raising upstream.
 

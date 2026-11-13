@@ -123,7 +123,7 @@ for (const width of [1000, 1280, 1440]) {
 
       // The top bar says what its actions are (from 40rem up).
       // Really drawn, not just present: a 1px clipped box counts as "visible" to Playwright, so measure the box and the clipping.
-      for (const sel of ['#offline-mode .bar-label', '#new-chat .bar-label']) {
+      for (const sel of ['#new-chat .bar-label']) {
         const drawn = await page.locator(sel).evaluate((el) => {
           const c = getComputedStyle(el);
           const r = el.getBoundingClientRect();
@@ -134,8 +134,7 @@ for (const width of [1000, 1280, 1440]) {
         expect(drawn.clipPath, `${sel} is not clipped away`).toBe('none');
         expect(drawn.overflow).toBe('visible');
       }
-      await expect(page.locator('#offline-mode')).toContainText('Offline mode');
-      await expect(page.locator('#offline-mode')).toContainText('Off');
+      await expect(page.locator('#offline-badge')).toBeHidden(); // the badge is for offline mode being ON; the switch is in Settings
     });
   }
 }

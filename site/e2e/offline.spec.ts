@@ -114,7 +114,7 @@ test('the content security policy holds: no violations while chatting', async ({
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('.cite').first()).toBeVisible();
   await openAccount(page);
-  await page.locator('#lang').selectOption('nd');
+  await page.getByRole('radio', { name: 'isiNdebele' }).check();
   expect(problems).toEqual([]);
 
   const csp = (await page.request.get('/lite/')).headers()['content-security-policy'];
