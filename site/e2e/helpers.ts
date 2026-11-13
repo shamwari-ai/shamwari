@@ -2,10 +2,22 @@ import { expect, type Page } from '@playwright/test';
 
 export const OK_KEY = 'sk_shamwari_mock_ok';
 
-/** Open the chat with a developer key already saved, as a returning tester would. */
-export async function openChat(page: Page, key: string | null = OK_KEY) {
+/**
+ * Open the chat with a developer key already saved, as a returning tester would.
+ *
+ * "Ready" is the app having started, but on a first visit the service worker is still installing and then claims the page
+ * (registered after `load`, so on a slow runner that is well after ready). A test that measures the page in that window can have
+ * its page context replaced under it ("Execution context was destroyed, most likely because of a navigation": seen in CI on
+ * theme.spec and density.spec, and on staging itself). So this waits until a worker controls the page, then until the app is
+ * ready again (a page that was replaced meanwhile starts over, and `waitForFunction` follows it), and only then returns.
+ * `settle: false` is for a test that blocks service workers on purpose (none will ever control the page).
+ */
+export async function openChat(page: Page, key: string | null = OK_KEY, opts: { settle?: boolean } = {}) {
   if (key) await page.addInitScript((k) => localStorage.setItem('shamwari.devkey', k), key);
   await page.goto('/lite/');
+  await page.waitForSelector('html[data-ready="true"]');
+  if (opts.settle === false) return;
+  await page.waitForFunction(() => !!navigator.serviceWorker?.controller);
   await page.waitForSelector('html[data-ready="true"]');
 }
 
