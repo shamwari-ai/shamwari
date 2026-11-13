@@ -270,8 +270,8 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   const closeDrawer = () => (document.getElementById('chat-sidebar') as (HTMLElement & { hidePopover?: () => void }) | null)?.hidePopover?.();
   const closeAccount = () => document.querySelector('details.account')?.removeAttribute('open');
   /**
-   * The drawer is a popover below 64rem. While it is open the page slides aside (CSS, on html[data-drawer]), is inert so
-   * nothing behind the drawer can be reached by keyboard or screen reader, the opening button says it is expanded, and
+   * The drawer is a popover below 64rem, laid over the page with a dim backdrop (CSS; the page does not move). While it is
+   * open, html[data-drawer] is set and the page frame is inert so nothing behind the drawer can be reached by keyboard or screen reader, the opening button says it is expanded, and
    * focus goes into the drawer and comes back to that button when it closes.
    */
   const drawer = document.getElementById('chat-sidebar') as HTMLElement | null;
