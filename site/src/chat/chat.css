@@ -1270,13 +1270,57 @@ html [data-slot='app-shell'] {
   position: absolute;
   flex: none;
 }
-@media (max-width: 39.999rem) {
-  /* Too narrow to draw beside the menu and the brand: still the page's heading, for a screen reader. */
-  .chat-title:not(.sr-only) {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    clip-path: inset(50%);
+/* The title and its subtitle are two lines; one invisible button over both is the single tappable target (it opens the chat menu).
+   On a phone the wordmark gives way to them while a chat is open. */
+.chat-heading {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* Only while a chat is open: with no chat the heading is invisible and must take no room (it would wrap the bar's actions). */
+html[data-titled] .chat-heading {
+  min-block-size: var(--size-control-sm);
+}
+.chat-heading .chat-title {
+  flex: none;
+  line-height: 1.3;
+}
+.chat-sub {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  min-width: 0;
+  font-size: var(--fs-caption);
+  line-height: 1.3;
+  color: var(--muted-text);
+}
+.chat-sub span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-sub svg {
+  flex: none;
+}
+.chat-hit {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+.chat-hit:hover {
+  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+@media (max-width: 63.999rem) {
+  html[data-titled] [data-slot='app-topbar'] .brand {
+    display: none;
   }
 }
 

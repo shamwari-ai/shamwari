@@ -4,10 +4,6 @@ import { openChat } from './helpers';
 // Updates are forced: a new release's service worker takes over at once and the page reloads ONCE, not while something is
 // being written, and never in a loop. The e2e server turns /__sw/bump into "a new release" (it changes sw.js).
 
-// The e2e server's /__sw/bump counter is shared by every page it serves, so these tests must not run side by side: one test's
-// "new release" would reach another test's page in the middle of it and reload it. Run the file's tests one after another.
-test.describe.configure({ mode: 'default' });
-
 // Each test waits through a real worker install, a takeover and a guard window: allow for a loaded CI machine.
 test.beforeEach(() => test.setTimeout(60_000));
 // Leave nothing running behind the test: a worker that is mid-takeover can hold the browser context open on teardown.

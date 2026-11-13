@@ -97,15 +97,17 @@ const headersFor = (p) => {
 };
 
 // A test hook: each GET /__sw/bump makes /lite/sw.js a different file (a comment line is added), which is exactly what a
-// new release is to a browser, so a test can drive a real service worker update.
-let swBump = 0;
+// new release is to a browser, so a test can drive a real service worker update. The release is PER BROWSER CONTEXT: the count lives in a
+// cookie (swbump) that the bumping test's own context keeps and sends, so one test's release never reaches another test's page, whichever
+// spec files run side by side. (A server-wide counter reloaded unrelated pages in the middle of their tests.)
+const swBumpOf = (req) => Number(/(?:^|;\s*)swbump=(\d+)/.exec(req.headers.cookie ?? '')?.[1] ?? 0);
 
 createServer(async (req, res) => {
   const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname)).replace(/^(\.\.[/\\])+/, '');
   if (path === '/__sw/bump') {
-    swBump += 1;
-    res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store' });
-    return res.end(String(swBump));
+    const next = swBumpOf(req) + 1;
+    res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store', 'Set-Cookie': `swbump=${next}; Path=/` });
+    return res.end(String(next));
   }
   const redirect = redirectFor(path);
   if (redirect) {
@@ -126,7 +128,8 @@ createServer(async (req, res) => {
   try {
     if ((await stat(file)).isDirectory()) file = join(file, 'index.html');
     let body = await readFile(file);
-    if (path === '/lite/sw.js' && swBump) body = Buffer.concat([body, Buffer.from(`\n// e2e bump ${swBump}\n`)]);
+    const bump = swBumpOf(req);
+    if (path === '/lite/sw.js' && bump) body = Buffer.concat([body, Buffer.from(`\n// e2e bump ${bump}\n`)]);
     res.writeHead(200, { 'Content-Type': types[extname(file)] ?? 'application/octet-stream', ...headersFor(new URL(req.url, 'http://x').pathname) });
     res.end(body);
   } catch {
