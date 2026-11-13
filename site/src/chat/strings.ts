@@ -120,6 +120,8 @@ export const en = {
   useApi: 'Use the API',
   opensNewTab: '(opens in a new tab)',
   disclaimerLink: 'Disclaimer and privacy',
+  wrongNote: 'Answers can be wrong',
+  privacyLink: 'Privacy',
   disclaimerTitle: 'Disclaimer and privacy',
   backToChat: 'Back to the chat',
   signedOutCleared: 'Signed out. Your chats were removed from this device.',
