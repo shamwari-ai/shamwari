@@ -1,6 +1,6 @@
 """The deploy workflow references pinned actions and no secret value (#266).
 
-Deploying on every release puts production credentials one `${{ secrets.X }}` away
+A manual break-glass deploy still puts production credentials one `${{ secrets.X }}` away
 from a workflow file. These checks keep that file honest without needing a YAML
 parser (CI installs none): every action is pinned to a commit, the only secrets
 referenced are the three the runbook tells the owner to provide, each only in the
@@ -77,10 +77,10 @@ class DeployWorkflow(unittest.TestCase):
         self.assertNotIn("npm install", src)
         self.assertIn("npx --no wrangler deploy", src)
         self.assertNotIn("--yes", src)
-        self.assertRegex(
-            src,
-            r'flyctl deploy --app shamwari-core --ha=false --remote-only --env "SERVERS_API_URL=\$SERVERS_API_URL"',
-        )
+        self.assertRegex(src, r"flyctl deploy --app shamwari-core --ha=false --remote-only\n")
+        # Core's settings come from core/fly.toml [env], so every way of deploying runs the same configuration.
+        self.assertNotIn("--env", src)
+        self.assertNotIn("SERVERS_API_URL", src)
         self.assertNotIn("--no-public-ips", src)  # Core is public HTTPS on purpose
 
     def test_every_action_is_pinned_to_a_commit(self):
@@ -167,23 +167,24 @@ class DeployWorkflow(unittest.TestCase):
         self.assertEqual(src.count("permissions:"), 1)
         self.assertEqual(src.count("persist-credentials: false"), src.count("actions/checkout@"))
 
-    def test_runs_only_after_green_ci_on_main(self):
+    def test_runs_only_when_started_by_hand_from_main(self):
         src = code()
-        self.assertRegex(src, r"workflow_run:\n    workflows: \[CI\]\n    types: \[completed\]\n    branches: \[main\]")
+        # The trigger block is exactly workflow_dispatch: not a push, a release, a schedule or another workflow's
+        # completion. (Owner, 2026-11-13: production deploys go through the platforms' GitHub connections.)
+        on = re.search(r"(?m)^on:\n((?:  .*\n|\n)+)", src + "\n").group(1)
+        self.assertEqual([ln.strip() for ln in on.splitlines() if ln.strip()], ["workflow_dispatch:"])
+        self.assertNotRegex(src, r"(?m)^\s*(workflow_run|push|pull_request|pull_request_target|schedule|release|workflow_call):")
         gate = jobs()["gate"]
-        self.assertIn("github.event.workflow_run.conclusion == 'success'", gate)
-        self.assertIn("github.event.workflow_run.event == 'push'", gate)
-        self.assertIn("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'", gate)
-        # The gate refuses anything that is not this repository's main, a full SHA, and an ancestor of main.
-        self.assertIn('[ "$HEAD_REPO" = "$THIS_REPO" ]', gate)
-        self.assertIn('[ "$HEAD_BRANCH" = main ]', gate)
+        self.assertIn("if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'", gate)
+        # The gate refuses anything that is not a full SHA on main.
         self.assertIn("grep -Eq '^[0-9a-f]{40}$'", gate)
         self.assertIn('git merge-base --is-ancestor "$sha" origin/main', gate)
         self.assertIn("ref: main", gate)
-        # The deploy jobs check out what the gate validated, never the triggering run's commit.
+        # The deploy jobs check out what the gate validated.
         for job in ("gateway", "core"):
             self.assertIn("ref: ${{ needs.gate.outputs.sha }}", jobs()[job])
-        self.assertNotIn("workflow_run.head_sha }}", "\n".join(jobs()[j] for j in ("gateway", "core")))
+            self.assertIn("needs: gate", jobs()[job])
+        self.assertNotIn("workflow_run", src)
 
     def test_health_checks_fail_the_job(self):
         for job, url in (("gateway", "https://api.shamwari.ai/health"), ("core", "https://shamwari-core.fly.dev/health")):
@@ -199,10 +200,12 @@ class DeployWorkflow(unittest.TestCase):
             # The health check is the last step: it runs after the deploy, and nothing after it hides a failure.
             self.assertIn("Health check", steps(job)[-1])
 
-    def test_servers_api_is_deploy_time_not_fly_toml(self):
-        self.assertIn("SERVERS_API_URL: http://nyuchi-servers-api.internal:8081", jobs()["core"])
-        live = [ln for ln in FLY_TOML.read_text(encoding="utf-8").splitlines() if not ln.lstrip().startswith("#")]
-        self.assertFalse([ln for ln in live if "SERVERS_API_URL" in ln], "must not be set in fly.toml")
+    def test_core_settings_are_not_set_by_the_workflow(self):
+        # SERVERS_API_URL lives in core/fly.toml [env] (checked in test_deploy_config.py); a flag or env here would
+        # make a break-glass deploy differ from the one Fly's GitHub connection runs.
+        self.assertNotIn("SERVERS_API_URL", code())
+        toml = FLY_TOML.read_text(encoding="utf-8")
+        self.assertRegex(toml, r'(?m)^  SERVERS_API_URL = "http://[a-z0-9-]+\.internal(:\d+)?"$')
 
     def test_runbook_names_the_secrets_and_the_break_glass_path(self):
         rb = RUNBOOK.read_text(encoding="utf-8")
