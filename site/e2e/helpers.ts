@@ -40,25 +40,22 @@ export async function openSection(page: Page, name: 'Chat' | 'Projects' | 'Artif
 export async function openChats(page: Page) {
   const open = await page.locator('#chat-sidebar').evaluate((el) => el.matches(':popover-open'));
   if (!open) await page.getByRole('button', { name: /open chats/i }).click();
-  // Wait for the page to finish sliding aside, so what a test measures or clicks is where it will stay.
+  // Wait for the drawer to finish sliding in, so what a test measures or clicks is where it will stay.
   await page.waitForFunction(() => {
     const el = document.querySelector('#chat-sidebar') as HTMLElement | null;
-    const main = document.querySelector('[data-slot="app-main"]') as HTMLElement | null;
-    if (!el || !main || document.documentElement.dataset.drawer !== 'open') return false;
-    const w = el.getBoundingClientRect().width;
-    return Math.round(el.getBoundingClientRect().left) === 0 && Math.round(main.getBoundingClientRect().x) === Math.round(w);
+    return !!el && document.documentElement.dataset.drawer === 'open' && Math.round(el.getBoundingClientRect().left) === 0;
   });
 }
 
-/** Close the drawer (Escape) and wait for the page to slide back and become reachable again. */
+/** Close the drawer (Escape) and wait for it to leave and the page to become reachable again. */
 export async function closeChats(page: Page) {
   const open = await page.locator('#chat-sidebar').evaluate((el) => el.matches(':popover-open'));
   if (open) await page.keyboard.press('Escape');
   await page.waitForFunction(() => {
     const main = document.querySelector('[data-slot="app-main"]') as HTMLElement | null;
     const side = document.querySelector('#chat-sidebar') as HTMLElement | null;
-    // Done sliding: the page is back, and the drawer has left the screen (display: none once its exit has finished).
-    return !!main && !main.inert && Math.round(main.getBoundingClientRect().x) === 0 && !document.documentElement.dataset.drawer && !!side && getComputedStyle(side).display === 'none';
+    // Done: the page is reachable, and the drawer has left the screen (display: none once its exit has finished).
+    return !!main && !main.inert && !document.documentElement.dataset.drawer && !!side && getComputedStyle(side).display === 'none';
   });
 }
 
