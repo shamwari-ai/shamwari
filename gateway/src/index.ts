@@ -588,11 +588,14 @@ const worker = {
       // Usage goes to the meter, which may be the Servers API; everything
       // else (conversations, messages) stays on the sink queue.
       const meter = usageMeter(env);
+      // A queue refuses an empty batch, and the web chat keeps no conversation,
+      // so there can be nothing left for the sink queue after the usage events.
+      const queued = sink.filter((b) => b.collection !== 'usageEvents').map((b) => ({ body: b }));
       ctx.waitUntil(
         Promise.all([
-          env.SINK.sendBatch(
-            sink.filter((b) => b.collection !== 'usageEvents').map((b) => ({ body: b })),
-          ).catch((e) => console.error('sink enqueue failed', String(e))),
+          queued.length > 0
+            ? env.SINK.sendBatch(queued).catch((e) => console.error('sink enqueue failed', String(e)))
+            : Promise.resolve(),
           ...sink.filter((b) => b.collection === 'usageEvents').map((b) => meter.record(b.doc)),
         ]),
       );

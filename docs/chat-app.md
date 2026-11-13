@@ -276,7 +276,7 @@ behaviour; the geometry tests moved with it. Screenshots (light and dark; 390, 1
   person's own question is a soft block at the right. The composer is one rounded container: the text above, a round send button
   below that is muted and disabled until there is text; Enter sends, Shift+Enter is a new line.
 - **Chat menu and sources:** pin, project and delete live in a "…" menu beside the chat's title (a popover; Delete still asks first). A
-  source is one compact row (Ground badge, the section, an "Open source" link) with the document, issuer and date under a disclosure.
+  source is one compact row (Source badge, the section, an "Open source" link) with the document, issuer and date under a disclosure, with a one-line "Taken from a cited source, not guessed."
   The composer's container is its only edge; its focus ring is the container's.
 - **Row menu:** each chat in the list has its own "…" (pin, project, delete). With a mouse it shows over the time on hover and on focus;
   on touch it is always there, beside the row. One shared popover, inside the drawer so opening it does not close the drawer.

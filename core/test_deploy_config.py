@@ -21,6 +21,7 @@ SERVING = {
     "NYUCHI_API_INTERNAL_KEY",
     "NYUCHI_API_URL",
     "NYUCHI_API_HOST",
+    "SERVERS_API_URL",  # plain setting; unset = the Nyuchi API client (off by default)
 }
 #: Ingest-only: database and Cloudflare logins. Never on the Fly app, and never read by Core.
 INGEST_ONLY = {"SUPABASE_DB_URL", "MONGODB_URI", "CF_ACCOUNT_ID", "CF_API_TOKEN"}
@@ -111,7 +112,7 @@ class NoSecretValues(unittest.TestCase):
             if line.lstrip().startswith("#"):
                 continue
             # NYUCHI_API_URL and _HOST are plain settings, not secrets, and live in [env].
-            for name in (SERVING - {"NYUCHI_API_URL", "NYUCHI_API_HOST"}) | INGEST_ONLY:
+            for name in (SERVING - {"NYUCHI_API_URL", "NYUCHI_API_HOST", "SERVERS_API_URL"}) | INGEST_ONLY:
                 self.assertNotIn(name, line)
 
     def test_runbook_never_prints_a_secret(self):

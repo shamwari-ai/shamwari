@@ -100,7 +100,7 @@ test('a source is one compact row, with the detail under it', async ({ page }) =
   await ask(page, 'Is everyone equal under the law?');
   const cite = page.locator('.cite').first();
   await expect(cite).toBeVisible();
-  await expect(cite.locator('.badge')).toHaveText('Ground');
+  await expect(cite.locator('.badge')).toHaveText('Source');
   expect(await cite.evaluate((el) => el.getBoundingClientRect().height), 'one row').toBeLessThanOrEqual(56);
   await expect(cite.locator('.cite-meta')).toBeHidden();
   await expect(cite.locator('.cite-link')).toBeVisible();
