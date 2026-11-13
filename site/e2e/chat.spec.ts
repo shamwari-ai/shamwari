@@ -9,7 +9,9 @@ test('asks a question and renders the answer with its citation card', async ({ p
   await expect(answer).toBeVisible();
 
   const card = answer.locator('.cite').first();
-  await expect(card.locator('.badge')).toHaveText('Ground');
+  await expect(card.locator('.badge')).toHaveText('Source');
+  await card.locator('summary').click();
+  await expect(card.locator('.cite-explain')).toHaveText('Taken from a cited source, not guessed.');
   await expect(card.locator('.cite-heading')).toContainText('Section 56');
   await expect(card.locator('.cite-title')).toContainText('Constitution of Zimbabwe');
   await expect(card).toContainText('22 May 2013');
@@ -41,7 +43,7 @@ test('there is no scope picker, and every question is asked as a general one, ne
   await openChat(page);
   // Nothing in the page asks which kind of knowledge is meant.
   await expect(page.locator('#scope')).toHaveCount(0);
-  await expect(page.getByLabel('Asking about')).toHaveCount(0);
+  await expect(page.getByLabel('Kind of question')).toHaveCount(0);
   await expect(page.locator('.dock select')).toHaveCount(0);
   for (let i = 0; i < 3; i++) await ask(page, `Is everyone equal under the law? ${i}`);
   await expect(page.locator('article.msg.bot:not(.pending) .cite')).toHaveCount(3, { timeout: 30_000 });

@@ -30,7 +30,8 @@ describe('strings', () => {
   it('keeps the product names untranslated', () => {
     for (const s of [en, sn, nd]) {
       expect(s.shamwari).toBe('Shamwari');
-      expect(s.ground).toBe('Ground');
+      expect(s.ground).not.toBe('Ground'); // plain words, not jargon (#244 row 5)
+      expect(s.scopeLabel).not.toMatch(/asking about|mubvunzo wekuti|ngokuthi/i);
     }
   });
 

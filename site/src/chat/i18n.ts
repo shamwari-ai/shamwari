@@ -13,6 +13,15 @@ export function currentLanguage(): Language {
   return pickLanguage(navigator.languages?.length ? navigator.languages : [navigator.language]);
 }
 
+/** True once a language has been chosen (or a first question asked), and also when storage is blocked and a choice could not be remembered. */
+export function hasSavedLanguage(): boolean {
+  try {
+    return localStorage.getItem(KEY) !== null;
+  } catch {
+    return true;
+  }
+}
+
 export function saveLanguage(lang: Language): void {
   try {
     localStorage.setItem(KEY, lang);
