@@ -69,6 +69,34 @@ export function renderCitation(c: Citation, s: Strings, lang: Language): HTMLEle
   );
 }
 
+/**
+ * An answer is shown as plain text: no markdown marks. A model often writes **bold**, # headings, `code`, > quotes and
+ * [links](url); on this page they would show as stray symbols, so they are taken out and only the words stay. Line breaks
+ * and paragraphs are kept; list items start with a plain dash.
+ */
+export function plainText(raw: string): string {
+  // No lookbehind anywhere: older phones' browsers cannot parse it, and a parse error here would stop the whole chat from loading.
+  const edge = '(^|[\\s(])'; // an emphasis mark opens at the start of a word...
+  const close = '(?=$|[\\s).,;:!?])'; // ...and closes at its end, so snake_case and __init__ are left alone
+  return raw
+    .replace(/\r\n?/g, '\n')
+    .replace(/```[^\n]*\n?([\s\S]*?)```/g, '$1') // fenced code: keep what is inside
+    // [text](url) -> "text (url)" (the address is kept: it is the pointer to the source), or just the address when there is no text
+    .replace(/!?\[([^\]]*)\]\(([^)\s]*)[^)]*\)/g, (_m, text: string, url: string) => (text.trim() ? (url && url !== text ? `${text} (${url})` : text) : url))
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, '') // # headings
+    .replace(/^[ \t]{0,3}>[ \t]?/gm, '') // > quotes
+    .replace(/^[ \t]*[*+][ \t]+/gm, '- ') // * item, + item -> - item
+    .replace(/^[ \t]*(?:[-*_][ \t]*){3,}$/gm, '') // --- rules
+    .replace(/^[ \t]*\|?[ \t]*:?-{2,}:?[ \t]*(?:\|[ \t]*:?-{2,}:?[ \t]*)*\|?[ \t]*$/gm, '') // | --- | --- | table separator rows
+    .replace(/^[ \t]*\|(.*?)\|?[ \t]*$/gm, (_m, row: string) => row.split('|').map((c) => c.trim()).join(' · ')) // | a | b | rows
+    .replace(new RegExp(`${edge}(\\*\\*|__)(\\S(?:.*?\\S)?)\\2${close}`, 'g'), '$1$3') // **bold**, __bold__
+    .replace(new RegExp(`${edge}([*_])(\\S(?:.*?\\S)?)\\2${close}`, 'g'), '$1$3') // *italic*, _italic_
+    .replace(/`([^`\n]+)`/g, '$1') // `code`
+    .replace(/~~(.+?)~~/g, '$1') // ~~struck~~
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function renderAnswer(
   m: StoredMessage,
   a: Answer,
@@ -79,10 +107,11 @@ export function renderAnswer(
   const save = onSave ? h('button', { type: 'button', class: 'btn link save-answer' }, s.saveAnswer) : null;
   save?.addEventListener('click', onSave!);
   // Copy: the answer's own words, to the clipboard. Where the browser has no clipboard the button is simply not offered.
+  const words = plainText(a.text);
   const copy = typeof navigator.clipboard?.writeText === 'function' ? h('button', { type: 'button', class: 'btn link copy-answer' }, s.copyAnswer) : null;
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
   copy?.addEventListener('click', () => {
-    void navigator.clipboard.writeText(a.text).then(
+    void navigator.clipboard.writeText(words).then(
       () => {
         copy.textContent = s.copied;
         clearTimeout(copiedTimer);
@@ -91,11 +120,25 @@ export function renderAnswer(
       () => undefined,
     );
   });
+  // Share: the answer and where it came from, through the phone's own share sheet (WhatsApp and the like). Only offered where the
+  // browser can share. Text, not an icon.
+  const share =
+    typeof navigator.share === 'function'
+      ? h('button', { type: 'button', class: 'btn link share-answer' }, s.shareAnswer)
+      : null;
+  share?.addEventListener('click', () => {
+    const from = a.citations.map((c) => (c.heading ? `${c.heading}, ${c.title}` : c.title)).join('\n');
+    const text = [words, from, `${location.origin}/lite/`].filter(Boolean).join('\n\n');
+    void navigator.share({ title: s.shamwari, text }).catch((e: unknown) => {
+      // Closing the share sheet is not an error. Anything else (no share target, blocked): the words go to the clipboard instead.
+      if ((e as { name?: string })?.name !== 'AbortError') void navigator.clipboard?.writeText(text).catch(() => undefined);
+    });
+  });
   return h(
     'article',
     { class: 'msg bot', 'data-id': m.id, 'aria-label': s.shamwari },
     h('p', { class: 'who' }, s.shamwari),
-    h('p', { class: 'text' }, a.text),
+    h('p', { class: 'text' }, words),
     a.degraded ? h('p', { class: 'note' }, s.closestSource) : null,
     a.citations.length
       ? h(
@@ -106,7 +149,7 @@ export function renderAnswer(
         )
       : h('p', { class: 'note' }, s.noSources),
     h('p', { class: 'meta' }, `${s.scopeLabel}: ${s.scope[a.scope]}`),
-    copy || save ? h('div', { class: 'msg-actions' }, copy, save) : null,
+    copy || save || share ? h('div', { class: 'msg-actions' }, copy, share, save) : null,
   );
 }
 
