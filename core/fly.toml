@@ -11,8 +11,7 @@
 #   required   SHAMWARI_CORE_TOKEN   NYUCHI_API_INTERNAL_KEY
 #   optional   SHAMWARI_OPS_TOKEN    (unset = the operator routes answer 503)
 #   plain      NYUCHI_API_URL  NYUCHI_API_HOST   (defaults: http://nyuchi-api.internal:8080, api.nyuchi.com)
-#   plain      SERVERS_API_URL   (set below: the Servers API on Fly's private network, no key or token. Core refuses to start for
-#                         a host that is not *.internal; unset it to go back to the Nyuchi API client)
+#   plain      SERVERS_API_URL   (unset = the Nyuchi API above; an <app>.internal URL = the Servers API, no key or token)
 # SUPABASE_DB_URL, CF_ACCOUNT_ID and CF_API_TOKEN are read by ingest_ground.py ONLY.
 # MONGODB_URI is read by ingest_ground.py ONLY, from the operator's own shell, until the API has
 # a ground-write route (docs/data-api-routes.md, G5). No database driver is in the image, the
@@ -43,11 +42,6 @@ primary_region = "jnb"
   # presents the public name.
   NYUCHI_API_URL = "http://nyuchi-api.internal:8080"
   NYUCHI_API_HOST = "api.nyuchi.com"
-  # The Servers API's private listener (nyuchi-servers-api, Fly app of the same name). Here, and not in a deploy
-  # flag, so a deploy started by Fly's GitHub connection, by the break-glass workflow or from a shell all run the
-  # same configuration. Core reaches it over the private network with no key or token, and refuses to start for a
-  # URL whose host is not *.internal (core/test_deploy_config.py checks this one).
-  SERVERS_API_URL = "http://nyuchi-servers-api.internal:8081"
 
 [[vm]]
   size = "shared-cpu-1x"

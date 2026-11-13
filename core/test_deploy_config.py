@@ -100,16 +100,6 @@ class SecretsMatchTheCode(unittest.TestCase):
             lines = [ln for ln in header.splitlines() if name in ln]
             self.assertTrue(any("ONLY" in ln for ln in lines), f"{name} is not marked ONLY")
 
-    def test_fly_toml_servers_api_url_is_a_private_address(self):
-        """Fly's GitHub deployment and the break-glass workflow run fly.toml as it is. Core refuses to start for a
-        SERVERS_API_URL whose host is not *.internal, so a bad value here would take the only machine down."""
-        toml = (HERE / "fly.toml").read_text()
-        env = toml[toml.index("\n[env]") :].split("\n[[", 1)[0]
-        live = [ln.strip() for ln in env.splitlines() if ln.strip() and not ln.strip().startswith("#")]
-        values = [ln for ln in live if ln.startswith("SERVERS_API_URL")]
-        self.assertEqual(len(values), 1, "SERVERS_API_URL must be set once in [env]")
-        self.assertRegex(values[0], r'^SERVERS_API_URL = "http://[a-z0-9-]+\.internal(:\d+)?"$')
-
     def test_runbook_names_every_secret(self):
         runbook = (REPO / "docs" / "core-fly-runbook.md").read_text()
         for name in SERVING | INGEST_ONLY:

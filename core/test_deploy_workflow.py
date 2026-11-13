@@ -19,7 +19,6 @@ from pathlib import Path
 REPO = Path(__file__).parent.parent
 WORKFLOW = REPO / ".github" / "workflows" / "deploy.yml"
 RUNBOOK = REPO / "docs" / "core-fly-runbook.md"
-FLY_TOML = REPO / "core" / "fly.toml"
 
 #: The only secrets the deploy may read. Names, never values.
 SECRET_NAMES = {"FLY_API_TOKEN", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"}
@@ -201,17 +200,27 @@ class DeployWorkflow(unittest.TestCase):
             self.assertIn("Health check", steps(job)[-1])
 
     def test_core_settings_are_not_set_by_the_workflow(self):
-        # SERVERS_API_URL lives in core/fly.toml [env] (checked in test_deploy_config.py); a flag or env here would
-        # make a break-glass deploy differ from the one Fly's GitHub connection runs.
+        # Core's non-secret settings (SERVERS_API_URL among them) come from core/fly.toml [env]; a flag or env here
+        # would make a break-glass deploy differ from the one Fly's GitHub connection runs.
         self.assertNotIn("SERVERS_API_URL", code())
-        toml = FLY_TOML.read_text(encoding="utf-8")
-        self.assertRegex(toml, r'(?m)^  SERVERS_API_URL = "http://[a-z0-9-]+\.internal(:\d+)?"$')
+        self.assertNotIn("--env", code())
 
     def test_runbook_names_the_secrets_and_the_break_glass_path(self):
         rb = RUNBOOK.read_text(encoding="utf-8")
         for name in SECRET_NAMES:
             self.assertTrue(name in rb, f"runbook does not name {name}")
         self.assertIn("break-glass", rb.lower())
+
+
+class SmokeProduction(unittest.TestCase):
+    """With deploys done by the platforms, the post-release check is the smoke workflow (#266)."""
+
+    def test_checks_the_gateway_and_core_health_with_no_secret(self):
+        smoke = (REPO / ".github" / "workflows" / "smoke-production.yml").read_text(encoding="utf-8")
+        self.assertIn("for u in https://api.shamwari.ai/health https://shamwari-core.fly.dev/health; do", smoke)
+        self.assertIn('c=$(code "$u"); [ "$c" = 200 ] || fail "$u: got $c, want 200"', smoke)
+        self.assertNotIn("secrets.", smoke)
+        self.assertRegex(smoke, r"(?m)^permissions:\n  contents: read\n  issues: write\n")
 
 
 if __name__ == "__main__":

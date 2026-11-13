@@ -34,17 +34,19 @@ Plain settings, in `fly.toml` `[env]` (not secrets): `NYUCHI_API_URL`
 (`http://nyuchi-api.internal:8080`, Fly's private network) and `NYUCHI_API_HOST`
 (`api.nyuchi.com`; the API trusts a list of hosts and `.internal` is not on it).
 
-`SERVERS_API_URL` is a third plain setting, also in `fly.toml` `[env]`:
-`http://nyuchi-servers-api.internal:8081`, the Servers API's listener on Fly's private
-network. It lives in the file, not in a deploy flag, so a deploy started by Fly's GitHub
-connection, by the break-glass workflow or from a shell all run the same configuration.
-Core reaches it with **no key and no token** (same Fly org), sends the owner in the
-`x-shamwari-person` header for a personal-scope search, never in the body, and reads the
-refusal reason from the RFC 9457 `error` member. An address that is not `*.internal` makes
-Core refuse to start (`core/test_deploy_config.py` checks the value in `fly.toml`): outside
-callers (the gateway Worker) use the key and token, Core holds neither for this. **It
-is on, so every Core deploy uses the Servers API client;** to go back to the Nyuchi API
-client, remove the line in a PR.
+`SERVERS_API_URL` is a third plain setting. Whether it is set is whatever `core/fly.toml`
+`[env]` says; the file, not a deploy flag, is the only place, so a deploy started by Fly's
+GitHub connection, by the break-glass workflow or from a shell all run the same
+configuration. **Unset (today), Core uses the Nyuchi API client.** Set to
+`http://nyuchi-servers-api.internal:8081`, the Servers API's keyless listener on Fly's
+private network, Core uses the Servers API client: **no key and no token** (same Fly org),
+the owner in the `x-shamwari-person` header for a personal-scope search, never in the body,
+and the refusal reason from the RFC 9457 `error` member. An address that is not
+`*.internal` makes Core refuse to start: outside callers (the gateway Worker) use the key
+and token, Core holds neither for this. **Do not set it until the Servers API's internal
+listener is on and reachable** (order below): a Core pointed at a port nothing listens on
+answers `/health` 503 and Fly takes its only machine out of rotation. The change is a
+separate PR from the one that moved deploys onto the platforms, so it can wait.
 
 The Cloudflare Secrets Store is for Workers only; Fly cannot read it. Core's secrets
 are Fly secrets, whose values come from the owner's vault.
@@ -112,10 +114,11 @@ What this changes, so nobody is surprised:
   lands. `main` only moves through the release PR, which opens after CI is green on the
   staging head and has the required checks on it, so a red commit does not normally
   reach `main`; but the platforms do not check.
-- **No post-deploy check runs by itself for the gateway or Core.** `smoke-production.yml`
-  checks `shamwari.ai` only. After a release, look at `https://api.shamwari.ai/health` and
-  `https://shamwari-core.fly.dev/health` (both answer 200 when healthy; Core's answers 200
-  only while the Nyuchi API also answers Core's key), or run the Verify section.
+- **No post-deploy check is part of the deploy.** `smoke-production.yml` runs on every
+  push to `main` (retrying while the deploys land) and every 30 minutes, and now also
+  checks `https://api.shamwari.ai/health` and `https://shamwari-core.fly.dev/health` for
+  200; it opens an issue (or comments on the open one) when either fails. Core's answers 200
+  only while its data API also answers Core's key. It only reads and rolls nothing back.
 - **Rollback is unchanged and manual** (see Rollback).
 - **Non-secret settings must be in the files.** The platforms run no flags, so whatever
   Core and the gateway need that is not a secret is in `core/fly.toml` `[env]` or
@@ -146,6 +149,21 @@ its own before the build command (`npm ci` is safe either way), and what the def
 non-production branch command is today.
 
 ### Owner steps: connect Core (Fly)
+
+**Order matters** if Core is to use the Servers API client (the `SERVERS_API_URL` change
+in `core/fly.toml`, a separate draft PR that says "merge only after" these are done):
+
+1. Pin the tunnel/VPC route to `:8080` (owner step, not yet done when this was written).
+2. Turn on the Servers API's internal listener (`SERVERS_API_INTERNAL_PORT=8081` on the
+   `nyuchi-servers-api` Fly app) and verify it answers from `shamwari-core`'s private
+   network, for example `fly ssh console --app shamwari-core` then `curl -sS
+http://nyuchi-servers-api.internal:8081/ready`.
+3. Merge the `SERVERS_API_URL` PR.
+4. Connect Fly to GitHub (below). **Once connected, merging that PR deploys it**, so do
+   steps 1 and 2 first.
+
+Until the `SERVERS_API_URL` PR merges, a Core built by Fly stays on its previous client
+(no `SERVERS_API_URL`). Connecting Fly without it is safe.
 
 1. Fly dashboard, the app `shamwari-core` (organisation `nyuchi-web-services`),
    **Deployments**, then its settings: connect the GitHub repository `shamwari-ai/shamwari`.
@@ -199,7 +217,7 @@ Cloudflare; Core's stay in Fly. The workflow touches neither.
 
 Use only when the platform connections and the workflow above are both unavailable, or
 a release must go out ahead of CI. Run from a clean checkout of `main` at the commit you
-mean to ship. This deploys with whatever `core/fly.toml` says, `SERVERS_API_URL` included. The first four steps are also
+mean to ship. This deploys with whatever `core/fly.toml` says. The first four steps are also
 the one-time setup of a Fly app that does not exist yet. Values come from your
 environment or a secret manager; nothing below prints one.
 
