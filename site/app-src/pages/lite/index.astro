@@ -163,7 +163,7 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
     </div>
     <button slot="actions" type="button" id="offline-badge" class="bar-action offline-badge" hidden>
       <Icon name="globe" class="h-5 w-5" />
-      <span data-i18n="offlineMode">{en.offlineMode}</span>
+      <span class="sr-only bar-label" data-i18n="offlineMode">{en.offlineMode}</span>
     </button>
     <span slot="actions" id="new-chat" class="contents">
       <button type="button" class="bar-action">
