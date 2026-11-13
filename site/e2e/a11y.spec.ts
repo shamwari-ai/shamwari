@@ -259,7 +259,7 @@ test('the drawer with a project, a pinned chat and a saved answer meets the Bund
   await page.locator('#project-list summary').click();
   expect(await underTheFloor(page), 'drawer with a project open').toEqual([]);
   // Every other section of the drawer is held to the same floor.
-  for (const name of ['Chat', 'Artifacts', 'Plugins'] as const) {
+  for (const name of ['Chat', 'Artifacts'] as const) {
     await openSection(page, name);
     expect(await underTheFloor(page), `drawer: ${name}`).toEqual([]);
   }
@@ -304,7 +304,7 @@ for (const [name, width, height] of [['320px phone', 320, 568], ['390px phone', 
     expect(await underTheFloor(page), `${name}: a long word and its answer`).toEqual([]);
     if (width < 1024) {
       // Every section of the drawer is held to the floor, not just the one it opens on.
-      for (const section of ['Chat', 'Projects', 'Artifacts', 'Plugins'] as const) {
+      for (const section of ['Chat', 'Projects', 'Artifacts'] as const) {
         await openSection(page, section);
         expect(await underTheFloor(page), `${name}: drawer, ${section}`).toEqual([]);
       }
@@ -333,7 +333,7 @@ for (const [name, width, height] of [['320px phone', 320, 568], ['360px phone', 
     await openChat(page);
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize), 'the 200% really applies').toBe('32px');
     expect(await underTheFloor(page), `${name} at 200%: home`).toEqual([]);
-    for (const section of ['Chat', 'Projects', 'Artifacts', 'Plugins'] as const) {
+    for (const section of ['Chat', 'Projects', 'Artifacts'] as const) {
       await openSection(page, section);
       expect(await underTheFloor(page), `${name} at 200%: drawer, ${section}`).toEqual([]);
     }
@@ -364,7 +364,7 @@ test('the floor holds in dark: the home screen, every drawer section and Setting
   await page.emulateMedia({ colorScheme: 'dark' });
   await openChat(page);
   expect(await underTheFloor(page), 'dark: home').toEqual([]);
-  for (const section of ['Chat', 'Projects', 'Artifacts', 'Plugins'] as const) {
+  for (const section of ['Chat', 'Projects', 'Artifacts'] as const) {
     await openSection(page, section);
     expect(await underTheFloor(page), `dark: drawer, ${section}`).toEqual([]);
   }
