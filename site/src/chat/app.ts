@@ -625,6 +625,11 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     if (none && tools.matches(':popover-open')) (tools as HTMLElement & { hidePopover(): void }).hidePopover();
     tools.hidden = none;
     $('#chat-menu').hidden = none;
+    $('#chat-title-hit').hidden = none;
+    $('#chat-sub').hidden = none;
+    document.documentElement.toggleAttribute('data-titled', !none);
+    // The second line: the project the chat is in, else when it was last used.
+    $('#chat-sub-text').textContent = projectsNow.find((p) => p.id === thread.projectId)?.name ?? whenOf(thread.updatedAt);
     const pin = $('#pin-chat');
     pin.textContent = thread.pinned ? s.unpin : s.pin;
     pin.setAttribute('aria-pressed', String(!!thread.pinned));
