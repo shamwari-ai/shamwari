@@ -252,7 +252,7 @@ Data: Ground ingest is additive; nothing here deletes a chunk.
 | You see                                                 | Likely cause                                                                                                              |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Ground answers `503 data_api_unavailable`, logs nothing | the Worker sent no token: the Secrets Store secrets are missing or the exchange failed (Workers Logs: `api token:`)       |
-| logs `data api refused the token`                       | the token lacks `shamwari`, `shamwari:service` or `ai`, or the key was revoked: mint a new key and update the two secrets |
+| logs `data api answered 401` or `403`                   | the token lacks `shamwari`, `shamwari:service` or `ai`, or the key was revoked: mint a new key and update the two secrets |
 | logs `data api unavailable`                             | the API app is down, or not reachable at `NYUCHI_API_URL` over the private network                                        |
 | Worker answers `401 invalid_api_key`                    | expected until G1 is built: Core no longer verifies keys                                                                  |
 | Worker answers `503 auth_unavailable`                   | Core unreachable from the Worker: `CORE_URL`                                                                              |

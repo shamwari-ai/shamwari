@@ -174,7 +174,7 @@ class DataApi:
             if res.status_code in (401, 403):
                 # The token the Worker sent is expired, wrong or lacks a scope. Not the caller's
                 # fault, not retryable, and not something to describe to a caller.
-                log.error("data api refused the token: %s %s -> %s", method, path, res.status_code)
+                log.error("data api answered %s for %s %s", res.status_code, method, path)
                 raise DataApiUnavailable("credential")
             if res.status_code == 429:
                 log.warning("data api rate limit: %s %s", method, path)
