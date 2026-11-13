@@ -295,6 +295,74 @@ class ServersApiRefusals(unittest.TestCase):
         self.assertEqual(cm.exception.detail, {"error": "x"})
 
 
+class FlagOffRefusalsAreUnchanged(unittest.TestCase):
+    """The RFC 9457 reading lives in ServersApi only. The Nyuchi API client relays as before."""
+
+    def refusal(self, status, body):
+        with self.assertRaises(DataApiRefusal) as cm:
+            run(client(lambda r: httpx.Response(status, json=body)).guardrails("s"))
+        return cm.exception.detail
+
+    def test_a_top_level_error_body_is_passed_on_whole_with_its_other_fields(self):
+        body = {"error": "too_many", "limit": 5, "detail": "prose"}
+        self.assertEqual(self.refusal(422, body), "prose")  # FastAPI-style: detail wins, as before
+
+    def test_a_body_with_a_top_level_error_and_no_detail_is_passed_on_whole(self):
+        body = {"error": "too_many", "limit": 5}
+        self.assertEqual(self.refusal(422, body), body)
+
+    def test_a_problem_shaped_body_with_a_string_detail_gives_that_string(self):
+        self.assertEqual(self.refusal(400, {"type": "t", "title": "x", "status": 400, "detail": "prose"}), "prose")
+
+    def test_the_servers_api_client_does_read_the_error_member(self):
+        body = {"type": "t", "title": "x", "status": 409, "detail": "prose", "error": "e1", "limit": 5}
+        with self.assertRaises(DataApiRefusal) as cm:
+            run(servers(lambda r: httpx.Response(409, json=body)).guardrails("s"))
+        self.assertEqual(cm.exception.detail, {"error": "e1", "message": "prose"})
+
+
+class ServersApiReadiness(unittest.TestCase):
+    def test_a_ready_object_is_ready(self):
+        self.assertEqual(run(servers(lambda r: httpx.Response(200, json={"status": "ready"})).whoami()), {"status": "ready"})
+
+    def test_a_plain_200_is_ready_too_so_fly_s_check_cannot_fail_forever(self):
+        for res in (httpx.Response(200, text="ok"), httpx.Response(200), httpx.Response(200, json=["x"])):
+            self.assertEqual(run(servers(lambda r, res=res: res).whoami()), {"status": "ready"})
+
+    def test_a_503_problem_is_not_ready(self):
+        problem = {"type": "t", "title": "Not ready", "status": 503}
+        with self.assertRaises(DataApiUnavailable):
+            run(servers(lambda r: httpx.Response(503, json=problem)).whoami())
+
+    def test_the_nyuchi_client_still_needs_a_json_object_from_whoami(self):
+        with self.assertRaises(DataApiUnavailable):
+            run(client(lambda r: httpx.Response(200, text="ok")).whoami())
+
+
+class ServersApiIsADataApi(unittest.TestCase):
+    def test_it_shares_the_parent_s_retry_and_client_setup(self):
+        calls = []
+
+        def handler(req):
+            calls.append(1)
+            raise httpx.ConnectError("down")
+
+        with self.assertRaises(DataApiUnavailable):
+            run(servers(handler).guardrails("s"))
+        self.assertEqual(len(calls), 2)  # one retry, from DataApi
+
+    def test_it_never_carries_the_nyuchi_api_headers(self):
+        seen = []
+
+        def handler(req):
+            seen.append(req)
+            return httpx.Response(200, json={})
+
+        run(servers(handler).guardrails("s"))
+        self.assertNotIn("x-api-key", seen[0].headers)
+        self.assertNotEqual(seen[0].headers.get("host"), "api.nyuchi.com")
+
+
 class Selection(unittest.TestCase):
     def test_unset_means_the_nyuchi_api_client(self):
         with mock.patch.dict(os.environ, {"NYUCHI_API_INTERNAL_KEY": KEY}, clear=True):
