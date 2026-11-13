@@ -1287,6 +1287,20 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     void renderHistory();
   });
 
+  // A round button above the composer takes the messages back to the end while they are scrolled up.
+  const jump = $<HTMLButtonElement>('#jump-latest');
+  const threadEl = $('#thread');
+  const syncJump = () => {
+    jump.hidden = threadEl.scrollHeight - threadEl.scrollTop - threadEl.clientHeight <= 64;
+  };
+  threadEl.addEventListener('scroll', syncJump, { passive: true });
+  new MutationObserver(syncJump).observe(log, { childList: true, subtree: true });
+  addEventListener('resize', syncJump);
+  jump.addEventListener('click', () => {
+    threadEl.scrollTo({ top: threadEl.scrollHeight });
+    threadEl.focus({ preventScroll: true }); // the button is about to hide: keep keyboard focus in the page
+  });
+
   const online = () => {
     $('#offline').hidden = navigator.onLine;
   };

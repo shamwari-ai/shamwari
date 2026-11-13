@@ -334,7 +334,29 @@ input:not([type='checkbox']):not([type='radio']) {
 
 /* ---- the dock: sign-in when needed, then the composer, pinned above the device's own bottom bar ------- */
 
+.jump-latest {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: calc(100% + var(--gap-floor));
+  margin-inline: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--size-control-sm);
+  block-size: var(--size-control-sm);
+  padding: 0;
+  border: 1px solid var(--border-control, var(--border));
+  border-radius: 50%;
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--foreground) 18%, transparent);
+  cursor: pointer;
+}
+.jump-latest:hover {
+  background: var(--muted);
+}
 .dock {
+  position: relative;
   flex: none;
   /* The divider between the messages and the composer: the canonical hairline token, so it moves with the dock and
      never scrolls away. Raised to a full pixel in high-contrast and forced-colors modes. */
