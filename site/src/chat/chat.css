@@ -1279,6 +1279,9 @@ html [data-slot='app-shell'] {
   justify-content: center;
   flex: 0 1 auto;
   min-width: 0;
+}
+/* Only while a chat is open: with no chat the heading is invisible and must take no room (it would wrap the bar's actions). */
+html[data-titled] .chat-heading {
   min-block-size: var(--size-control-sm);
 }
 .chat-heading .chat-title {
