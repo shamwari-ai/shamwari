@@ -38,9 +38,8 @@ const row = (page: Page, name: string) =>
 test('the foot rows are quiet text rows, not buttons: no button chrome, no icon, the same names', async ({ page }) => {
   await openChat(page);
   await openChats(page);
-  await openAccount(page);
   await page.mouse.move(0, 0); // not over a row: a hovered row is filled
-  for (const { name } of ROWS) {
+  const check = async (name: string) => {
     const r = row(page, name);
     await expect(r, name).toBeVisible();
     await expect(r, name).not.toHaveClass(/\bbtn\b/);
@@ -57,7 +56,13 @@ test('the foot rows are quiet text rows, not buttons: no button chrome, no icon,
     // label (and, for Use the API, a screen-reader note) carries the meaning.
     if (name !== 'Settings') await expect(r.locator('svg'), `${name} has no icon`).toHaveCount(0); // the account row has its avatar and gear
     await expect(r, name).toContainText(name);
-  }
+  };
+  // The Settings row lives in the drawer, and opening Settings closes the drawer: look at it while the drawer is open. The other
+  // two rows are inside the Settings dialog, so they are looked at after it opens.
+  await check('Settings');
+  await openAccount(page);
+  await page.mouse.move(0, 0); // the tap that opened Settings may still rest over a row, which would be filled
+  for (const { name } of ROWS.filter((r) => r.name !== 'Settings')) await check(name);
   // The names a screen reader hears are unchanged: links are links, and Settings is a button that opens a dialog.
   await expect(page.getByRole('link', { name: 'Use the API' })).toHaveAttribute('href', 'https://platform.nyuchi.com');
   await expect(page.getByRole('link', { name: 'Disclaimer and privacy' })).toHaveAttribute('href', '/lite/disclaimer/');

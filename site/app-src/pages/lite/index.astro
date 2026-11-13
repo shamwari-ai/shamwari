@@ -187,12 +187,21 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
         <img class="mark" src="/apple-touch-icon.png" alt="" width="56" height="56" />
         <h2 id="greeting" data-i18n="greeting">Hello, friend</h2>
         <p class="lead" data-i18n="tagline">Ask a question. Get the answer with the section it came from.</p>
+        <!-- First run only (the script reveals it when no language has been chosen yet): one tap switches the whole screen. The
+             labels are the languages' own names, so they are not translated. Settings keeps the radio group. -->
+        <div class="first-lang" id="first-lang" role="group" aria-label={en.language} data-i18n-attr="aria-label:language" hidden>
+          <button type="button" class="btn chip" data-first-lang="en" lang="en">English</button>
+          <button type="button" class="btn chip" data-first-lang="sn" lang="sn">ChiShona</button>
+          <button type="button" class="btn chip" data-first-lang="nd" lang="nd">isiNdebele</button>
+        </div>
         <h3 id="try" class="try" data-i18n="tryAsking">Try asking</h3>
         <div class="examples" role="group" aria-label={en.suggestedPrompts} data-i18n-attr="aria-label:suggestedPrompts">
           <button type="button" class="btn chip" data-example data-i18n="example1">What does the Constitution say about equality?</button>
           <button type="button" class="btn chip" data-example data-i18n="example2">What are my rights if I am arrested?</button>
           <button type="button" class="btn chip" data-example data-i18n="example3">What does the Constitution say about education?</button>
         </div>
+        <!-- Quiet, under the prompts: answers can be wrong, and the privacy page is one tap away (it was two, in Settings). -->
+        <p class="trust"><span data-i18n="wrongNote">{en.wrongNote}</span><span aria-hidden="true"> · </span><a class="footer-link" href="/lite/disclaimer/" data-i18n="privacyLink">{en.privacyLink}</a></p>
       </section>
 
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>

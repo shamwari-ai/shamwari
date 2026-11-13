@@ -358,6 +358,40 @@ class ThroughTheServersApi(unittest.TestCase):
         self.assertEqual(self.seen[0].url.path, "/v1/shamwari/guardrails")
 
 
+    # -- the sink: what the Worker's queue consumer needs to tell poison from an outage ----------
+
+    def sink(self):
+        doc = {"licenseClass": "open_weight", "scope": "platform", "trainingEligible": True,
+               "createdAt": "2026-10-31T04:00:00Z", "requestId": "r1"}
+        return self.http.post("/sink/bulk", headers=AUTH, json={"database": "shamwari", "collections": {"conversations": [doc]}})
+
+    def test_a_permanent_refusal_passes_through_with_its_status_and_error_member(self):
+        for status, code in ((400, "invalid_field_name"), (409, "conflicting_record"), (413, "oversize"), (422, "document_too_deep")):
+            problem = {"type": "about:blank", "title": "x", "status": status, "detail": "prose", "error": code}
+            self.answer = lambda req, p=problem, st=status: self.httpx.Response(st, json=p)
+            r = self.sink()
+            self.assertEqual(r.status_code, status)
+            self.assertEqual(r.json()["detail"]["error"], code)
+
+    def test_a_transient_failure_is_a_503_never_a_4xx(self):
+        for status in (500, 502, 503, 504, 429, 401, 403, 404):
+            self.answer = lambda req, st=status: self.httpx.Response(st, json={"title": "x", "status": st})
+            self.assertEqual(self.sink().status_code, 503, status)
+
+    def test_an_unreachable_servers_api_is_a_503(self):
+        def boom(req):
+            raise self.httpx.ConnectError("down")
+
+        self.answer = boom
+        self.assertEqual(self.sink().status_code, 503)
+
+    def test_the_sink_goes_to_the_servers_api_sink_route_with_no_credential(self):
+        self.answer = lambda req: self.httpx.Response(200, json={"written": {}})
+        self.assertEqual(self.sink().status_code, 200)
+        self.assertEqual(self.seen[0].url.path, "/v1/shamwari/sink")
+        self.assertNotIn("authorization", self.seen[0].headers)
+
+
 class NoDatabaseDriver(unittest.TestCase):
     def test_importing_core_loads_no_database_driver(self):
         code = (
