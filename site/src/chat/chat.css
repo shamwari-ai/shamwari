@@ -110,33 +110,6 @@ body {
    floor is a 49px hit region, so they are lifted to it here. Worth raising upstream (mzizi-registry), where
    the same 44px rows are listed as pending (HIT_AREA_GAPS). */
 
-.account {
-  position: relative;
-}
-.account-panel {
-  position: absolute;
-  right: 0;
-  z-index: 40;
-  margin-top: var(--gap-floor);
-  width: min(20rem, calc(100vw - 1rem));
-  padding: var(--inset-floor);
-  display: grid;
-  gap: var(--gap-floor);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--popover);
-  color: var(--popover-foreground);
-  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
-}
-.account-title {
-  margin: 0;
-  font-weight: 600;
-}
-.account-note {
-  margin: 0;
-  font-size: var(--fs-caption);
-  color: var(--muted-foreground);
-}
 .account-row {
   display: flex;
   flex-wrap: wrap;
@@ -322,20 +295,27 @@ input:not([type='checkbox']):not([type='radio']) {
   font-weight: 600;
   color: var(--muted-foreground);
 }
+/* Suggested prompts are pills (Mzizi's suggested-prompts shape): fully rounded, a thin border, the input tint as the fill and a
+   stronger tint on hover. They wrap onto as many rows as they need instead of scrolling sideways, because the page never
+   scrolls sideways and Shona and Ndebele run longer. Each is a real button: the 49px hit region on touch, drawn at the density size (32px) with a mouse, as every other control here. */
 .examples {
-  list-style: none;
-  padding: 0;
-  margin: 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--gap-floor);
+  margin: 0;
 }
 .btn.chip {
   max-width: 100%;
+  min-height: var(--size-control-sm);
   white-space: normal;
   text-align: center;
-  padding-block: var(--gap-floor);
+  padding-block: calc(var(--gap-floor) / 2);
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--input) 30%, transparent);
+}
+.btn.chip:hover {
+  background: color-mix(in oklab, var(--input) 50%, transparent);
 }
 .install {
   margin: 0;
@@ -556,11 +536,6 @@ input:not([type='checkbox']):not([type='radio']) {
 }
 #new-project {
   margin-block-start: var(--gap-floor);
-}
-.settings-panel {
-  display: grid;
-  gap: var(--gap-floor);
-  padding-block: var(--gap-floor);
 }
 
 /* The drawer's lists: pinned, projects, loose chats, saved answers. */
@@ -894,9 +869,6 @@ html[data-view='pending'] dialog {
   height: 1rem;
   color: currentColor;
 }
-.side-settings[open] > .side-row {
-  color: var(--foreground);
-}
 
 /* ---- the drawer's sections ---------------------------------------------------------------------------------
    Chat, Projects, Factory, Artifacts, Plugins: the same quiet rows as the foot, at the top. The open one is full
@@ -954,6 +926,9 @@ html[data-view='pending'] dialog {
 .side-empty {
   margin: 0;
   padding: var(--gap-floor) var(--inset-floor);
+  font-size: var(--fs-small);
+  color: var(--muted-foreground);
+  line-height: var(--leading-floor);
 }
 .side-tabs {
   display: flex;
@@ -981,35 +956,24 @@ html[data-view='pending'] dialog {
   color: var(--foreground);
 }
 
-/* ---- the page slides aside to open the drawer ------------------------------------------------------------------
-   Below 64rem the drawer is a popover (Mzizi's AppShell). Opening it also slides the PAGE sideways by the drawer's
-   width, so the drawer is revealed rather than laid over it; a slice of the page stays visible, and a tap on it
-   closes the drawer. ONE variable sets the direction: --drawer-shift is 1 when the page moves toward the inline end
-   (to the right, away from a drawer at the left, as shipped) and -1 for the other way. Only `transform` animates,
-   and with reduced motion the change is instant. The page is `inert` while the drawer is open (script). */
+/* ---- the drawer on a phone or tablet ----------------------------------------------------------------------
+   Below 64rem the drawer is a popover (Mzizi's AppShell) laid OVER the whole page with a dim backdrop. The page does not move
+   and nothing of it is cut off by the drawer: it is dimmed, inert (script) and cannot be reached while the drawer is open. A tap
+   on the dim part or Esc closes it. Only the drawer's own transform animates, and the dim fades in; with reduced motion
+   the change is instant. */
 :root {
-  --drawer-shift: 1;
   --drawer-w: min(18rem, 86vw);
 }
 @media (max-width: 63.999rem) {
   [data-slot='app-sidebar'] {
     width: var(--drawer-w);
-    /* The page's own slide is the dimming; no scrim over it. The ::backdrop still takes the tap that closes. */
     transform: translateX(-100%);
   }
   [data-slot='app-sidebar']:popover-open {
     transform: none;
   }
-  [data-slot='app-sidebar']::backdrop {
-    background: transparent;
-  }
-  html[data-drawer='open'] [data-slot='app-main'] {
-    transform: translateX(calc(var(--drawer-shift) * var(--drawer-w)));
-  }
+  /* The dim is Mzizi's own (AppShell: the foreground colour at 30%); it is not restyled here, only faded in. */
   @media (prefers-reduced-motion: no-preference) {
-    [data-slot='app-main'] {
-      transition: transform 220ms ease;
-    }
     /* The drawer also keeps `display` and `overlay` for the length of the slide out, so it is not cut off mid-way. */
     [data-slot='app-sidebar'] {
       transition:
@@ -1017,9 +981,18 @@ html[data-view='pending'] dialog {
         display 220ms allow-discrete,
         overlay 220ms allow-discrete;
     }
+    [data-slot='app-sidebar']::backdrop {
+      transition:
+        background-color 220ms ease,
+        display 220ms allow-discrete,
+        overlay 220ms allow-discrete;
+    }
     @starting-style {
       [data-slot='app-sidebar']:popover-open {
         transform: translateX(-100%);
+      }
+      [data-slot='app-sidebar']:popover-open::backdrop {
+        background-color: transparent;
       }
     }
   }
@@ -1247,10 +1220,6 @@ html [data-slot='app-shell'] {
 }
 .side-gear {
   margin-inline-start: auto;
-}
-.settings-panel .side-row {
-  padding-inline: 0;
-  justify-content: flex-start;
 }
 
 /* The top bar: thin, no rule, the chat's title at the left of the actions. */
@@ -1758,4 +1727,90 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .msg.user .attach-chip {
   font-weight: 400; /* the question's weight is for its words, not its attachments */
   background: color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+
+/* ---- Settings: a modal ----------------------------------------------------------------------------------
+   A native dialog (focus trap, Esc, inert page behind it). Full screen below 40rem with the close button pinned
+   at the top; centred and capped above. Sizes are tokens: 49px hit regions, 7px gaps, 14px inset. */
+.settings-dialog {
+  padding: 0;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+  max-width: none;
+  max-height: none;
+}
+.settings-dialog:not([open]) {
+  display: none;
+}
+.settings-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  inset: 0;
+  margin: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  border-radius: 0;
+  border: 0;
+}
+.settings-dialog::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+.settings-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor) var(--page-inset);
+  border-bottom: 1px solid var(--border);
+}
+.settings-head h2 {
+  margin: 0;
+  font-size: var(--fs-body, 1rem);
+}
+.settings-head .btn {
+  min-height: var(--target-floor);
+  min-width: var(--target-floor);
+}
+.settings-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: var(--inset-floor);
+  padding: var(--inset-floor) var(--page-inset) max(var(--inset-floor), env(safe-area-inset-bottom));
+}
+.settings-section {
+  display: grid;
+  gap: var(--gap-floor);
+  min-width: 0;
+}
+.settings-section h3 {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+.settings-dialog :is(h2, h3) {
+  font-family: inherit;
+}
+.settings-section .btn {
+  max-inline-size: 100%;
+  white-space: normal; /* at 200% text a long label wraps inside the dialog instead of running to its edge */
+}
+.settings-section .side-row {
+  padding-inline: 0;
+  justify-content: flex-start;
+}
+@media (min-width: 40rem) {
+  .settings-dialog[open] {
+    inset: 0;
+    margin: auto;
+    inline-size: min(32rem, calc(100vw - 2 * var(--page-inset)));
+    block-size: auto;
+    max-block-size: calc(100dvh - 2 * var(--page-inset));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg, 1rem);
+  }
 }

@@ -65,10 +65,10 @@ for (const scheme of ['light', 'dark'] as const) {
 
     test(`the account row is the only thing in the foot; the links inside Settings are text only (${scheme})`, async ({ page }) => {
       await openChat(page);
-      expect((await rows(page, '.side-foot > .side-nav > details > summary')).map((r) => r.text)).toEqual(['Settings']);
-      await page.locator('details.account summary').click();
-      const links = await rows(page, '.settings-panel a.side-row');
-      expect(links.map((r) => r.text.replace(/\(opens in a new tab\)/, '').trim())).toEqual(['Use the API', 'Disclaimer and privacy']);
+      expect((await rows(page, '.side-foot > .side-nav > #open-settings')).map((r) => r.text)).toEqual(['Settings']);
+      await page.locator('#open-settings').click();
+      const links = await rows(page, '.settings-dialog a.side-row');
+      expect(links.map((r) => r.text.replace(/\(opens in a new tab\)/, '').trim())).toEqual(['Disclaimer and privacy', 'Use the API']);
       for (const r of links) expect(r.svgs, `${r.text} has no icon`).toBe(0);
     });
   });
@@ -109,8 +109,9 @@ for (const width of [1000, 1280, 1440]) {
       const labels = await lines(page, '.side-row > span:not(.sr-only, .chat-row-title, .chat-row-when)');
       expect(labels.length).toBeGreaterThanOrEqual(7);
       for (const l of labels) expect(l.lines, `"${l.text}" is on one line`).toBe(1);
-      const factory = await page.locator('.side-row.side-disabled').evaluate((el) => el.getBoundingClientRect().height);
-      expect(factory, 'the Factory row is one row high, chip included').toBeLessThanOrEqual(popover ? 50 : 33);
+      const inert = await page.locator('.side-row.side-disabled').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+      expect(inert).toHaveLength(2); // Factory and Plugins
+      for (const h of inert) expect(h, 'a coming-soon row is one row high, chip included').toBeLessThanOrEqual(popover ? 50 : 33);
 
       if (!popover) {
         const w = await page.locator('[data-slot="app-sidebar"]').evaluate((el) => el.getBoundingClientRect().width);
@@ -139,19 +140,21 @@ for (const width of [1000, 1280, 1440]) {
   }
 }
 
-test('no control is a marketing pill: buttons and suggestion chips use the small radius, the composer a soft one; only Send is round', async ({ page }) => {
+test('no control is a marketing pill except the suggested prompts (Mzizi\'s pills) and Send: buttons use the small radius, the composer a soft one', async ({ page }) => {
   await openChat(page);
   const radii = await page.evaluate(() => {
     const r = (sel: string) => {
       const el = document.querySelector(sel);
       return el ? parseFloat(getComputedStyle(el).borderTopLeftRadius) : null;
     };
-    return { newChat: r('#side-new'), chip: r('.btn.chip'), composer: r('.composer') };
+    return { newChat: r('#side-new'), composer: r('.composer') };
   });
   for (const [name, v] of Object.entries(radii)) {
     expect(v, name).not.toBeNull();
     expect(v!, `${name} is not a pill`).toBeLessThanOrEqual(16);
   }
+  // The suggested prompts are the one exception: pills, as Mzizi's suggested-prompts component draws them.
+  expect(await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.btn.chip')!).borderTopLeftRadius))).toBeGreaterThan(100);
 });
 
 test('hierarchy: New chat is a plain row, the round send button is the one filled control and is muted until there is text', async ({ page }) => {
@@ -169,8 +172,8 @@ test('hierarchy: New chat is a plain row, the round send button is the one fille
 test('clutter is gone: the version line is in Settings (not the drawer foot) and Install is in Settings (not above the composer)', async ({ page }) => {
   await openChat(page);
   await expect(page.locator('.side-foot > .version-line')).toHaveCount(0);
-  await expect(page.locator('details.account .version-line')).toHaveCount(1);
-  await expect(page.locator('details.account #install')).toHaveCount(1);
+  await expect(page.locator('#settings-dialog .version-line')).toHaveCount(1);
+  await expect(page.locator('#settings-dialog #install')).toHaveCount(1);
   await expect(page.locator('.thread #install, #empty #install')).toHaveCount(0);
   await expect(page.locator('p.install')).toHaveCount(0);
 });
