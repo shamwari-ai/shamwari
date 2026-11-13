@@ -224,7 +224,8 @@ version is gated; it is never automatic.
    and Core deploy the same way, through their own platform connections (owner decision,
    2026-11-13, shamwari-ai/shamwari#266: no deploy secrets in GitHub): **Cloudflare Workers
    Builds for `shamwari-gateway`** and **Fly's GitHub deployment for `shamwari-core`**. Neither
-   is gated on CI or followed by a check; `main` only moves through the release PR. The
+   is gated on CI; `main` only moves through the release PR, and step 5 checks both `/health`
+   addresses afterwards. The
    owner's one-time steps for both are in docs/core-fly-runbook.md, Deploy. Until they are
    done, the gateway and Core are deployed by hand
    (`.github/workflows/deploy.yml` is the manual break-glass version and needs secrets

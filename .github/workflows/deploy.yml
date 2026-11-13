@@ -21,8 +21,8 @@
 #     cancelled by a newer one (the newer one waits).
 #   - A failed health check fails the job loudly and names the rollback commands. It does not roll back by
 #     itself: that path cannot be tested from CI, so a person runs it (docs/core-fly-runbook.md, Rollback).
-#   - Core's non-secret settings (SERVERS_API_URL included) live in core/fly.toml [env], so this deploy, Fly's
-#     GitHub deployment and a deploy from a shell all run the same configuration. No flag here sets them.
+#   - Core's non-secret settings live in core/fly.toml [env], so this deploy, Fly's GitHub deployment and a deploy
+#     from a shell all run the same configuration. No flag here sets them.
 name: Deploy (break-glass)
 
 on:
@@ -158,8 +158,8 @@ jobs:
       - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1  # 1.6
 
       # One machine (core/fly.toml: min_machines_running = 1), so this also starts a stopped one. Core is public
-      # HTTPS on purpose (docs/core-fly-runbook.md, Hardening), so there is no --no-public-ips here. Its settings,
-      # SERVERS_API_URL included, come from core/fly.toml [env], not from a flag.
+      # HTTPS on purpose (docs/core-fly-runbook.md, Hardening), so there is no --no-public-ips here. Its settings
+      # come from core/fly.toml [env], not from a flag.
       - name: fly deploy
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
