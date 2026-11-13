@@ -153,7 +153,7 @@ function world(
 
   /** What the queue consumer does with what the Worker enqueued. */
   const flush = async () => {
-    const messages = wire.sink.map((body) => ({ body })) as unknown as MessageBatch<SinkMessage>['messages'];
+    const messages = wire.sink.map((body) => ({ body, ack: () => {}, retry: () => {} })) as unknown as MessageBatch<SinkMessage>['messages'];
     await drain({ messages } as unknown as MessageBatch<SinkMessage>, env);
   };
 
