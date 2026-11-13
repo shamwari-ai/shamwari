@@ -139,19 +139,21 @@ for (const width of [1000, 1280, 1440]) {
   }
 }
 
-test('no control is a marketing pill: buttons and suggestion chips use the small radius, the composer a soft one; only Send is round', async ({ page }) => {
+test('no control is a marketing pill except the suggested prompts (Mzizi\'s pills) and Send: buttons use the small radius, the composer a soft one', async ({ page }) => {
   await openChat(page);
   const radii = await page.evaluate(() => {
     const r = (sel: string) => {
       const el = document.querySelector(sel);
       return el ? parseFloat(getComputedStyle(el).borderTopLeftRadius) : null;
     };
-    return { newChat: r('#side-new'), chip: r('.btn.chip'), composer: r('.composer') };
+    return { newChat: r('#side-new'), composer: r('.composer') };
   });
   for (const [name, v] of Object.entries(radii)) {
     expect(v, name).not.toBeNull();
     expect(v!, `${name} is not a pill`).toBeLessThanOrEqual(16);
   }
+  // The suggested prompts are the one exception: pills, as Mzizi's suggested-prompts component draws them.
+  expect(await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.btn.chip')!).borderTopLeftRadius))).toBeGreaterThan(100);
 });
 
 test('hierarchy: New chat is a plain row, the round send button is the one filled control and is muted until there is text', async ({ page }) => {

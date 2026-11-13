@@ -322,20 +322,27 @@ input:not([type='checkbox']):not([type='radio']) {
   font-weight: 600;
   color: var(--muted-foreground);
 }
+/* Suggested prompts are pills (Mzizi's suggested-prompts shape): fully rounded, a thin border, the input tint as the fill and a
+   stronger tint on hover. They wrap onto as many rows as they need instead of scrolling sideways, because the page never
+   scrolls sideways and Shona and Ndebele run longer. Each is a real button: the 49px hit region on touch, drawn at the density size (32px) with a mouse, as every other control here. */
 .examples {
-  list-style: none;
-  padding: 0;
-  margin: 0;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: var(--gap-floor);
+  margin: 0;
 }
 .btn.chip {
   max-width: 100%;
+  min-height: var(--size-control-sm);
   white-space: normal;
   text-align: center;
-  padding-block: var(--gap-floor);
+  padding-block: calc(var(--gap-floor) / 2);
+  border-radius: var(--radius-full);
+  background: color-mix(in oklab, var(--input) 30%, transparent);
+}
+.btn.chip:hover {
+  background: color-mix(in oklab, var(--input) 50%, transparent);
 }
 .install {
   margin: 0;

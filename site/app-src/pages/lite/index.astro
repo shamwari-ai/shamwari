@@ -218,11 +218,11 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
         <h2 id="greeting" data-i18n="greeting">Hello, friend</h2>
         <p class="lead" data-i18n="tagline">Ask a question. Get the answer with the section it came from.</p>
         <h3 id="try" class="try" data-i18n="tryAsking">Try asking</h3>
-        <ul class="examples">
-          <li><button type="button" class="btn chip" data-example data-i18n="example1">What does the Constitution say about equality?</button></li>
-          <li><button type="button" class="btn chip" data-example data-i18n="example2">What are my rights if I am arrested?</button></li>
-          <li><button type="button" class="btn chip" data-example data-i18n="example3">What does the Constitution say about education?</button></li>
-        </ul>
+        <div class="examples" role="group" aria-label={en.suggestedPrompts} data-i18n-attr="aria-label:suggestedPrompts">
+          <button type="button" class="btn chip" data-example data-i18n="example1">What does the Constitution say about equality?</button>
+          <button type="button" class="btn chip" data-example data-i18n="example2">What are my rights if I am arrested?</button>
+          <button type="button" class="btn chip" data-example data-i18n="example3">What does the Constitution say about education?</button>
+        </div>
       </section>
 
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
