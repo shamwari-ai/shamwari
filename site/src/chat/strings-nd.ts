@@ -48,7 +48,7 @@ export const nd: Strings = {
   you: 'Wena',
   shamwari: 'Shamwari',
   sources: 'Imithombo',
-  ground: 'Ground',
+  ground: 'Umthombo',
   groundHint: 'Kuthathwe emthonjeni obizwa ngegama, hakuqanjiwe.',
   effective: 'Kusebenza kusukela',
   openSource: 'Vula umthombo',
@@ -130,7 +130,7 @@ export const nd: Strings = {
   signInRetry: 'Asikwazanga ukuqeda ukuphuma komuntu wokucina. Hlola i-inthanethi uphinde uzame.',
   askRegion: 'Buza umbuzo',
   install: 'Faka i-app',
-  scopeLabel: 'Umbuzo ngokuthi',
+  scopeLabel: 'Uhlobo lombuzo',
   scope: {
     platform: 'Ulwazi olujwayelekileyo',
     community: 'Ulwazi lomphakathi',

@@ -48,7 +48,7 @@ export const sn: Strings = {
   you: 'Imi',
   shamwari: 'Shamwari',
   sources: 'Zvinobva',
-  ground: 'Ground',
+  ground: 'Chinobva',
   groundHint: 'Zvakatorwa pachinyorwa chinonzi chakabva, hazvina kufungidzirwa.',
   effective: 'Zvinoshanda kubva',
   openSource: 'Vhura chinobva',
@@ -130,7 +130,7 @@ export const sn: Strings = {
   signInRetry: 'Hatina kukwanisa kupedza kubuda kwemunhu wekupedzisira. Tarisai internet muedze zvakare.',
   askRegion: 'Bvunza mubvunzo',
   install: 'Isa app',
-  scopeLabel: 'Mubvunzo wekuti',
+  scopeLabel: 'Rudzi rwemubvunzo',
   scope: {
     platform: 'Ruzivo rwakawandisa',
     community: 'Ruzivo rwenharaunda',
