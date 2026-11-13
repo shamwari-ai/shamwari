@@ -90,12 +90,15 @@ jobs:
       group: deploy-gateway-production
       cancel-in-progress: false
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       # Custom domain in gateway/wrangler.jsonc ("routes").
       HEALTH_URL: https://api.shamwari.ai/health
+    # The Cloudflare secrets are given to the two steps that need them and to no other: not to checkout,
+    # setup-node or `npm ci`, which runs the dependencies' install scripts.
     steps:
       - name: Require the Cloudflare secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           missing=0
           for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
@@ -118,13 +121,16 @@ jobs:
           cache: npm
           cache-dependency-path: gateway/package-lock.json
 
-      # The wrangler version is the one gateway/package-lock.json pins; npx runs that local copy and, without
-      # --yes, would stop rather than fetch a different one.
+      # The wrangler version is the one gateway/package-lock.json pins. `npx --no` runs that local copy and
+      # stops rather than download a different one.
       - run: npm ci
         working-directory: gateway
 
       - name: wrangler deploy
-        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --no wrangler deploy
         working-directory: gateway
 
       - name: Health check (gateway)
@@ -149,7 +155,6 @@ jobs:
       group: deploy-core-production
       cancel-in-progress: false
     env:
-      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
       HEALTH_URL: https://shamwari-core.fly.dev/health
       # Not a secret: the Servers API's private listener, reachable only over Fly's private network with no key or
       # token. Passed at deploy time rather than set in core/fly.toml, so a deploy from a shell without the flag
@@ -157,6 +162,8 @@ jobs:
       SERVERS_API_URL: http://nyuchi-servers-api.internal:8081
     steps:
       - name: Require the Fly deploy token
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: |
           if [ -z "$FLY_API_TOKEN" ]; then
             echo "::error title=Core deploy failed::secret FLY_API_TOKEN is not set, so this release was NOT deployed."
@@ -174,6 +181,8 @@ jobs:
       # One machine (core/fly.toml: min_machines_running = 1), so this also starts a stopped one. Core is public
       # HTTPS on purpose (docs/core-fly-runbook.md, Hardening), so there is no --no-public-ips here.
       - name: fly deploy
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: flyctl deploy --app shamwari-core --ha=false --remote-only --env "SERVERS_API_URL=$SERVERS_API_URL"
         working-directory: core
 
