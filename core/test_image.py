@@ -67,6 +67,7 @@ class LeastPrivilege(unittest.TestCase):
                 "/v1/shamwari/sink",
                 "/v1/shamwari/usage/rollup",
                 "/v1/ai/guardrails",
+                "/v1/shamwari/guardrails",  # Servers API, behind SERVERS_API_URL (unset = off)
             },
         )
 

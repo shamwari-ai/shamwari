@@ -47,7 +47,7 @@ from typing import Any, Literal
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
-from nyuchi_api import DataApi, DataApiRefusal, DataApiUnavailable
+from nyuchi_api import DataApiRefusal, DataApiUnavailable, data_api_from_env
 from personal import needs_own_information
 
 log = logging.getLogger("shamwari.core")
@@ -60,7 +60,7 @@ OPS_TOKEN = os.environ.get("SHAMWARI_OPS_TOKEN", "")
 
 #: Built from the environment at import, so a missing key stops Core at boot, loudly,
 #: rather than at the first request. Tests replace it.
-api = DataApi.from_env()
+api = data_api_from_env()
 
 
 @asynccontextmanager
@@ -437,8 +437,8 @@ async def rollup_by_tier(billing_period: str, owner_entity_id: str) -> None:
     raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, _PARKED)
 
 
-#: /health is open (Fly's check, and anyone else) and each real check is an authenticated call
-#: with Core's key, so it is answered from a short cache. The API sees at most one readiness call
+#: /health is open (Fly's check, and anyone else) and each real check is a call to the data API
+#: (authenticated with Core's key for the Nyuchi API), so it is answered from a short cache. The API sees at most one readiness call
 #: per window however often /health is hit, and a hammered /health cannot spend Core's rate limit.
 _HEALTH_OK_SECONDS = 10.0
 _HEALTH_FAIL_SECONDS = 3.0
@@ -447,7 +447,7 @@ _health: dict[str, Any] = {"until": 0.0, "ok": False}
 
 @app.get("/health")
 async def health() -> dict[str, Any]:
-    """Readiness: Core is up AND the data API answers Core's key. Fails closed otherwise."""
+    """Readiness: Core is up AND the data API answers (Nyuchi API: Core's key; Servers API: /ready). Fails closed otherwise."""
     now = time.monotonic()
     if now >= _health["until"]:
         try:
