@@ -113,6 +113,8 @@ export const en = {
   example2: 'What are my rights if I am arrested?',
   example3: 'What does the Constitution say about education?',
   settings: 'Settings',
+  about: 'About',
+  settingsData: 'Data on this device',
   useApi: 'Use the API',
   opensNewTab: '(opens in a new tab)',
   disclaimerLink: 'Disclaimer and privacy',

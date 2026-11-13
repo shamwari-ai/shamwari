@@ -54,9 +54,14 @@ Where the chat departs from the library, and why:
 - **No web fonts.** Mzizi names Noto Sans first; the chat loads no font and falls back to the
   device's own, because the shell has to paint on 2G.
 - **A hand-drawn bell.** The icon set has no bell yet.
-- **The account menu is Mzizi's disclosure pattern without its `AccountMenu` component.** The
+- **Settings is a native `<dialog>` opened from the account row, not Mzizi's `AccountMenu`.** The
   component names a signed-in person (their initials and name); this chat has none to show until
-  Mukoko sign-in is on. Switch to `AccountMenu` then.
+  Mukoko sign-in is on. Switch to `AccountMenu` then. The dialog is modal (focus held, Esc closes,
+  the page behind it is inert), full screen below 40rem with a pinned 49 px close button, a centred
+  box of at most 32rem above. Its markup is in the page, not a lazy chunk: the handlers it needs
+  (language, delete, install, sign out) are bound at start, and the markup is the same bytes the old
+  panel had. There is no Appearance section: the page follows the device's light or dark setting and
+  there is no override to choose yet.
 - **The menu, close and top-bar action buttons are lifted from 44 px to the 49 px floor** in
   `chat.css`; `AppShell` draws them at 44 px. Worth raising upstream.
 
@@ -248,8 +253,8 @@ behaviour; the geometry tests moved with it. Screenshots (light and dark; 390, 1
   chat, Search chats, then the sections (Chat, Projects, Factory, Artifacts, Plugins); the history under muted, collapsible labels
   (Pinned, Recents) and, inside Recents, Today / Yesterday / Previous 7 days / Older; one line per chat, the title cut with an
   ellipsis and the time muted at the right (the hour today, the weekday this week, else the day and month); the open chat has a
-  soft fill. Search opens a field and narrows the lists by title; Escape closes it. The account row is pinned at the bottom: Settings
-  holds language, Use the API, Disclaimer and privacy, Delete history, Install and the version. There is no version line, Install
+  soft fill. Search opens a field and narrows the lists by title; Escape closes it. The account row is pinned at the bottom and opens
+  the Settings dialog (language and its draft note; delete history, Install, remove key; Disclaimer and privacy, Use the API, version). There is no version line, Install
   pill or big button in the drawer itself.
 - **Page:** one centred column (46rem). The top bar is thin and shows the chat's title (it is the page's `h1`; with no messages it
   is the app name, for screen readers only). Replies are plain prose with a quiet row under them (Copy answer, Save answer); the

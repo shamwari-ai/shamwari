@@ -65,10 +65,10 @@ for (const scheme of ['light', 'dark'] as const) {
 
     test(`the account row is the only thing in the foot; the links inside Settings are text only (${scheme})`, async ({ page }) => {
       await openChat(page);
-      expect((await rows(page, '.side-foot > .side-nav > details > summary')).map((r) => r.text)).toEqual(['Settings']);
-      await page.locator('details.account summary').click();
-      const links = await rows(page, '.settings-panel a.side-row');
-      expect(links.map((r) => r.text.replace(/\(opens in a new tab\)/, '').trim())).toEqual(['Use the API', 'Disclaimer and privacy']);
+      expect((await rows(page, '.side-foot > .side-nav > #open-settings')).map((r) => r.text)).toEqual(['Settings']);
+      await page.locator('#open-settings').click();
+      const links = await rows(page, '.settings-dialog a.side-row');
+      expect(links.map((r) => r.text.replace(/\(opens in a new tab\)/, '').trim())).toEqual(['Disclaimer and privacy', 'Use the API']);
       for (const r of links) expect(r.svgs, `${r.text} has no icon`).toBe(0);
     });
   });
@@ -169,8 +169,8 @@ test('hierarchy: New chat is a plain row, the round send button is the one fille
 test('clutter is gone: the version line is in Settings (not the drawer foot) and Install is in Settings (not above the composer)', async ({ page }) => {
   await openChat(page);
   await expect(page.locator('.side-foot > .version-line')).toHaveCount(0);
-  await expect(page.locator('details.account .version-line')).toHaveCount(1);
-  await expect(page.locator('details.account #install')).toHaveCount(1);
+  await expect(page.locator('#settings-dialog .version-line')).toHaveCount(1);
+  await expect(page.locator('#settings-dialog #install')).toHaveCount(1);
   await expect(page.locator('.thread #install, #empty #install')).toHaveCount(0);
   await expect(page.locator('p.install')).toHaveCount(0);
 });

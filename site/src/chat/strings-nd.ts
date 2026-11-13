@@ -106,6 +106,8 @@ export const nd: Strings = {
   example2: 'Amalungelo ami ayini nxa ngiboshiwe?',
   example3: 'ISimiso sithini ngemfundo?',
   settings: 'Izilungiso',
+  about: 'Mayelana',
+  settingsData: 'Idatha kule foni',
   useApi: 'Sebenzisa i-API',
   opensNewTab: '(ivulwa kuthebhu entsha)',
   disclaimerLink: 'Isaziso nobumfihlo',

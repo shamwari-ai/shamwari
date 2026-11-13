@@ -106,6 +106,8 @@ export const sn: Strings = {
   example2: 'Kodzero dzangu dziri dzipi kana ndabatwa?',
   example3: 'Bumbiro remitemo rinotii chii pamusoro pedzidzo?',
   settings: 'Zvirongwa',
+  about: 'Nezve',
+  settingsData: 'Data iri pafoni ino',
   useApi: 'Shandisa API',
   opensNewTab: '(inovhurika patab itsva)',
   disclaimerLink: 'Chinyorwa chekuzivisa nekuvanzika',

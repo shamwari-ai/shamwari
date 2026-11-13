@@ -235,7 +235,8 @@ test('Settings and the chats drawer meet the Bundu floor', async ({ page }) => {
   await newChat(page); // a second chat, so the drawer has something to list
   await openAccount(page);
   expect(await underTheFloor(page), 'settings open').toEqual([]);
-  await page.locator('details.account summary').click();
+  await page.keyboard.press('Escape'); // Settings is a modal: Esc closes it (and the drawer it came from is already closed)
+  await openChats(page);
   await expect(page.locator('#history-list button.chat-row').first()).toBeVisible();
   expect(await underTheFloor(page), 'drawer open').toEqual([]);
 });

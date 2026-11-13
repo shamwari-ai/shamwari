@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openChatMenu, ask, makeProject, openAccount, openChat, openChats, openSection, closeChats, newChat, seedLegacyQuestion } from './helpers';
+import { openChatMenu, ask, makeProject, openAccount, openChat, openChats, openSection, newChat, seedLegacyQuestion } from './helpers';
 
 test('asks a question and renders the answer with its citation card', async ({ page }) => {
   await openChat(page);
@@ -195,9 +195,9 @@ test('Shona is offered, shown as a draft, and Enter sends', async ({ page }) => 
   await openAccount(page);
   await page.locator('#lang').selectOption('sn');
   await expect(page.locator('html')).toHaveAttribute('lang', 'sn');
-  await closeChats(page); // the page behind an open drawer is inert
-  // The draft notice is a banner in the page, not inside the drawer: it shows with the drawer closed.
+  // The draft notice sits under the language field inside Settings.
   await expect(page.locator('#review')).toBeVisible();
+  await page.keyboard.press('Escape'); // Settings is a modal: the page behind it is inert until it closes
   await expect(page.locator('#send')).toHaveText('Tumira');
   await page.locator('#q').fill('hello');
   await page.locator('#q').press('Enter');
@@ -281,7 +281,7 @@ test('Settings is named in Shona, and Install stays visible after a question', a
   await openChat(page);
   await openAccount(page);
   await page.locator('#lang').selectOption('sn');
-  await expect(page.locator('details.account summary')).toHaveText('Zvirongwa');
+  await expect(page.locator('#open-settings')).toHaveText('Zvirongwa');
   // The install button lives outside the greeting, so asking a question (which hides the greeting) does not take it away.
   await expect(page.locator('#install').locator('xpath=ancestor::*[@id="empty"]')).toHaveCount(0);
 });
