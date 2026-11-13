@@ -156,7 +156,13 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
          chat. #new-chat is a wrapper the script listens on. -->
     <!-- The chat's title and, beside it, its "..." menu (pin, project, delete). The menu shows once there is a chat. -->
     <div slot="actions" class="chat-head">
-      <h1 id="chat-title" class="chat-title sr-only" data-i18n="appName">{en.appName}</h1>
+      <!-- Two lines: the title (the page's one heading) and a quiet subtitle. The block is ONE tappable target, an invisible button laid over
+           both lines (49px), that opens the chat menu; the subtitle itself is only text. -->
+      <div class="chat-heading">
+        <h1 id="chat-title" class="chat-title sr-only" data-i18n="appName">{en.appName}</h1>
+        <p id="chat-sub" class="chat-sub" hidden><span id="chat-sub-text"></span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></p>
+        <button type="button" id="chat-title-hit" class="chat-hit" popovertarget="chat-tools" aria-haspopup="true" hidden data-i18n-attr="aria-label:chatOptions" aria-label={en.chatOptions}></button>
+      </div>
       <button type="button" id="chat-menu" class="bar-action chat-menu-btn" popovertarget="chat-tools" aria-haspopup="true" hidden data-i18n-attr="aria-label:chatOptions" aria-label={en.chatOptions}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
       </button>
