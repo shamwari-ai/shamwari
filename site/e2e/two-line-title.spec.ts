@@ -57,7 +57,7 @@ test('on a phone the wordmark gives way to the title while a chat is open, and i
   expect(await brandShown(page), 'the empty screen keeps the wordmark').toBe(true);
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('article.msg.bot:not(.pending)').first()).toBeVisible();
-  expect(await brandShown(page), 'a chat is open: the title takes its place').toBe(false);
+  await expect.poll(() => brandShown(page), { message: 'a chat is open: the title takes its place' }).toBe(false);
 });
 
 test('a very long title is cut with an ellipsis inside the bar at 320px, never wrapping it or scrolling the page', async ({ page }) => {
