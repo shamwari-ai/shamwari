@@ -18,6 +18,7 @@
 // the store or the sink queue is a leak even if the response is a 409.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../src/index';
+import { resetApiTokenCache } from '../src/api-token';
 import { drain } from '../src/sink';
 import type { AuthContext, Env, SinkMessage } from '../src/types';
 
@@ -37,6 +38,8 @@ const AUTH: AuthContext = {
 interface Wire {
   /** Every request the Worker sent to Core: path and parsed body. */
   core: { path: string; body: Record<string, unknown> | null }[];
+  /** The body of every token exchange the Worker made with the (stand-in) API. */
+  exchanges: string[];
   /** Every request that would have reached a model provider. */
   inference: { system: string; headers: Record<string, string> }[];
   /** Every call to the Workers AI binding: embeddings, and the fallback model if it was reached. */
@@ -57,7 +60,7 @@ function world(
 ) {
   // With realAuth the key check is not stubbed: the Worker asks Core's /auth/verify.
   const kv = new Map<string, string>();
-  const wire: Wire = { core: [], inference: [], ai: [], sink: [], pending: [] };
+  const wire: Wire = { core: [], exchanges: [], inference: [], ai: [], sink: [], pending: [] };
   const env = {
     AI: {
       run: async (model: string, input: { text?: string[] }) => {
@@ -84,6 +87,10 @@ function world(
     },
     CORE_URL: CORE,
     SHAMWARI_CORE_TOKEN: TOKEN,
+    // The key pair lives only here (the Secrets Store, in production). Core is never given it.
+    SHAMWARI_API_CLIENT_ID: { get: async () => process.env.E2E_API_CLIENT_ID },
+    SHAMWARI_API_CLIENT_SECRET: { get: async () => process.env.E2E_API_CLIENT_SECRET },
+    NYUCHI_API_URL: `${CORE}/__api`,
     EMBEDDING_MODEL: '@cf/baai/bge-m3',
     GROUND_TOP_K: '6',
     AUTH_CACHE_TTL: '300',
@@ -101,6 +108,11 @@ function world(
   vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     const u = String(url);
     if (u.startsWith(CORE!)) {
+      // The token exchange goes to the stand-in API, not to Core: keep it out of the Core list.
+      if (new URL(u).pathname.endsWith('/v1/auth/token')) {
+        wire.exchanges.push(String(init?.body ?? ''));
+        return realFetch(url, init);
+      }
       const raw = init?.body ? String(init.body) : null;
       wire.core.push({
         path: new URL(u).pathname,
@@ -166,6 +178,8 @@ async function coreState() {
     api: { method: string; path: string; summary?: Record<string, any> }[];
     embed_calls: number;
     stored: Record<string, Record<string, any>[]>;
+    token_exchanges: { grant_type: string }[];
+    api_token: string;
   };
 }
 
@@ -179,11 +193,48 @@ describe.skipIf(!CORE)('gateway -> Core -> Ground -> answer (real HTTP, fake mod
     served = { provider: 'workers-ai', model: '@cf/zai-org/glm-5.3-flash' };
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    resetApiTokenCache();
     await realFetch(`${CORE}/__e2e/reset`, { method: 'POST' });
   });
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
+  });
+
+  describe('the API token', () => {
+    it('is exchanged by the Worker once, reused, and is what lets Core reach the API', async () => {
+      const w = world();
+      const a = await w.call('/v1/chat/completions', ask('What does section 56 say about equality?'));
+      const b = await w.call('/v1/chat/completions', ask('What does section 56 say about equality?'));
+      expect(a.body.shamwari.grounded).toBe(true);
+      expect(b.body.shamwari.grounded).toBe(true);
+      const s = await coreState();
+      expect(s.token_exchanges).toEqual([{ grant_type: 'client_credentials' }]);
+      expect(s.api.filter((c) => c.path === '/v1/shamwari/ground/search').length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('is never in a response or a log line', async () => {
+      const logs: string[] = [];
+      for (const m of ['log', 'info', 'warn', 'error'] as const) {
+        vi.spyOn(console, m).mockImplementation((...a: unknown[]) => void logs.push(a.map(String).join(' ')));
+      }
+      const w = world();
+      const r = await w.call('/v1/chat/completions', ask('What does section 56 say about equality?'));
+      const { api_token } = await coreState();
+      expect(api_token.length).toBeGreaterThan(20);
+      expect(JSON.stringify(r.body)).not.toContain(api_token);
+      expect(logs.join('\n')).not.toContain(api_token);
+      expect(logs.join('\n')).not.toContain(process.env.E2E_API_CLIENT_SECRET!);
+    });
+
+    it('missing, the question is still answered, ungrounded, and nothing is guessed', async () => {
+      const w = world({}, {});
+      (w.env as unknown as Record<string, unknown>).SHAMWARI_API_CLIENT_SECRET = undefined;
+      const r = await w.call('/v1/chat/completions', ask('What does section 56 say about equality?'));
+      expect(r.status).toBe(200);
+      expect(r.body.shamwari.grounded).toBe(false);
+      expect((await coreState()).api).toEqual([]);
+    });
   });
 
   describe('a platform-scope question', () => {

@@ -3,8 +3,10 @@ Shamwari Core: the service that enforces Shamwari's two rules in front of its da
 
 Core holds NO database login. Ground, the sink and usage live behind the Nyuchi API
 (/v1/shamwari, nyuchi/nyuchi-api#393), which Core reaches over Fly's private network
-with one internal key (nyuchi_api.py). That is the owner's decision of 2026-10-27:
-only the Nyuchi API talks to databases.
+(nyuchi_api.py). That is the owner's decision of 2026-10-27: only the Nyuchi API talks to
+databases. Core holds NO standing credential for that API either: the gateway Worker, which
+holds the key pair in the Cloudflare Secrets Store, sends a short-lived token on each request
+(X-Shamwari-Api-Token) and Core forwards it. A request with no token is a 503, never a crash.
 
 What Core is for, then, is deciding BEFORE a call is made, and checking what comes back:
 
@@ -39,7 +41,6 @@ import hmac
 import logging
 import os
 import re
-import time
 from contextlib import asynccontextmanager
 from enum import Enum
 from typing import Any, Literal
@@ -47,7 +48,7 @@ from typing import Any, Literal
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
-from nyuchi_api import DataApi, DataApiRefusal, DataApiUnavailable
+from nyuchi_api import DataApi, DataApiRefusal, DataApiUnavailable, RequestTokenMiddleware
 from personal import needs_own_information
 
 log = logging.getLogger("shamwari.core")
@@ -58,8 +59,7 @@ CORE_TOKEN = os.environ["SHAMWARI_CORE_TOKEN"]
 #: Unset means those routes are shut.
 OPS_TOKEN = os.environ.get("SHAMWARI_OPS_TOKEN", "")
 
-#: Built from the environment at import, so a missing key stops Core at boot, loudly,
-#: rather than at the first request. Tests replace it.
+#: Holds no credential; each call uses the token of the request being served. Tests replace it.
 api = DataApi.from_env()
 
 
@@ -70,6 +70,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Shamwari Core", version="0.4.0", lifespan=lifespan)
+app.add_middleware(RequestTokenMiddleware)
 
 _ID = r"^[A-Za-z0-9_.:-]{1,64}$"
 _PERIOD = r"^\d{4}-(0[1-9]|1[0-2])$"
@@ -437,24 +438,12 @@ async def rollup_by_tier(billing_period: str, owner_entity_id: str) -> None:
     raise HTTPException(status.HTTP_501_NOT_IMPLEMENTED, _PARKED)
 
 
-#: /health is open (Fly's check, and anyone else) and each real check is an authenticated call
-#: with Core's key, so it is answered from a short cache. The API sees at most one readiness call
-#: per window however often /health is hit, and a hammered /health cannot spend Core's rate limit.
-_HEALTH_OK_SECONDS = 10.0
-_HEALTH_FAIL_SECONDS = 3.0
-_health: dict[str, Any] = {"until": 0.0, "ok": False}
-
-
 @app.get("/health")
 async def health() -> dict[str, Any]:
-    """Readiness: Core is up AND the data API answers Core's key. Fails closed otherwise."""
-    now = time.monotonic()
-    if now >= _health["until"]:
-        try:
-            await api.whoami()
-            _health.update(ok=True, until=now + _HEALTH_OK_SECONDS)
-        except (DataApiUnavailable, DataApiRefusal):
-            _health.update(ok=False, until=now + _HEALTH_FAIL_SECONDS)
-    if not _health["ok"]:
-        raise _unavailable()
+    """
+    Liveness only. Core holds no credential for the data API (the Worker hands it a token per
+    request), so /health has nothing to probe the API with and never calls it. Fly's check and
+    anyone else can hit it with no token. Whether the API answers is seen per request: a Ground
+    call without a working token is a 503 data_api_unavailable.
+    """
     return {"ok": True, "service": "shamwari-core", "version": "0.4.0"}

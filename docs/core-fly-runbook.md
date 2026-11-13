@@ -11,8 +11,9 @@ origin). It is public HTTPS on `shamwari-core.fly.dev`; every route except
 
 **Core holds no database login.** Owner decision, 2026-10-27: only the Nyuchi API
 talks to databases. Core reaches Ground, the sink and usage through the API's
-`/v1/shamwari` routes (nyuchi/nyuchi-api#393) over Fly's private network, with one
-internal key. Rule 1 is decided in Core before any call, and checked again on what the
+`/v1/shamwari` routes (nyuchi/nyuchi-api#393) over Fly's private network, **with a
+short-lived token the gateway Worker sends on each request**. Core holds no standing
+credential for the API at all (owner decision, 2026-11-13). Rule 1 is decided in Core before any call, and checked again on what the
 API returns; the API checks it a third time. Which routes exist and which are missing:
 `docs/data-api-routes.md`.
 
@@ -21,11 +22,13 @@ API returns; the API checks it a third time. Which routes exist and which are mi
 Set on the **Fly app `shamwari-core`** (the running service reads exactly these;
 `core/test_deploy_config.py` fails if the code reads another):
 
-| Name                      | Required | What it is for                                                                                | Where the value comes from                                                                                                                                 |
-| ------------------------- | -------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SHAMWARI_CORE_TOKEN`     | yes      | The edge Worker's bearer token. Opens Ground, guardrails, sink and rollup.                    | Generated: `openssl rand -hex 32`. Must be **the same value** as the gateway Worker secret of the same name.                                               |
-| `NYUCHI_API_INTERNAL_KEY` | yes      | Core's one credential for the Nyuchi API, form `nyk_<id>.nys_<secret>`.                       | Minted in the Console by a person holding `console:api-keys-mint`: an **internal** key with scopes `shamwari`, `shamwari:service` and `ai`. Nothing wider. |
-| `SHAMWARI_OPS_TOKEN`      | no       | Operator routes (`/replay/*`, `/rollup/by-tier`; both parked, see below). Unset = answer 503. | Generated, a **different** value from the Worker's.                                                                                                        |
+| Name                  | Required | What it is for                                                                                | Where the value comes from                                                                                   |
+| --------------------- | -------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `SHAMWARI_CORE_TOKEN` | yes      | The edge Worker's bearer token. Opens Ground, guardrails, sink and rollup.                    | Generated: `openssl rand -hex 32`. Must be **the same value** as the gateway Worker secret of the same name. |
+| `SHAMWARI_OPS_TOKEN`  | no       | Operator routes (`/replay/*`, `/rollup/by-tier`; both parked, see below). Unset = answer 503. | Generated, a **different** value from the Worker's.                                                          |
+
+There is **no** Nyuchi API key on the Fly app: see "The API credential" below. Core
+reads no variable of that kind, and `core/test_deploy_config.py` fails if it starts to.
 
 Plain settings, in `fly.toml` `[env]` (not secrets): `NYUCHI_API_URL`
 (`http://nyuchi-api.internal:8080`, Fly's private network) and `NYUCHI_API_HOST`
@@ -94,17 +97,17 @@ fly apps create shamwari-core --org nyuchi-web-services
 # 2. Secrets. `fly secrets import` reads NAME=value lines from stdin, so a value
 #    never reaches argv, `ps`, or shell history. --stage queues them for the
 #    first deploy instead of restarting anything.
-#    Export NYUCHI_API_INTERNAL_KEY first, from your secret manager (not typed inline).
+#    Core needs no Nyuchi API key: the gateway Worker sends it a token per request.
 SHAMWARI_CORE_TOKEN="$(openssl rand -hex 32)"
 SHAMWARI_OPS_TOKEN="$(openssl rand -hex 32)"
-printf 'NYUCHI_API_INTERNAL_KEY=%s\nSHAMWARI_CORE_TOKEN=%s\nSHAMWARI_OPS_TOKEN=%s\n' \
-  "$NYUCHI_API_INTERNAL_KEY" "$SHAMWARI_CORE_TOKEN" "$SHAMWARI_OPS_TOKEN" \
+printf 'SHAMWARI_CORE_TOKEN=%s\nSHAMWARI_OPS_TOKEN=%s\n' \
+  "$SHAMWARI_CORE_TOKEN" "$SHAMWARI_OPS_TOKEN" \
   | fly secrets import --stage --app shamwari-core
 
 # 3. Keep both tokens in your secret manager NOW: Fly never shows a secret's
 #    value again. The Worker needs the same Core token (see "Point the Worker at
 #    Core"), so do not lose it. Then drop them from this shell.
-unset SHAMWARI_CORE_TOKEN SHAMWARI_OPS_TOKEN NYUCHI_API_INTERNAL_KEY
+unset SHAMWARI_CORE_TOKEN SHAMWARI_OPS_TOKEN
 
 # 4. Deploy. Remote builder; CI builds this image on every PR, so a Dockerfile or lock
 #    problem has already failed there. One machine (fly.toml: min_machines_running = 1).
@@ -126,9 +129,9 @@ check that the API app is deployed and that its machine listens on 8080.
 # Exported here, never printed.
 : "${SHAMWARI_CORE_TOKEN:?export it from your secret manager first}"
 
-# Readiness, no auth. 200 {"ok":true,...} means the machine is up AND the Nyuchi API answered
-# Core's key. Fly's check is this same route, so an API outage takes the only machine out of
-# rotation (the Worker sees 503) instead of letting it answer errors. Nothing restarts.
+# Liveness, no auth, no token. 200 {"ok":true,...} means the machine is up. It never calls the
+# Nyuchi API (Core holds no credential to call it with), and Fly's check is this same route.
+# Whether the API answers is seen per request: Ground without a working token is a 503.
 curl -fsS https://shamwari-core.fly.dev/health
 
 # Auth is on: no header -> 422, wrong token -> 401. Neither reveals anything.
@@ -149,7 +152,8 @@ curl -sS -w '\n%{http_code}\n' -X POST https://shamwari-core.fly.dev/ground/sear
   -d '{"query":"x","owner_entity_id":"probe","scope":"personal","destination":"cloud"}'
 # expect {"detail":{"error":"scope_requires_local_inference",...}} and 409
 
-# A platform-scope search reaches the API with Core's key (404-free hit or miss, 200):
+# A platform-scope search with NO API token is a clean 503 data_api_unavailable (Core holds no
+# key of its own; the Worker supplies the token, so a real hit is only seen through the Worker):
 curl -sS -w '\n%{http_code}\n' -X POST https://shamwari-core.fly.dev/ground/search \
   -H @<(printf 'Authorization: Bearer %s' "$SHAMWARI_CORE_TOKEN") \
   -H 'Content-Type: application/json' \
@@ -158,6 +162,30 @@ curl -sS -w '\n%{http_code}\n' -X POST https://shamwari-core.fly.dev/ground/sear
 fly status --app shamwari-core
 fly logs --app shamwari-core --no-tail | tail -50
 ```
+
+## The API credential (owner-only)
+
+Core holds no key for the Nyuchi API. The gateway Worker holds the key pair in the Cloudflare
+Secrets Store (store `56f84bfa8a564c54a95dbf4f4b4281b4`, bindings `SHAMWARI_API_CLIENT_ID` and
+`SHAMWARI_API_CLIENT_SECRET`), trades it at `POST /v1/auth/token` (OAuth 2.0
+`client_credentials`; the API issues a one-hour token), keeps the token until 30 seconds before
+it expires, and sends it to Core on each request in `X-Shamwari-Api-Token`. Core forwards it as
+`Authorization: Bearer` for that request and stores nothing. If the secrets or the exchange are
+unavailable the Worker calls Core without a token, Core answers `503 data_api_unavailable`, and
+chat answers ungrounded, as when Core is down. Nothing is set on the Fly app for any of this.
+
+Steps, in this order (a person holding `console:api-keys-mint`, then a Cloudflare account admin):
+
+1. In the Console, mint an **internal** key with scopes `shamwari`, `shamwari:service` and `ai`.
+   Nothing wider. The pair is `nyk_<id>` and `nys_<secret>`.
+2. Store the id as the Secrets Store secret `SHAMWARI_API_CLIENT_ID` and the secret as
+   `SHAMWARI_API_CLIENT_SECRET`, scope Workers, in the store above. Values from your secret
+   manager, never typed into a shared shell or argv.
+3. Only then deploy the gateway Worker: its `wrangler.jsonc` binds both secrets, and a binding to
+   a secret that does not exist fails the deploy.
+
+Rotation: mint a new key, update the two secrets, revoke the old key. The Worker notices the new
+id on its next request and exchanges again.
 
 ## Point the Worker at Core
 
@@ -208,8 +236,9 @@ fly deploy --app shamwari-core --image <registry.fly.io/shamwari-core:deployment
 
 Secrets: `fly secrets import` creates a new release too. To revert a bad value,
 import the old one (you keep it in the secret manager) and the app restarts on it.
-To revoke Core's data access at once, revoke its internal key in the Console: Core then
-answers 503 to everything that needs data and nothing leaks.
+To revoke data access at once, revoke the internal key in the Console (or delete the two
+Secrets Store secrets): the Worker can no longer get a token, Core answers 503 to everything
+that needs data, and nothing leaks. Tokens already issued expire within the hour.
 
 Worker: `cd gateway && npx wrangler rollback` returns the Worker to its previous
 version. To take Cloud answering out of the loop without a deploy, point `CORE_URL`
@@ -220,11 +249,11 @@ Data: Ground ingest is additive; nothing here deletes a chunk.
 
 ## Failure signs
 
-| You see                                           | Likely cause                                                                                |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Boot crash `KeyError: 'NYUCHI_API_INTERNAL_KEY'`  | secret missing: `fly secrets list` shows names                                              |
-| `/health` 503, logs `data api refused Core's key` | the internal key is revoked or lacks `shamwari`, `shamwari:service` or `ai`: mint a new one |
-| `/health` 503, logs `data api unavailable`        | the API app is down, or not reachable at `NYUCHI_API_URL` over the private network          |
-| Worker answers `401 invalid_api_key`              | expected until G1 is built: Core no longer verifies keys                                    |
-| Worker answers `503 auth_unavailable`             | Core unreachable from the Worker: `CORE_URL`                                                |
-| Ground answers `503 data_api_unavailable`         | the API is failing; Core fails closed and serves nothing in its place                       |
+| You see                                                 | Likely cause                                                                                                              |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Ground answers `503 data_api_unavailable`, logs nothing | the Worker sent no token: the Secrets Store secrets are missing or the exchange failed (Workers Logs: `api token:`)       |
+| logs `data api refused the token`                       | the token lacks `shamwari`, `shamwari:service` or `ai`, or the key was revoked: mint a new key and update the two secrets |
+| logs `data api unavailable`                             | the API app is down, or not reachable at `NYUCHI_API_URL` over the private network                                        |
+| Worker answers `401 invalid_api_key`                    | expected until G1 is built: Core no longer verifies keys                                                                  |
+| Worker answers `503 auth_unavailable`                   | Core unreachable from the Worker: `CORE_URL`                                                                              |
+| Ground answers `503 data_api_unavailable`               | the API is failing; Core fails closed and serves nothing in its place                                                     |

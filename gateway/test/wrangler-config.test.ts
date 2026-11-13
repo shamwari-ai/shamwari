@@ -8,7 +8,11 @@ const config = JSON.parse(
   raw
     .replace(/^\s*\/\/.*$/gm, '')
     .replace(/,(\s*[}\]])/g, '$1'),
-) as { vars: Record<string, string>; routes?: { pattern: string; custom_domain?: boolean }[] };
+) as {
+  vars: Record<string, string>;
+  routes?: { pattern: string; custom_domain?: boolean }[];
+  secrets_store_secrets?: { binding: string; store_id: string; secret_name: string }[];
+};
 
 describe('wrangler.jsonc production vars', () => {
   const v = config.vars;
@@ -39,5 +43,18 @@ describe('wrangler.jsonc production vars', () => {
 
   it('puts the gateway on api.shamwari.ai as a custom domain', () => {
     expect(config.routes).toContainEqual({ pattern: 'api.shamwari.ai', custom_domain: true });
+  });
+
+  it('binds the Nyuchi API key pair from the Secrets Store, never as a var', () => {
+    const bound = Object.fromEntries((config.secrets_store_secrets ?? []).map((b) => [b.binding, b]));
+    for (const name of ['SHAMWARI_API_CLIENT_ID', 'SHAMWARI_API_CLIENT_SECRET']) {
+      expect(bound[name]).toEqual({
+        binding: name,
+        store_id: '56f84bfa8a564c54a95dbf4f4b4281b4',
+        secret_name: name,
+      });
+      expect(name in v).toBe(false);
+    }
+    expect(v.NYUCHI_API_URL).toBe('https://api.nyuchi.com');
   });
 });

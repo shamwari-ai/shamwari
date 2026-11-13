@@ -3,7 +3,9 @@
 Owner decision, 2026-10-27 (#81): **Core holds no database login; only the Nyuchi API
 talks to databases.** Core reaches data through `/v1/shamwari` on the API
 (nyuchi/nyuchi-api#393, `gateway/routers/shamwari.py`) over Fly's private network, with
-one internal key. Client: `core/nyuchi_api.py`. This page maps every Mongo call Core
+a short-lived token the gateway Worker sends on each request (Core holds no standing key; the
+Worker holds the internal key pair in the Secrets Store and exchanges it at `POST /v1/auth/token`;
+see `docs/core-fly-runbook.md`, "The API credential"). Client: `core/nyuchi_api.py`. This page maps every Mongo call Core
 used to make to a route, and specifies the routes that are missing so the API side can be
 built. The API repo is not writable from here.
 
@@ -12,17 +14,17 @@ The owner checked 2026-10-31: `platform.apiKeys` holds 3 documents, all `interna
 
 ## What Core used to do in Mongo, and where it goes
 
-| Core route                                            | Mongo calls it made                                                           | Now                                                                                                           |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `POST /ground/search`                                 | `shamwari.knowledgeBase.aggregate`, `groundMisses.insert_one`                 | `POST /v1/shamwari/ground/search` (exists). The API logs the miss, and omits the question for personal scope. |
-| `GET /guardrails`                                     | `shamwari.guardrails.find`                                                    | `GET /v1/ai/guardrails?applies_to=` (exists, scope `ai`). Shape is `{platform, entity}`, not `{rules}`.       |
-| `POST /sink/bulk`                                     | `insert_many` on six collections                                              | `POST /v1/shamwari/sink` (exists). Content-derived ids make a retry a counted duplicate.                      |
-| `GET /rollup`                                         | `platform.usageEvents.aggregate`                                              | `GET /v1/shamwari/usage/rollup` (exists).                                                                     |
-| `GET /health`                                         | `admin.command("ping")`                                                       | `GET /v1/shamwari/whoami` with Core's key (exists). Readiness means "the API answers my key".                 |
-| `POST /auth/verify`                                   | `platform.apiKeys.find_one`, `entity.entities.find_one`                       | **G1**. Core answers 501 `key_verification_moved`; the Worker denies.                                         |
-| `GET /rollup/by-tier`                                 | `usageEvents.aggregate` (by reach, tier, path)                                | **G3**. Core answers 501.                                                                                     |
-| `POST /replay/usage`, `/requeue`, `GET /replay/stats` | `usageEvents` find, `update_many`, `count_documents`                          | **G4**. Core answers 501.                                                                                     |
-| `ingest_ground.py`                                    | `knowledgeBase` insert, update, count; Postgres `documents`, `corpus_sources` | **G5**. A one-off from a trusted machine until then.                                                          |
+| Core route                                            | Mongo calls it made                                                           | Now                                                                                                                 |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `POST /ground/search`                                 | `shamwari.knowledgeBase.aggregate`, `groundMisses.insert_one`                 | `POST /v1/shamwari/ground/search` (exists). The API logs the miss, and omits the question for personal scope.       |
+| `GET /guardrails`                                     | `shamwari.guardrails.find`                                                    | `GET /v1/ai/guardrails?applies_to=` (exists, scope `ai`). Shape is `{platform, entity}`, not `{rules}`.             |
+| `POST /sink/bulk`                                     | `insert_many` on six collections                                              | `POST /v1/shamwari/sink` (exists). Content-derived ids make a retry a counted duplicate.                            |
+| `GET /rollup`                                         | `platform.usageEvents.aggregate`                                              | `GET /v1/shamwari/usage/rollup` (exists).                                                                           |
+| `GET /health`                                         | `admin.command("ping")`                                                       | None. Core holds no credential to probe with, so `/health` is liveness only; the API's whoami stays for the Worker. |
+| `POST /auth/verify`                                   | `platform.apiKeys.find_one`, `entity.entities.find_one`                       | **G1**. Core answers 501 `key_verification_moved`; the Worker denies.                                               |
+| `GET /rollup/by-tier`                                 | `usageEvents.aggregate` (by reach, tier, path)                                | **G3**. Core answers 501.                                                                                           |
+| `POST /replay/usage`, `/requeue`, `GET /replay/stats` | `usageEvents` find, `update_many`, `count_documents`                          | **G4**. Core answers 501.                                                                                           |
+| `ingest_ground.py`                                    | `knowledgeBase` insert, update, count; Postgres `documents`, `corpus_sources` | **G5**. A one-off from a trusted machine until then.                                                                |
 
 What Core keeps, and why: `resolve_scope` and the embedding refusal run **before** a call,
 so a refused request makes zero data calls (counted in `core/test_core_routes.py` and in the

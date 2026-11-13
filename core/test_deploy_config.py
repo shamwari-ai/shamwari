@@ -18,12 +18,14 @@ REPO = HERE.parent
 SERVING = {
     "SHAMWARI_CORE_TOKEN",
     "SHAMWARI_OPS_TOKEN",
-    "NYUCHI_API_INTERNAL_KEY",
     "NYUCHI_API_URL",
     "NYUCHI_API_HOST",
 }
 #: Ingest-only: database and Cloudflare logins. Never on the Fly app, and never read by Core.
 INGEST_ONLY = {"SUPABASE_DB_URL", "MONGODB_URI", "CF_ACCOUNT_ID", "CF_API_TOKEN"}
+#: Names Core must never read for the Nyuchi API: it gets a token per request from the gateway Worker.
+STANDING_API_CREDENTIAL = re.compile(r"NYUCHI_API.*(KEY|SECRET|TOKEN|CLIENT)|SHAMWARI_API_|API_CLIENT_(ID|SECRET)")
+SERVING_FILES = ("main.py", "nyuchi_api.py", "replay.py", "telemetry.py")
 
 
 def env_names_in(src: str) -> set[str]:
@@ -84,6 +86,28 @@ class SecretsMatchTheCode(unittest.TestCase):
         for py in ("main.py", "nyuchi_api.py", "replay.py", "telemetry.py"):
             read |= env_names(HERE / py)
         self.assertEqual(read, SERVING, "serving code reads an undocumented variable")
+
+    def test_core_reads_no_api_key_from_the_environment(self):
+        """The Worker holds the key pair (Secrets Store) and sends Core a token per request."""
+        for py in SERVING_FILES:
+            names = env_names(HERE / py)
+            self.assertEqual({n for n in names if STANDING_API_CREDENTIAL.search(n)}, set(), py)
+            self.assertNotIn("NYUCHI_API_INTERNAL_KEY", (HERE / py).read_text(), py)
+        self.assertFalse({n for n in SERVING if STANDING_API_CREDENTIAL.search(n)})
+
+    def test_the_credential_check_catches_a_standing_key(self):
+        for bad in ("NYUCHI_API_INTERNAL_KEY", "NYUCHI_API_KEY", "NYUCHI_API_CLIENT_SECRET", "SHAMWARI_API_CLIENT_ID"):
+            self.assertTrue(STANDING_API_CREDENTIAL.search(bad), bad)
+        for ok in ("NYUCHI_API_URL", "NYUCHI_API_HOST", "SHAMWARI_CORE_TOKEN", "SHAMWARI_OPS_TOKEN"):
+            self.assertFalse(STANDING_API_CREDENTIAL.search(ok), ok)
+
+    def test_no_deploy_surface_hands_core_the_key(self):
+        """fly.toml's settings, the Dockerfile and CI must not give Core a key it must not read."""
+        repo = REPO
+        for rel in ("core/fly.toml", "core/Dockerfile", "core/.env.example", ".github/workflows/ci.yml"):
+            text = (repo / rel).read_text()
+            code = "\n".join(ln for ln in text.splitlines() if not ln.lstrip().startswith("#") or rel.endswith("Dockerfile"))
+            self.assertNotRegex(code, r"NYUCHI_API_INTERNAL_KEY\s*[=:]", rel)
 
     def test_serving_code_never_reads_ingest_credentials(self):
         for py in ("main.py", "nyuchi_api.py", "replay.py", "telemetry.py"):

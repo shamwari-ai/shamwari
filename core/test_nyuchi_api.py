@@ -5,26 +5,44 @@ No network: httpx's MockTransport stands in for the Nyuchi API.
 
 import asyncio
 import logging
+import os
 import unittest
+from unittest import mock
 
 import httpx
 
-from nyuchi_api import DataApi, DataApiRefusal, DataApiUnavailable
+from nyuchi_api import (
+    DataApi,
+    DataApiRefusal,
+    DataApiUnavailable,
+    RequestTokenMiddleware,
+    _request_token,
+    clean_token,
+)
 
+#: A stand-in for the key pair the Worker holds. Core never sees it; it is only here to prove it is not logged.
 KEY = "nyk_abc123.nys_SECRETVALUE"
+#: The per-request machine token the Worker would send.
+TOKEN = "eyJhbGciOiJIUzI1NiJ9.TOKENPAYLOAD.TOKENSIG"
 
 
 def client(handler, **kw):
     http = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://api.test")
-    return DataApi(key=KEY, http=http, backoff=0, **kw)
+    return DataApi(http=http, backoff=0, **kw)
 
 
-def run(coro):
-    return asyncio.run(coro)
+def run(coro, token=TOKEN):
+    """Run `coro` as one request whose token is `token` (None = the request carried none)."""
+
+    async def inner():
+        _request_token.set(token)  # inside the task, so it cannot leak into the next run
+        return await coro
+
+    return asyncio.run(inner())
 
 
 class Requests(unittest.TestCase):
-    def test_every_request_carries_the_key_and_the_public_host(self):
+    def test_every_request_carries_the_request_token_and_the_public_host(self):
         seen = []
 
         def handler(req):
@@ -33,7 +51,8 @@ class Requests(unittest.TestCase):
 
         run(client(handler).whoami())
         h = seen[0].headers
-        self.assertEqual(h["x-api-key"], KEY)
+        self.assertEqual(h["authorization"], f"Bearer {TOKEN}")
+        self.assertNotIn("x-api-key", h)
         self.assertEqual(h["host"], "api.nyuchi.com")
         self.assertEqual(seen[0].url.path, "/v1/shamwari/whoami")
 
@@ -83,7 +102,7 @@ class FailClosed(unittest.TestCase):
             with self.assertRaises(DataApiUnavailable, msg=status):
                 run(client(lambda r, s=status: httpx.Response(s)).whoami())
 
-    def test_core_s_own_credential_being_refused_is_unavailable_never_a_caller_error(self):
+    def test_the_token_being_refused_is_unavailable_never_a_caller_error(self):
         for status in (401, 403):
             calls = []
 
@@ -150,12 +169,75 @@ class NoSecretsInLogs(unittest.TestCase):
                 except DataApiUnavailable:
                     pass
         text = "\n".join(cm.output)
-        for secret in (KEY, "SECRETVALUE", marker):
+        for secret in (KEY, "SECRETVALUE", TOKEN, marker):
             self.assertNotIn(secret, text)
 
-    def test_a_missing_key_refuses_to_start(self):
-        with self.assertRaises(ValueError):
-            DataApi(key="")
+    def test_the_token_is_never_logged(self):
+        with self.assertLogs("shamwari.core.data_api", level=logging.DEBUG) as cm:
+            for handler in (
+                lambda r: httpx.Response(401, json={"detail": TOKEN}),
+                lambda r: httpx.Response(500, text=TOKEN),
+                lambda r: (_ for _ in ()).throw(httpx.ConnectError(TOKEN)),
+            ):
+                try:
+                    run(client(handler).whoami())
+                except DataApiUnavailable:
+                    pass
+        self.assertNotIn(TOKEN, "\n".join(cm.output))
+
+
+class NoStandingCredential(unittest.TestCase):
+    def test_the_client_takes_no_key_and_holds_no_authorization(self):
+        with self.assertRaises(TypeError):
+            DataApi(key=KEY)  # type: ignore[call-arg]
+        self.assertNotIn("authorization", {k.lower() for k in DataApi()._headers})
+        self.assertNotIn("x-api-key", {k.lower() for k in DataApi()._headers})
+
+    def test_it_builds_from_an_environment_with_no_key_at_all(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            DataApi.from_env()
+
+    def test_a_request_with_no_token_is_unavailable_and_makes_no_call(self):
+        calls = []
+        with self.assertRaises(DataApiUnavailable):
+            run(client(lambda r: (calls.append(1), httpx.Response(200, json={}))[1]).whoami(), token=None)
+        self.assertEqual(calls, [])
+
+    def test_only_the_token_of_the_request_being_served_is_forwarded(self):
+        seen = []
+
+        def handler(req):
+            seen.append(req.headers.get("authorization"))
+            return httpx.Response(200, json={"ok": True})
+
+        c = client(handler)
+        run(c.whoami(), token="tok-one")
+        run(c.whoami(), token="tok-two")
+        with self.assertRaises(DataApiUnavailable):
+            run(c.whoami(), token=None)
+        self.assertEqual(seen, ["Bearer tok-one", "Bearer tok-two"])
+
+    def test_a_malformed_token_counts_as_no_token(self):
+        for raw in ("", "   ", "a b", "tok\r\nX-Evil: 1", "x" * 5000, "tök"):
+            self.assertIsNone(clean_token(raw), raw)
+        self.assertEqual(clean_token("  abc.def.ghi \n"), "abc.def.ghi")
+        self.assertIsNone(clean_token(None))
+
+    def test_the_token_does_not_outlive_the_request(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        app = FastAPI()
+        app.add_middleware(RequestTokenMiddleware)
+
+        @app.get("/t")
+        async def t():
+            return {"token": _request_token.get()}
+
+        http = TestClient(app)
+        self.assertEqual(http.get("/t", headers={"X-Shamwari-Api-Token": "abc"}).json(), {"token": "abc"})
+        self.assertEqual(http.get("/t").json(), {"token": None})
+        self.assertIsNone(_request_token.get())
 
 
 if __name__ == "__main__":

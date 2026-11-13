@@ -54,7 +54,7 @@ class Image(unittest.TestCase):
 
 
 class LeastPrivilege(unittest.TestCase):
-    """What Core's one data-API credential can do: the four /v1/shamwari routes and the guardrails read."""
+    """What a token handed to Core can be used for here: the four /v1/shamwari routes and the guardrails read."""
 
     def test_core_calls_exactly_these_data_api_routes(self):
         src = (HERE / "nyuchi_api.py").read_text()  # the only module that makes a request

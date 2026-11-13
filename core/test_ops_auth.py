@@ -8,7 +8,6 @@ there). Nothing here reaches Mongo: every case is refused before a handler runs.
 import os
 import unittest
 
-os.environ.setdefault("NYUCHI_API_INTERNAL_KEY", "nyk_test.nys_test")
 os.environ["SHAMWARI_CORE_TOKEN"] = "worker-token"  # forced: CI sets its own placeholder
 os.environ["SHAMWARI_OPS_TOKEN"] = "ops-token"
 

@@ -41,6 +41,20 @@
       "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
       "secret_name": "NYUCHI_AI_GATEWAY_TOKEN",
     },
+    // The Nyuchi API key pair (an internal key scoped shamwari, shamwari:service and ai). Core holds NO
+    // standing key: this Worker trades the pair for a short-lived token at POST /v1/auth/token and sends
+    // it to Core on each request (src/api-token.ts). Owner steps: docs/core-fly-runbook.md, "The API
+    // credential". The two secrets must EXIST in the store before this deploys.
+    {
+      "binding": "SHAMWARI_API_CLIENT_ID",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "SHAMWARI_API_CLIENT_ID",
+    },
+    {
+      "binding": "SHAMWARI_API_CLIENT_SECRET",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "SHAMWARI_API_CLIENT_SECRET",
+    },
   ],
 
   // Weekly degradation probe. Exercises all three inference paths and writes
@@ -76,6 +90,8 @@
     // Core's Fly address (docs/core-fly-runbook.md, "Point the Worker at Core"). The
     // core.shamwari.ai name was never created; the Fly hostname needs no DNS of ours.
     "CORE_URL": "https://shamwari-core.fly.dev",
+    // Where the API key pair is exchanged for the short-lived token Core is handed (src/api-token.ts).
+    "NYUCHI_API_URL": "https://api.nyuchi.com",
     "EMBEDDING_MODEL": "@cf/baai/bge-m3",
     "GROUND_TOP_K": "6",
     "AUTH_CACHE_TTL": "60",

@@ -1,3 +1,4 @@
+import { API_TOKEN_HEADER, apiToken } from "./api-token";
 import type { Env } from "./types";
 
 /**
@@ -19,10 +20,15 @@ export async function core<T>(
   path: string,
   init: { method?: string; body?: unknown } = {},
 ): Promise<T> {
+  // A short-lived Nyuchi API token for Core to forward on this request. Core holds no standing key
+  // for the API; with no token (secrets or exchange unavailable) Core answers 503 and the caller
+  // degrades exactly as when Core is down. Never logged, never returned.
+  const apiTok = await apiToken(env);
   const res = await fetch(`${env.CORE_URL}${path}`, {
     method: init.method ?? "GET",
     headers: {
       Authorization: `Bearer ${env.SHAMWARI_CORE_TOKEN}`,
+      ...(apiTok ? { [API_TOKEN_HEADER]: apiTok } : {}),
       ...(init.body ? { "Content-Type": "application/json" } : {}),
     },
     ...(init.body ? { body: JSON.stringify(init.body) } : {}),

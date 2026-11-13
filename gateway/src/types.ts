@@ -13,6 +13,16 @@ export interface Env {
   CORE_URL: string;
   SHAMWARI_CORE_TOKEN: string;
 
+  /**
+   * The Nyuchi API key pair, in the Cloudflare Secrets Store (read with `.get()`). The Worker trades
+   * it for a short-lived token and sends that to Core per request (src/api-token.ts); Core holds no
+   * key. Optional: unbound (or unreadable) means Core is called without a token and answers 503.
+   */
+  SHAMWARI_API_CLIENT_ID?: SecretsStoreSecret;
+  SHAMWARI_API_CLIENT_SECRET?: SecretsStoreSecret;
+  /** The API origin the token exchange goes to. Not a secret. Defaults to https://api.nyuchi.com. */
+  NYUCHI_API_URL?: string;
+
   /** "true" moves key verification and metering to the Servers API. Off by default. */
   SERVERS_API_ENABLED?: string;
   SERVERS_API_URL?: string;

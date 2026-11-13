@@ -165,7 +165,7 @@ owner: Core path + secrets ──► Core on Fly (#81) ──► gateway CORE_UR
 connect to databases itself ("the core doesn't need its own secrets by connecting to the
 other fly apps ... the Nyuchi API Fly app already does that"), and #127 built it: Core
 holds no database login and reaches Ground, the sink and usage through
-`/v1/shamwari/*` on the Nyuchi API with one internal key, over Fly's private network
+`/v1/shamwari/*` on the Nyuchi API with a per-request token from the Worker (no standing key on Fly), over Fly's private network
 (`docs/data-api-routes.md`). `core/main.py` no longer uses `motor`, and its old
 `/auth/verify` now answers 501 `key_verification_moved`. **Ingest is separate:**
 `ingest_ground.py` is an operator tool and still needs its own credentials (above).
@@ -232,7 +232,7 @@ Factory stay in the "deliberately not in this phase" list.
 | `shamwari` core/                                                      | no                                                 | Dockerfile, fly.toml, replay, nyuchi-api client (#127), runbook (#117)                                                         | image never built; Fly app and secrets (owner); deploy                                                        |
 | `shamwari` site/                                                      | `www.shamwari.ai` (light chat: `shamwari.ai/lite`) | Chat shell, thread, citations (#116, #119)                                                                                     | Chat release; WorkOS redirect; status page                                                                    |
 | `shamwari-core`, `-gateway`, `-platform`, `-sandbox`, `-mind`, `-web` | empty scaffolds (per #61, #66)                     |                                                                                                                                | decide which are real; Rust (#66)                                                                             |
-| `nyuchi-api`                                                          | `/v1/shamwari`, Console, WorkOS sign-in (owner)    |                                                                                                                                | internal key for Core; Shamwari key issue/revoke UI                                                           |
+| `nyuchi-api`                                                          | `/v1/shamwari`, Console, WorkOS sign-in (owner)    |                                                                                                                                | internal key pair for the Worker's Secrets Store; Shamwari key issue/revoke UI                                |
 | `nyuchi-servers-api`                                                  |                                                    | merged to staging, in-memory KeyStore (owner)                                                                                  | durable ledger stores (being built, owner); first Fly app                                                     |
 | `data-infra` ledger                                                   |                                                    | code, bring-up and restore-drill scripts on `data-infra` main (owner); `nyuchi-ledger` Fly app pending, not deployed (checked) | **deploy** (about $49.62 a month, owner figure); key migration phases                                         |
 | Atlas `shamwari.knowledgeBase`                                        | indexes READY                                      |                                                                                                                                | content (count 0, checked 2026-10-31)                                                                         |
@@ -328,9 +328,9 @@ repo or issues. All assume `fly` and `wrangler` are logged in to the right accou
 
 ```bash
 fly apps create shamwari-core --org nyuchi-web-services
-# Core holds no database login (#127). It needs one internal key from the Console
-#   (scopes shamwari, shamwari:service, ai) and the Nyuchi API base URL; exact secret
-#   names are in docs/core-fly-runbook.md. Plus the bearer token below.
+# Core holds no database login (#127) and no Nyuchi API key: the gateway Worker holds the
+#   internal key pair (Secrets Store) and sends Core a token per request; see
+#   docs/core-fly-runbook.md, "The API credential". Core needs only the bearer token below.
 TOKEN="$(openssl rand -hex 32)"
 fly secrets set -a shamwari-core SHAMWARI_CORE_TOKEN="$TOKEN"   # + path secrets
 fly deploy -a shamwari-core --remote-only

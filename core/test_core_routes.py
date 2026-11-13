@@ -13,7 +13,6 @@ import sys
 import unittest
 from pathlib import Path
 
-os.environ.setdefault("NYUCHI_API_INTERNAL_KEY", "nyk_test.nys_test")
 os.environ["SHAMWARI_CORE_TOKEN"] = "worker-token"
 os.environ["SHAMWARI_OPS_TOKEN"] = "ops-token"  # same as test_ops_auth: whichever imports main first sets it
 
@@ -21,7 +20,7 @@ try:
     from fastapi.testclient import TestClient
 
     import main
-    from nyuchi_api import DataApiRefusal, DataApiUnavailable
+    from nyuchi_api import DataApi, DataApiRefusal, DataApiUnavailable
 
     SKIP = None
 except Exception as e:  # noqa: BLE001 - any import problem means "deps not installed"
@@ -262,28 +261,14 @@ class Rest(Base):
         self.assertEqual(r.json(), {"surface": "shamwari", "platform": [{"id": "r1"}], "entity": []})
         self.assertEqual(self.http.get("/guardrails", headers=AUTH, params={"surface": "A B"}).status_code, 422)
 
-    def reset_health(self):
-        main._health.update(until=0.0, ok=False)
-
-    def test_health_is_readiness_of_the_data_api_and_fails_closed(self):
-        self.reset_health()
-        self.assertEqual(self.http.get("/health").json()["ok"], True)
-        self.reset_health()
+    def test_health_works_with_no_token_and_never_calls_the_api(self):
+        # Fly's check sends no token, and Core holds no credential to probe the API with.
         self.api.answers["whoami"] = DataApiUnavailable("x")
-        r = self.http.get("/health")
-        self.assertEqual(r.status_code, 503)
-        self.assertEqual(r.json()["detail"], {"error": "data_api_unavailable"})
-
-    def test_hammering_health_costs_the_api_one_call_per_window(self):
-        self.reset_health()
-        for _ in range(50):
-            self.http.get("/health")
-        self.assertEqual([c for c in self.api.calls if c[0] == "whoami"].__len__(), 1)
-        self.api.answers["whoami"] = DataApiUnavailable("x")
-        self.reset_health()
-        for _ in range(50):
-            self.assertEqual(self.http.get("/health").status_code, 503)
-        self.assertEqual([c for c in self.api.calls if c[0] == "whoami"].__len__(), 2)
+        for _ in range(5):
+            r = self.http.get("/health")
+            self.assertEqual(r.status_code, 200)
+            self.assertEqual(r.json()["ok"], True)
+        self.assertEqual(self.api.calls, [])
 
     def test_key_verification_has_moved_and_says_so_without_admitting_anyone(self):
         r = self.http.post("/auth/verify", headers=AUTH, json={"key_prefix": "sk_shamwari_", "key_hash": "0" * 64})
@@ -308,18 +293,71 @@ class NoDatabaseDriver(unittest.TestCase):
         )
         r = subprocess.run(
             [sys.executable, "-c", code], cwd=HERE, capture_output=True, text=True,
-            env={"PATH": os.environ.get("PATH", ""), "SHAMWARI_CORE_TOKEN": "t",
-                 "NYUCHI_API_INTERNAL_KEY": "nyk_a.nys_b"},
+            env={"PATH": os.environ.get("PATH", ""), "SHAMWARI_CORE_TOKEN": "t"},
         )
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
 
-    def test_core_does_not_start_without_its_data_api_key(self):
+    def test_core_starts_with_no_data_api_credential_of_any_kind(self):
         r = subprocess.run(
             [sys.executable, "-c", "import main"], cwd=HERE, capture_output=True, text=True,
             env={"PATH": os.environ.get("PATH", ""), "SHAMWARI_CORE_TOKEN": "t"},
         )
-        self.assertNotEqual(r.returncode, 0)
-        self.assertIn("NYUCHI_API_INTERNAL_KEY", r.stderr)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
+
+@unittest.skipIf(SKIP, SKIP or "")
+class PerRequestToken(unittest.TestCase):
+    """The REAL DataApi behind the real app, with only the network faked."""
+
+    def setUp(self):
+        import asyncio  # noqa: F401
+        import httpx
+
+        self.seen = []
+
+        def handler(req):
+            self.seen.append(req)
+            return httpx.Response(200, json={"scope": "platform", "hit": False, "chunks": []})
+
+        self.real = main.api
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://api.test")
+        main.api = DataApi(http=http, backoff=0)
+        self.addCleanup(setattr, main, "api", self.real)
+        self.http = TestClient(main.app, raise_server_exceptions=False)
+        self.body = {"query": "equality", "owner_entity_id": "e1", "scope": "platform", "destination": "cloud"}
+
+    def search(self, **headers):
+        return self.http.post("/ground/search", headers={**AUTH, **headers}, json=self.body)
+
+    def test_the_token_on_the_request_is_the_bearer_the_api_sees(self):
+        self.assertEqual(self.search(**{"X-Shamwari-Api-Token": "tok-a"}).status_code, 200)
+        self.assertEqual(self.seen[0].headers["authorization"], "Bearer tok-a")
+        self.assertNotIn("x-api-key", self.seen[0].headers)
+        # Core's own bearer (the Worker-to-Core secret) is never what goes upstream.
+        self.assertNotIn("worker-token", self.seen[0].headers["authorization"])
+
+    def test_each_request_gets_only_its_own_token(self):
+        self.search(**{"X-Shamwari-Api-Token": "tok-a"})
+        self.search(**{"X-Shamwari-Api-Token": "tok-b"})
+        r = self.search()
+        self.assertEqual([x.headers["authorization"] for x in self.seen], ["Bearer tok-a", "Bearer tok-b"])
+        self.assertEqual(r.status_code, 503, "a request with no token must not reuse the last one")
+
+    def test_no_token_is_a_clean_503_not_a_crash_and_no_call_is_made(self):
+        r = self.search()
+        self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.json()["detail"], {"error": "data_api_unavailable"})
+        self.assertEqual(self.seen, [])
+        for path, method in (("/guardrails", "get"), ("/rollup?owner_entity_id=e1&billing_period=2026-10", "get")):
+            self.assertEqual(getattr(self.http, method)(path, headers=AUTH).status_code, 503, path)
+        self.assertEqual(
+            self.http.post("/sink/bulk", headers=AUTH, json={"database": "shamwari", "collections": {"groundMisses": [{"a": 1}]}}).status_code,
+            503,
+        )
+        self.assertEqual(self.seen, [])
+
+    def test_health_still_works_with_no_token(self):
+        self.assertEqual(self.http.get("/health").status_code, 200)
 
 
 if __name__ == "__main__":

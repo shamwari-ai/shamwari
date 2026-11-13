@@ -13,10 +13,14 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 python="${PYTHON:-python}"
 port="${E2E_PORT:-$("$python" -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1])')}"
 token="$("$python" -c 'import secrets; print(secrets.token_hex(16))')"
+# The key pair the Worker holds in production (Secrets Store). Core is never given it; the
+# stand-in API hands out a token for it and the Worker passes that token to Core per request.
+api_id="e2e-$("$python" -c 'import secrets; print(secrets.token_hex(8))')"
+api_secret="$("$python" -c 'import secrets; print(secrets.token_hex(24))')"
 log="$(mktemp)"
 
 cd "$root/core"
-E2E_APP=1 E2E_PORT="$port" E2E_CORE_TOKEN="$token" "$python" -m uvicorn e2e_app:app --host 127.0.0.1 --port "$port" --log-level warning >"$log" 2>&1 &
+E2E_APP=1 E2E_PORT="$port" E2E_CORE_TOKEN="$token" E2E_API_CLIENT_ID="$api_id" E2E_API_CLIENT_SECRET="$api_secret" "$python" -m uvicorn e2e_app:app --host 127.0.0.1 --port "$port" --log-level warning >"$log" 2>&1 &
 pid=$!
 trap 'kill "$pid" 2>/dev/null || true; rm -f "$log"' EXIT
 
@@ -29,4 +33,4 @@ done
 curl -fsS "http://127.0.0.1:$port/__e2e/ready" >/dev/null || { echo "Core e2e app did not start" >&2; cat "$log" >&2; exit 1; }
 
 cd "$root/gateway"
-E2E_CORE_URL="http://127.0.0.1:$port" E2E_CORE_TOKEN="$token" npx vitest run test/e2e.test.ts
+E2E_CORE_URL="http://127.0.0.1:$port" E2E_CORE_TOKEN="$token" E2E_API_CLIENT_ID="$api_id" E2E_API_CLIENT_SECRET="$api_secret" npx vitest run test/e2e.test.ts

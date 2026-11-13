@@ -1,16 +1,22 @@
 """
 Core's only door to data: the Nyuchi API's /v1/shamwari routes.
 
-Core holds no database login. It reaches Ground, the sink and usage through the
-Nyuchi API (nyuchi/nyuchi-api#393), over Fly's private network, with one internal
-key. The decisions Core exists to make (scope, provenance) are made in main.py
-BEFORE a call is built; the API checks them again on its side.
+Core holds no database login and NO standing credential for the API. It reaches
+Ground, the sink and usage through the Nyuchi API (nyuchi/nyuchi-api#393), over Fly's
+private network, with a short-lived machine token that the gateway Worker hands it on
+each request (header `X-Shamwari-Api-Token`). The Worker holds the key pair in the
+Cloudflare Secrets Store and exchanges it at the API's token endpoint; Core only forwards
+the token it was given, for that request, and keeps nothing. The decisions Core exists
+to make (scope, provenance) are made in main.py BEFORE a call is built; the API checks
+them again on its side.
 
 Behaviour that matters:
 
-  * Fail closed. If the API cannot be reached, answers 5xx, or refuses Core's own
-    credential, the caller gets DataApiUnavailable and Core answers 503. Nothing is
-    guessed, cached or served from a stale copy.
+  * Fail closed. If the API cannot be reached, answers 5xx, refuses the token, or the
+    request carried no token at all, the caller gets DataApiUnavailable and Core answers
+    503. Nothing is guessed, cached or served from a stale copy.
+  * The token lives in a ContextVar set by RequestTokenMiddleware for the length of one
+    request. It is never read from the environment, stored on the client, or logged.
   * A refusal on a rule (400/409/413/422) is not an outage. It is passed through as
     DataApiRefusal with the API's own body, so a 409 scope_requires_local_inference
     from the API reaches the caller as that 409.
@@ -26,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from contextvars import ContextVar
 from typing import Any
 
 import httpx
@@ -57,26 +64,63 @@ class DataApiRefusal(Exception):
         self.detail = detail
 
 
+#: The header the gateway Worker puts the per-request machine token in (lower case, as ASGI sends it).
+TOKEN_HEADER = "x-shamwari-api-token"
+#: A real token is a JWT, well under this. Anything longer or oddly shaped is treated as absent.
+_MAX_TOKEN = 4096
+
+_request_token: ContextVar[str | None] = ContextVar("shamwari_api_token", default=None)
+
+
+def clean_token(raw: str | None) -> str | None:
+    """The token as sent, or None if it is empty or not a plausible bearer value."""
+    if not raw:
+        return None
+    t = raw.strip()
+    if not t or len(t) > _MAX_TOKEN or any(ord(c) < 33 or ord(c) > 126 for c in t):
+        return None
+    return t
+
+
+class RequestTokenMiddleware:
+    """Pure ASGI: holds the incoming token in a ContextVar for exactly one request."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        raw = None
+        for name, value in scope.get("headers", []):
+            if name == TOKEN_HEADER.encode():
+                raw = value.decode("latin-1")
+                break
+        reset = _request_token.set(clean_token(raw))
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _request_token.reset(reset)
+
+
 class DataApi:
     def __init__(
         self,
         *,
-        key: str,
         base_url: str = DEFAULT_URL,
         host: str = DEFAULT_HOST,
         http: httpx.AsyncClient | None = None,
         retries: int = 1,
         backoff: float = 0.2,
     ) -> None:
-        if not key:
-            raise ValueError("an internal key is required")
         self._http = http or httpx.AsyncClient(
             base_url=base_url.rstrip("/"),
             timeout=httpx.Timeout(10.0, connect=3.0),
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
         )
+        # No credential here: Authorization is added per request, from that request's token.
         self._headers = {
-            "X-API-Key": key,
             "Host": host,
             "Accept": "application/json",
             "User-Agent": "shamwari-core",
@@ -87,7 +131,6 @@ class DataApi:
     @classmethod
     def from_env(cls) -> "DataApi":
         return cls(
-            key=os.environ["NYUCHI_API_INTERNAL_KEY"],
             base_url=os.environ.get("NYUCHI_API_URL", DEFAULT_URL),
             host=os.environ.get("NYUCHI_API_HOST", DEFAULT_HOST),
         )
@@ -106,6 +149,12 @@ class DataApi:
         params: dict[str, Any] | None = None,
         retry: bool = True,
     ) -> Any:
+        token = _request_token.get()
+        if token is None:
+            # The Worker could not get a token (Secrets Store or the exchange is down), or the
+            # caller is not the Worker. Chat degrades ungrounded; nothing to log.
+            raise DataApiUnavailable("no_token")
+        headers = {**self._headers, "Authorization": f"Bearer {token}"}
         attempts = 1 + (self._retries if retry else 0)
         last = "unreachable"
         for attempt in range(attempts):
@@ -113,7 +162,7 @@ class DataApi:
                 await asyncio.sleep(self._backoff * attempt)
             try:
                 res = await self._http.request(
-                    method, path, json=json, params=params, headers=self._headers
+                    method, path, json=json, params=params, headers=headers
                 )
             except (httpx.TransportError, httpx.TimeoutException) as e:
                 last = type(e).__name__
@@ -123,9 +172,9 @@ class DataApi:
                 last = str(res.status_code)
                 continue
             if res.status_code in (401, 403):
-                # Core's own credential is wrong or lacks a scope. Not the caller's fault,
-                # not retryable, and not something to describe to a caller.
-                log.error("data api refused Core's key: %s %s -> %s", method, path, res.status_code)
+                # The token the Worker sent is expired, wrong or lacks a scope. Not the caller's
+                # fault, not retryable, and not something to describe to a caller.
+                log.error("data api refused the token: %s %s -> %s", method, path, res.status_code)
                 raise DataApiUnavailable("credential")
             if res.status_code == 429:
                 log.warning("data api rate limit: %s %s", method, path)

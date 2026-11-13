@@ -60,7 +60,7 @@ Shamwari API           api.shamwari.ai. For consumers. The gateway Worker:
         │              authenticates the caller, runs the Rule 1 scope gate
         ▼              first, routes.
 Core (Fly)             Decides scope again; holds no database login.
-        │  internal key, over Fly 6PN, never public
+        │  per-request token from the Worker, over Fly 6PN, never public
         ▼
 Nyuchi Servers API     /v1/shamwari. Internal only, between internal apps.
                        Pulls from the Nyuchi platform. Decided, not built.

@@ -2,13 +2,16 @@
 # tunnel (issue #66); this is public HTTPS until then, and every route except
 # /health requires the bearer token (SHAMWARI_CORE_TOKEN).
 #
-# Core holds NO database login. It reaches Ground, the sink and usage through the Nyuchi API
-# (/v1/shamwari) over Fly's private network, with one internal key (owner, 2026-10-27).
+# Core holds NO database login and NO standing credential for the Nyuchi API. It reaches Ground,
+# the sink and usage through the API (/v1/shamwari) over Fly's private network, using a
+# short-lived token the gateway Worker sends on each request (X-Shamwari-Api-Token). The Worker
+# holds the API key pair in the Cloudflare Secrets Store; nothing for the API is set on this app
+# (owner, 2026-11-13). A request with no token is answered 503 data_api_unavailable.
 #
 # Secrets are never in this file. Set them with `fly secrets import` (stdin, so
 # no value reaches argv or shell history); the full procedure is
 # docs/core-fly-runbook.md. What the RUNNING service reads, and only this:
-#   required   SHAMWARI_CORE_TOKEN   NYUCHI_API_INTERNAL_KEY
+#   required   SHAMWARI_CORE_TOKEN
 #   optional   SHAMWARI_OPS_TOKEN    (unset = the operator routes answer 503)
 #   plain      NYUCHI_API_URL  NYUCHI_API_HOST   (defaults: http://nyuchi-api.internal:8080, api.nyuchi.com)
 # SUPABASE_DB_URL, CF_ACCOUNT_ID and CF_API_TOKEN are read by ingest_ground.py ONLY.

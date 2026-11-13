@@ -1,3 +1,4 @@
+import { API_TOKEN_HEADER, apiToken } from './api-token';
 import type { Env, SinkMessage } from './types';
 
 /**
@@ -16,11 +17,15 @@ export async function drain(batch: MessageBatch<SinkMessage>, env: Env): Promise
   }
 
   for (const [database, collections] of Object.entries(byDb)) {
+    // Core holds no standing API key: it forwards the short-lived token sent here. With none (the
+    // exchange is down) Core answers 503 and the batch is retried, as for any Core outage.
+    const apiTok = await apiToken(env);
     const res = await fetch(`${env.CORE_URL}/sink/bulk`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${env.SHAMWARI_CORE_TOKEN}`,
+        ...(apiTok ? { [API_TOKEN_HEADER]: apiTok } : {}),
       },
       body: JSON.stringify({ database, collections }),
     });

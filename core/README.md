@@ -50,12 +50,16 @@ the product and Cloud is the general-knowledge fallback.
 pip install --require-hashes -r requirements.txt
 
 export SHAMWARI_CORE_TOKEN="$(openssl rand -hex 32)"
-export NYUCHI_API_INTERNAL_KEY="nyk_<id>.nys_<secret>"   # internal key: shamwari, shamwari:service, ai
 export NYUCHI_API_URL="http://nyuchi-api.internal:8080"  # default; a Fly private address
 export NYUCHI_API_HOST="api.nyuchi.com"                   # default; the API trusts this host name
 
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
+
+Core holds no key for the Nyuchi API. The gateway Worker exchanges its key pair for a short-lived
+machine token and sends it on each request in `X-Shamwari-Api-Token`; Core forwards it as
+`Authorization: Bearer` for that request only. A request with no token is answered
+`503 data_api_unavailable`, and `/health` needs none.
 
 The ingest script has its own lock, `requirements-ingest.txt`, and its own credentials, set
 in your own shell and never on the Fly app (see Ground ingestion below).
