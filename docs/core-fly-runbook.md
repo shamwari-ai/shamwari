@@ -95,7 +95,7 @@ Two independent jobs, each behind the `production` GitHub Environment:
 
 | Job     | What it does                                                                                                      | Health check after                     |
 | ------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| gateway | `npm ci`, then `npx wrangler deploy` in `gateway/` (the wrangler version `package-lock.json` pins)                | `https://api.shamwari.ai/health`       |
+| gateway | `npm ci`, then `npx --no wrangler deploy` in `gateway/` (the wrangler version `package-lock.json` pins)           | `https://api.shamwari.ai/health`       |
 | core    | `flyctl deploy --app shamwari-core --ha=false --remote-only --env SERVERS_API_URL=...` in `core/`, one machine on | `https://shamwari-core.fly.dev/health` |
 
 `app/` and `site/` are not here: Workers Builds deploys those from `main` itself.
@@ -167,7 +167,7 @@ fly deploy --app shamwari-core --ha=false
 fly secrets list --app shamwari-core
 
 # 6. Deploy the gateway Worker (needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in this shell).
-cd ../gateway && npm ci && npx wrangler deploy
+cd ../gateway && npm ci && npx --no wrangler deploy
 ```
 
 Core reaches `nyuchi-api.internal` only if both apps are in the same Fly organisation
