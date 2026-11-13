@@ -19,7 +19,6 @@ from pathlib import Path
 REPO = Path(__file__).parent.parent
 WORKFLOW = REPO / ".github" / "workflows" / "deploy.yml"
 RUNBOOK = REPO / "docs" / "core-fly-runbook.md"
-FLY_TOML = REPO / "core" / "fly.toml"
 
 #: The only secrets the deploy may read. Names, never values.
 SECRET_NAMES = {"FLY_API_TOKEN", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID"}
@@ -199,10 +198,10 @@ class DeployWorkflow(unittest.TestCase):
             # The health check is the last step: it runs after the deploy, and nothing after it hides a failure.
             self.assertIn("Health check", steps(job)[-1])
 
-    def test_servers_api_is_deploy_time_not_fly_toml(self):
+    def test_servers_api_is_passed_at_deploy_time(self):
+        # fly.toml [env] now also sets it (core/fly.toml, checked in test_deploy_config.py). #286 removes the flag from
+        # this workflow and this test with it; until then the workflow still passes the same value.
         self.assertIn("SERVERS_API_URL: http://nyuchi-servers-api.internal:8081", jobs()["core"])
-        live = [ln for ln in FLY_TOML.read_text(encoding="utf-8").splitlines() if not ln.lstrip().startswith("#")]
-        self.assertFalse([ln for ln in live if "SERVERS_API_URL" in ln], "must not be set in fly.toml")
 
     def test_runbook_names_the_secrets_and_the_break_glass_path(self):
         rb = RUNBOOK.read_text(encoding="utf-8")
