@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { LANGUAGES, en, nd, pickLanguage, sn } from '../../src/chat/strings';
+import { LANGUAGES, en, loadStrings, pickLanguage } from '../../src/chat/strings';
+import { nd } from '../../src/chat/strings-nd';
+import { sn } from '../../src/chat/strings-sn';
 
 const keys = (o: object, p = ''): string[] =>
   Object.entries(o).flatMap(([k, v]) => (typeof v === 'object' ? keys(v, `${p}${k}.`) : [`${p}${k}`]));
@@ -8,6 +10,15 @@ describe('strings', () => {
   it('has every English key in Shona and Ndebele, and no extras', () => {
     expect(keys(sn).sort()).toEqual(keys(en).sort());
     expect(keys(nd).sort()).toEqual(keys(en).sort());
+  });
+
+  it('loads Shona and Ndebele on demand: English until then, the real words after', async () => {
+    expect(LANGUAGES.en.strings).toBe(en);
+    expect(await loadStrings('sn')).toBe(sn);
+    expect(await loadStrings('nd')).toBe(nd);
+    expect(LANGUAGES.sn.strings).toBe(sn);
+    expect(LANGUAGES.nd.strings).toBe(nd);
+    expect(await loadStrings('en')).toBe(en);
   });
 
   it('marks Shona and Ndebele as needing native review, and English as not', () => {
