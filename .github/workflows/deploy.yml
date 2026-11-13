@@ -1,0 +1,192 @@
+# Deploy on release (shamwari-ai/shamwari#266). Owner, 2026-11-13: "You should be deploying every time a
+# release hits main." Merging and releasing are already automatic (release-to-main.yml); this is the last step.
+#
+# Every push to main is deployed once CI has passed on that exact commit:
+#   - the gateway Worker (gateway/) with the wrangler the lockfile pins, and
+#   - Core (Fly app shamwari-core, core/) with flyctl.
+# app/ and site/ are NOT here: Workers Builds deploys those from main on its own.
+#
+# Modelled on nyuchi/nyuchi-servers-api fly-deploy.yml (trigger, tested-commit check, token check, concurrency)
+# and on the Cloudflare Workers deploy used elsewhere in the nyuchi org (production environment, secret check,
+# pinned wrangler, /health retry).
+#
+# Rules this file keeps:
+#   - A missing secret FAILS the job with a message naming it. Nothing skips quietly and nothing reports
+#     success without having deployed.
+#   - No secret value is written here. Only the names FLY_API_TOKEN, CLOUDFLARE_API_TOKEN and
+#     CLOUDFLARE_ACCOUNT_ID are referenced, and core/test_deploy_workflow.py fails if that changes.
+#   - Each deploy job stands alone, behind the `production` GitHub Environment, and a deploy in flight is never
+#     cancelled by a newer one (the newer one waits).
+#   - A failed health check fails the job loudly and names the rollback commands. It does not roll back by
+#     itself: that path cannot be tested from CI, so a person runs it (docs/core-fly-runbook.md, Rollback).
+#
+# Break-glass (a deploy from a shell, when Actions is down): docs/core-fly-runbook.md.
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Decides which commit to deploy, and refuses anything CI did not vouch for. The deploy jobs never check out
+  # the triggering run's commit directly: they check out the SHA this job validated.
+  gate:
+    name: Commit to deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Fail closed: a green CI run on a push to main, or a manual run from main.
+    if: >-
+      (github.event_name == 'workflow_run'
+      && github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push')
+      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    outputs:
+      sha: ${{ steps.pick.outputs.sha }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: pick
+        name: Validate the tested commit
+        env:
+          EVENT: ${{ github.event_name }}
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          THIS_REPO: ${{ github.repository }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = workflow_dispatch ]; then
+            sha="$DISPATCH_SHA"
+          else
+            sha="$TESTED_SHA"
+            [ "$HEAD_REPO" = "$THIS_REPO" ] || { echo "::error::CI ran on $HEAD_REPO, not $THIS_REPO; refusing to deploy."; exit 1; }
+            [ "$HEAD_BRANCH" = main ] || { echo "::error::CI ran on branch $HEAD_BRANCH, not main; refusing to deploy."; exit 1; }
+          fi
+          printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$' || { echo "::error::'$sha' is not a commit SHA."; exit 1; }
+          git merge-base --is-ancestor "$sha" origin/main \
+            || { echo "::error::$sha is not on main; refusing to deploy."; exit 1; }
+          echo "Deploying $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  gateway:
+    name: Deploy gateway Worker
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    # One gateway deploy at a time; a newer release waits for this one instead of cancelling it.
+    concurrency:
+      group: deploy-gateway-production
+      cancel-in-progress: false
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Custom domain in gateway/wrangler.jsonc ("routes").
+      HEALTH_URL: https://api.shamwari.ai/health
+    steps:
+      - name: Require the Cloudflare secrets
+        run: |
+          missing=0
+          for name in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error title=Gateway deploy failed::secret $name is not set, so this release was NOT deployed."
+              echo "Add $name to the production environment of this repository."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gateway/package-lock.json
+
+      # The wrangler version is the one gateway/package-lock.json pins; npx runs that local copy and, without
+      # --yes, would stop rather than fetch a different one.
+      - run: npm ci
+        working-directory: gateway
+
+      - name: wrangler deploy
+        run: npx wrangler deploy
+        working-directory: gateway
+
+      - name: Health check (gateway)
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$HEALTH_URL" || true)
+            if [ "$code" = 200 ]; then echo "$HEALTH_URL answered 200 (attempt $attempt)"; exit 0; fi
+            echo "attempt $attempt: $HEALTH_URL answered '$code', want 200"
+            [ "$attempt" -lt 6 ] && sleep 10
+          done
+          echo "::error title=Gateway failed its health check::$HEALTH_URL did not answer 200. The new version IS live."
+          echo "Roll back: cd gateway && npx wrangler rollback (docs/core-fly-runbook.md, Rollback)."
+          exit 1
+
+  core:
+    name: Deploy Core to Fly
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    concurrency:
+      group: deploy-core-production
+      cancel-in-progress: false
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      HEALTH_URL: https://shamwari-core.fly.dev/health
+      # Not a secret: the Servers API's private listener, reachable only over Fly's private network with no key or
+      # token. Passed at deploy time rather than set in core/fly.toml, so a deploy from a shell without the flag
+      # still uses the Nyuchi API client. Core refuses to start for any host that is not *.internal.
+      SERVERS_API_URL: http://nyuchi-servers-api.internal:8081
+    steps:
+      - name: Require the Fly deploy token
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::error title=Core deploy failed::secret FLY_API_TOKEN is not set, so this release was NOT deployed."
+            echo "Add a Fly deploy token scoped to the shamwari-core app to the production environment."
+            exit 1
+          fi
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1  # 1.6
+
+      # One machine (core/fly.toml: min_machines_running = 1), so this also starts a stopped one. Core is public
+      # HTTPS on purpose (docs/core-fly-runbook.md, Hardening), so there is no --no-public-ips here.
+      - name: fly deploy
+        run: flyctl deploy --app shamwari-core --ha=false --remote-only --env "SERVERS_API_URL=$SERVERS_API_URL"
+        working-directory: core
+
+      # /health answers 200 only while the Nyuchi API also answers Core's key (the runbook, Verify).
+      - name: Health check (Core)
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$HEALTH_URL" || true)
+            if [ "$code" = 200 ]; then echo "$HEALTH_URL answered 200 (attempt $attempt)"; exit 0; fi
+            echo "attempt $attempt: $HEALTH_URL answered '$code', want 200"
+            [ "$attempt" -lt 6 ] && sleep 10
+          done
+          echo "::error title=Core failed its health check::$HEALTH_URL did not answer 200. The new release IS live."
+          echo "Roll back: fly releases --app shamwari-core --image, then fly deploy --app shamwari-core --image <previous image>."
+          echo "See docs/core-fly-runbook.md, Rollback."
+          exit 1
