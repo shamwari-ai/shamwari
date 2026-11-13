@@ -217,6 +217,10 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
     <!-- The dock: the composer, pinned to the bottom of the screen. (Sign-in, when it is needed, is in the page above
          it, not in the dock: a pinned panel would cover what a person is reading.) -->
     <div class="dock">
+      <!-- Round, above the composer, shown by the script only while the messages are scrolled up from the end. -->
+      <button type="button" id="jump-latest" class="jump-latest" hidden aria-label={en.jumpLatest} data-i18n-attr="aria-label:jumpLatest">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7" /></svg>
+      </button>
       <section class="ask" aria-labelledby="ask-title">
         <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
         <form id="composer" class="composer" autocomplete="off">

@@ -42,6 +42,7 @@ export const nd: Strings = {
   deleted: 'Umlando ususiwe kulefoni.',
   language: 'Ulimi',
   thinking: 'UShamwari uyadinga impendulo…',
+  jumpLatest: 'Yehlela phansi',
   stop: 'Misa',
   stopped: 'Kumisiwe. Umbuzo wakho ugcinwe kule divayisi futhi awuphenduliwe.',
   slow: 'Kusasebenza. I-network ihamba kancane, ngakho kungathatha isikhathi.',

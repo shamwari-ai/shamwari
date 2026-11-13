@@ -42,6 +42,7 @@ export const sn: Strings = {
   deleted: 'Nhoroondo yabviswa pafoni iyi.',
   language: 'Mutauro',
   thinking: 'Shamwari iri kutsvaga mhinduro…',
+  jumpLatest: 'Enda pasi',
   stop: 'Mira',
   stopped: 'Yamiswa. Mubvunzo wako wachengetwa pachishandiso ichi uye hauna kupindurwa.',
   slow: 'Ichiri kushanda. Network inononoka, saka zvinogona kutora nguva.',
