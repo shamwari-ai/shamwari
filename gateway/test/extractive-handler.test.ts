@@ -241,12 +241,17 @@ describe('the web chat keeps no content on the server', () => {
 
   it('never asks the queue to send an empty batch', async () => {
     const { env } = setup();
+    const sendBatch = vi.spyOn(env.SINK, 'sendBatch');
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
-    await worker.fetch(pwa(), env, ctx);
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(err.mock.calls.filter((c) => c[0] === 'sink enqueue failed')).toEqual([]);
-    err.mockRestore();
+    try {
+      await worker.fetch(pwa(), env, ctx);
+      // sendBatch is reached synchronously while the response is built, so no waiting on ticks.
+      for (const [batch] of sendBatch.mock.calls) expect(batch).not.toHaveLength(0);
+      expect(err.mock.calls.filter((c) => c[0] === 'sink enqueue failed')).toEqual([]);
+    } finally {
+      err.mockRestore();
+      sendBatch.mockRestore();
+    }
   });
 
   it('is matched by the channel name only, so SMS still behaves as before', async () => {

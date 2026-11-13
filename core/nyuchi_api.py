@@ -106,6 +106,7 @@ class DataApi:
         params: dict[str, Any] | None = None,
         retry: bool = True,
         headers: dict[str, str] | None = None,
+        lenient: bool = False,
     ) -> Any:
         attempts = 1 + (self._retries if retry else 0)
         last = "unreachable"
@@ -132,10 +133,12 @@ class DataApi:
                 log.warning("data api rate limit: %s %s", method, path)
                 raise DataApiUnavailable("rate_limited")
             if res.status_code in _REFUSALS:
-                raise DataApiRefusal(res.status_code, _detail(res))
+                raise DataApiRefusal(res.status_code, self._detail(res))
             if res.status_code >= 400:
                 log.error("data api error: %s %s -> %s", method, path, res.status_code)
                 raise DataApiUnavailable(str(res.status_code))
+            if lenient:
+                return None  # the caller only needs "it answered 2xx"
             try:
                 return res.json()
             except ValueError:
@@ -144,6 +147,15 @@ class DataApi:
 
         log.error("data api unavailable: %s %s (%s)", method, path, last)
         raise DataApiUnavailable(last)
+
+    @staticmethod
+    def _detail(res: httpx.Response) -> Any:
+        try:
+            body = res.json()
+        except ValueError:
+            return {"error": "refused", "status": res.status_code}
+        # FastAPI wraps an HTTPException's detail; pass that on, not the wrapper.
+        return body.get("detail", body) if isinstance(body, dict) else body
 
     # -- /v1/shamwari ------------------------------------------------------------
 
@@ -176,27 +188,6 @@ class DataApi:
     async def guardrails(self, surface: str) -> dict[str, Any]:
         """The rules for a surface, from the one copy at /v1/ai/guardrails."""
         return _object(await self._request("GET", "/v1/ai/guardrails", params={"applies_to": surface}))
-
-
-def _detail(res: httpx.Response) -> Any:
-    try:
-        body = res.json()
-    except ValueError:
-        return {"error": "refused", "status": res.status_code}
-    if not isinstance(body, dict):
-        return body
-    # The Servers API sends RFC 9457 problem+json with the machine-readable reason in the
-    # `error` extension member: {type, title, status, detail, error}. Pass that on in the
-    # shape callers already read ({"error": ...}); `detail` there is prose, not the reason.
-    if isinstance(body.get("error"), str):
-        out: dict[str, Any] = {"error": body["error"]}
-        if isinstance(body.get("detail"), str):
-            out["message"] = body["detail"]
-        return out
-    if ("type" in body or "title" in body) and "status" in body and not isinstance(body.get("detail"), dict):
-        return {"error": "refused", "status": res.status_code}
-    # FastAPI (the Nyuchi API) wraps an HTTPException's detail; pass that on, not the wrapper.
-    return body.get("detail", body)
 
 
 def _ground(value: Any) -> dict[str, Any]:
@@ -241,18 +232,13 @@ class ServersApi(DataApi):
         internal = _is_internal(base_url)
         if not internal and not (key and token):
             raise ValueError("a Servers API host outside the Fly private network needs an internal key and a token")
-        # Bypass DataApi.__init__'s key requirement; the client and retry state are the same.
-        self._http = http or httpx.AsyncClient(
-            base_url=base_url.rstrip("/"),
-            timeout=httpx.Timeout(10.0, connect=3.0),
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
-        )
+        # The key argument only satisfies the parent's check; its headers are replaced below,
+        # so the Nyuchi API key and public host name are never sent to the Servers API.
+        super().__init__(key="-", base_url=base_url, http=http, retries=retries, backoff=backoff)
         self._headers = {"Accept": "application/json", "User-Agent": "shamwari-core"}
         if not internal:
             self._headers["Authorization"] = f"Bearer {token}"
             self._headers["x-nyuchi-internal-key"] = str(key)
-        self._retries = retries
-        self._backoff = backoff
 
     @classmethod
     def from_env(cls) -> "ServersApi":
@@ -261,9 +247,32 @@ class ServersApi(DataApi):
         # client, built with explicit arguments.
         return cls(base_url=os.environ["SERVERS_API_URL"].strip())
 
+    @staticmethod
+    def _detail(res: httpx.Response) -> Any:
+        try:
+            body = res.json()
+        except ValueError:
+            return {"error": "refused", "status": res.status_code}
+        if not isinstance(body, dict):
+            return body
+        # RFC 9457 problem+json: {type, title, status, detail, error}. The machine-readable
+        # reason is the `error` extension member; `detail` is prose. Pass it on in the shape
+        # callers already read ({"error": ...}).
+        if isinstance(body.get("error"), str):
+            out: dict[str, Any] = {"error": body["error"]}
+            if isinstance(body.get("detail"), str):
+                out["message"] = body["detail"]
+            return out
+        if ("type" in body or "title" in body) and "status" in body and not isinstance(body.get("detail"), dict):
+            return {"error": "refused", "status": res.status_code}
+        return body.get("detail", body)
+
     async def whoami(self) -> dict[str, Any]:
-        # Core's readiness check: "the Servers API answers". /ready is unauthenticated.
-        return _object(await self._request("GET", "/ready"))
+        # Core's readiness check. /ready is unauthenticated: 200 {"status":"ready"} when ready,
+        # a bare 503 problem when a dependency is down (nyuchi-servers-api origin tests). Any
+        # 2xx counts as ready, so a plain 200 can never fail Fly's check for good.
+        await self._request("GET", "/ready", lenient=True)
+        return {"status": "ready"}
 
     async def ground_search(self, body: dict[str, Any]) -> dict[str, Any]:
         body = dict(body)
