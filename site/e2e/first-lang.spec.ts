@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { ask, openAccount, openChat } from './helpers';
+import { ask, openChat } from './helpers';
 
 // First run: one line on the empty screen, "English / ChiShona / isiNdebele", shown once and remembered (#244 row 1). Settings keeps the
 // radio group. A language already chosen (or a first question already asked) means it never shows again.
@@ -32,8 +32,7 @@ test('tapping a language switches the whole screen, is remembered, and the line 
   await expect(page.locator('html')).toHaveAttribute('lang', 'sn');
   await expect(page.locator('#empty .first-lang')).toBeHidden();
   // Settings still has the radio group, with the choice in it.
-  await openAccount(page);
-  await expect(page.getByRole('radio', { name: 'ChiShona' })).toBeChecked();
+  await expect(page.locator('#lang input[value="sn"]')).toBeChecked();
 });
 
 test('choosing English is a choice too: it is remembered and the line goes', async ({ page }) => {
@@ -60,6 +59,9 @@ test('asking a first question without choosing counts as an answer: the line is 
   await expect(page.locator('#empty .first-lang')).toBeHidden();
 });
 
+// The service worker would answer from its cache and hide the failure, so this one runs without it.
+test.describe('words that cannot load', () => {
+  test.use({ serviceWorkers: 'block' });
 test('if the words of a language cannot be loaded, the line stays so the person can try again', async ({ page }) => {
   await openChat(page);
   await page.route('**/strings-sn*', (r) => r.abort());
@@ -67,6 +69,7 @@ test('if the words of a language cannot be loaded, the line stays so the person 
   await expect(page.locator('#toast')).toContainText('could not be loaded');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(row(page)).toBeVisible();
+});
 });
 
 for (const scheme of ['light', 'dark'] as const) {
