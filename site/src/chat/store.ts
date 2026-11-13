@@ -18,7 +18,7 @@ export interface StoredMessage {
   /** assistant messages */
   answer?: Answer;
   /** Why a queued question is waiting, when it is not simply offline (a brief 503, say). */
-  hint?: 'offline' | 'unavailable' | 'busy';
+  hint?: 'offline' | 'unavailable' | 'busy' | 'stopped';
   /** Delivery attempts that got no answer while the browser said it was online. */
   attempts?: number;
   /** user messages whose ask failed: why, so a reload still shows it. */

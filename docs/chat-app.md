@@ -278,3 +278,11 @@ microphone records a **voice note**. Both stay on this device and go nowhere: ad
 - **CSP:** `media-src 'self' blob:` was added in `scripts/post-build.mjs` so a recording can play from a blob URL made on the device; nothing
   else may load media.
 - **Known limits:** attachments are not encrypted on the device (same as the chats); the attachments code (1.5 KB gzipped) loads on the first tap of "+" or the microphone, so the first load stays under its budget.
+
+## Stopping a slow answer (2026-11-12)
+
+Ten seconds after a question is sent, the thinking bubble says the network is slow and offers **Stop**. Stop cancels the request in the browser
+(the client already took an `AbortSignal`); the question is kept on this device, marked "Stopped. Your question is kept on this device and
+was not answered.", and is NOT queued, so nothing sends it again by itself. The person can **Send now** (under a fresh idempotency key, since
+the gateway may still be finishing the first try) or **Discard**. An answer that arrives in the same moment as the click is shown as usual.
+It reuses the offline-mode `local` status with `hint: 'stopped'`. Not covered: Stop during a credential renewal waits for the renewal.
