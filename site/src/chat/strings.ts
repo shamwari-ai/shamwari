@@ -27,6 +27,8 @@ export const en = {
   copyAnswer: 'Copy answer',
   copied: 'Copied',
   shareAnswer: 'Share answer',
+  codeBlock: 'Code',
+  tableBox: 'Table',
   languageUnavailable: 'That language could not be loaded. Try again when you are online.',
   deleteWait: 'This chat is still sending. Delete it when it has its answer.',
   addTo: 'Add',

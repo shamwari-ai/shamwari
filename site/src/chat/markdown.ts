@@ -6,8 +6,8 @@
  * allowed only for http:, https: and mailto: (checked by parsing the address, so "java\nscript:" and friends fail),
  * open in a new tab with rel="noopener noreferrer", and an image is drawn as its alt text.
  *
- * It is linear in the size of the answer: no lookbehind, no backtracking-prone pattern (every pattern is anchored and
- * has no nested quantifier), every search that can fail is remembered so it is not repeated, block nesting stops at
+ * It is linear in the size of the answer: no lookbehind, no backtracking-prone pattern (every pattern is anchored, and none can
+ * match the same characters two ways, so a pattern's cost is linear in the line), every search that can fail is remembered so it is not repeated, block nesting stops at
  * MAX_BLOCK and inline nesting at MAX_INLINE (deeper marks are shown as the characters they are), and an answer over
  * MAX_CHARS is shown as one plain paragraph rather than parsed.
  *
@@ -61,6 +61,7 @@ function inline(s: string, out: Element, d: number, noLink = false): void {
   let buf = "";
   let i = 0;
   const fail: Record<string, number> = {}; // a search from here on found nothing, so a later one cannot either
+  let noAuto = 0; // a bare address that failed ran to here: another start inside the same run is not tried again
   let match: number[] | undefined; // [ -> its ]
   const flush = () => {
     if (buf) out.append(buf);
@@ -150,9 +151,22 @@ function inline(s: string, out: Element, d: number, noLink = false): void {
         dest = s.slice(close + 2, q);
         if (s[q] === ")") end = q + 1;
         else if (q < n && s[q]! <= " ") {
-          // [text](url "title"): the title is dropped
-          for (let k = q; k < Math.min(n, q + 200); k++)
-            if (s[k] === ")") end = k + 1;
+          // [text](url "title"): only a real title, then the closing ")", makes a link. Anything else is not a link and its
+          // words stay as they are (a title is dropped; nothing else is ever dropped).
+          let k = q;
+          while (k < n && k < q + 8 && s[k]! <= " ") k++;
+          const o = s[k];
+          const cl = o === '"' ? '"' : o === "'" ? "'" : o === "(" ? ")" : "";
+          if (cl) {
+            const lim = Math.min(n, k + 200);
+            let m = k + 1;
+            while (m < lim && s[m] !== cl) m++;
+            if (s[m] === cl) {
+              let e = m + 1;
+              while (e < n && e < m + 9 && s[e]! <= " ") e++;
+              if (s[e] === ")") end = e + 1;
+            }
+          }
         }
       }
       if (end < 0 || d >= MAX_INLINE) {
@@ -222,6 +236,7 @@ function inline(s: string, out: Element, d: number, noLink = false): void {
       c === "h" &&
       !noLink &&
       (s.startsWith("http://", i) || s.startsWith("https://", i)) &&
+      i >= noAuto &&
       !isAlnum(s[i - 1])
     ) {
       let j = i;
@@ -232,7 +247,10 @@ function inline(s: string, out: Element, d: number, noLink = false): void {
         flush();
         out.append(link(href, [s.slice(i, j)]));
         i = j;
-      } else buf += s[i++];
+      } else {
+        noAuto = j;
+        buf += s[i++];
+      }
     } else {
       buf += c;
       i++;
@@ -280,6 +298,8 @@ function cells(line: string): string[] {
 
 interface State {
   lv: number;
+  code: string; // the accessible names of the scrolling boxes, in the answer's language
+  table: string;
 }
 
 function blocks(
@@ -322,6 +342,8 @@ function blocks(
       i++; // the closing fence; or past the end, when it never came
       node = mk("pre", "", mk("code", "", body.join("\n")));
       node.setAttribute("tabindex", "0"); // a scrolling box can be reached and scrolled with a keyboard
+      node.setAttribute("role", "group");
+      node.setAttribute("aria-label", st.code);
     } else if (!deep && (m = ATX.exec(line))) {
       let t = (m[2] ?? "").trim();
       let e = t.length;
@@ -396,17 +418,18 @@ function blocks(
       const align = cells(L[i + 1]!).map((c) =>
         c.endsWith(":") ? (c.startsWith(":") ? "md-c" : "md-r") : "",
       );
-      const row = (cs: string[], tag: "th" | "td") =>
-        mk(
-          "tr",
-          "",
-          ...cs.map((c, k) => {
-            const cell = mk(tag, align[k] ?? "");
-            if (tag === "th") cell.setAttribute("scope", "col");
-            inline(c, cell, 0);
-            return cell;
-          }),
-        );
+      const row = (cs: string[], tag: "th" | "td") => {
+        // Appended one by one: a row of tens of thousands of cells must not be spread into one call's arguments (a phone's
+        // JavaScript engine allows about 65 000).
+        const tr = mk("tr");
+        cs.forEach((c, k) => {
+          const cell = mk(tag, align[k] ?? "");
+          if (tag === "th") cell.setAttribute("scope", "col");
+          inline(c, cell, 0);
+          tr.append(cell);
+        });
+        return tr;
+      };
       const body = mk("tbody");
       for (i += 2; i < n && L[i]!.trim() && L[i]!.includes("|"); i++)
         body.append(row(cells(L[i]!), "td"));
@@ -415,7 +438,10 @@ function blocks(
         "md-table",
         mk("table", "", mk("thead", "", row(head, "th")), body),
       );
-      wrap.setAttribute("tabindex", "0"); // a table wider than the screen scrolls inside its own box
+      wrap.setAttribute("tabindex", "0");
+      wrap.setAttribute("role", "group"); // a named group, not a landmark: several tables can share a name
+      wrap.setAttribute("aria-label", st.table);
+      // a table wider than the screen scrolls inside its own box
       node = wrap;
     } else {
       const para = [line.trimStart()];
@@ -431,10 +457,13 @@ function blocks(
 }
 
 /** The answer's formatted body: one block-level container, ready to sit where the plain-text paragraph was. */
-export function renderMarkdown(raw: string): HTMLElement {
+export function renderMarkdown(
+  raw: string,
+  names = { code: "Code", table: "Table" },
+): HTMLElement {
   const root = mk("div", "text md");
   const src = raw.replace(/\r\n?/g, "\n").trim();
   if (src.length > MAX_CHARS) root.append(mk("p", "md-raw", src));
-  else blocks(src.split("\n"), root, 0, { lv: 1 });
+  else blocks(src.split("\n"), root, 0, { lv: 1, ...names });
   return root;
 }

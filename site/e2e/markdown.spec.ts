@@ -61,6 +61,9 @@ test("bold, italics, a heading, lists, code, a quote, a link and a table are dra
   await expect(a.locator(".text p code")).toHaveText("section 50");
   await expect(a.locator(".text pre code")).toHaveText('ask: "Why am I held?"');
   await expect(a.locator(".text blockquote")).toHaveText("Keep calm.");
+  // The scrolling boxes are named, so a screen reader says what has been reached.
+  await expect(a.locator(".text pre")).toHaveAccessibleName("Code");
+  await expect(a.locator(".text .md-table")).toHaveAccessibleName("Table");
   const link = a.locator(".text a");
   await expect(link).toHaveText("the Constitution");
   await expect(link).toHaveAttribute("href", "https://www.parlzim.gov.zw/");

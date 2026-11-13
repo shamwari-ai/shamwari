@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { renderMarkdown, safeHref } from "../../src/chat/markdown";
 
@@ -84,8 +84,8 @@ const ALLOWED_ATTRS: Record<string, string[]> = {
   a: ["href", "target", "rel"],
   ol: ["start"],
   p: ["role", "aria-level"],
-  pre: ["tabindex"],
-  div: ["tabindex"],
+  pre: ["tabindex", "role", "aria-label"],
+  div: ["tabindex", "role", "aria-label"],
   th: ["scope"],
 };
 
@@ -169,7 +169,7 @@ describe("renderMarkdown: formatting", () => {
     expect(
       out('> Keep **calm**.\n\n---\n\n```js\nlet a = "<b>"; // **no**\n```'),
     ).toBe(
-      '<div class="text md"><blockquote><p>Keep <strong>calm</strong>.</p></blockquote><hr><pre tabindex="0"><code>let a = &quot;&lt;b&gt;&quot;; // **no**</code></pre></div>',
+      '<div class="text md"><blockquote><p>Keep <strong>calm</strong>.</p></blockquote><hr><pre tabindex="0" role="group" aria-label="Code"><code>let a = &quot;&lt;b&gt;&quot;; // **no**</code></pre></div>',
     );
   });
   it("draws a table with a header, aligned columns and escaped pipes", () => {
@@ -177,7 +177,7 @@ describe("renderMarkdown: formatting", () => {
       "| Right | Section |\n|:--|--:|\n| Liberty | 49 |\n| a \\| b | **x** |",
     );
     expect(t).toContain(
-      '<div class="md-table" tabindex="0"><table><thead><tr><th scope="col">Right</th><th class="md-r" scope="col">Section</th></tr>',
+      '<div class="md-table" tabindex="0" role="group" aria-label="Table"><table><thead><tr><th scope="col">Right</th><th class="md-r" scope="col">Section</th></tr>',
     );
     expect(t).toContain("<td>a | b</td>");
     expect(t).toContain("<strong>x</strong>");
@@ -286,15 +286,82 @@ describe("renderMarkdown: an answer is untrusted text and stays inert", () => {
       expect(safeHref(bad), bad).toBeNull();
     }
   });
-  it("never uses innerHTML or a lookbehind (older phones cannot parse one)", () => {
-    const src = readFileSync(
-      new URL("../../src/chat/markdown.ts", import.meta.url),
-      "utf8",
-    ).replace(/\/\*[\s\S]*?\*\//g, "");
-    expect(src).not.toMatch(
-      /innerHTML|outerHTML|insertAdjacentHTML|document\.write|DOMParser|createContextualFragment|eval\(|new Function/,
+  it("no chat source writes HTML, and the renderer has no lookbehind (older phones cannot parse one)", () => {
+    const dir = new URL("../../src/chat/", import.meta.url);
+    const files = readdirSync(dir).filter((f) => f.endsWith(".ts"));
+    expect(files).toContain("markdown.ts");
+    for (const f of files) {
+      const src = readFileSync(new URL(f, dir), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      expect(src, f).not.toMatch(
+        /innerHTML|outerHTML|insertAdjacentHTML|setHTML|setHTMLUnsafe|srcdoc|document\.write|DOMParser|createContextualFragment|\beval\(|new Function/,
+      );
+    }
+    const md = readFileSync(new URL("markdown.ts", dir), "utf8").replace(
+      /\/\*[\s\S]*?\*\//g,
+      "",
     );
-    expect(src).not.toContain("(?<");
+    expect(md).not.toContain("(?<");
+  });
+  it("never deletes answer text: a link title is left out, and a malformed link stays as characters", () => {
+    expect(
+      textOf(render('See [the Act](https://a.org "the title") here.')),
+    ).toBe("See the Act here.");
+    expect(
+      textOf(render("See [the Act](https://a.org 'the title' ) here.")),
+    ).toBe("See the Act here.");
+    expect(
+      textOf(render("See [the Act](https://a.org (the title)) here.")),
+    ).toBe("See the Act here.");
+    const bad = "See [the Act](https://a.org do not sign) here.";
+    expect(textOf(render(bad))).toBe(bad);
+    // the bare address inside it is linked as any address is, but "the Act" is not a link and no word is lost
+    expect(
+      all(render(bad))
+        .filter((e) => e.tag === "a")
+        .map(textOf),
+    ).toEqual(["https://a.org"]);
+    const after =
+      "Read [the Act](https://a.org do not sign) and (section 49) too.";
+    expect(textOf(render(after))).toBe(after);
+    const good = render('[x](https://a.org "t") (section 49)');
+    expect(textOf(good)).toBe("x (section 49)");
+    expect(all(good).filter((e) => e.tag === "a")).toHaveLength(1);
+  });
+  it("names its scrolling boxes, so a screen reader says what has been reached", () => {
+    const r = render("```\ncode\n```\n\n| a | b |\n|---|---|\n| c | d |");
+    const pre = all(r).find((e) => e.tag === "pre")!;
+    const box = all(r).find((e) => e.className === "md-table")!;
+    expect([
+      pre.attrs.role,
+      pre.attrs["aria-label"],
+      pre.attrs.tabindex,
+    ]).toEqual(["group", "Code", "0"]);
+    expect([
+      box.attrs.role,
+      box.attrs["aria-label"],
+      box.attrs.tabindex,
+    ]).toEqual(["group", "Table", "0"]);
+    const sn = renderMarkdown("```\nx\n```", {
+      code: "Kodhi",
+      table: "Tafura",
+    }) as unknown as FEl;
+    expect(all(sn).find((e) => e.tag === "pre")!.attrs["aria-label"]).toBe(
+      "Kodhi",
+    );
+  });
+  it("builds a very wide table row cell by cell (never spread into one call)", () => {
+    const cols = 9_500; // three lines of it stay under the size limit
+    const r = render(
+      "|" +
+        "a|".repeat(cols) +
+        "\n|" +
+        "-|".repeat(cols) +
+        "\n|" +
+        "b|".repeat(cols),
+    );
+    expect(all(r).filter((e) => e.tag === "td").length).toBe(cols);
   });
 });
 
@@ -339,7 +406,7 @@ describe("renderMarkdown: malformed, nested and hostile input", () => {
   it("runs an unterminated fence to the end of the answer, as code", () => {
     const r = render("before\n\n```\nlet a = 1;\n**not bold**\n\nstill code");
     expect(html(r)).toBe(
-      '<div class="text md"><p>before</p><pre tabindex="0"><code>let a = 1;\n**not bold**\n\nstill code</code></pre></div>',
+      '<div class="text md"><p>before</p><pre tabindex="0" role="group" aria-label="Code"><code>let a = 1;\n**not bold**\n\nstill code</code></pre></div>',
     );
   });
   it("closes a fence only with a fence at least as long", () => {
@@ -386,6 +453,21 @@ describe("renderMarkdown: malformed, nested and hostile input", () => {
     expect(all(r).some((e) => e.tag === "strong")).toBe(false);
   });
 
+  // Repeated invalid bare addresses once rescanned to the end of the line from every start (quadratic: about 1.1 s at 59 000
+  // characters). Linear is a few milliseconds, so this bound is tight on purpose and still safe on a slow machine.
+  for (const [name, md] of Object.entries({
+    "http://[": "http://[".repeat(7400),
+    "https://[": "https://[".repeat(6500),
+    "http://a:99999999/": "http://a:99999999/".repeat(3300),
+  })) {
+    it(`does not rescan a failed bare address: ${name}`, () => {
+      const t0 = performance.now();
+      assertInert(render(md), name);
+      const ms = performance.now() - t0;
+      expect(ms, `${name} took ${Math.round(ms)} ms`).toBeLessThan(250);
+    });
+  }
+
   // No catastrophic backtracking: each of these is the classic shape that makes a naive regex-based renderer take minutes.
   // They must finish in well under a second each (the bound is generous, so a slow CI machine cannot fail them; a quadratic
   // renderer would take tens of seconds on 50 000 characters).
@@ -407,6 +489,9 @@ describe("renderMarkdown: malformed, nested and hostile input", () => {
     "close brackets": "]".repeat(N),
     "nested brackets then parens": "[[[[a](b)](c)](d)]".repeat(N / 18),
     "long address": "[a](" + "x(".repeat(N / 2),
+    "repeated invalid http:// starts": "http://[".repeat(7400),
+    "repeated invalid https:// starts": "https://[".repeat(6500),
+    "repeated invalid port": "http://a:99999999/".repeat(3300),
     "bare addresses": "http://a ".repeat(N / 9),
     "a very long unbroken address": "https://" + "a".repeat(N),
     quotes: "> ".repeat(N / 2),

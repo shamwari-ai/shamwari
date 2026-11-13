@@ -141,7 +141,7 @@ export function renderAnswer(
     'article',
     { class: 'msg bot', 'data-id': m.id, 'aria-label': s.shamwari },
     h('p', { class: 'who' }, s.shamwari),
-    renderMarkdown(a.text),
+    renderMarkdown(a.text, { code: s.codeBlock, table: s.tableBox }),
     a.degraded ? h('p', { class: 'note' }, s.closestSource) : null,
     a.citations.length
       ? h(
