@@ -1303,15 +1303,23 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   padding: 0;
   margin-right: 0;
 }
-/* No chat bubbles: the person's own question is plain text too, set apart by its weight, not by a box. */
+/* The person's own message is a soft rounded bubble at the right: a slightly darker tint of the page, no border. Replies stay plain text.
+   (Owner reference, #269.) The tint is a fraction of the text colour over the page, so it follows light and dark by itself. */
 .msg.user {
-  background: none;
+  justify-self: end;
+  background: color-mix(in oklab, var(--foreground) 7%, var(--background));
   color: var(--foreground);
   margin: 0;
-  max-inline-size: none;
-  padding: 0;
-  border-radius: 0;
-  font-weight: 600;
+  max-inline-size: min(100%, 34rem);
+  padding: var(--inset-floor);
+  border-radius: var(--radius-lg);
+  font-weight: 400;
+}
+@media (prefers-contrast: more), (forced-colors: active) {
+  /* A tint is not enough for everyone: the bubble gets an edge too. */
+  .msg.user {
+    border: 1px solid CanvasText;
+  }
 }
 .msg {
   position: relative; /* the hidden name below is placed against the message, not the page */
@@ -1626,6 +1634,45 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .composer-gap {
   flex: 1 1 0; /* "+" at the left, the microphone and send at the right */
 }
+.status-chips {
+  display: grid;
+  gap: var(--gap-floor);
+}
+.status-chips:not(:has(.status-chip:not([hidden]))) {
+  display: none;
+}
+.status-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-floor);
+  padding-inline-start: var(--inset-floor);
+  border-radius: var(--radius-lg);
+  background: var(--accent);
+  color: var(--foreground);
+  font-size: var(--fs-caption);
+  line-height: var(--leading-floor);
+}
+.status-chip[hidden] {
+  display: none;
+}
+.chip-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: var(--size-control-sm);
+  block-size: var(--size-control-sm);
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.chip-x:hover {
+  background: var(--muted);
+}
 .bar-icon {
   display: inline-flex;
   align-items: center;
@@ -1635,7 +1682,7 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   block-size: var(--size-control-sm);
   padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   background: transparent;
   color: color-mix(in oklab, var(--foreground) 80%, var(--background));
   cursor: pointer;
@@ -1740,7 +1787,7 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 }
 .msg.user .attach-chip {
   font-weight: 400; /* the question's weight is for its words, not its attachments */
-  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  background: color-mix(in oklab, var(--foreground) 12%, transparent); /* a step darker than the bubble it sits in */
 }
 
 /* ---- Settings: a modal ----------------------------------------------------------------------------------

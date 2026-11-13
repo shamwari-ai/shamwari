@@ -218,9 +218,14 @@ version is gated; it is never automatic.
 3. **Release PR:** it keeps one branch, `release/staging-to-main`, whose tree equals staging's
    (branch from `main`, `git read-tree -u --reset origin/staging`, commit), opens or updates the
    PR `chore: release staging to main, DATE+n`, labels it `forward-ported`, and turns on
-   auto-merge. It moves `main` only: the gateway and Core are not deployed by this.
+   auto-merge. It moves `main` only; `deploy.yml` (step 4) does the deploying.
 4. **Deploy:** when `main` updates, Workers Builds deploys `shamwari-site` (connected) and
-   `shamwari-app` (once the owner connects it in the Cloudflare dashboard).
+   `shamwari-app` (once the owner connects it in the Cloudflare dashboard). Separately,
+   `deploy.yml` runs when CI is green on that `main` commit (shamwari-ai/shamwari#266) and deploys the
+   gateway Worker (`wrangler deploy`) and Core (`flyctl deploy`, Fly app `shamwari-core`) as two
+   independent jobs behind the `production` Environment, each followed by a `/health` check. Needs the
+   secrets `FLY_API_TOKEN`, `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`; a missing one fails the
+   job by name. Details and the manual break-glass path: docs/core-fly-runbook.md.
 5. **Smoke:** `smoke-production.yml` checks production for up to 18 minutes: `/lite/`
    unauthenticated is a 302 to `/auth/login`; `/lite/disclaimer/`,
    `/lite/manifest.webmanifest` and `/lite/sw.js` are 200; a `/lite/_astro/*.js` script named in
@@ -228,7 +233,9 @@ version is gated; it is never automatic.
    `redirect-uri-invalid` (the WorkOS redirect address is registered; docs/chat-signin.md). It also runs every 30 minutes. On failure it opens an
    issue (or comments on the one that is open).
 
-**Rollback:** Cloudflare dashboard, Workers & Pages, the Worker, Deployments, roll back to the
+**Rollback:** for the gateway and Core, `npx wrangler rollback` in `gateway/` and `fly releases` / `fly deploy --image`
+(docs/core-fly-runbook.md, Rollback); a failed health check names them and does not roll back by itself. For the
+`shamwari-app` and `shamwari-site` Workers: Cloudflare dashboard, Workers & Pages, the Worker, Deployments, roll back to the
 previous version (a deploy keeps the previous version ids), then fix forward on `staging`.
 
 **Needs the owner:** a GitHub App (or token) the release workflow can use, stored as the
