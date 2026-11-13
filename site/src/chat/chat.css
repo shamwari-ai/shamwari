@@ -455,10 +455,6 @@ input:not([type='checkbox']):not([type='radio']) {
   margin: 0;
   white-space: pre-wrap;
 }
-.msg.user {
-  background: var(--accent);
-  margin-left: 12%;
-}
 .msg.bot {
   background: var(--card);
   border: 1px solid var(--border);
@@ -1313,14 +1309,15 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   padding: 0;
   margin-right: 0;
 }
+/* No chat bubbles: the person's own question is plain text too, set apart by its weight, not by a box. */
 .msg.user {
-  background: var(--muted);
+  background: none;
   color: var(--foreground);
-  margin-left: auto;
-  max-inline-size: 85%;
-  padding: var(--gap-floor) var(--inset-floor);
-  border-radius: var(--radius-lg);
-  box-sizing: border-box;
+  margin: 0;
+  max-inline-size: none;
+  padding: 0;
+  border-radius: 0;
+  font-weight: 600;
 }
 .msg {
   position: relative; /* the hidden name below is placed against the message, not the page */
@@ -1333,8 +1330,16 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   clip-path: inset(50%);
   white-space: nowrap;
 }
+/* Message text is the small size (14px, the smallest the Bundu floor allows), not the 17px body size. */
 .msg .text {
+  font-size: var(--fs-small);
   line-height: 1.6;
+}
+/* "Thinking..." is a status, not a message: as small as the floor allows, and muted. */
+.msg.pending .text {
+  font-size: var(--fs-small);
+  font-weight: 400;
+  color: var(--muted-foreground);
 }
 .msg.refusal,
 .msg.error {
@@ -1751,5 +1756,6 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   margin-top: var(--gap-floor);
 }
 .msg.user .attach-chip {
+  font-weight: 400; /* the question's weight is for its words, not its attachments */
   background: color-mix(in oklab, var(--foreground) 6%, transparent);
 }

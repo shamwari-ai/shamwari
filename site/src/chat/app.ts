@@ -6,6 +6,7 @@ import { readStoredUser, rememberUser, subjectOf, userKeyOf } from './user';
 import { applyStrings, currentLanguage, saveLanguage } from './i18n';
 import {
   h,
+  plainText,
   renderAnswer,
   renderError,
   renderPending,
@@ -630,7 +631,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   const showArtifact = (a: Artifact) => {
     shown = a;
     $('#artifact-title-view').textContent = a.title;
-    $('#artifact-text').textContent = a.text;
+    $('#artifact-text').textContent = plainText(a.text); // saved before plain text was kept: shown plain too
     $('#artifact-cites').replaceChildren(
       ...a.citations.map((c) => h('li', {}, c.heading ? `${c.title} — ${c.heading}` : c.title)),
     );
@@ -657,7 +658,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
         id: newId(),
         threadId: thread.id,
         title: titleOf(q?.text || m.answer.text),
-        text: m.answer.text,
+        text: plainText(m.answer.text),
         citations: m.answer.citations,
         savedAt: Date.now(),
       });

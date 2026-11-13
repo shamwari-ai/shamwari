@@ -19,6 +19,16 @@ import { createServer } from 'node:http';
 
 export const FIXTURES = [
   {
+    // A model that writes markdown: the page must show plain words, with none of its marks.
+    match: /\bmarkdown please\b/i,
+    text:
+      '## Your rights\n\n**Section 49** says you have the right to _personal liberty_. See `section 50` and [the Constitution](https://www.parlzim.gov.zw/).\n\n' +
+      '* You may ask why you are held\n* You may ask for a lawyer\n\n> Keep calm.',
+    citations: [
+      { title: 'Constitution of Zimbabwe Amendment (No. 20) Act 2013', heading: 'Section 49 — Right to personal liberty', authority: 'Parliament of Zimbabwe', effective_from: '2013-05-22', url: null },
+    ],
+  },
+  {
     match: /equal|discriminat|tinashe|ruremekedzo/i,
     text:
       'Section 56 of the Constitution says everyone is equal before the law and has the right to equal protection and benefit of the law. ' +
