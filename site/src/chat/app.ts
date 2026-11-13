@@ -1301,6 +1301,9 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     threadEl.focus({ preventScroll: true }); // the button is about to hide: keep keyboard focus in the page
   });
 
+  // The X on a status chip hides that chip until its state changes again (going offline once more shows it again).
+  document.querySelectorAll<HTMLButtonElement>('.chip-x').forEach((b) => b.addEventListener('click', () => (b.closest<HTMLElement>('.status-chip')!.hidden = true)));
+
   const online = () => {
     $('#offline').hidden = navigator.onLine;
   };
