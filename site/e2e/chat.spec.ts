@@ -193,7 +193,7 @@ test('Shona is offered, shown as a draft, and Enter sends', async ({ page }) => 
   await openChat(page);
   await expect(page.locator('#review')).toBeHidden();
   await openAccount(page);
-  await page.locator('#lang').selectOption('sn');
+  await page.getByRole('radio', { name: 'ChiShona' }).check();
   await expect(page.locator('html')).toHaveAttribute('lang', 'sn');
   // The draft notice sits under the language field inside Settings.
   await expect(page.locator('#review')).toBeVisible();
@@ -239,7 +239,7 @@ test('the prompts are in the page with no network, and in Shona they are Shona',
   await page.waitForSelector('html[data-ready="true"]');
   await expect(page.locator('#empty [data-example]')).toHaveCount(3);
   await openAccount(page);
-  await page.locator('#lang').selectOption('sn');
+  await page.getByRole('radio', { name: 'ChiShona' }).check();
   await page.keyboard.press('Escape');
   await expect(page.locator('#empty [data-example]').first()).toContainText('Bumbiro');
 });
@@ -280,7 +280,7 @@ test('Settings is in the drawer, there is no bell, and signing out brings the si
 test('Settings is named in Shona, and Install stays visible after a question', async ({ page }) => {
   await openChat(page);
   await openAccount(page);
-  await page.locator('#lang').selectOption('sn');
+  await page.getByRole('radio', { name: 'ChiShona' }).check();
   await expect(page.locator('#open-settings')).toHaveText('Zvirongwa');
   // The install button lives outside the greeting, so asking a question (which hides the greeting) does not take it away.
   await expect(page.locator('#install').locator('xpath=ancestor::*[@id="empty"]')).toHaveCount(0);
@@ -289,7 +289,7 @@ test('Settings is named in Shona, and Install stays visible after a question', a
 test('the shell speaks the chosen language: new chat, the drawer buttons and the chats region', async ({ page }) => {
   await openChat(page);
   await openAccount(page);
-  await page.locator('#lang').selectOption('sn');
+  await page.getByRole('radio', { name: 'ChiShona' }).check();
   await page.keyboard.press('Escape'); // close the drawer
   await expect(page.getByRole('button', { name: 'Vhura hurukuro' })).toBeVisible();
   await page.getByRole('button', { name: 'Vhura hurukuro' }).click();

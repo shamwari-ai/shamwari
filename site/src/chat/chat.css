@@ -998,7 +998,7 @@ html[data-view='pending'] dialog {
   }
 }
 
-/* The top bar's actions say what they are from 40rem up ("Offline mode", "New chat"); below that only the icon shows and the
+/* The top bar's actions say what they are from 40rem up ("New chat"); below that only the icon shows and the
    name stays for screen readers (the labels carry Tailwind's sr-only below that). The Tailwind sm:not-sr-only these used was
    not in the build, so the labels never showed. */
 @media (min-width: 40rem) {
@@ -1013,10 +1013,9 @@ html[data-view='pending'] dialog {
   }
 }
 
-/* ---- the OFFLINE MODE switch, top right ----------------------------------------------------------------------
-   A switch (role="switch", aria-checked), at the right of the top bar. Off it is a quiet action like the others; on, it is
-   filled, and the page says so in words (#offline-mode-note), so the state never rests on colour. Below 40rem only the
-   icon and the On/Off word show; the name stays for screen readers. */
+/* ---- the OFFLINE MODE switch, in Settings ---------------------------------------------------------------------
+   A switch (role="switch", aria-checked) in the Settings dialog. Off it is a plain button; on, it is filled, the top bar shows a
+   badge and the page says so in words (#offline-mode-note), so the state never rests on colour. */
 .offline-switch .offline-state {
   font-weight: 600;
 }
@@ -1026,7 +1025,7 @@ html[data-view='pending'] dialog {
 }
 
 /* ---- large text ------------------------------------------------------------------------------------------------
-   With text at 200% the top bar's menu, brand and actions (Offline mode, New chat) no longer fit one row on a phone. The
+   With text at 200% the top bar's menu, brand and actions (the offline badge, New chat) no longer fit one row on a phone. The
    bar wraps instead of pushing the last action off the screen: the actions drop to a second line, right-aligned. */
 [data-slot='app-topbar'] {
   flex-wrap: wrap;
@@ -1813,4 +1812,67 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
     border: 1px solid var(--border);
     border-radius: var(--radius-lg, 1rem);
   }
+}
+
+/* ---- Settings: the language radio group and the offline switch ----------------------------------------------
+   Each language is a row with the radio drawn over the whole row, so the hit region is the full row (49px, or the density size
+   with a mouse); the dot and ring are painted on the input itself and its focus ring is the page's own. */
+.radio-group {
+  display: grid;
+  gap: var(--gap-floor);
+}
+.radio-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: var(--size-control-sm);
+  padding-inline: calc(var(--inset-floor) + 1.75rem) var(--inset-floor);
+  cursor: pointer;
+}
+.radio-row input {
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  margin: 0;
+  border: 1px solid var(--border-control, var(--border));
+  border-radius: var(--radius-sm);
+  background:
+    radial-gradient(circle at calc(var(--inset-floor) + 0.5rem) 50%, transparent 0 0.3rem, var(--foreground) 0.3rem 0.4rem, transparent 0.4rem) no-repeat,
+    transparent;
+  cursor: pointer;
+}
+.radio-row input:checked {
+  background:
+    radial-gradient(circle at calc(var(--inset-floor) + 0.5rem) 50%, var(--foreground) 0 0.3rem, transparent 0.3rem 0.4rem, var(--foreground) 0.4rem 0.45rem, transparent 0.45rem) no-repeat,
+    var(--muted);
+}
+.radio-row span {
+  position: relative;
+  pointer-events: none;
+}
+.offline-badge {
+  background: var(--muted);
+  box-shadow: inset 0 0 0 1.5px var(--foreground);
+}
+.settings-section .offline-switch {
+  justify-content: space-between;
+  gap: var(--gap-floor);
+}
+
+@media (forced-colors: active) {
+  /* The dot and fill are backgrounds, which forced colours drop: the chosen language keeps a thick border instead. */
+  .radio-row input:checked {
+    border: 4px solid Highlight;
+  }
+  .offline-switch[aria-checked='true'] {
+    border: 4px solid Highlight;
+  }
+}
+.settings-hint {
+  margin: 0;
+  font-size: var(--fs-small);
+  color: var(--muted-foreground);
+  line-height: var(--leading-floor);
 }

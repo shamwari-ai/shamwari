@@ -80,6 +80,7 @@ test('muted text on the drawer surface keeps its contrast, in light and in dark,
     }
     // Hover: a soft fill appears and the text steps up to full strength.
     const r = row(page, 'Use the API');
+    await page.mouse.move(0, 0); // the pointer may still rest where an earlier tap was, which can be over this row
     const before = await r.evaluate((el) => getComputedStyle(el).color);
     await r.hover();
     const hovered = await r.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, color: getComputedStyle(el).color }));

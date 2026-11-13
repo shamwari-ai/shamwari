@@ -40,9 +40,9 @@ test('a draft language shows its review note inside Settings, and the delete con
   await openChat(page);
   await openAccount(page);
   await expect(page.locator('#review')).toBeHidden();
-  await page.locator('#lang').selectOption('sn');
+  await page.getByRole('radio', { name: 'ChiShona' }).check();
   await expect(page.locator('#review')).toBeVisible();
-  await page.locator('#lang').selectOption('en');
+  await page.getByRole('radio', { name: 'English' }).check();
   let asked = '';
   page.once('dialog', async (d) => {
     asked = d.message();
@@ -51,4 +51,26 @@ test('a draft language shows its review note inside Settings, and the delete con
   await page.locator('#delete-history').click();
   expect(asked).not.toBe('');
   await expect(page.locator('#settings-dialog')).toBeVisible(); // cancelled: Settings stays
+});
+
+test('language is a radio group: every language in view, one tap each, arrow keys move between them, 49px rows', async ({ page }) => {
+  await openChat(page);
+  await openAccount(page);
+  const group = page.getByRole('radiogroup', { name: 'Language' });
+  await expect(group).toBeVisible();
+  await expect(group.getByRole('radio')).toHaveCount(3);
+  await expect(group.getByRole('radio', { name: 'English' })).toBeChecked();
+  for (const r of await group.getByRole('radio').all()) {
+    const b = (await r.boundingBox())!;
+    expect(b.height, 'the whole row is the hit region').toBeGreaterThanOrEqual(49);
+  }
+  await group.getByRole('radio', { name: 'ChiShona' }).check();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'sn');
+  await expect(page.locator('#settings-title')).toHaveText('Zvirongwa');
+  // Arrow keys move the choice within the group (its name is now Shona, so find it by id).
+  const sn = page.locator('#lang').getByRole('radio', { name: 'ChiShona' });
+  await sn.focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#lang').getByRole('radio', { name: 'isiNdebele' })).toBeChecked();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'nd');
 });

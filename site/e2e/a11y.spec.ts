@@ -46,7 +46,7 @@ for (const scheme of ['light', 'dark'] as const) {
     test('Shona (draft) with its review note has no violations', async ({ page }) => {
       await openChat(page);
       await openAccount(page);
-      await page.locator('#lang').selectOption('sn');
+      await page.getByRole('radio', { name: 'ChiShona' }).check();
       await closeChats(page); // the page behind an open drawer is inert; the draft note is read with the drawer closed
       await expect(page.locator('#review')).toBeVisible();
       expect(summary(await scan(page))).toEqual([]);
