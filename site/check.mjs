@@ -343,6 +343,9 @@ if (chatHtml) {
 if (chatHtml) {
   const html = readFileSync(chatHtml, 'utf8');
   if (!/<link rel="manifest" href="\/lite\/manifest\.webmanifest"/.test(html)) fail.push('chat: no <link rel="manifest">');
+  if (!/<meta name="theme-color" content="#[0-9a-f]{6}" media="\(prefers-color-scheme: light\)"/i.test(html) || !/<meta name="theme-color" content="#[0-9a-f]{6}" media="\(prefers-color-scheme: dark\)"/i.test(html)) {
+    fail.push('chat: theme-color must have a light and a dark variant (the browser bar follows the scheme)');
+  }
   if (!assets.has('/lite/manifest.webmanifest')) fail.push('chat: manifest missing from the build');
   else {
     const m = JSON.parse(readFileSync(`${DIST}/lite/manifest.webmanifest`, 'utf8'));

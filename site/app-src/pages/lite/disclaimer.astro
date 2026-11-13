@@ -20,7 +20,9 @@ const versions = [
   <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
   <link rel="icon" type="image/png" href="/favicon.png" sizes="256x256" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <meta name="theme-color" content="#283593" />
+  <!-- The browser bar takes the page's own colour in each scheme (the page background token), not the brand indigo. -->
+  <meta name="theme-color" content="#f3f3f1" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0e0d0c" media="(prefers-color-scheme: dark)" />
 </head>
 <body class="text-base">
   <main class="legal">
