@@ -48,7 +48,7 @@ test('a reply has a quiet Copy action that puts its words on the clipboard', asy
   await ask(page, 'Is everyone equal under the law?');
   const answer = page.locator('article.msg.bot:not(.pending)').first();
   await expect(answer.locator('.cite').first()).toBeVisible();
-  const text = (await answer.locator('p.text').textContent()) ?? '';
+  const text = (await answer.locator('.text').textContent()) ?? '';
   await answer.getByRole('button', { name: 'Copy answer' }).click();
   await expect(answer.getByRole('button', { name: 'Copied' })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(text);

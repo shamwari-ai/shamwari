@@ -161,7 +161,7 @@ export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) 
     const controls = [...document.querySelectorAll<HTMLElement>('a[href], button, select, textarea, summary, input:not([type="hidden"])')].filter(seen).filter(onTop);
     for (const el of controls) {
       const r = el.getBoundingClientRect();
-      const inSentence = el.tagName === 'A' && !!el.closest('p, li') && getComputedStyle(el).display === 'inline';
+      const inSentence = el.tagName === 'A' && !!el.closest('p, li, td, th') && getComputedStyle(el).display === 'inline';
       if (!inSentence && (r.width < minHit || r.height < minHit)) out.push(`hit region ${Math.round(r.width)}x${Math.round(r.height)}: ${label(el)}`);
     }
     // A control scrolled partly out of its column is only there where the column shows it: its neighbours are measured
@@ -241,7 +241,7 @@ export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) 
     // Blocks that follow each other in the page: 7px between them, never touching or overlapping by accident.
     const flow = (el: Element) => {
       const s = getComputedStyle(el);
-      return seen(el) && !hiddenAway(el) && !['fixed', 'absolute'].includes(s.position) && s.display !== 'contents' && s.display !== 'inline';
+      return seen(el) && !hiddenAway(el) && !['fixed', 'absolute'].includes(s.position) && s.display !== 'contents' && s.display !== 'inline' && !s.display.startsWith('table-'); // rows and cells of a table are not free-standing blocks
     };
     for (const a of document.querySelectorAll<HTMLElement>('main *, [data-slot="app-sidebar"] *, body > *')) {
       const b = a.nextElementSibling as HTMLElement | null;

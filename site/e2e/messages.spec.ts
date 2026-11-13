@@ -3,15 +3,14 @@ import { ask, openChat } from './helpers';
 
 // Messages: plain text with no markdown marks, no chat bubbles, small text, small "thinking", and text (not icon) actions.
 
-test('an answer written in markdown is shown as plain words, with none of its marks', async ({ page }) => {
+test('an answer written in markdown is drawn formatted, with none of its marks left in view (see markdown.spec.ts)', async ({ page }) => {
   await openChat(page);
   await ask(page, 'Show markdown please');
-  const text = page.locator('article.msg.bot:not(.pending) p.text');
+  const text = page.locator('article.msg.bot:not(.pending) .text');
   await expect(text).toContainText('Your rights');
   const shown = (await text.textContent()) ?? '';
-  for (const mark of ['##', '**', '`', '](', '_personal', '> ']) expect(shown, `no "${mark}"`).not.toContain(mark);
-  expect(shown).toContain('Section 49 says you have the right to personal liberty. See section 50 and the Constitution (https://www.parlzim.gov.zw/).');
-  expect(shown).toContain('(https://www.parlzim.gov.zw/).\n\n- You may ask why you are held');
+  for (const mark of ['##', '**', '](', '_personal', '> ', '|---']) expect(shown, `no "${mark}"`).not.toContain(mark);
+  expect(shown).toContain('Section 49 says you have the right to personal liberty.');
   expect(shown).toContain('Keep calm.');
 });
 
@@ -22,7 +21,7 @@ test('no chat bubbles: the question and the answer are plain text at the small s
   for (const sel of ['article.msg.user', 'article.msg.bot:not(.pending)']) {
     const st = await page.locator(sel).evaluate((el) => {
       const c = getComputedStyle(el);
-      const t = getComputedStyle(el.querySelector('p.text')!);
+      const t = getComputedStyle(el.querySelector('.text')!);
       return { bg: c.backgroundColor, radius: c.borderTopLeftRadius, border: c.borderTopWidth, pad: c.paddingTop, size: t.fontSize };
     });
     expect(st.bg, `${sel} has no fill`).toBe('rgba(0, 0, 0, 0)');
@@ -31,7 +30,7 @@ test('no chat bubbles: the question and the answer are plain text at the small s
     expect(st.pad, `${sel} has no padding`).toBe('0px');
     expect(st.size, `${sel} text is the small size`).toBe('14px');
   }
-  const weight = (sel: string) => page.locator(sel).evaluate((el) => Number(getComputedStyle(el.querySelector('p.text')!).fontWeight));
+  const weight = (sel: string) => page.locator(sel).evaluate((el) => Number(getComputedStyle(el.querySelector('.text')!).fontWeight));
   expect(await weight('article.msg.user')).toBeGreaterThan(await weight('article.msg.bot:not(.pending)'));
 });
 
