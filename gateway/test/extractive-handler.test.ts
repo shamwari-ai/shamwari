@@ -61,8 +61,11 @@ function setup(
     },
     SINK: {
       send: async (m: SinkMessage) => void calls.sink.push(m),
-      sendBatch: async (ms: { body: SinkMessage }[]) =>
-        void calls.sink.push(...ms.map((m) => m.body)),
+      // A real queue refuses an empty batch, so the fake does too.
+      sendBatch: async (ms: { body: SinkMessage }[]) => {
+        if (ms.length === 0) throw new TypeError('sendBatch() requires at least one message');
+        calls.sink.push(...ms.map((m) => m.body));
+      },
     },
     CORE_URL: 'https://core.example',
     SHAMWARI_CORE_TOKEN: 't',
@@ -234,6 +237,16 @@ describe('the web chat keeps no content on the server', () => {
     const stored = JSON.stringify(calls.sink);
     expect(stored).not.toContain('Do I have a right to life?');
     expect(stored).not.toContain('generated');
+  });
+
+  it('never asks the queue to send an empty batch', async () => {
+    const { env } = setup();
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await worker.fetch(pwa(), env, ctx);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(err.mock.calls.filter((c) => c[0] === 'sink enqueue failed')).toEqual([]);
+    err.mockRestore();
   });
 
   it('is matched by the channel name only, so SMS still behaves as before', async () => {
