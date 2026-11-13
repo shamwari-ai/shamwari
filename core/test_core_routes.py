@@ -299,6 +299,65 @@ class Rest(Base):
         self.assertEqual(self.api.calls, [])
 
 
+@unittest.skipIf(SKIP, SKIP or "")
+class ThroughTheServersApi(unittest.TestCase):
+    """Core's real routes with the real Servers API client over a recording transport."""
+
+    def setUp(self):
+        import httpx
+
+        from nyuchi_api import ServersApi
+
+        self.seen = []
+        self.answer = lambda req: httpx.Response(200, json={"scope": "platform", "chunks": []})
+
+        def handler(req):
+            self.seen.append(req)
+            return self.answer(req)
+
+        http = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url="http://data.internal:8080")
+        self.real = main.api
+        main.api = ServersApi(base_url="http://data.internal:8080", http=http, backoff=0)
+        self.addCleanup(setattr, main, "api", self.real)
+        self.http = TestClient(main.app, raise_server_exceptions=False)
+        self.httpx = httpx
+
+    def search(self, **over):
+        body = {"query": "equality", "owner_entity_id": "person_1", "scope": "platform", "destination": "cloud"}
+        body.update(over)
+        return self.http.post("/ground/search", headers=AUTH, json=body)
+
+    def test_rule_1_personal_scope_to_cloud_still_reaches_no_data_call(self):
+        r = self.search(scope="personal")
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(self.seen, [])
+
+    def test_a_personal_mind_search_carries_the_owner_in_the_header_only(self):
+        self.answer = lambda req: self.httpx.Response(200, json={"scope": "personal", "chunks": []})
+        r = self.search(scope="personal", destination="mind")
+        self.assertEqual(r.status_code, 200)
+        (req,) = self.seen
+        self.assertEqual(req.headers["x-shamwari-person"], "person_1")
+        self.assertNotIn("person_1", req.content.decode())
+
+    def test_a_refusal_reason_is_read_from_the_error_member(self):
+        problem = {"type": "about:blank", "title": "Conflict", "status": 409, "detail": "x", "error": "scope_requires_local_inference"}
+        self.answer = lambda req: self.httpx.Response(409, json=problem)
+        r = self.search()
+        self.assertEqual(r.status_code, 409)
+        self.assertEqual(r.json()["detail"]["error"], "scope_requires_local_inference")
+
+    def test_no_credential_is_sent_to_an_internal_host(self):
+        self.search()
+        for name in ("authorization", "x-nyuchi-internal-key", "x-api-key"):
+            self.assertNotIn(name, self.seen[0].headers)
+
+    def test_guardrails_use_the_servers_api_path(self):
+        self.answer = lambda req: self.httpx.Response(200, json={"platform": [], "entity": []})
+        self.assertEqual(self.http.get("/guardrails", headers=AUTH).status_code, 200)
+        self.assertEqual(self.seen[0].url.path, "/v1/shamwari/guardrails")
+
+
 class NoDatabaseDriver(unittest.TestCase):
     def test_importing_core_loads_no_database_driver(self):
         code = (
