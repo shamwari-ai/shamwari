@@ -109,8 +109,9 @@ for (const width of [1000, 1280, 1440]) {
       const labels = await lines(page, '.side-row > span:not(.sr-only, .chat-row-title, .chat-row-when)');
       expect(labels.length).toBeGreaterThanOrEqual(7);
       for (const l of labels) expect(l.lines, `"${l.text}" is on one line`).toBe(1);
-      const factory = await page.locator('.side-row.side-disabled').evaluate((el) => el.getBoundingClientRect().height);
-      expect(factory, 'the Factory row is one row high, chip included').toBeLessThanOrEqual(popover ? 50 : 33);
+      const inert = await page.locator('.side-row.side-disabled').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
+      expect(inert).toHaveLength(2); // Factory and Plugins
+      for (const h of inert) expect(h, 'a coming-soon row is one row high, chip included').toBeLessThanOrEqual(popover ? 50 : 33);
 
       if (!popover) {
         const w = await page.locator('[data-slot="app-sidebar"]').evaluate((el) => el.getBoundingClientRect().width);

@@ -9,7 +9,7 @@ test('the sections are in the specified order, Factory is plain text with a chip
   await openChat(page);
   await openChats(page);
   const rows = nav(page).locator('li');
-  await expect(rows).toHaveText([/^Chat$/, /^Projects$/, /^Factory\s*Coming soon$/, /^Artifacts$/, /^Plugins$/]);
+  await expect(rows).toHaveText([/^Chat$/, /^Projects$/, /^Factory\s*Coming soon$/, /^Artifacts$/, /^Plugins\s*Coming soon$/]);
   await expect(nav(page)).toHaveAttribute('aria-label', 'Sections');
   // Every row has one decorative icon from the Mzizi set.
   for (const li of await rows.all()) {
@@ -46,39 +46,23 @@ test('each section opens its own list, aria-current follows, and the other lists
   await expect(page.locator('[data-panel]:not([hidden])')).toHaveCount(1);
 });
 
-test('Plugins is an honest shell: three tabs, nothing behind them, and the third-party note; its script loads only then', async ({ page }) => {
-  const scripts: string[] = [];
-  page.on('request', (r) => {
-    if (r.url().endsWith('.js')) scripts.push(r.url());
-  });
+test('Factory and Plugins are not available yet: each is plain text with a "Coming soon" chip, inert, not focusable, and skipped by Tab', async ({ page }) => {
   await openChat(page);
-  expect(scripts.some((u) => /\/plugins\./.test(u)), 'not loaded with the chat').toBe(false);
-  await openSection(page, 'Plugins');
-  await expect.poll(() => scripts.some((u) => /\/plugins\./.test(u))).toBe(true);
-  const tabs = page.getByRole('tab');
-  await expect(tabs).toHaveText(['Plugins', 'Skills', 'MCP']);
-  await expect(page.getByText('No plugins yet.')).toBeVisible();
-  await expect(page.getByText('A plugin or an MCP server would be run by someone else')).toBeVisible();
-  // Arrow keys move between tabs (one tab in the tab order), and each says honestly there is nothing.
-  await tabs.first().focus();
-  await page.keyboard.press('ArrowRight');
-  await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText('No skills yet.')).toBeVisible();
-  await page.keyboard.press('End');
-  await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText('No MCP servers are connected.')).toBeVisible();
-  // No network request is made by opening any of it.
-  const requests: string[] = [];
-  page.on('request', (r) => requests.push(r.url()));
-  await tabs.first().click();
-  await tabs.nth(2).click();
-  expect(requests).toEqual([]);
+  await openChats(page);
+  for (const name of ['Factory', 'Plugins']) {
+    const row = page.locator('.side-primary .side-disabled', { hasText: name });
+    await expect(row, name).toHaveCount(1);
+    await expect(row).toHaveAttribute('aria-disabled', 'true');
+    await expect(row.locator('.side-chip')).toHaveText('Coming soon');
+    await expect(nav(page).getByRole('button', { name }), `${name} is not a button`).toHaveCount(0);
+    expect(await row.evaluate((el) => getComputedStyle(el).cursor), `${name} does not look tappable`).not.toBe('pointer');
+  }
 });
 
 test('the rows meet the 49px floor and are keyboard reachable in order', async ({ page }) => {
   await openChat(page);
   await openChats(page);
-  for (const name of ['Chat', 'Projects', 'Artifacts', 'Plugins']) {
+  for (const name of ['Chat', 'Projects', 'Artifacts']) {
     const b = nav(page).getByRole('button', { name });
     expect((await b.boundingBox())!.height, name).toBeGreaterThanOrEqual(49);
   }

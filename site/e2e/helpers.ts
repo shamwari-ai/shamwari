@@ -30,8 +30,8 @@ export async function makeProject(page: Page, name: string) {
   await page.getByRole('button', { name: 'Create project' }).click();
 }
 
-/** Open one section of the drawer (Chat, Projects, Artifacts, Plugins) from its row at the top. */
-export async function openSection(page: Page, name: 'Chat' | 'Projects' | 'Artifacts' | 'Plugins') {
+/** Open one section of the drawer (Chat, Projects, Artifacts) from its row at the top. */
+export async function openSection(page: Page, name: 'Chat' | 'Projects' | 'Artifacts') {
   await openChats(page);
   await page.locator('.side-primary').getByRole('button', { name }).click();
 }
