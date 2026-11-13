@@ -101,6 +101,7 @@ export const nd: Strings = {
   closeChats: 'Vala izingxoxo',
   yourChats: 'Izingxoxo zakho',
   tryAsking: 'Zama ukubuza',
+  suggestedPrompts: 'Imibuzo eyethulwayo',
   greeting: 'Sawubona, mngane',
   example1: 'ISimiso sithini ngokulinganisana?',
   example2: 'Amalungelo ami ayini nxa ngiboshiwe?',

@@ -101,6 +101,7 @@ export const sn: Strings = {
   closeChats: 'Vhara hurukuro',
   yourChats: 'Hurukuro dzenyu',
   tryAsking: 'Edzai kubvunza',
+  suggestedPrompts: 'Mibvunzo inokurudzirwa',
   greeting: 'Mhoro, shamwari',
   example1: 'Bumbiro remitemo rinotii chii pamusoro pekuenzana?',
   example2: 'Kodzero dzangu dziri dzipi kana ndabatwa?',

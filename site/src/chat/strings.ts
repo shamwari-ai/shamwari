@@ -108,6 +108,7 @@ export const en = {
   closeChats: 'Close chats',
   yourChats: 'Your chats',
   tryAsking: 'Try asking',
+  suggestedPrompts: 'Suggested prompts',
   greeting: 'Hello, friend',
   example1: 'What does the Constitution say about equality?',
   example2: 'What are my rights if I am arrested?',
