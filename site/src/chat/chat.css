@@ -270,7 +270,7 @@ input:not([type='checkbox']):not([type='radio']) {
   outline: none;
 }
 .lead {
-  color: var(--muted-foreground);
+  color: var(--muted-text);
   margin: 0;
 }
 #empty {
@@ -293,7 +293,7 @@ input:not([type='checkbox']):not([type='radio']) {
   margin: var(--inset-floor) 0 var(--gap-floor);
   font-size: var(--fs-caption);
   font-weight: 600;
-  color: var(--muted-foreground);
+  color: var(--muted-text);
 }
 /* Suggested prompts are pills (Mzizi's suggested-prompts shape): fully rounded, a thin border, the input tint as the fill and a
    stronger tint on hover. They wrap onto as many rows as they need instead of scrolling sideways, because the page never
@@ -704,7 +704,7 @@ main#main :where(.thread, .dock, .ask, #empty, .panel, .chat-tools) {
 .version-line {
   margin: 0;
   font-size: var(--fs-caption);
-  color: var(--muted-foreground);
+  color: var(--muted-text);
 }
 
 /* ---- the shell never scrolls -----------------------------------------------------------------------------
@@ -962,6 +962,9 @@ html[data-view='pending'] dialog {
    on the dim part or Esc closes it. Only the drawer's own transform animates, and the dim fades in; with reduced motion
    the change is instant. */
 :root {
+  /* Quiet text (hints, section labels) that still reaches the floor's 7:1 against the page: the page text mixed 80% into its background,
+     the same colour the drawer rows use. Mzizi's muted-foreground alone measures about 6:1 in light. */
+  --muted-text: color-mix(in oklab, var(--foreground) 80%, var(--background));
   /* One sidebar width, as the drawer on a phone and as the column from 64rem, so crossing 64rem does not make it jump. */
   --sidebar-w: 17.5rem;
   --drawer-w: min(var(--sidebar-w), 86vw);
@@ -1781,7 +1784,7 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   margin: 0;
   font-size: var(--fs-small);
   font-weight: 600;
-  color: var(--muted-foreground);
+  color: var(--muted-text);
 }
 .settings-dialog :is(h2, h3) {
   font-family: inherit;
@@ -1865,6 +1868,6 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .settings-hint {
   margin: 0;
   font-size: var(--fs-small);
-  color: var(--muted-foreground);
+  color: var(--muted-text);
   line-height: var(--leading-floor);
 }
