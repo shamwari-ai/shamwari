@@ -286,3 +286,13 @@ Ten seconds after a question is sent, the thinking bubble says the network is sl
 was not answered.", and is NOT queued, so nothing sends it again by itself. The person can **Send now** (under a fresh idempotency key, since
 the gateway may still be finishing the first try) or **Discard**. An answer that arrives in the same moment as the click is shown as usual.
 It reuses the offline-mode `local` status with `hint: 'stopped'`. Not covered: Stop during a credential renewal waits for the renewal.
+
+## Plain messages (2026-11-13)
+
+Owner's direction: no markdown marks in messages, no chat bubbles, smaller message text, a really small "thinking", and text (not icons) for
+the answer actions. An answer is shown with `plainText()` (`render.ts`): headings, bold, italic, code, quotes, rules, tables and fences lose their
+marks, list items become plain dashes, `[text](url)` becomes "text (url)" (the address is the pointer to the source); no regex lookbehind (older phones
+cannot parse it). The same plain words are copied, shared and saved (a saved answer from before is shown plain). The question is plain text too,
+set apart by weight (600), not by a box; message text is 14px (`--fs-small`, the smallest the Bundu floor allows) and "thinking" is 14px and
+muted. Copy answer, Share answer (only where the browser can share; closing the sheet is not an error, any other failure copies the text instead)
+and Save answer are text buttons. Refusal and error boxes stay: they are notices, not bubbles.
