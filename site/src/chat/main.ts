@@ -9,14 +9,21 @@ import { reloadOnTakeover, startUpdateChecks } from './update-reload';
 // someone else's server.
 const apiBase = document.querySelector<HTMLMetaElement>('meta[name="shamwari-api"]')?.content;
 
-const select = document.querySelector<HTMLSelectElement>('#lang');
-if (select) {
+// The language choice is a radio group: every language is in view at once, one tap each (no list to open).
+const group = document.querySelector<HTMLElement>('#lang');
+if (group) {
   for (const [code, { label }] of Object.entries(LANGUAGES)) {
-    const o = document.createElement('option');
-    o.value = code;
-    o.textContent = label;
-    o.lang = code;
-    select.append(o);
+    const row = document.createElement('label');
+    row.className = 'radio-row';
+    row.lang = code;
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'lang';
+    input.value = code;
+    const text = document.createElement('span');
+    text.textContent = label;
+    row.append(input, text);
+    group.append(row);
   }
 }
 // Mukoko unless the build asked for the developer-key screen by name (chat/auth-mode.ts).
