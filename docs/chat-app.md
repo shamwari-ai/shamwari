@@ -84,8 +84,9 @@ account menu open and the drawer open. A control that falls under it fails the b
 ## How an answer is drawn
 
 An answer is formatted: bold, italics, headings, lists, inline code and code blocks, quotes, links and simple
-tables, as the model writes them. `site/src/chat/markdown.ts` (about 2.5 KB gzipped, hand-written, in the main
-chunk) builds the DOM with `createElement` and text nodes only: raw HTML in an answer is shown as the characters it
+tables, as the model writes them. `site/src/chat/markdown.ts` (about 2.5 KB gzipped, hand-written, a part of its own
+loaded on the first answer and precached for offline, so the first load stays in budget; until it is there an answer
+shows as plain words) builds the DOM with `createElement` and text nodes only: raw HTML in an answer is shown as the characters it
 is, links are limited to `http:`, `https:` and `mailto:` (with `rel="noopener noreferrer"` and
 `target="_blank"`), and an image is drawn as its alt text. It is linear in the size of the answer (no lookbehind,
 block nesting capped at 4, inline at 5, an answer over 60 000 characters is one plain paragraph).
