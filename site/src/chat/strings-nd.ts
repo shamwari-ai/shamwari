@@ -20,6 +20,8 @@ export const nd: Strings = {
   copyAnswer: 'Kopisha impendulo',
   copied: 'Kokopishiwe',
   shareAnswer: 'Yabelana ngempendulo',
+  codeBlock: 'Ikhodi',
+  tableBox: 'Ithebula',
   languageUnavailable: 'Lolu limi alikwazanga ukulayishwa. Zama futhi uma uxhumene ne-inthanethi.',
   deleteWait: 'Le ngxoxo isathumela. Isule uma isiphendulwe.',
   addTo: 'Engeza',

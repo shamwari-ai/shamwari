@@ -3,15 +3,14 @@ import { ask, openChat } from './helpers';
 
 // Messages: plain text with no markdown marks, no chat bubbles, small text, small "thinking", and text (not icon) actions.
 
-test('an answer written in markdown is shown as plain words, with none of its marks', async ({ page }) => {
+test('an answer written in markdown is drawn formatted, with none of its marks left in view (see markdown.spec.ts)', async ({ page }) => {
   await openChat(page);
   await ask(page, 'Show markdown please');
-  const text = page.locator('article.msg.bot:not(.pending) p.text');
+  const text = page.locator('article.msg.bot:not(.pending) .text');
   await expect(text).toContainText('Your rights');
   const shown = (await text.textContent()) ?? '';
-  for (const mark of ['##', '**', '`', '](', '_personal', '> ']) expect(shown, `no "${mark}"`).not.toContain(mark);
-  expect(shown).toContain('Section 49 says you have the right to personal liberty. See section 50 and the Constitution (https://www.parlzim.gov.zw/).');
-  expect(shown).toContain('(https://www.parlzim.gov.zw/).\n\n- You may ask why you are held');
+  for (const mark of ['##', '**', '](', '_personal', '> ', '|---']) expect(shown, `no "${mark}"`).not.toContain(mark);
+  expect(shown).toContain('Section 49 says you have the right to personal liberty.');
   expect(shown).toContain('Keep calm.');
 });
 
@@ -22,7 +21,7 @@ test('the person\'s own message is a soft rounded bubble at the right; the answe
   const read = (sel: string) =>
     page.locator(sel).evaluate((el) => {
       const c = getComputedStyle(el);
-      const t = getComputedStyle(el.querySelector('p.text')!);
+      const t = getComputedStyle(el.querySelector('.text')!);
       const r = el.getBoundingClientRect();
       const log = document.querySelector('#log')!.getBoundingClientRect();
       return { bg: c.backgroundColor, radius: parseFloat(c.borderTopLeftRadius), border: c.borderTopWidth, pad: c.paddingTop, size: t.fontSize, weight: Number(t.fontWeight), left: r.left - log.left, right: log.right - r.right, width: r.width, logWidth: log.width };
@@ -67,7 +66,7 @@ for (const scheme of ['light', 'dark'] as const) {
         if (c[3] > 0.5) { page = c; break; }
       }
       const bg = over(rgb(getComputedStyle(el).backgroundColor), page);
-      const fg = over(rgb(getComputedStyle(el.querySelector('p.text')!).color), bg);
+      const fg = over(rgb(getComputedStyle(el.querySelector('.text')!).color), bg);
       const lum = (c: number[]) => {
         const f = (v: number) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
         return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);

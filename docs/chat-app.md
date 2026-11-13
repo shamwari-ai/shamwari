@@ -81,6 +81,20 @@ account menu open and the drawer open. A control that falls under it fails the b
 | Hit regions and text sizes     | the Bundu floor       | all at or above the floor    | e2e test         |
 | Accessibility                  | axe wcag2a/aa/21/22aa | 0 violations, light and dark | e2e test         |
 
+## How an answer is drawn
+
+An answer is formatted: bold, italics, headings, lists, inline code and code blocks, quotes, links and simple
+tables, as the model writes them. `site/src/chat/markdown.ts` (about 2.5 KB gzipped, hand-written, a part of its own
+loaded on the first answer and precached for offline, so the first load stays in budget; until it is there an answer
+shows as plain words) builds the DOM with `createElement` and text nodes only: raw HTML in an answer is shown as the characters it
+is, links are limited to `http:`, `https:` and `mailto:` (with `rel="noopener noreferrer"` and
+`target="_blank"`), and an image is drawn as its alt text. It is linear in the size of the answer (no lookbehind,
+block nesting capped at 4, inline at 5, an answer over 60 000 characters is one plain paragraph).
+`test/app/markdown.test.ts` fails if any of that breaks, and `e2e/markdown.spec.ts` checks a malicious answer in a
+real browser. Headings are styled paragraphs with `role="heading"` that start at level 2 and never skip a level, so
+the page's outline is untouched; tables and code blocks scroll inside their own boxes. Copy, Share and Save still
+use `plainText()`, so the clipboard and a WhatsApp message get plain words. Refs #269.
+
 ## Installable and offline
 
 - **Install.** A web manifest scoped to `/lite/` (standalone, sodalite theme,

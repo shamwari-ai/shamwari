@@ -1396,6 +1396,145 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .msg.error {
   border-color: var(--destructive-text, var(--destructive));
 }
+/* A formatted answer (markdown.ts): paragraphs, lists, quotes, code and tables, all from Mzizi tokens. Blocks are 7px apart
+   (the floor), headings are as big as the body at the smallest, and text never goes under 14px, so code is not shrunk. */
+.msg .text.md {
+  white-space: normal;
+}
+.md > * {
+  margin-block: 0 var(--gap-floor);
+}
+.md > :last-child {
+  margin-block-end: 0;
+}
+.md-raw {
+  white-space: pre-wrap;
+}
+.md .md-h {
+  font-weight: 700;
+  margin-block-start: var(--inset-floor);
+}
+.md > .md-h:first-child {
+  margin-block-start: 0;
+}
+.md .md-h1,
+.md .md-h2 {
+  font-size: var(--fs-body);
+  line-height: var(--leading-floor);
+}
+.md ul,
+.md ol {
+  padding-inline-start: 1.5em;
+}
+.md ul {
+  list-style: disc; /* the page's reset removes markers; an answer's lists need them */
+}
+.md ol {
+  list-style: decimal;
+}
+.md ul ul {
+  list-style: circle;
+}
+.md li + li {
+  margin-block-start: var(--gap-floor);
+}
+.md li > ul,
+.md li > ol,
+.md li > p,
+.md li > blockquote,
+.md li > pre,
+.md li > .md-table {
+  margin-block: var(--gap-floor) 0;
+}
+.md strong {
+  font-weight: 700;
+}
+.md blockquote {
+  margin-inline: 0;
+  padding-inline-start: var(--inset-floor);
+  border-inline-start: 3px solid var(--border);
+  color: var(--muted-foreground);
+}
+.md hr {
+  border: 0;
+  border-block-start: 1px solid var(--border);
+}
+.md a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.md code {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
+  background: var(--muted);
+  color: var(--foreground);
+  border-radius: var(--radius-sm);
+  padding-inline: 0.3em;
+}
+/* A code block scrolls inside its own box: the page never scrolls sideways. */
+.md pre {
+  background: var(--muted);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--gap-floor) var(--inset-floor);
+  max-inline-size: 100%;
+  overflow-x: auto;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+  tab-size: 2;
+}
+.md pre code {
+  background: none;
+  border-radius: 0;
+  padding: 0;
+}
+.md .md-table {
+  max-inline-size: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.md table {
+  border-collapse: collapse;
+  inline-size: max-content;
+  min-inline-size: 100%;
+}
+.md th,
+.md td {
+  padding: var(--gap-floor);
+  border: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+  min-inline-size: 7rem;
+  max-inline-size: 20rem;
+  overflow-wrap: break-word;
+}
+.md th {
+  background: var(--muted);
+  font-weight: 700;
+}
+.md .md-r {
+  text-align: end;
+}
+.md .md-c {
+  text-align: center;
+}
+@media (prefers-contrast: more), (forced-colors: active) {
+  .md pre,
+  .md .md-table,
+  .md th,
+  .md td,
+  .md blockquote,
+  .md hr {
+    border-color: var(--border-control, CanvasText);
+  }
+  .md blockquote {
+    border-inline-start-width: 4px;
+  }
+}
+
 /* A quiet row of actions under a reply. */
 .msg-actions {
   display: flex;
