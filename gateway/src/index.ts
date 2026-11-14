@@ -79,8 +79,10 @@ async function overQuota(env: Env, auth: AuthContext): Promise<boolean> {
 /**
  * Whether a stored conversation may ever reach the Mind training pipeline. Every term is a
  * way to say no; there is no way to say yes except being an open_weight answer to a caller
- * who was asked. Channel traffic and signed-in people (WorkOS) have not been asked, so
- * neither is trainable until the owner decides on consent.
+ * who was asked and said yes (`consented`). Storing a conversation is not consent to train
+ * on it, so a caller with no recorded consent is not trainable, whatever kind of key it holds.
+ * Channel traffic and signed-in people (WorkOS) stay excluded even with a flag, until the
+ * owner decides how their consent is asked for.
  */
 export function conversationTrainable(
   scope: string,
@@ -93,8 +95,11 @@ export function conversationTrainable(
    * the traffic that must not become Mind training material, whatever scope it travelled in.
    */
   looksPersonal = false,
+  /** The caller's recorded consent to training. Only `true` counts; absent is no. */
+  consented = false,
 ): boolean {
   return (
+    consented === true &&
     scope !== 'personal' &&
     licenseClass === 'open_weight' &&
     !viaChannel &&
@@ -524,6 +529,11 @@ const worker = {
             // people who have not been asked, in the channel where they are
             // most likely to type something personal, so it is metered and
             // nothing more until the owner decides on consent.
+            //
+            // And no caller is trainable without recorded consent: storing a
+            // conversation is not consent to train on it. Core refuses a
+            // trainable row that does not carry trainingConsent: true.
+            trainingConsent: auth.trainingConsent === true,
             trainingEligible:
               conversationTrainable(
                 decision.scope,
@@ -531,6 +541,7 @@ const worker = {
                 req.headers.has('X-Shamwari-Channel'),
                 auth.keyType,
                 ownInformation(decision, g).answered_without_own_information,
+                auth.trainingConsent === true,
               ),
             promoted: false,
             lastMessageAt: now,
