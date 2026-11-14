@@ -38,6 +38,7 @@ const AUTH = {
   keyType: 'standard',
   tier: 'community',
   monthlyTokenCap: 100_000,
+  trainingConsent: true,
 };
 
 const PERSONAL_Q = 'How much PAYE do I owe on my salary?';
@@ -402,8 +403,8 @@ describe('what review found', () => {
   });
 
   it('conversationTrainable says no when the question looked personal', () => {
-    expect(conversationTrainable('platform', 'open_weight', false, 'shamwari', true)).toBe(false);
-    expect(conversationTrainable('platform', 'open_weight', false, 'shamwari')).toBe(true);
+    expect(conversationTrainable('platform', 'open_weight', false, 'shamwari', true, true)).toBe(false);
+    expect(conversationTrainable('platform', 'open_weight', false, 'shamwari', false, true)).toBe(true);
   });
 
   it('the notice does not squeeze a USSD answer to a few words', () => {
@@ -471,5 +472,26 @@ describe('(d) Core and the gateway cannot disagree about a scope decision', () =
       expect(((await res.json()) as any).shamwari.grounded).toBe(false);
       expect(scopesSeen(wire).filter((s) => !CLOUD_SAFE.has(s as string))).toEqual([]);
     }
+  });
+});
+
+describe('storing a conversation is not consent to train on it', () => {
+  it('a caller with no recorded consent is never trainable, whatever else is true', () => {
+    // Every other term says yes; only consent is missing.
+    expect(conversationTrainable('platform', 'open_weight', false, 'shamwari')).toBe(false);
+    expect(conversationTrainable('community', 'open_weight', false, 'standard', false, false)).toBe(false);
+    expect(conversationTrainable('platform', 'open_weight', false, 'shamwari', false, true)).toBe(true);
+  });
+
+  it('an API caller without consent is stored, but not as training material', async () => {
+    const { trainingConsent: _, ...unasked } = AUTH;
+    const { env, wire } = setup();
+    // The cached auth context is what authenticate() reads first.
+    (env.AUTH_CACHE as unknown as { get: () => Promise<unknown> }).get = async () => unasked;
+    await worker.fetch(chat(PLAIN_Q), env, ctx);
+    await Promise.resolve();
+    const conv = wire.sink.find((m) => m.collection === 'conversations')!.doc as any;
+    expect(conv.trainingEligible).toBe(false);
+    expect(conv.trainingConsent).toBe(false);
   });
 });

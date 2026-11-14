@@ -32,6 +32,8 @@ const AUTH: AuthContext = {
   keyType: 'shamwari',
   tier: 'community',
   monthlyTokenCap: 100_000,
+  // The trainable path below needs a caller who agreed; the default (no consent) is tested on its own.
+  trainingConsent: true,
 };
 
 interface Wire {

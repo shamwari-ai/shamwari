@@ -55,6 +55,8 @@ function setup(opts: { answer?: string; chunks?: GroundChunk[]; overQuota?: bool
               keyType: 'standard',
               tier: 'community',
               monthlyTokenCap: 100_000,
+              // Consented, so the direct control below is trainable and the channel result is the header's doing.
+              trainingConsent: true,
             }
           : JSON.parse(store.get(k) ?? 'null'),
       put: async (k: string, v: string) => void (!k.startsWith('auth:') && store.set(k, v)),
