@@ -231,6 +231,22 @@ async def ground_search(body: GroundQuery) -> dict[str, Any]:
             },
         )
 
+    # The owner's rule (shamwari#291): a question that needs the person's own information is
+    # personal scope, and the edge embedding runs on Cloudflare-hosted inference. The gateway
+    # does not embed such a question (gateway/src/ground.ts); this is the check it cannot
+    # bypass. Refused, not discarded, for the same reason as the mind case above.
+    if body.embedding is not None and (body.needs_own_information or needs_own_information(body.query)):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "error": "edge_embedding_forbidden",
+                "message": (
+                    "A question that needs the person's own information must not be embedded "
+                    "by the caller. Embedding is inference."
+                ),
+            },
+        )
+
     try:
         out = await api.ground_search(
             {

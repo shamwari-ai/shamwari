@@ -104,6 +104,22 @@ class GroundRule1(Base):
         self.assertEqual((body["scope"], body["destination"]), ("personal", "mind"))
         self.assertNotIn("embedding", body)
 
+    def test_an_embedded_question_that_needs_own_information_is_refused_and_makes_no_data_call(self):
+        # shamwari#291: such a question is personal scope; the edge embedding is hosted inference.
+        for over in ({"query": "How much PAYE do I owe on my salary?"},
+                     {"query": "equality", "needs_own_information": True}):
+            r = self.search(embedding=[0.5] * 1024, **over)
+            self.assertEqual(r.status_code, 409, over)
+            self.assertEqual(r.json()["detail"]["error"], "edge_embedding_forbidden")
+        self.assertEqual(self.api.calls, [])
+
+    def test_a_question_that_needs_own_information_without_an_embedding_is_searched_by_keyword(self):
+        r = self.search(query="How much PAYE do I owe on my salary?")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["needs_own_information"])
+        (_, (body,)), = self.api.calls
+        self.assertNotIn("embedding", body)
+
     def test_a_cloud_query_is_forwarded_with_exactly_what_the_api_takes(self):
         r = self.search(embedding=[0.5] * 1024, language="sn", top_k=8)
         self.assertEqual(r.status_code, 200)

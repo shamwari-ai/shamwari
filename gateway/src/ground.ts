@@ -75,11 +75,16 @@ export async function ground(
   // stores the conversation — so this adds no exposure that rule 1 has not
   // already accepted.
   //
+  // The same holds for a question the gateway's own rules say needs the person's
+  // own information (`withoutOwnInformation`). The owner's rule (shamwari#291) is
+  // that such a question is personal scope: Workers AI is a third-party host, so
+  // it gets no edge embedding either, only Core's keyword search.
+  //
   // An embedding failure is an outage of Workers AI, which is exactly when the
   // lower rungs must still work. It degrades to the same keyword search a mind
   // destination gets: weaker ranking over the same corpus, never a different one.
   let embedding: number[] | null = null;
-  if (destination === 'cloud') {
+  if (destination === 'cloud' && !decision.withoutOwnInformation) {
     try {
       embedding = await embed(env, lastUser.content, decision);
     } catch (e) {
