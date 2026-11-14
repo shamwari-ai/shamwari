@@ -712,6 +712,9 @@ no-database-login rule (#127), or the Ground store.
 
 ### What is stored, and the rule about it
 
+> **Not to be deployed: conflicts with the personal-scope rule (shamwari#291).
+> Owner sign-off needed before any server-side storage of personal text.**
+
 Relayed (awaiting owner confirmation in this session): the owner accepts that
 personal-scope conversation text may be stored here, in line with the verbatim
 decision recorded in #146.

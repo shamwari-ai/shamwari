@@ -580,14 +580,14 @@ describe('the two credential shapes stay apart', () => {
 
 describe('signed-in people are not Mind training material (nobody asked them)', () => {
   it('keeps a WorkOS caller out of training even for an open_weight community answer', () => {
-    expect(conversationTrainable('community', 'open_weight', false, 'shamwari')).toBe(true); // the unchanged baseline
-    expect(conversationTrainable('community', 'open_weight', false, 'workos')).toBe(false);
-    expect(conversationTrainable('platform', 'open_weight', false, 'workos')).toBe(false);
+    expect(conversationTrainable('community', 'open_weight', false, 'shamwari', false, true)).toBe(true); // the baseline, consented
+    expect(conversationTrainable('community', 'open_weight', false, 'workos', false, true)).toBe(false);
+    expect(conversationTrainable('platform', 'open_weight', false, 'workos', false, true)).toBe(false);
   });
 
   it('keeps every earlier way of saying no', () => {
-    expect(conversationTrainable('personal', 'open_weight', false, 'shamwari')).toBe(false);
-    expect(conversationTrainable('community', 'restricted', false, 'shamwari')).toBe(false);
-    expect(conversationTrainable('community', 'open_weight', true, 'shamwari')).toBe(false);
+    expect(conversationTrainable('personal', 'open_weight', false, 'shamwari', false, true)).toBe(false);
+    expect(conversationTrainable('community', 'restricted', false, 'shamwari', false, true)).toBe(false);
+    expect(conversationTrainable('community', 'open_weight', true, 'shamwari', false, true)).toBe(false);
   });
 });

@@ -104,6 +104,22 @@ class GroundRule1(Base):
         self.assertEqual((body["scope"], body["destination"]), ("personal", "mind"))
         self.assertNotIn("embedding", body)
 
+    def test_an_embedded_question_that_needs_own_information_is_refused_and_makes_no_data_call(self):
+        # shamwari#291: such a question is personal scope; the edge embedding is hosted inference.
+        for over in ({"query": "How much PAYE do I owe on my salary?"},
+                     {"query": "equality", "needs_own_information": True}):
+            r = self.search(embedding=[0.5] * 1024, **over)
+            self.assertEqual(r.status_code, 409, over)
+            self.assertEqual(r.json()["detail"]["error"], "edge_embedding_forbidden")
+        self.assertEqual(self.api.calls, [])
+
+    def test_a_question_that_needs_own_information_without_an_embedding_is_searched_by_keyword(self):
+        r = self.search(query="How much PAYE do I owe on my salary?")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["needs_own_information"])
+        (_, (body,)), = self.api.calls
+        self.assertNotIn("embedding", body)
+
     def test_a_cloud_query_is_forwarded_with_exactly_what_the_api_takes(self):
         r = self.search(embedding=[0.5] * 1024, language="sn", top_k=8)
         self.assertEqual(r.status_code, 200)
@@ -191,7 +207,7 @@ class Sink(Base):
 
     def conv(self, **over):
         d = {"licenseClass": "open_weight", "scope": "platform", "trainingEligible": True,
-             "createdAt": "2026-10-31T04:00:00Z", "requestId": "r1"}
+             "trainingConsent": True, "createdAt": "2026-10-31T04:00:00Z", "requestId": "r1"}
         d.update(over)
         return d
 
@@ -213,6 +229,20 @@ class Sink(Base):
         for doc in bad:
             self.assertEqual(self.post("shamwari", {"conversations": [doc]}).status_code, 400, doc)
         self.assertEqual(self.api.calls, [])
+
+    def test_a_trainable_row_without_recorded_consent_is_refused(self):
+        # Storing a conversation is not consent to train on it. Only an explicit True counts.
+        for consent in (None, False, "yes", 1):
+            doc = self.conv(trainingConsent=consent)
+            if consent is None:
+                del doc["trainingConsent"]
+            self.assertEqual(self.post("shamwari", {"conversations": [doc]}).status_code, 400, consent)
+        self.assertEqual(self.api.calls, [])
+
+    def test_an_unconsented_row_that_is_not_trainable_passes(self):
+        doc = self.conv(trainingEligible=False)
+        del doc["trainingConsent"]
+        self.assertEqual(self.post("shamwari", {"conversations": [doc]}).status_code, 200)
 
     def test_restricted_and_personal_rows_that_are_marked_untrainable_pass(self):
         for doc in (self.conv(licenseClass="restricted", trainingEligible=False),
@@ -362,7 +392,7 @@ class ThroughTheServersApi(unittest.TestCase):
 
     def sink(self):
         doc = {"licenseClass": "open_weight", "scope": "platform", "trainingEligible": True,
-               "createdAt": "2026-10-31T04:00:00Z", "requestId": "r1"}
+               "trainingConsent": True, "createdAt": "2026-10-31T04:00:00Z", "requestId": "r1"}
         return self.http.post("/sink/bulk", headers=AUTH, json={"database": "shamwari", "collections": {"conversations": [doc]}})
 
     def test_a_permanent_refusal_passes_through_with_its_status_and_error_member(self):

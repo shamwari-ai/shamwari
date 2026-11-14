@@ -79,8 +79,10 @@ async function overQuota(env: Env, auth: AuthContext): Promise<boolean> {
 /**
  * Whether a stored conversation may ever reach the Mind training pipeline. Every term is a
  * way to say no; there is no way to say yes except being an open_weight answer to a caller
- * who was asked. Channel traffic and signed-in people (WorkOS) have not been asked, so
- * neither is trainable until the owner decides on consent.
+ * who was asked and said yes (`consented`). Storing a conversation is not consent to train
+ * on it, so a caller with no recorded consent is not trainable, whatever kind of key it holds.
+ * Channel traffic and signed-in people (WorkOS) stay excluded even with a flag, until the
+ * owner decides how their consent is asked for.
  */
 export function conversationTrainable(
   scope: string,
@@ -93,8 +95,11 @@ export function conversationTrainable(
    * the traffic that must not become Mind training material, whatever scope it travelled in.
    */
   looksPersonal = false,
+  /** The caller's recorded consent to training. Only `true` counts; absent is no. */
+  consented = false,
 ): boolean {
   return (
+    consented === true &&
     scope !== 'personal' &&
     licenseClass === 'open_weight' &&
     !viaChannel &&
@@ -446,6 +451,28 @@ const worker = {
         return extractiveResponse(ctx, env, { ...rung, degraded: false });
       }
 
+      // PERSONAL SCOPE, BY THE GATEWAY'S OWN RULES (owner decision, shamwari#291).
+      //
+      // A question that looks like it needs the person's own information is
+      // treated as personal scope, not answered by a hosted model with a notice
+      // attached. Every inference path is hosted by someone else (the AI Gateway
+      // providers and the Workers AI fallback on Cloudflare), so none is called:
+      // the answer is the cited Ground passage, with nothing generated, and no
+      // conversation row is written (extractiveResponse). ground() already skipped
+      // the edge embedding for the same reason. Core saying yes counts too.
+      if (decision.withoutOwnInformation || g.coreNeedsOwnInformation) {
+        if (g.unavailable) {
+          return new Response(
+            JSON.stringify({ error: 'ground_unavailable', retry: true }, null, 2),
+            {
+              status: 503,
+              headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
+            },
+          );
+        }
+        return extractiveResponse(ctx, env, { ...rung, degraded: false });
+      }
+
       const routed = applyReach(route(messages, body.model, env), reach, env);
       const target = routed.target;
       let result: Awaited<ReturnType<typeof infer>>;
@@ -524,6 +551,11 @@ const worker = {
             // people who have not been asked, in the channel where they are
             // most likely to type something personal, so it is metered and
             // nothing more until the owner decides on consent.
+            //
+            // And no caller is trainable without recorded consent: storing a
+            // conversation is not consent to train on it. Core refuses a
+            // trainable row that does not carry trainingConsent: true.
+            trainingConsent: auth.trainingConsent === true,
             trainingEligible:
               conversationTrainable(
                 decision.scope,
@@ -531,6 +563,7 @@ const worker = {
                 req.headers.has('X-Shamwari-Channel'),
                 auth.keyType,
                 ownInformation(decision, g).answered_without_own_information,
+                auth.trainingConsent === true,
               ),
             promoted: false,
             lastMessageAt: now,

@@ -32,6 +32,8 @@ const AUTH: AuthContext = {
   keyType: 'shamwari',
   tier: 'community',
   monthlyTokenCap: 100_000,
+  // The trainable path below needs a caller who agreed; the default (no consent) is tested on its own.
+  trainingConsent: true,
 };
 
 interface Wire {
@@ -325,7 +327,7 @@ describe.skipIf(!CORE)('gateway -> Core -> Ground -> answer (real HTTP, fake mod
   });
 
   describe('the system decides the scope (#81): a personal-looking question, Cloud-only mode', () => {
-    it('is answered from platform knowledge with the notice, and no provider or data call carries a personal scope', async () => {
+    it('is answered from the cited Ground passage with the notice, and reaches no model (shamwari#291)', async () => {
       const w = world();
       const r = await w.call('/v1/chat/completions', ask('what is on my payslip? section 56 equality', { scope: 'community' }));
 
@@ -335,12 +337,15 @@ describe.skipIf(!CORE)('gateway -> Core -> Ground -> answer (real HTTP, fake mod
       expect(r.body.shamwari.answered_without_own_information).toBe(true);
       expect(r.body.shamwari.notice.code).toBe('answered_without_your_own_information');
 
-      // Counted: one embedding, one completion, one Core search, one data-API search, all platform.
-      expect(w.wire.ai).toHaveLength(1);
-      expect(w.wire.inference).toHaveLength(1);
+      // Personal scope by the gateway's own rules: no embedding, no completion (no hosted model sees it),
+      // one Core keyword search and one data-API search, both platform, and no conversation stored.
+      expect(w.wire.ai).toHaveLength(0);
+      expect(w.wire.inference).toHaveLength(0);
+      expect(r.body.shamwari.inference_path).toBe('extractive');
       const search = w.wire.core.filter((c) => c.path === '/ground/search');
       expect(search).toHaveLength(1);
       expect(search[0]!.body).toMatchObject({ scope: 'platform', destination: 'cloud' });
+      expect(search[0]!.body).not.toHaveProperty('embedding');
       const calls = (await coreState()).api.filter((c) => c.path === '/v1/shamwari/ground/search');
       expect(calls).toHaveLength(1);
       expect(calls[0]!.summary).toMatchObject({ scope: 'platform', destination: 'cloud' });

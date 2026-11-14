@@ -12,6 +12,7 @@
 import '../../../src/chat/chat.css';
 import { en } from '../../../src/chat/strings';
 import { authModeOf } from '../../../src/chat/auth-mode';
+import { skillsEnabled } from '../../../src/chat/features';
 import AppShell from '@bundu/ui/app/AppShell.astro';
 import Icon from '@bundu/ui/Icon.astro';
 
@@ -20,6 +21,9 @@ const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
 // Mukoko sign-in is the default; only a build that asks for PUBLIC_CHAT_AUTH=developer-key gets the developer-key screen
 // (chat/auth-mode.ts). check.mjs fails a build that comes out in any other mode.
 const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
+// The Skills tab is hidden until a SKILL.md loader exists (shamwari#291): a tab with nothing behind it is a promise the
+// app cannot keep. Off by default; only a build with PUBLIC_CHAT_SKILLS=true renders it (chat/features.ts).
+const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
 ---
 <!doctype html>
 <html lang="en" class="app">
@@ -124,16 +128,17 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
       </section>
       <p id="artifacts-empty" class="side-empty" data-i18n="artifactsEmpty">{en.artifactsEmpty}</p>
       </div>
-      <!-- Plugins, Skills and MCP: nothing exists behind them yet, so each says so. Its script loads only when this
+      <!-- Plugins and MCP: nothing exists behind them yet, so each says so. Skills is not rendered at all unless the build
+           turns it on (showSkills, off by default), because there is no SKILL.md loader. Its script loads only when this
            panel is first opened. -->
       <div data-panel="plugins" hidden>
         <div role="tablist" class="side-tabs" aria-label={en.navPlugins} data-i18n-attr="aria-label:navPlugins">
           <button type="button" role="tab" id="tab-plugins" aria-controls="tabpanel-plugins" aria-selected="true" data-i18n="pluginsTab">{en.pluginsTab}</button>
-          <button type="button" role="tab" id="tab-skills" aria-controls="tabpanel-skills" aria-selected="false" tabindex="-1" data-i18n="skillsTab">{en.skillsTab}</button>
+          {showSkills && (<button type="button" role="tab" id="tab-skills" aria-controls="tabpanel-skills" aria-selected="false" tabindex="-1" data-i18n="skillsTab">{en.skillsTab}</button>)}
           <button type="button" role="tab" id="tab-mcp" aria-controls="tabpanel-mcp" aria-selected="false" tabindex="-1" data-i18n="mcpTab">{en.mcpTab}</button>
         </div>
         <div role="tabpanel" id="tabpanel-plugins" aria-labelledby="tab-plugins"><p class="side-empty" data-i18n="pluginsEmpty">{en.pluginsEmpty}</p></div>
-        <div role="tabpanel" id="tabpanel-skills" aria-labelledby="tab-skills" hidden><p class="side-empty" data-i18n="skillsEmpty">{en.skillsEmpty}</p></div>
+        {showSkills && (<div role="tabpanel" id="tabpanel-skills" aria-labelledby="tab-skills" hidden><p class="side-empty" data-i18n="skillsEmpty">{en.skillsEmpty}</p></div>)}
         <div role="tabpanel" id="tabpanel-mcp" aria-labelledby="tab-mcp" hidden><p class="side-empty" data-i18n="mcpEmpty">{en.mcpEmpty}</p></div>
         <p class="side-empty" data-i18n="thirdPartyNote">{en.thirdPartyNote}</p>
       </div>
@@ -156,7 +161,13 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
          chat. #new-chat is a wrapper the script listens on. -->
     <!-- The chat's title and, beside it, its "..." menu (pin, project, delete). The menu shows once there is a chat. -->
     <div slot="actions" class="chat-head">
-      <h1 id="chat-title" class="chat-title sr-only" data-i18n="appName">{en.appName}</h1>
+      <!-- Two lines: the title (the page's one heading) and a quiet subtitle. The block is ONE tappable target, an invisible button laid over
+           both lines (49px), that opens the chat menu; the subtitle itself is only text. -->
+      <div class="chat-heading">
+        <h1 id="chat-title" class="chat-title sr-only" data-i18n="appName">{en.appName}</h1>
+        <p id="chat-sub" class="chat-sub" hidden><span id="chat-sub-text"></span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></p>
+        <button type="button" id="chat-title-hit" class="chat-hit" popovertarget="chat-tools" aria-haspopup="true" hidden data-i18n-attr="aria-label:chatOptions" aria-label={en.chatOptions}></button>
+      </div>
       <button type="button" id="chat-menu" class="bar-action chat-menu-btn" popovertarget="chat-tools" aria-haspopup="true" hidden data-i18n-attr="aria-label:chatOptions" aria-label={en.chatOptions}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
       </button>
