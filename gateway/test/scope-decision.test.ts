@@ -211,13 +211,15 @@ describe('(a) no personal path to a provider', () => {
     }
   });
 
-  it('COUNTS the provider calls on the new path: a personal-looking question makes exactly one embedding and one completion, both cloud-safe', async () => {
+  it('COUNTS the provider calls: a personal-looking question makes no embedding and no completion (shamwari#291)', async () => {
     const { env, wire } = setup(); // Cloud-only mode: MIND_AVAILABLE=false
     const res = await worker.fetch(chat(PERSONAL_Q), env, ctx);
     expect(res.status).toBe(200);
-    expect(wire.embed).toHaveLength(1);
-    expect(wire.completions).toHaveLength(1);
+    // Personal scope by the gateway's own rules: no hosted model sees it, Cloudflare's included.
+    expect(wire.embed).toHaveLength(0);
+    expect(wire.completions).toHaveLength(0);
     expect(wire.core).toHaveLength(1);
+    expect(((await res.json()) as any).shamwari.inference_path).toBe('extractive');
     for (const s of scopesSeen(wire)) expect(CLOUD_SAFE.has(s)).toBe(true);
     expect(scopesSeen(wire).filter((s) => s === 'personal')).toHaveLength(0);
     // Nothing the Worker stored claims personal scope either.
@@ -291,7 +293,7 @@ describe('(a) no personal path to a provider', () => {
 });
 
 describe('(b) a personal-looking question is never answered without the marker', () => {
-  it('Cloud-only mode: the response says it was answered without the person\'s own information, with the Mind message', async () => {
+  it('Cloud-only mode: the response says it was answered without the person\'s own information, accurately', async () => {
     const { env } = setup();
     const j = (await (await worker.fetch(chat(PERSONAL_Q), env, ctx)).json()) as any;
     expect(j.shamwari.answered_without_own_information).toBe(true);
@@ -299,7 +301,10 @@ describe('(b) a personal-looking question is never answered without the marker',
       code: 'answered_without_your_own_information',
       message: OWN_INFORMATION_NOTICE,
     });
-    expect(j.shamwari.notice.message).toContain('On-device Shamwari Mind will use your own information');
+    // The notice says what happened, and promises nothing that has not shipped.
+    expect(j.shamwari.notice.message).toContain('not sent to an AI model');
+    expect(j.shamwari.notice.message).not.toContain('Mind');
+    expect(j.shamwari.inference_path).toBe('extractive');
     expect(j.shamwari.scope).toBe('platform'); // not silently retried as something else, not personal
   });
 
@@ -326,15 +331,13 @@ describe('(b) a personal-looking question is never answered without the marker',
     expect(wire.completions).toHaveLength(0);
   });
 
-  it('the degraded answer (every inference path failed) carries it', async () => {
-    const { env } = setup({ inferenceFails: true });
-    (env.AI.run as any).mockImplementation(async (_m: unknown, input: { text?: string[] }) => {
-      if (input.text) return { data: [Array.from({ length: 1024 }, () => 0.1)] };
-      throw new Error('workers ai down');
-    });
+  it('never reaches the degraded path: no model is tried, so none can fail', async () => {
+    const { env, wire } = setup({ inferenceFails: true });
     const j = (await (await worker.fetch(chat(PERSONAL_Q), env, ctx)).json()) as any;
-    expect(j.shamwari.degraded).toBe(true);
+    expect(j.shamwari.degraded).toBe(false);
     expect(j.shamwari.answered_without_own_information).toBe(true);
+    expect(wire.completions).toHaveLength(0);
+    expect(wire.embed).toHaveLength(0);
   });
 
   it('a follow-up straight after a personal turn is still flagged', async () => {
@@ -393,8 +396,8 @@ describe('what review found', () => {
     const { env, wire } = setup();
     await worker.fetch(chat(PERSONAL_Q), env, ctx);
     await Promise.resolve();
-    const conv = wire.sink.find((m) => m.collection === 'conversations')!.doc as any;
-    expect(conv.trainingEligible).toBe(false);
+    // Answered extractively, so no conversation is stored at all, let alone a trainable one.
+    expect(wire.sink.filter((m) => m.collection === 'conversations')).toEqual([]);
 
     const plain = setup();
     await worker.fetch(chat(PLAIN_Q), plain.env, ctx);
@@ -466,11 +469,22 @@ describe('(d) Core and the gateway cannot disagree about a scope decision', () =
   it('Core refusing the scope (403 or 409) leaves the answer ungrounded, never retried under another scope', async () => {
     for (const coreStatus of [403, 409]) {
       const { env, wire } = setup({ coreStatus });
-      const res = await worker.fetch(chat(PERSONAL_Q), env, ctx);
+      const res = await worker.fetch(chat(PLAIN_Q), env, ctx);
       expect(res.status).toBe(200);
       expect(wire.core).toHaveLength(1); // one attempt: no retry as another scope
       expect(((await res.json()) as any).shamwari.grounded).toBe(false);
       expect(scopesSeen(wire).filter((s) => !CLOUD_SAFE.has(s as string))).toEqual([]);
+    }
+  });
+
+  it('a personal-looking question with Ground unreachable is a retryable 503, never a model answer', async () => {
+    for (const coreStatus of [403, 409]) {
+      const { env, wire } = setup({ coreStatus });
+      const res = await worker.fetch(chat(PERSONAL_Q), env, ctx);
+      expect(res.status).toBe(503);
+      expect(wire.core).toHaveLength(1);
+      expect(wire.completions).toHaveLength(0);
+      expect(wire.embed).toHaveLength(0);
     }
   });
 });
@@ -493,5 +507,55 @@ describe('storing a conversation is not consent to train on it', () => {
     const conv = wire.sink.find((m) => m.collection === 'conversations')!.doc as any;
     expect(conv.trainingEligible).toBe(false);
     expect(conv.trainingConsent).toBe(false);
+  });
+});
+
+describe('a personal-looking question is personal scope (owner decision, shamwari#291)', () => {
+  it('a plain question still goes to a model, with one cloud-safe embedding', async () => {
+    const { env, wire } = setup();
+    const res = await worker.fetch(chat(PLAIN_Q), env, ctx);
+    expect(res.status).toBe(200);
+    expect(wire.embed).toHaveLength(1);
+    expect(wire.completions).toHaveLength(1);
+  });
+
+  it('Core saying yes on its own is enough: no completion, the cited passage instead', async () => {
+    const { env, wire } = setup({
+      core: (b) => ({ chunks: [{ ...CHUNK, scope: b.scope }], hit: true, scope: b.scope, needs_own_information: true }),
+    });
+    const j = (await (await worker.fetch(chat(PLAIN_Q), env, ctx)).json()) as any;
+    expect(wire.completions).toHaveLength(0);
+    expect(j.shamwari.inference_path).toBe('extractive');
+    expect(j.shamwari.answered_without_own_information).toBe(true);
+  });
+
+  it('the retrieval endpoint does not embed a personal-looking question at the edge either', async () => {
+    const { env, wire } = setup();
+    const res = await worker.fetch(
+      post('/v1/ground/context', { messages: [{ role: 'user', content: PERSONAL_Q }] }),
+      env,
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    expect(wire.embed).toHaveLength(0);
+    expect(wire.completions).toHaveLength(0);
+    expect(wire.core[0]).not.toHaveProperty('embedding');
+  });
+
+  it('a follow-up after a personal turn is kept from the model too', async () => {
+    const { env, wire } = setup();
+    await worker.fetch(
+      post('/v1/chat/completions', {
+        messages: [
+          { role: 'user', content: 'I earn $400 a month' },
+          { role: 'assistant', content: 'Ok.' },
+          { role: 'user', content: 'and how much tax is that?' },
+        ],
+      }),
+      env,
+      ctx,
+    );
+    expect(wire.completions).toHaveLength(0);
+    expect(wire.embed).toHaveLength(0);
   });
 });

@@ -451,6 +451,28 @@ const worker = {
         return extractiveResponse(ctx, env, { ...rung, degraded: false });
       }
 
+      // PERSONAL SCOPE, BY THE GATEWAY'S OWN RULES (owner decision, shamwari#291).
+      //
+      // A question that looks like it needs the person's own information is
+      // treated as personal scope, not answered by a hosted model with a notice
+      // attached. Every inference path is hosted by someone else (the AI Gateway
+      // providers and the Workers AI fallback on Cloudflare), so none is called:
+      // the answer is the cited Ground passage, with nothing generated, and no
+      // conversation row is written (extractiveResponse). ground() already skipped
+      // the edge embedding for the same reason. Core saying yes counts too.
+      if (decision.withoutOwnInformation || g.coreNeedsOwnInformation) {
+        if (g.unavailable) {
+          return new Response(
+            JSON.stringify({ error: 'ground_unavailable', retry: true }, null, 2),
+            {
+              status: 503,
+              headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
+            },
+          );
+        }
+        return extractiveResponse(ctx, env, { ...rung, degraded: false });
+      }
+
       const routed = applyReach(route(messages, body.model, env), reach, env);
       const target = routed.target;
       let result: Awaited<ReturnType<typeof infer>>;
