@@ -361,6 +361,16 @@ def check_sink(database: str, collections: dict[str, list[dict[str, Any]]]) -> N
                     f"{name} document has restricted provenance and cannot set trainingEligible=true",
                 )
 
+            # Storing a conversation is not consent to train on it. A trainable row must
+            # say, in its own right, that the caller agreed; anything but an explicit
+            # True (absent, false, "yes") is no. Checked here as well as at the edge,
+            # because the edge's view is the one a bug or a stale cache can get wrong.
+            if eligible and d.get("trainingConsent") is not True:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{name} document sets trainingEligible=true without trainingConsent=true",
+                )
+
 
 @app.post("/sink/bulk", dependencies=[Depends(require_token)])
 async def sink_bulk(body: BulkWrite) -> dict[str, Any]:
