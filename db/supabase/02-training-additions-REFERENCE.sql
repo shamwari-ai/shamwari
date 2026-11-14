@@ -33,6 +33,14 @@ create table if not exists training_examples (
   -- to train competing models; this makes that a schema constraint
   -- rather than something a person has to remember.
 
+  training_consent boolean not null default false,
+  -- A conversation-sourced example needs the caller's recorded consent.
+  -- Storing a conversation is not consent to train on it, so the CHECK
+  -- below keeps an unconsented conversation out of this table entirely.
+  -- Other sources (synthetic, human_authored, corpus_derived) carry
+  -- their own terms and are not gated by this column.
+  check (source <> 'conversation' or training_consent),
+
   language        text not null              -- sn | nd | en | sn-en | nd-en
                   check (language in ('sn','nd','en','sn-en','nd-en')),
   domain          text not null,             -- law | tax | agriculture | health | education | general
@@ -67,7 +75,7 @@ create table if not exists promotion_log (
   mongo_id     text primary key,
   promoted_at  timestamptz not null default now(),
   outcome      text not null
-               check (outcome in ('promoted','skipped_restricted','skipped_low_signal','skipped_duplicate'))
+               check (outcome in ('promoted','skipped_restricted','skipped_no_consent','skipped_low_signal','skipped_duplicate'))
 );
 
 -- Annotators. Paid work, tracked properly.

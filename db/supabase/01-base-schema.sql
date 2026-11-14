@@ -58,8 +58,19 @@ create table if not exists usage_events (
 create index if not exists usage_account_time_idx on usage_events(account_id, created_at desc);
 create index if not exists usage_license_idx on usage_events(license_class, created_at desc);
 
--- Conversation log. Mind training candidates come from here, filtered
--- to license_class = 'open_weight' only.
+-- Conversation log. Mind training candidates come from here, and only
+-- rows where all three gates hold (the same rule Core's /sink/bulk
+-- enforces on the Mongo side, core/main.py check_sink):
+--   license_class = 'open_weight'  the teacher model's terms allow it
+--   scope <> 'personal'            the person's own pod data never trains
+--   training_consent               the caller agreed; storing a
+--                                  conversation is not consent to train on it
+-- training_consent defaults to false, so a row written without it is
+-- never eligible.
+--
+-- NOTE: `create table if not exists` does not change a table that
+-- already exists. A database where this table was created from an
+-- earlier version of this file needs its own migration (owner step).
 create table if not exists conversations (
   id            uuid primary key default gen_random_uuid(),
   account_id    uuid not null references accounts(id) on delete cascade,
@@ -71,7 +82,14 @@ create table if not exists conversations (
   teacher_model text,
   license_class text not null
                 check (license_class in ('open_weight','restricted')),
-  mind_eligible boolean generated always as (license_class = 'open_weight') stored,
+  scope         text not null
+                check (scope in ('personal','community','platform')),
+  training_consent boolean not null default false,
+  mind_eligible boolean generated always as (
+                  license_class = 'open_weight'
+                  and scope <> 'personal'
+                  and training_consent
+                ) stored,
   created_at    timestamptz not null default now()
 );
 create index if not exists conv_mind_idx on conversations(mind_eligible, created_at desc);
