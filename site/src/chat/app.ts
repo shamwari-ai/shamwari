@@ -6,6 +6,8 @@ import { readStoredUser, rememberUser, subjectOf, userKeyOf } from './user';
 import { applyStrings, currentLanguage, hasSavedLanguage, saveLanguage } from './i18n';
 import {
   h,
+  loadMarkdown,
+  markdownReady,
   plainText,
   renderAnswer,
   renderError,
@@ -265,6 +267,11 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     thread.messages.forEach(mount);
     log.setAttribute('aria-live', 'polite');
     syncEmpty();
+    // Stored answers are drawn formatted by a part loaded on first use. Until it is here they show as plain words, and
+    // once it is, the thread is drawn again (with the log not live, so nothing is read out twice).
+    if (!markdownReady() && thread.messages.some((x) => x.role === 'assistant' && x.answer)) {
+      void loadMarkdown().then(() => markdownReady() && rebuild());
+    }
   };
 
   /** Close the chats drawer (a popover below 64rem) and the account menu: after an action they must not stay over the page. */
@@ -804,6 +811,9 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
       }
       pending?.remove();
       nodes.delete(`${m.id}:pending`);
+      // The answer is drawn formatted, by a part loaded on first use (markdown.ts): have it before the answer is added to
+      // the log, so the answer is added once, already formatted, and read out once. A failed load shows plain words.
+      if (res.ok) await loadMarkdown();
       // Delete history ran while this was in flight: the thread it belongs to is
       // gone, and writing it back would bring the deleted conversation back.
       if (startedIn !== epoch) return;
@@ -1290,6 +1300,20 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     syncOfflineMode();
     rebuild();
     void renderHistory();
+  });
+
+  // A round button above the composer takes the messages back to the end while they are scrolled up.
+  const jump = $<HTMLButtonElement>('#jump-latest');
+  const threadEl = $('#thread');
+  const syncJump = () => {
+    jump.hidden = threadEl.scrollHeight - threadEl.scrollTop - threadEl.clientHeight <= 64;
+  };
+  threadEl.addEventListener('scroll', syncJump, { passive: true });
+  new MutationObserver(syncJump).observe(log, { childList: true, subtree: true });
+  addEventListener('resize', syncJump);
+  jump.addEventListener('click', () => {
+    threadEl.scrollTo({ top: threadEl.scrollHeight });
+    threadEl.focus({ preventScroll: true }); // the button is about to hide: keep keyboard focus in the page
   });
 
   // The X on a status chip hides that chip until its state changes again (going offline once more shows it again).

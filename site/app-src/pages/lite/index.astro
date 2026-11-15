@@ -31,7 +31,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Shamwari Chat</title>
-  <meta name="description" content="Ask in Shona, Ndebele or English and get the answer with the section it came from." />
+  <meta name="description" content="Ask in Shona, Ndebele or English about farming, weather, news and places, and get the answer with its source." />
   <link rel="canonical" href="https://shamwari.ai/lite/" />
   <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
   <link rel="icon" type="image/png" href="/favicon.png" sizes="256x256" />
@@ -197,7 +197,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
       <section id="empty" aria-labelledby="greeting">
         <img class="mark" src="/apple-touch-icon.png" alt="" width="56" height="56" />
         <h2 id="greeting" data-i18n="greeting">Hello, friend</h2>
-        <p class="lead" data-i18n="tagline">Ask a question. Get the answer with the section it came from.</p>
+        <p class="lead" data-i18n="tagline">Ask about farming, weather, news and places. Get the answer with its source.</p>
         <!-- First run only (the script reveals it when no language has been chosen yet): one tap switches the whole screen. The
              labels are the languages' own names, so they are not translated. Settings keeps the radio group. -->
         <div class="first-lang" id="first-lang" role="group" aria-label={en.language} data-i18n-attr="aria-label:language" hidden>
@@ -207,9 +207,9 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
         </div>
         <h3 id="try" class="try" data-i18n="tryAsking">Try asking</h3>
         <div class="examples" role="group" aria-label={en.suggestedPrompts} data-i18n-attr="aria-label:suggestedPrompts">
-          <button type="button" class="btn chip" data-example data-i18n="example1">What does the Constitution say about equality?</button>
-          <button type="button" class="btn chip" data-example data-i18n="example2">What are my rights if I am arrested?</button>
-          <button type="button" class="btn chip" data-example data-i18n="example3">What does the Constitution say about education?</button>
+          <button type="button" class="btn chip" data-example data-i18n="example1">When should I plant maize if the rains come late?</button>
+          <button type="button" class="btn chip" data-example data-i18n="example2">What is the news on maize prices this week?</button>
+          <button type="button" class="btn chip" data-example data-i18n="example3">Where is the nearest market in Masvingo?</button>
         </div>
         <!-- Quiet, under the prompts: answers can be wrong, and the privacy page is one tap away (it was two, in Settings). -->
         <p class="trust"><span data-i18n="wrongNote">{en.wrongNote}</span><span aria-hidden="true"> · </span><a class="footer-link" href="/lite/disclaimer/" data-i18n="privacyLink">{en.privacyLink}</a></p>
@@ -222,6 +222,10 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
     <!-- The dock: the composer, pinned to the bottom of the screen. (Sign-in, when it is needed, is in the page above
          it, not in the dock: a pinned panel would cover what a person is reading.) -->
     <div class="dock">
+      <!-- Round, above the composer, shown by the script only while the messages are scrolled up from the end. -->
+      <button type="button" id="jump-latest" class="jump-latest" hidden aria-label={en.jumpLatest} data-i18n-attr="aria-label:jumpLatest">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7" /></svg>
+      </button>
       <section class="ask" aria-labelledby="ask-title">
         <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
         <form id="composer" class="composer" autocomplete="off">

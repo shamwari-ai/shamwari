@@ -71,9 +71,26 @@ export function renderCitation(c: Citation, s: Strings, lang: Language): HTMLEle
 }
 
 /**
- * An answer is shown as plain text: no markdown marks. A model often writes **bold**, # headings, `code`, > quotes and
- * [links](url); on this page they would show as stray symbols, so they are taken out and only the words stay. Line breaks
- * and paragraphs are kept; list items start with a plain dash.
+ * The formatted-answer drawing (markdown.ts, about 2.5 KB gzipped) is a part of its own, loaded the first time an answer
+ * is shown, so the first load stays inside its budget. It is precached for offline. Until it is here (or if it cannot be
+ * loaded) an answer is drawn as its plain words.
+ */
+let markdown: typeof import('./markdown') | undefined;
+export const markdownReady = (): boolean => !!markdown;
+export function loadMarkdown(): Promise<void> {
+  return import('./markdown').then(
+    (m) => {
+      markdown = m;
+    },
+    () => undefined,
+  );
+}
+
+/**
+ * The answer's words with no markdown marks, for Copy, Share and Save: a clipboard and a WhatsApp message get plain words, not
+ * stray symbols. (What is drawn on the page is the formatted answer, from markdown.ts.) A model often writes **bold**,
+ * # headings, `code`, > quotes and [links](url); here they are taken out and only the words stay. Line breaks and paragraphs
+ * are kept; list items start with a plain dash.
  */
 export function plainText(raw: string): string {
   // No lookbehind anywhere: older phones' browsers cannot parse it, and a parse error here would stop the whole chat from loading.
@@ -139,7 +156,7 @@ export function renderAnswer(
     'article',
     { class: 'msg bot', 'data-id': m.id, 'aria-label': s.shamwari },
     h('p', { class: 'who' }, s.shamwari),
-    h('p', { class: 'text' }, words),
+    markdown ? markdown.renderMarkdown(a.text, { code: s.codeBlock, table: s.tableBox }) : h('p', { class: 'text' }, words),
     a.degraded ? h('p', { class: 'note' }, s.closestSource) : null,
     a.citations.length
       ? h(
