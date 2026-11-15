@@ -31,13 +31,20 @@
  * them yet; treat them as a starting point that errs towards flagging.
  */
 
-/** What a client may see as one line. Plain ASCII, so it survives every channel. */
+/**
+ * What a client may see as one line. Plain ASCII, so it survives every channel.
+ *
+ * It says what actually happened (shamwari-ai/shamwari#291). A question this file flags is
+ * treated as personal scope: it is not sent to any hosted model, including the
+ * Cloudflare-hosted embedding, and the answer is the cited Ground passage with nothing
+ * generated (index.ts). The earlier wording promised on-device Mind, which has not shipped.
+ */
 export const OWN_INFORMATION_NOTICE =
-  'Answered without your own information. On-device Shamwari Mind will use your own information.';
+  'Answered without your own information, from public sources only. It looks personal, so it was not sent to an AI model.';
 
 /** For SMS and USSD, where every character is billed and a segment is 160. */
 export const OWN_INFORMATION_NOTICE_SHORT =
-  'Answered without your own info. Shamwari Mind on your phone can use it.';
+  'Answered without your own info. Not sent to an AI: public sources only.';
 
 /** For a screen of about 180 characters (USSD): the marker alone, so the answer keeps its room. */
 export const OWN_INFORMATION_NOTICE_MIN = 'Answered without your own info.';

@@ -97,8 +97,13 @@ if (TARGET === 'app') {
   // and a Workers Build without the flag shipped "Mukoko sign-in is coming soon" to everyone) fails here.
   const litePage = pages.find((p) => p.endsWith('/lite/index.html'));
   if (litePage) {
-    const problem = authModeProblem(readFileSync(litePage, 'utf8'));
+    const liteHtml = readFileSync(litePage, 'utf8');
+    const problem = authModeProblem(liteHtml);
     if (problem) fail.push(`app build: ${problem}`);
+    // No Skills tab until a SKILL.md loader exists (shamwari#291, chat/features.ts). Only a build that asks for it may carry it.
+    if (process.env.PUBLIC_CHAT_SKILLS !== 'true' && /id="tab-skills"|id="tabpanel-skills"/.test(liteHtml)) {
+      fail.push('app build: the Skills tab is in the page, but there is no SKILL.md loader (set PUBLIC_CHAT_SKILLS=true only once there is)');
+    }
   }
   const redirects = files.includes(`${DIST}/_redirects`) ? readFileSync(`${DIST}/_redirects`, 'utf8') : '';
   // The apex root is answered by the Worker (worker/root.ts), which chooses /chat/ or /lite/ by

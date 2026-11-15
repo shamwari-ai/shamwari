@@ -34,8 +34,12 @@ silently downgraded.
 
 **A question that looks like it needs the person's own information** ("my
 payslip", "I earn…", Shona `-ngu`, Ndebele `-mi`; `src/personal.ts`, a short list
-of deterministic rules, no model, leaning towards yes) is answered from community
-and platform knowledge only, and the answer says so. Every chat and retrieval
+of deterministic rules, no model, leaning towards yes) is treated as personal
+scope (owner decision, shamwari#291): it is sent to no hosted model, the
+Cloudflare-hosted embedding included, and the answer is the cited Ground passage
+with nothing generated (the extractive rung; no conversation is stored). If Ground
+cannot be reached the reply is a retryable 503, never a model answer. The answer
+says so. Every chat and retrieval
 response carries, in `shamwari`:
 
 ```json
@@ -43,7 +47,7 @@ response carries, in `shamwari`:
   "answered_without_own_information": true,
   "notice": {
     "code": "answered_without_your_own_information",
-    "message": "Answered without your own information. On-device Shamwari Mind will use your own information."
+    "message": "Answered without your own information, from public sources only. It looks personal, so it was not sent to an AI model."
   }
 }
 ```
