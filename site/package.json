@@ -22,7 +22,7 @@
     "e2e": "playwright test"
   },
   "dependencies": {
-    "@astrojs/react": "^6.0.5",
+    "@astrojs/react": "^7.1.4",
     "@bundu/ui": "^0.14.0",
     "@tailwindcss/vite": "^4.3.3",
     "@workos-inc/node": "^12.1.0",
