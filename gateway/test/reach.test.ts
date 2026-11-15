@@ -92,7 +92,8 @@ const ctx = {
   waitUntil: (p: Promise<unknown>) => void p.catch(() => {}),
 } as unknown as ExecutionContext;
 
-const ESCALATING = 'Please calculate the total rainfall for my three fields step by step.';
+// No first-person words: a personal-looking question is answered extractively and never reaches a tier (shamwari#291).
+const ESCALATING = 'Please calculate the total rainfall for three fields step by step.';
 const SIMPLE = 'Will it rain tomorrow?';
 
 function ask(body: Record<string, unknown>, content = SIMPLE) {
