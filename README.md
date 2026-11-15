@@ -56,9 +56,10 @@ that — resolved from what actually served the request, not from what was
 merely asked for, because a proxy substituting models behind your back is a
 real failure mode this codebase has already hit and fixed once.
 
-Read [`CLAUDE.md`](./CLAUDE.md) for the actual enforcement — file names,
-line-level reasoning, and the defects each rule's _second_ check exists
-because of. It's the single most information-dense file in this repo.
+Read [`AGENTS.md`](./AGENTS.md) for where each rule is enforced and tested,
+and for the repo's build, test, branch and commit conventions. The comments
+in the files it names carry the line-level reasoning and the defects each
+rule's _second_ check exists because of.
 
 ## The three layers
 
@@ -89,7 +90,7 @@ Building in public means saying this part plainly. As of this writing:
 | Core (FastAPI) + Gateway (Cloudflare Workers)                        | written, tested, **not deployed yet**                                                      |
 | Ground's vector + text search indexes                                | live and ready                                                                             |
 | Ground's actual content                                              | **empty** — this is the one thing standing between this repo and a working demo            |
-| Corpus licensing (law, tax, health, education sources)               | 22 sources seeded; 5 blocked pending licence review — see `CLAUDE.md`                      |
+| Corpus licensing (law, tax, health, education sources)               | 22 sources seeded; 7 blocked pending licence review — see `docs/launch-plan.md`            |
 | `platform.shamwari.ai`                                               | **not the console yet** — a stale pre-pivot Vercel deployment still answers there          |
 
 If you're evaluating this as a product today: it isn't one yet. If you're
@@ -159,22 +160,22 @@ This project needs more than pull requests, and that's part of what makes
 it worth joining early:
 
 - **Code** — `gateway/` (TypeScript, Cloudflare Workers), `core/` (Python,
-  FastAPI), corpus ingestion tooling. Start with [`CLAUDE.md`](./CLAUDE.md)
+  FastAPI), corpus ingestion tooling. Start with [`AGENTS.md`](./AGENTS.md)
   and the per-directory READMEs; both rules above have tests you should
   read before you touch the files they cover.
 - **Corpus review** — several high-value Zimbabwean legal and policy
   sources are blocked purely on licence review, not engineering. If you can
   read a licence and tell us whether it permits reuse, that unblocks real
-  content faster than a code change would. See "Blocked on human decisions"
-  in `CLAUDE.md`.
+  content faster than a code change would. See the source table in
+  `docs/ground-ingest.md` and the corpus section of `docs/launch-plan.md`.
 - **Language and annotation** — Shona and Ndebele fluency matters more here
   than almost anywhere else building AI right now. Shamwari Mind's training
   data is human-corrected, by design and by necessity — that correction
   work is the irreplaceable asset this project is built on, not a
   footnote to it.
 
-Before your first PR: read `CLAUDE.md` in full (it's dense on purpose — the
-"why," not just the "what"), and this org's
+Before your first PR: read [`AGENTS.md`](./AGENTS.md) (the two rules, how to
+build and test, which branch to target, how to write commits), and this org's
 [contribution guidelines](https://github.com/shamwari-ai/.github/blob/main/CONTRIBUTING.md)
 and [code of conduct](https://github.com/shamwari-ai/.github/blob/main/CODE_OF_CONDUCT.md).
 Questions before that? [hello@shamwari.ai](mailto:hello@shamwari.ai).
@@ -182,7 +183,7 @@ Questions before that? [hello@shamwari.ai](mailto:hello@shamwari.ai).
 ## Repo map
 
 ```
-CLAUDE.md                      handoff context, invariants, applied-migration log
+AGENTS.md                      the two rules, build/test commands, branch and commit conventions
 LICENSE  NOTICE                Apache-2.0; third-party model and corpus terms
 .github/workflows/ci.yml       gateway types + tests, Core imports, secret scan
 docs/architecture-and-gtm.md   product architecture + go-to-market
@@ -209,7 +210,7 @@ core/                          FastAPI, runs on Nyuchi infrastructure
   main.py                      owns Mongo · Ground · auth · scope enforcement
   ingest_ground.py             corpus ingestion, heading-aware chunking
 
-db/supabase/                   SQL (see CLAUDE.md for what's already applied)
+db/supabase/                   reference SQL (not run by Core)
 db/mongodb/                    reference only — live cluster differs
 scripts/                       generator for the gateway, kept for reference
 ```
@@ -236,8 +237,8 @@ They are not covered by ours, and Ground eligibility is not training
 eligibility.
 
 Shamwari Cloud routes to third-party open-weight and commercial models. It is
-**not** "fully open source" — say "open weights". See the language discipline
-table in `CLAUDE.md`.
+**not** "fully open source" — say "open weights". See the Language section
+of `AGENTS.md`.
 
 © Bundu Foundation. Shamwari is Bundu Foundation IP, sold commercially under
 Nyuchi Africa.

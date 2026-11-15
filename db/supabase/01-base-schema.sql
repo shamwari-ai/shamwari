@@ -59,7 +59,12 @@ create index if not exists usage_account_time_idx on usage_events(account_id, cr
 create index if not exists usage_license_idx on usage_events(license_class, created_at desc);
 
 -- Conversation log. Mind training candidates come from here, filtered
--- to license_class = 'open_weight' only.
+-- to license_class = 'open_weight' AND recorded consent.
+--
+-- Two gates, and a row needs both (shamwari#291). license_class gates the
+-- teacher model's terms; training_consent gates the person's. Storing a
+-- conversation is not consent to train on it, so consent defaults to false
+-- and only an explicit true counts.
 create table if not exists conversations (
   id            uuid primary key default gen_random_uuid(),
   account_id    uuid not null references accounts(id) on delete cascade,
@@ -71,9 +76,32 @@ create table if not exists conversations (
   teacher_model text,
   license_class text not null
                 check (license_class in ('open_weight','restricted')),
-  mind_eligible boolean generated always as (license_class = 'open_weight') stored,
+  training_consent boolean not null default false,
+  mind_eligible boolean generated always as
+                (license_class = 'open_weight' and training_consent) stored,
   created_at    timestamptz not null default now()
 );
+
+-- Upgrade a table created by an earlier version of this file, where
+-- mind_eligible was derived from licence alone. A generated column cannot be
+-- altered in place, so it is dropped (taking conv_mind_idx with it) and added
+-- again with the consent term. Idempotent: does nothing once consent is in.
+alter table conversations
+  add column if not exists training_consent boolean not null default false;
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema()
+      and table_name = 'conversations'
+      and column_name = 'mind_eligible'
+      and generation_expression not like '%training_consent%'
+  ) then
+    alter table conversations drop column mind_eligible;
+    alter table conversations add column mind_eligible boolean generated always as
+      (license_class = 'open_weight' and training_consent) stored;
+  end if;
+end $$;
 create index if not exists conv_mind_idx on conversations(mind_eligible, created_at desc);
 
 -- ---------------------------------------------------------------

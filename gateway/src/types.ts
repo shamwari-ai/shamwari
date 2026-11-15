@@ -112,6 +112,13 @@ export interface AuthContext {
    * gate allows.
    */
   scopes?: Scope[];
+  /**
+   * The caller agreed that their conversations may become Shamwari Mind training
+   * material. Only an explicit `true` counts: absent means nobody asked, and storing
+   * a conversation is not consent to train on it. Nothing sets this yet; how consent
+   * is asked for and recorded is the owner's decision.
+   */
+  trainingConsent?: boolean;
 }
 
 export type SinkMessage = {
