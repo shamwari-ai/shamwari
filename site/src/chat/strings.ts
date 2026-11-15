@@ -50,6 +50,7 @@ export const en = {
   language: 'Language',
   thinking: 'Shamwari is looking for the answer…',
   stop: 'Stop',
+  jumpLatest: 'Jump to the latest message',
   stopped: 'Stopped. Your question is kept on this device and was not answered.',
   slow: 'Still working. The network is slow, so this can take a while.',
   you: 'You',
