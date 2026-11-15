@@ -19,11 +19,35 @@ import { createServer } from 'node:http';
 
 export const FIXTURES = [
   {
-    // A model that writes markdown: the page must show plain words, with none of its marks.
+    // A table and a code line far wider than a phone: each must scroll inside its own box, never the page.
+    match: /\bwide table please\b/i,
+    text:
+      '| Section | What it protects | Who may rely on it | Where it is enforced |\n|---|---|---|---|\n' +
+      '| 49 | Personal liberty, including freedom from arbitrary detention | Every person in Zimbabwe, citizen or not | The High Court, and any other court with jurisdiction |\n\n' +
+      '```\nconst reallyLongLineOfCodeThatIsFarWiderThanAnyPhoneScreenCouldShowInOneGo = "abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789";\n```\n\nDone.',
+    citations: [
+      { title: 'Constitution of Zimbabwe Amendment (No. 20) Act 2013', heading: 'Section 49 — Right to personal liberty', authority: 'Parliament of Zimbabwe', effective_from: '2013-05-22', url: null },
+    ],
+  },
+  {
+    // A model that writes markdown: the page must draw it (bold, lists, code, a link, a table), and Copy gives plain words.
     match: /\bmarkdown please\b/i,
     text:
       '## Your rights\n\n**Section 49** says you have the right to _personal liberty_. See `section 50` and [the Constitution](https://www.parlzim.gov.zw/).\n\n' +
-      '* You may ask why you are held\n* You may ask for a lawyer\n\n> Keep calm.',
+      '* You may ask why you are held\n* You may ask for a lawyer\n\n1. Stay calm\n2. Say your name\n\n' +
+      '| Right | Section |\n|---|---:|\n| Liberty | 49 |\n| Dignity | 51 |\n\n' +
+      '```\nask: "Why am I held?"\n```\n\n> Keep calm.',
+    citations: [
+      { title: 'Constitution of Zimbabwe Amendment (No. 20) Act 2013', heading: 'Section 49 — Right to personal liberty', authority: 'Parliament of Zimbabwe', effective_from: '2013-05-22', url: null },
+    ],
+  },
+  {
+    // An answer an attacker could shape (a poisoned passage, a prompt injection): every mark of it must stay inert text.
+    match: /\bmalicious please\b/i,
+    text:
+      'Safe words first.\n\n<script>window.__pwned = 1</script>\n\n<img src=x onerror="window.__pwned = 2">\n\n' +
+      '[click me](javascript:window.__pwned=3) and [data](data:text/html,<script>window.__pwned=4</script>) and ![pic](https://example.org/p.png)\n\n' +
+      '[safe](https://example.org/ok)',
     citations: [
       { title: 'Constitution of Zimbabwe Amendment (No. 20) Act 2013', heading: 'Section 49 — Right to personal liberty', authority: 'Parliament of Zimbabwe', effective_from: '2013-05-22', url: null },
     ],
