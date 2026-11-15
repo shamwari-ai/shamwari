@@ -87,7 +87,7 @@ test('a suggested prompt never replaces what the person already typed', async ({
   await openChat(page);
   await page.locator('#q').fill('My own half-written question');
   await page.locator('#empty [data-example]').first().click();
-  await expect(page.locator('#q')).toHaveValue(/^My own half-written question\nWhat does the Constitution say about equality\?$/);
+  await expect(page.locator('#q')).toHaveValue(/^My own half-written question\nWhen should I plant maize if the rains come late\?$/);
   await expect(page.locator('article.msg.user')).toHaveCount(0);
 });
 
@@ -221,13 +221,13 @@ test('the home screen greets and offers exactly three suggested prompts; a tap f
 
   // A tap fills the box and puts the cursor in it. Nothing is sent until the person presses send.
   await chips.first().click();
-  await expect(page.locator('#q')).toHaveValue(/Constitution/);
+  await expect(page.locator('#q')).toHaveValue(/plant maize/);
   await expect(page.locator('#q')).toBeFocused();
   await expect(page.locator('article.msg.user')).toHaveCount(0);
   expect(requests.filter((u) => u.includes('/v1/chat/completions'))).toEqual([]);
 
   await page.locator('#send').click();
-  await expect(page.locator('article.msg.user')).toContainText('Constitution');
+  await expect(page.locator('article.msg.user')).toContainText('plant maize');
   // Once a conversation exists, the prompts are gone.
   await expect(page.locator('#empty')).toBeHidden();
   await expect(page.locator('[data-example]:visible')).toHaveCount(0);
@@ -243,7 +243,7 @@ test('the prompts are in the page with no network, and in Shona they are Shona',
   await openAccount(page);
   await page.getByRole('radio', { name: 'ChiShona' }).check();
   await page.keyboard.press('Escape');
-  await expect(page.locator('#empty [data-example]').first()).toContainText('Bumbiro');
+  await expect(page.locator('#empty [data-example]').first()).toContainText('chibage');
 });
 
 test('the composer is one rounded container below the messages: no divider rule, an edge of its own, text above its actions', async ({ page }) => {
@@ -321,7 +321,8 @@ test('the chat has no small print under it: a link opens the disclaimer and priv
   await page.getByRole('link', { name: 'Disclaimer and privacy' }).click();
   await expect(page).toHaveURL(/\/lite\/disclaimer\/$/);
   await expect(page.getByText('not the text of your question or its answer')).toBeVisible();
-  await expect(page.getByText('This is not legal advice')).toBeVisible();
+  await expect(page.getByText('Answers can be wrong', { exact: false }).first()).toBeVisible();
+  await expect(page.getByText(/legal advice/i)).toHaveCount(0);
   await expect(page.locator('script')).toHaveCount(0); // only the chat page ships a script
   // It is a document, not the chat's one scroller: the other languages and the way back can be reached on a phone.
   const back = page.getByRole('link', { name: 'Back to the chat' });
