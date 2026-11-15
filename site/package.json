@@ -26,7 +26,7 @@
     "@bundu/ui": "^0.14.0",
     "@tailwindcss/vite": "^4.3.3",
     "@workos-inc/node": "^12.1.0",
-    "astro": "^7.2.8",
+    "astro": "^7.4.7",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "tailwindcss": "^4.3.3"
