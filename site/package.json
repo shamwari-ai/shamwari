@@ -42,7 +42,7 @@
     "sharp": "^0.35.4",
     "typescript": "^5.9.0",
     "vitest": "^5.0.5",
-    "wrangler": "^4.147.0"
+    "wrangler": "^4.158.0"
   },
   "overrides": {
     "undici@7.29.1": "7.30.1"
