@@ -85,9 +85,10 @@ PR-title lint and the gitleaks secret scan, all in CI.
 ## Branches
 
 - **`staging` is the integration branch.** Open pull requests against it.
-- `main` is released from `staging` automatically: when CI is green on a push to
-  `staging`, `release-to-main.yml` opens or updates one release PR to `main`.
-  Do not open feature PRs against `main`.
+- `main` is released from `staging` automatically: the organisation's
+  `bundu-release` app opens one release PR to `main` with auto-merge on, and it
+  merges with a merge commit, so `staging` stays part of `main`'s history. Do
+  not open feature PRs against `main`, and never squash a release PR.
 - A push to `main` deploys (`deploy.yml`); `staging` pushes get a patch version
   tag (`staging-version.yml`).
 - CI runs on pull requests to `main`, `staging` and `claude/**`, so a stacked PR
