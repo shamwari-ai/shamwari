@@ -1,51 +1,45 @@
-# Deploy on release (shamwari-ai/shamwari#266). Owner, 2026-11-13: "You should be deploying every time a
-# release hits main." Merging and releasing are already automatic (release-to-main.yml); this is the last step.
+# Break-glass deploy (shamwari-ai/shamwari#266). MANUAL ONLY: it never runs on a push, a release or a schedule.
 #
-# Every push to main is deployed once CI has passed on that exact commit:
-#   - the gateway Worker (gateway/) with the wrangler the lockfile pins, and
-#   - Core (Fly app shamwari-core, core/) with flyctl.
-# app/ and site/ are NOT here: Workers Builds deploys those from main on its own.
+# Owner decision, 2026-11-13: production deploys go through the platforms' own GitHub connections, not through
+# secrets held in this repository. Cloudflare Workers Builds deploys the gateway Worker (and app/ and site/) from
+# main, and Fly's GitHub deployment deploys Core from main. The owner steps are in docs/core-fly-runbook.md and
+# docs/domains-and-deploy.md. This workflow is what is left for the day those are unavailable: a person starts it
+# from the Actions tab, on main, and it deploys with repository secrets if they have been added.
 #
-# Modelled on nyuchi/nyuchi-servers-api fly-deploy.yml (trigger, tested-commit check, token check, concurrency)
-# and on the Cloudflare Workers deploy used elsewhere in the nyuchi org (production environment, secret check,
-# pinned wrangler, /health retry).
+# Modelled on nyuchi/nyuchi-servers-api fly-deploy.yml (tested-commit check, token check, concurrency) and on the
+# Cloudflare Workers deploy used elsewhere in the nyuchi org (production environment, secret check, pinned
+# wrangler, /health retry).
 #
 # Rules this file keeps:
+#   - It runs only when started by hand, from main. Nothing triggers it, so it cannot fail red on every release.
 #   - A missing secret FAILS the job with a message naming it. Nothing skips quietly and nothing reports
 #     success without having deployed.
 #   - No secret value is written here. Only the names FLY_API_TOKEN, CLOUDFLARE_API_TOKEN and
-#     CLOUDFLARE_ACCOUNT_ID are referenced, and core/test_deploy_workflow.py fails if that changes.
+#     CLOUDFLARE_ACCOUNT_ID are referenced, each only in the steps that need it, and
+#     core/test_deploy_workflow.py fails if that changes.
 #   - Each deploy job stands alone, behind the `production` GitHub Environment, and a deploy in flight is never
 #     cancelled by a newer one (the newer one waits).
 #   - A failed health check fails the job loudly and names the rollback commands. It does not roll back by
 #     itself: that path cannot be tested from CI, so a person runs it (docs/core-fly-runbook.md, Rollback).
-#
-# Break-glass (a deploy from a shell, when Actions is down): docs/core-fly-runbook.md.
-name: Deploy
+#   - Core's non-secret settings live in core/fly.toml [env], so this deploy, Fly's GitHub deployment and a deploy
+#     from a shell all run the same configuration. No flag here sets them.
+name: Deploy (break-glass)
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  # Decides which commit to deploy, and refuses anything CI did not vouch for. The deploy jobs never check out
-  # the triggering run's commit directly: they check out the SHA this job validated.
+  # Decides which commit to deploy and refuses anything that is not on main. The deploy jobs check out the SHA
+  # this job validated.
   gate:
     name: Commit to deploy
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # Fail closed: a green CI run on a push to main, or a manual run from main.
-    if: >-
-      (github.event_name == 'workflow_run'
-      && github.event.workflow_run.conclusion == 'success'
-      && github.event.workflow_run.event == 'push')
-      || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    # Fail closed: only a manual run from main.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
     outputs:
       sha: ${{ steps.pick.outputs.sha }}
     steps:
@@ -56,23 +50,12 @@ jobs:
           persist-credentials: false
 
       - id: pick
-        name: Validate the tested commit
+        name: Validate the commit
         env:
-          EVENT: ${{ github.event_name }}
-          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
-          HEAD_REPO: ${{ github.event.workflow_run.head_repository.full_name }}
-          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          THIS_REPO: ${{ github.repository }}
           DISPATCH_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          if [ "$EVENT" = workflow_dispatch ]; then
-            sha="$DISPATCH_SHA"
-          else
-            sha="$TESTED_SHA"
-            [ "$HEAD_REPO" = "$THIS_REPO" ] || { echo "::error::CI ran on $HEAD_REPO, not $THIS_REPO; refusing to deploy."; exit 1; }
-            [ "$HEAD_BRANCH" = main ] || { echo "::error::CI ran on branch $HEAD_BRANCH, not main; refusing to deploy."; exit 1; }
-          fi
+          sha="$DISPATCH_SHA"
           printf '%s' "$sha" | grep -Eq '^[0-9a-f]{40}$' || { echo "::error::'$sha' is not a commit SHA."; exit 1; }
           git merge-base --is-ancestor "$sha" origin/main \
             || { echo "::error::$sha is not on main; refusing to deploy."; exit 1; }
@@ -156,10 +139,6 @@ jobs:
       cancel-in-progress: false
     env:
       HEALTH_URL: https://shamwari-core.fly.dev/health
-      # Not a secret: the Servers API's private listener, reachable only over Fly's private network with no key or
-      # token. Passed at deploy time rather than set in core/fly.toml, so a deploy from a shell without the flag
-      # still uses the Nyuchi API client. Core refuses to start for any host that is not *.internal.
-      SERVERS_API_URL: http://nyuchi-servers-api.internal:8081
     steps:
       - name: Require the Fly deploy token
         env:
@@ -179,11 +158,12 @@ jobs:
       - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1  # 1.6
 
       # One machine (core/fly.toml: min_machines_running = 1), so this also starts a stopped one. Core is public
-      # HTTPS on purpose (docs/core-fly-runbook.md, Hardening), so there is no --no-public-ips here.
+      # HTTPS on purpose (docs/core-fly-runbook.md, Hardening), so there is no --no-public-ips here. Its settings
+      # come from core/fly.toml [env], not from a flag.
       - name: fly deploy
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: flyctl deploy --app shamwari-core --ha=false --remote-only --env "SERVERS_API_URL=$SERVERS_API_URL"
+        run: flyctl deploy --app shamwari-core --ha=false --remote-only
         working-directory: core
 
       # /health answers 200 only while the Nyuchi API also answers Core's key (the runbook, Verify).
