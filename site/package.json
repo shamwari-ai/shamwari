@@ -40,7 +40,7 @@
     "@types/react-dom": "^19.2.7",
     "playwright": "^1.63.0",
     "sharp": "^0.35.4",
-    "typescript": "^5.9.0",
+    "typescript": "^7.0.2",
     "vitest": "^5.0.5",
     "wrangler": "^4.147.0"
   },
