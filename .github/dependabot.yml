@@ -1,0 +1,41 @@
+# Dependabot opens its PRs against staging: changes go to staging and are
+# released to main by the automatic release PR, never merged straight into
+# main. Version updates wait 7 days after a release (cooldown), since a
+# just-published package is the likeliest to be malicious or broken; the
+# cooldown does not delay security updates.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directories:
+      - /chat/librechat
+      - /chat/proxy
+      - /docs-site
+      - /gateway
+      - /mobile
+      - /site
+    target-branch: staging
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      astro:
+        patterns:
+          - "astro"
+          - "@astrojs/*"
+
+  - package-ecosystem: pip
+    directory: /core
+    target-branch: staging
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: staging
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7

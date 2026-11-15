@@ -9,6 +9,6 @@
     "test": "node --test \"test/*.test.mjs\""
   },
   "dependencies": {
-    "yaml": "2.8.1"
+    "yaml": "2.8.3"
   }
 }
