@@ -231,6 +231,22 @@ async def ground_search(body: GroundQuery) -> dict[str, Any]:
             },
         )
 
+    # The owner's rule (shamwari#291): a question that needs the person's own information is
+    # personal scope, and the edge embedding runs on Cloudflare-hosted inference. The gateway
+    # does not embed such a question (gateway/src/ground.ts); this is the check it cannot
+    # bypass. Refused, not discarded, for the same reason as the mind case above.
+    if body.embedding is not None and (body.needs_own_information or needs_own_information(body.query)):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "error": "edge_embedding_forbidden",
+                "message": (
+                    "A question that needs the person's own information must not be embedded "
+                    "by the caller. Embedding is inference."
+                ),
+            },
+        )
+
     try:
         out = await api.ground_search(
             {
@@ -359,6 +375,16 @@ def check_sink(database: str, collections: dict[str, list[dict[str, Any]]]) -> N
                 raise HTTPException(
                     status.HTTP_400_BAD_REQUEST,
                     f"{name} document has restricted provenance and cannot set trainingEligible=true",
+                )
+
+            # Storing a conversation is not consent to train on it. A trainable row must
+            # say, in its own right, that the caller agreed; anything but an explicit
+            # True (absent, false, "yes") is no. Checked here as well as at the edge,
+            # because the edge's view is the one a bug or a stale cache can get wrong.
+            if eligible and d.get("trainingConsent") is not True:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    f"{name} document sets trainingEligible=true without trainingConsent=true",
                 )
 
 
