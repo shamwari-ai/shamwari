@@ -213,12 +213,12 @@ Every merge to `staging` is released to `main` and production without a manual s
 version is gated; it is never automatic.
 
 1. A PR merges to `staging` through the queue.
-2. **Verify:** `release-to-main.yml` runs when CI finishes on the staging head. A red head
-   releases nothing, and a head that has since been replaced is left to the newer run.
-3. **Release PR:** it keeps one branch, `release/staging-to-main`, whose tree equals staging's
-   (branch from `main`, `git read-tree -u --reset origin/staging`, commit), opens or updates the
-   PR `chore: release staging to main, DATE+n`, labels it `forward-ported`, and turns on
-   auto-merge. It moves `main` only; `deploy.yml` (step 4) does the deploying.
+2. **Release PR:** the organisation's `bundu-release` GitHub App (installed across the
+   organisation; nothing to configure in this repository) opens or updates one PR from `staging`
+   to `main`, `Release: shamwari staging into main`, with auto-merge on. It merges with a merge
+   commit once the required checks pass, so `staging` stays an ancestor of `main` and the next
+   release merges without conflicts. Never squash a release PR: that drops the `staging` parent.
+3. **Main only:** the release moves `main`; the platforms (step 4) do the deploying.
 4. **Deploy:** when `main` updates, Workers Builds deploys `shamwari-site` (connected) and
    `shamwari-app` (once the owner connects it in the Cloudflare dashboard). The gateway Worker
    and Core deploy the same way, through their own platform connections (owner decision,
@@ -242,9 +242,6 @@ version is gated; it is never automatic.
 `shamwari-app` and `shamwari-site` Workers: Cloudflare dashboard, Workers & Pages, the Worker, Deployments, roll back to the
 previous version (a deploy keeps the previous version ids), then fix forward on `staging`.
 
-**Needs the owner:** a GitHub App (or token) the release workflow can use, stored as the
-repository secrets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY`, installed on this repository
-with Contents, Pull requests and Issues write. The built-in `GITHUB_TOKEN` is not enough: a PR it
-opens does not start the pull-request workflows, so the required checks would never run.
-Both workflows must also be on `main` before they run (`workflow_run` uses the default branch's
-copy), so the first release is cut by hand.
+The repository's own `release-to-main.yml` (which needed the secrets `RELEASE_APP_ID` and
+`RELEASE_APP_PRIVATE_KEY`) is retired: the `bundu-release` app does that job for the whole
+organisation.
