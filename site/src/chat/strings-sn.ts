@@ -20,6 +20,8 @@ export const sn: Strings = {
   copyAnswer: 'Kopa mhinduro',
   copied: 'Yakopwa',
   shareAnswer: 'Govera mhinduro',
+  codeBlock: 'Kodhi',
+  tableBox: 'Tafura',
   languageUnavailable: 'Mutauro uyu hauna kukwanisa kuiswa. Edza zvakare kana uri paIndaneti.',
   deleteWait: 'Hurukuro uhu hucharamba huchitumira. Dzima kana hwapiwa mhinduro.',
   addTo: 'Wedzera',
