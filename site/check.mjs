@@ -100,9 +100,14 @@ if (TARGET === 'app') {
     const liteHtml = readFileSync(litePage, 'utf8');
     const problem = authModeProblem(liteHtml);
     if (problem) fail.push(`app build: ${problem}`);
-    // No Skills tab until a SKILL.md loader exists (shamwari#291, chat/features.ts). Only a build that asks for it may carry it.
-    if (process.env.PUBLIC_CHAT_SKILLS !== 'true' && /id="tab-skills"|id="tabpanel-skills"/.test(liteHtml)) {
-      fail.push('app build: the Skills tab is in the page, but there is no SKILL.md loader (set PUBLIC_CHAT_SKILLS=true only once there is)');
+    // The Skills tab is on by default (chat/features.ts): the page has it, its panel, and a Plugins row that opens them. Only a
+    // build with PUBLIC_CHAT_SKILLS=false leaves it out, and then nothing opens the empty Plugins panel.
+    const hasSkills = /id="tab-skills"/.test(liteHtml) && /id="tabpanel-skills"/.test(liteHtml);
+    const pluginsOpens = /data-section="plugins"/.test(liteHtml);
+    if (process.env.PUBLIC_CHAT_SKILLS === 'false') {
+      if (hasSkills || pluginsOpens) fail.push('app build: PUBLIC_CHAT_SKILLS=false, but the Skills tab or a Plugins row that opens it is in the page');
+    } else if (!hasSkills || !pluginsOpens) {
+      fail.push('app build: the Skills tab (or the Plugins row that opens it) is missing; it is on unless PUBLIC_CHAT_SKILLS=false');
     }
   }
   const redirects = files.includes(`${DIST}/_redirects`) ? readFileSync(`${DIST}/_redirects`, 'utf8') : '';

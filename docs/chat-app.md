@@ -166,7 +166,9 @@ use `plainText()`, so the clipboard and a WhatsApp message get plain words. Refs
   `personal`. A personal question gets the gateway's 409
   (`scope_requires_local_inference`), and the app explains it kindly: personal
   questions need Shamwari Mind on the device, which is not shipped yet. It is
-  never rendered as a generic error.
+  never rendered as a generic error. A question asked with a personal-scope skill
+  on still sends `scope: platform`, with `own_information: true` beside it, which the
+  gateway treats as personal scope (see "Skills" below).
 - **Language claims.** The footer says "Answered by Shamwari Cloud (a routed
   model). Answers can be wrong, so check anything important." Shamwari is a
   general-purpose assistant (agriculture, weather, news and places first), not a legal
@@ -288,7 +290,7 @@ behaviour; the geometry tests moved with it. Screenshots (light and dark; 390, 1
 
 ## Attachments, phase 1: on this device only (2026-11-12)
 
-A "+" at the left of the composer opens a menu with **Upload a file** (a skills entry is not shown until Skills has something in it), and a
+A "+" at the left of the composer opens a menu with **Upload a file** (skills are turned on in the Skills tab; a shortcut here is a follow-up), and a
 microphone records a **voice note**. Both stay on this device and go nowhere: adding, recording and removing make no network request
 (`e2e/attach.spec.ts` watches every request), and what is sent with the question is its text and nothing about the attachment.
 
@@ -319,3 +321,54 @@ cannot parse it). The same plain words are copied, shared and saved (a saved ans
 set apart by weight (600), not by a box; message text is 14px (`--fs-small`, the smallest the Bundu floor allows) and "thinking" is 14px and
 muted. Copy answer, Share answer (only where the browser can share; closing the sheet is not an error, any other failure copies the text instead)
 and Save answer are text buttons. Refusal and error boxes stay: they are notices, not bubbles.
+
+## Skills: Agent Skills from SKILL.md, with a builder (2026-11-17)
+
+Owner's request (2026-11-17), answering the audit in #291 ("Skills as SKILL.md: FAIL, the tab exists with no loader"). The drawer's
+**Plugins** row opens again, on a **Skills** tab first (Plugins and MCP still say there is nothing behind them). It is on by default;
+a build with `PUBLIC_CHAT_SKILLS=false` leaves it out and Plugins goes back to a "Coming soon" row (`chat/features.ts`, held by
+`check.mjs` and `test/app/features.test.ts`).
+
+- **The standard.** A skill is an [Agent Skill](https://agentskills.io): a `SKILL.md` with YAML frontmatter and a Markdown body. The
+  rules are copied from the spec at source, `github.com/agentskills/agentskills` `docs/specification.mdx` and its reference validator
+  `skills-ref/src/skills_ref/validator.py`, both at commit `83021e2be457a9b6679148719c1f6074f0ad975e`: `name` 1-64 characters (after
+  NFKC), lowercase letters, digits and hyphens, no leading, trailing or double hyphen; `description` 1-1024 characters; optional
+  `license`, `compatibility` (1-500), `metadata` (string to string) and `allowed-tools`; no other field. Where the spec's prose (a-z,
+  0-9) and its validator (any lowercase Unicode letter) differ, Lite follows the validator. Shamwari's own limit, not the spec's: the
+  instructions are at most 12,000 characters, because a skill that is on travels with every question.
+- **Reader and writer:** `chat/skill.ts` (`parseSkillMd`, `validateSkill`, `writeSkillMd`), with `test/app/skill.test.ts`. The YAML
+  reader is a small subset (plain, quoted, `|` and `>` values, `#` comments, one level of `metadata`); anything else is refused with its
+  line number, never guessed. What it writes any YAML reader can read.
+- **The builder** (`chat/skills-ui.ts`, loaded with the Plugins section, so the first load does not carry it): name, description and
+  instructions, checked live against the spec; each field says what is wrong under it once it has been typed in (`aria-invalid`,
+  `aria-describedby`), and Save moves focus to the first field still wrong rather than being disabled. Edit, delete (asks first), export
+  (`SKILL.md`; put it in a folder named after the skill, as the spec asks) and import (a `.md` file; one with fixable problems opens in
+  the form, a field the spec does not allow is named and left out on save). Two skills cannot share a name.
+- **Three sources.** _Personal_: written in Lite (scope `personal`). _Platform_: published by Shamwari (scope `platform`, read-only;
+  `PLATFORM_SKILLS` in `chat/skills.ts` is empty until the owner decides which to publish). _Plugin_: imported from a SKILL.md file
+  (another tool's, or the person's own), with the scope chosen at import, `personal` unless the person picks the other option.
+- **Storage.** On the device: IndexedDB `skills` (database version 4), per person like the chats. Each skill is one self-contained
+  record, `{ id, source, scope, skillMd, createdAt, updatedAt }`, where `skillMd` is the whole SKILL.md text and the source of truth,
+  so it can move to the person's Bundu Cell (proposed, `siafuDB/cell`, owned by another team) without being reshaped. Deleting chat
+  history does not delete skills; the person deletes them in the tab. Syncing skills to the person's server-side profile is **not built**
+  (a follow-up), and neither is Cell.
+- **On or off, per chat.** "On in this chat" is a switch on each skill (up to 3 at once); a new chat starts with none on. The chat's skill
+  ids are kept on the thread; each question records which platform skills were on when it was asked, so a retry sends the same ones. A
+  line above the question box says which are on.
+- **Rule 1.** A personal-scope skill never leaves the device. A question asked while one is on is marked `ownInformation`; its request
+  carries `own_information: true` and **no skill text at all** (`chat/skills.ts`), and the gateway treats it exactly as a question its
+  own rules flag: personal scope, no edge embedding, no completion, only the cited Ground passage, and Core is told
+  (`needs_own_information`). The gateway reads the flag in `resolveScope` (`gateway/src/scope.ts`), where it can only add the personal
+  flag, never remove it; an explicit `scope: personal` is still the 409. Such a question and its answer are also kept out of the context
+  of later questions that are not personal. If the skills cannot be read when a question is asked, it is treated as personal (fails
+  closed). Platform-scope skills go as `skills: [{ name, description, instructions }]` (at most 3) and the gateway adds them after the
+  constant system prompt and the Ground context, never in place of it (`gateway/src/skills.ts`); as a second check it runs the personal
+  rules over each skill's own words, and a skill that looks personal makes the request personal scope too. Tests:
+  `gateway/test/scope-decision.test.ts` ("skills: ..."), `site/test/app/skills.test.ts`, `site/e2e/skills.spec.ts`.
+- **Languages.** Every new string is in `strings.ts`, `strings-sn.ts` and `strings-nd.ts`. The builder's words are English in the Shona
+  and Ndebele files (the fallback those files already use for Plugins, Skills and MCP) except Cancel, Delete and Name, which reuse words the
+  files already have. A native speaker should write the rest.
+- **Not built yet:** a Skills entry in the "+" menu; publishing platform skills; sync to the profile; skill resources beyond `SKILL.md`
+  (`scripts/`, `references/`, `assets/` are not read, and a skill's `allowed-tools` grants nothing: Lite runs no tools).
+- **Budget:** the first load went from 49,316 to about 50,800 bytes gzipped of the 51,200 R2 budget (the new English strings, the
+  record type and the skill path in the send code); the builder and the SKILL.md reader load only when the Plugins section is opened.
