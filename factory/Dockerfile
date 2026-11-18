@@ -27,6 +27,13 @@ RUN npm install --global --ignore-scripts opencode-linux-x64-baseline@1.19.4 \
 
 COPY --from=sandbox-tools /usr/local/bin/sandbox-shim /usr/local/bin/sandbox-shim
 
+# Run as the image's unprivileged `node` user (uid 1000), not root: OpenCode
+# runs code an agent wrote, so a compromised process must not own the
+# container. /workspace is created for that user; its home (/home/node) holds
+# OpenCode's own state. The intercept CA at /etc/cloudflare/certs is mounted
+# by the platform and only read.
+RUN mkdir -p /workspace && chown node:node /workspace
 WORKDIR /workspace
+USER node
 # The Durable Object starts `opencode serve` itself (src/workspace-core.ts).
 CMD ["sleep", "infinity"]

@@ -95,6 +95,18 @@ describe("pins agree", () => {
   });
 });
 
+describe("the image does not run as root", () => {
+  it("the last USER in the Dockerfile is an unprivileged user", () => {
+    const users = dockerfile
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => /^USER\s+/i.test(l))
+      .map((l) => l.split(/\s+/)[1]);
+    expect(users.length).toBeGreaterThan(0);
+    expect(["root", "0", "0:0"]).not.toContain(users.at(-1));
+  });
+});
+
 describe("the source names no inference provider and holds no credential", () => {
   it("no provider host or provider key name appears in src/", () => {
     const sources = import.meta.glob("../src/**/*.ts", {
