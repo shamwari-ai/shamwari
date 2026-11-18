@@ -1,0 +1,29 @@
+# Shamwari Standard: Z.ai GLM-5.3 on Cloudflare Workers AI, behind Shamwari's
+# gateway. `shamwari-standard` is the alias the gateway pins to its standard
+# tier (gateway/routing-policy.json); the tier's model is STANDARD_MODEL =
+# @cf/zai-org/glm-5.3 (gateway/wrangler.jsonc), listed by GET /v1/models.
+# Source: https://github.com/shamwari-ai/shamwari/tree/staging/gateway
+# Tools: the gateway does not forward `tools` or `tool_choice`.
+# Reasoning: always on; the gateway sends reasoning_effort = low and ignores
+# the caller's, so there is no caller control.
+# Sampling: the gateway sets temperature (0.3) and ignores the caller's
+# temperature and top_p.
+# Output: capped at 2,048 tokens by the gateway (DEFAULT_MAX_OUTPUT_TOKENS).
+# Fallback: if GLM-5.3 fails, the route answers with GLM-5.3-Flash and the
+# response says so (`shamwari.model_served`, `shamwari.model_substituted`).
+# The caller's system messages are replaced by Shamwari's grounded system prompt.
+# No cost: API prices are not published yet.
+schema = 2
+base_model = "zhipuai/glm-5.3"
+name = "Shamwari Standard"
+description = "GLM-5.3 behind Shamwari's gateway, with answers grounded in cited Zimbabwean law, policy and economy sources"
+
+[capabilities]
+tools = { supported = false }
+reasoning = { supported = true }
+temperature = false
+top_p = false
+top_k = false
+
+[limit]
+output = 2_048
