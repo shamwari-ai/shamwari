@@ -1,5 +1,7 @@
 import type { Env, Message, SinkMessage, AuthContext, GroundChunk } from './types';
 import { authenticate } from './auth';
+import type { AuthResult } from './auth';
+import { modelList } from './models';
 import { keyService, permittedScopes, usageMeter } from './keys';
 import { estimateCostUsd, PRICE_TABLE_VERSION } from './pricing';
 import { resolveScope, ScopeRefusal } from './scope';
@@ -120,6 +122,21 @@ interface ChatBody {
   format?: string;
 }
 
+/** The response for a failed authentication, the same on every authenticated endpoint. */
+function authFailure(authed: Exclude<AuthResult, { ok: true }>): Response {
+  // 'unavailable' is a 503, not a 401: the caller's key may be fine, and a
+  // client that drops a good key on a 401 would turn our outage into theirs.
+  if (authed.reason === 'unavailable') {
+    return json({ error: 'auth_unavailable' }, 503, { 'Retry-After': '5' });
+  }
+  // A real sign-in that is not provisioned for Shamwari. Not a 401: the client would send the
+  // person back to sign in and hand them a new token with the same gap.
+  if (authed.reason === 'forbidden') {
+    return json({ error: 'not_provisioned', reason: authed.detail }, 403);
+  }
+  return json({ error: 'invalid_api_key' }, 401);
+}
+
 /**
  * Everything both endpoints do before they diverge: authenticate, meter,
  * parse, and gate on scope. The capability argument is what makes the gate
@@ -143,19 +160,7 @@ async function admit(
     }
 > {
   const authed = await authenticate(req, env);
-  if (!authed.ok) {
-    // 'unavailable' is a 503, not a 401: the caller's key may be fine, and a
-    // client that drops a good key on a 401 would turn our outage into theirs.
-    if (authed.reason === 'unavailable') {
-      return { ok: false, response: json({ error: 'auth_unavailable' }, 503, { 'Retry-After': '5' }) };
-    }
-    // A real sign-in that is not provisioned for Shamwari. Not a 401: the client would send the
-    // person back to sign in and hand them a new token with the same gap.
-    if (authed.reason === 'forbidden') {
-      return { ok: false, response: json({ error: 'not_provisioned', reason: authed.detail }, 403) };
-    }
-    return { ok: false, response: json({ error: 'invalid_api_key' }, 401) };
-  }
+  if (!authed.ok) return { ok: false, response: authFailure(authed) };
   const auth = authed.auth;
   const quota = async (): Promise<Response | null> =>
     (await overQuota(env, auth))
@@ -388,6 +393,13 @@ const worker = {
         version: '1.0.0',
         mind: env.MIND_AVAILABLE === 'true',
       });
+    }
+    // The model ids a caller may name (src/models.ts). Authenticated like the rest
+    // of /v1, but not metered and not quota-checked: listing costs nothing to serve.
+    if (url.pathname === '/v1/models' && req.method === 'GET') {
+      const authed = await authenticate(req, env);
+      if (!authed.ok) return authFailure(authed);
+      return json(modelList(env));
     }
     if (url.pathname === '/v1/ground/context' && req.method === 'POST') {
       return groundContext(req, env, ctx);
