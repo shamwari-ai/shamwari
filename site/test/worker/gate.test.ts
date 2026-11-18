@@ -289,7 +289,12 @@ describe('the Worker in front of the gate', () => {
   });
 
   it('keeps app/wrangler.jsonc routing the gated area to the Worker', () => {
-    const text = readFileSync(join(__dirname, '../../app/wrangler.jsonc'), 'utf8');
-    expect(text).toContain('"run_worker_first": ["/", "/auth/*", "/callback", "/chat", "/chat/*", "/lite", "/lite/*"]');
+    // Parsed, not matched as text, so the formatter may wrap the array. Same JSONC stripping as check.mjs.
+    const text = readFileSync(join(__dirname, '../../app/wrangler.jsonc'), 'utf8')
+      .split('\n')
+      .filter((l) => !/^\s*\/\//.test(l))
+      .join('\n')
+      .replace(/,(\s*[}\]])/g, '$1');
+    expect(JSON.parse(text).assets.run_worker_first).toEqual(['/', '/auth/*', '/callback', '/chat', '/chat/*', '/lite', '/lite/*']);
   });
 });
