@@ -97,8 +97,9 @@ owner's review (docs/factory.md, "Gateway"), not something this package does.
 ## Owner steps to switch it on (none done)
 
 1. **Gateway factory path.** Agree and merge the gateway change above,
-   including a code-model tier (for example the open-weight
-   `@cf/moonshotai/kimi-k2.7-code` on Workers AI) in the dynamic route and the
+   including a code-model tier (an open-weight Workers AI model whose licence
+   has been read; not `kimi-k2.7-code`, which Cloudflare retires on 2026-11-20,
+   #331) in the dynamic route and the
    provenance allow-list. Then add it to `MODELS` in `src/opencode.ts`.
 2. **WorkOS.** In the Mukoko Account environment's AuthKit application, add the
    redirect URI `https://factory.shamwari.ai/callback`. Set the

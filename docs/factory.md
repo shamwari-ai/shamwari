@@ -97,8 +97,9 @@ no production routing was edited):
    (`X-Shamwari-Channel: pwa` today drops the conversation document): people's
    code should not be stored as conversations.
 3. A code-model tier in the dynamic route and the provenance allow-list, on an
-   open-weight code model the gateway can already reach on Workers AI (for
-   example `@cf/moonshotai/kimi-k2.7-code`, `docs/workers-ai-models.md`). Until
+   open-weight code model on Workers AI whose licence has been read. Not
+   `@cf/moonshotai/kimi-k2.7-code`: Cloudflare retires it on 2026-11-20 (#331).
+   Check the current catalog in `docs/workers-ai-models.md` first. Until
    then the factory defaults to `shamwari-standard` (GLM, open weights).
 
 ## Sizing and cost
