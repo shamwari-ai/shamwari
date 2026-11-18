@@ -3,6 +3,10 @@ import { LANGUAGES } from './strings';
 import { authModeOf } from './auth-mode';
 import { whenIdle } from './busy';
 import { reloadOnTakeover, startUpdateChecks } from './update-reload';
+import { applyTheme, savedTheme } from './theme';
+
+// A theme chosen in the command menu, before anything is drawn.
+applyTheme(savedTheme());
 
 // The API origin is fixed at build time (PUBLIC_SHAMWARI_API). It is never read
 // from the URL: a link that could repoint the app would send a person's key to

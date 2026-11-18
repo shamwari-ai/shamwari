@@ -15,6 +15,9 @@ import type { ChatRequest } from './types';
  * Skills Shamwari publishes: the same self-contained record as the person's own, read-only, never stored per person.
  * None is published yet; which ones to publish is the owner's call (docs/chat-app.md).
  */
+/** How many skills can be on in one chat at once (each on skill travels with every question). */
+export const SKILLS_ON_MAX = 3;
+
 export const PLATFORM_SKILLS: readonly SkillRecord[] = [];
 
 /** Every skill this person can turn on: Shamwari's, then their own. */

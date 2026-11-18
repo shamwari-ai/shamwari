@@ -10,12 +10,12 @@
  */
 import { h } from './render';
 import { BODY_MAX, DESCRIPTION_MAX, NAME_MAX, normaliseName, parseSkillMd, validateSkill, writeSkillMd, type SkillFields, type SkillProblem } from './skill';
-import { allSkills } from './skills';
+import { SKILLS_ON_MAX, allSkills } from './skills';
 import type { SkillRecord, Store } from './store';
 import type { Strings } from './strings';
 
 /** How many skills can be on in one chat (the gateway takes at most three: gateway/src/skills.ts). */
-export const SKILLS_ON_MAX = 3;
+export { SKILLS_ON_MAX };
 
 export interface SkillsHost {
   store: Pick<Store, 'skills' | 'putSkill' | 'removeSkill'>;

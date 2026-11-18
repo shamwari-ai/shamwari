@@ -21,6 +21,7 @@ import { newId, openSwitchableStore, titleOf, type Artifact, type Project, type 
 import { LANGUAGES, isLanguage, loadStrings } from './strings';
 import type { AskErrorKind, ChatMessage, Scope } from './types';
 import { setBusy } from './busy';
+import { applyTheme } from './theme';
 import type { AuthMode } from './auth-mode';
 
 /**
@@ -262,6 +263,14 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   // ---- skills on in this chat (chat/skills.ts; the Skills tab is chat/skills-ui.ts, loaded with the Plugins section) ----
   let skillsUi: { refresh(): void } | null = null;
   /** The quiet line above the question box: which skills are on here, and what a personal one means for the answer. */
+  /** The mode chip in the prompt box says what kind of question this chat asks; it never chooses one (see GENERAL). */
+  let personalOn = false;
+  const syncMode = () => {
+    const s = strings();
+    const mode = offlineMode ? 'offline' : personalOn ? 'personal' : 'general';
+    document.documentElement.dataset.mode = mode;
+    $('#mode-text').textContent = mode === 'offline' ? s.offlineMode : mode === 'personal' ? s.skillPersonal : s.skillGeneral;
+  };
   const syncSkills = () => {
     skillsUi?.refresh();
     const note = $('#skills-note');
@@ -269,6 +278,8 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     const ids = th.skills ?? [];
     if (!ids.length) {
       note.hidden = true;
+      personalOn = false;
+      syncMode();
       return;
     }
     void import('./skills')
@@ -278,6 +289,8 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
         if (th !== thread) return; // another chat is open now
         const s = strings();
         note.hidden = !on.ownInformation && !on.skills.length;
+        personalOn = on.ownInformation;
+        syncMode();
         $('#skills-note-text').textContent = on.ownInformation ? s.skillsOnPersonal : s.skillsOn.replace('{n}', String(on.skills.length));
       });
   };
@@ -1209,6 +1222,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   };
   input.addEventListener('input', autosize);
   input.addEventListener('keydown', (e) => {
+    if (commands?.onSlashKey(commandHost, e)) return; // the "/" menu has Up, Down, Enter and Escape while it is open
     // Enter sends; Shift+Enter is a new line. Composition (IME) Enter must not send.
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
@@ -1407,6 +1421,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     $('#offline-mode-note').hidden = !offlineMode;
     $('#offline-badge').hidden = !offlineMode; // the top bar says so only while it is on
     document.documentElement.toggleAttribute('data-offline-mode', offlineMode);
+    syncMode();
   };
   offlineSwitch.addEventListener('click', () => {
     offlineMode = !offlineMode;
@@ -1428,6 +1443,66 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     syncOfflineMode();
     rebuild(); // each kept question shows the state that matches the mode
     void renderHistory();
+  });
+
+  // ---- the session list as a column (from 64rem): hidden and shown from the top bar, remembered on this device ------------
+  const SIDE_KEY = 'shamwari.side';
+  const sideToggle = $('#side-toggle');
+  const setSide = (closed: boolean) => {
+    if (closed) document.documentElement.dataset.side = 'closed';
+    else delete document.documentElement.dataset.side;
+    sideToggle.setAttribute('aria-pressed', String(closed));
+  };
+  try {
+    setSide(localStorage.getItem(SIDE_KEY) === 'closed');
+  } catch {
+    /* no storage: the list starts shown */
+  }
+  sideToggle.addEventListener('click', () => {
+    const closed = document.documentElement.dataset.side !== 'closed';
+    setSide(closed);
+    try {
+      localStorage.setItem(SIDE_KEY, closed ? 'closed' : 'open');
+    } catch {
+      /* the choice holds for this visit only */
+    }
+  });
+
+  // ---- the command menu (chat/commands.ts, loaded on first use): Ctrl/Cmd+K, the top bar's button, the mode chip and "/" ----
+  const commandHost = {
+    strings,
+    thread: () => thread,
+    store,
+    skillsOn: () => thread.skills ?? [],
+    setSkillsOn,
+    offlineMode: () => offlineMode,
+    openSection: (name: Section) => {
+      showSection(name);
+      if (!matchMedia('(min-width: 64rem)').matches) (drawer as HTMLElement & { showPopover(): void } | null)?.showPopover();
+      else if (document.documentElement.dataset.side === 'closed') sideToggle.click();
+    },
+    setLanguage: (code: string) => {
+      langSelect.value = code;
+      langGroup.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+    setTheme: (theme: 'dark' | 'light' | null) => applyTheme(theme, true),
+    say: (text: string) => ($('#toast').textContent = text),
+    input,
+  };
+  let commands: typeof import('./commands') | null = null;
+  const loadCommands = async () => (commands ??= await import('./commands'));
+  const palette = (only?: 'skills') => void loadCommands().then((c) => c.openPalette(commandHost, only));
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k' && document.documentElement.dataset.view === 'app') {
+      e.preventDefault();
+      palette();
+    }
+  });
+  $('#open-palette').addEventListener('click', () => palette());
+  $('#mode-chip').addEventListener('click', () => palette('skills'));
+  if (/Mac|iPhone|iPad/.test(navigator.platform)) $('#open-palette .kbd').textContent = '⌘K';
+  input.addEventListener('input', () => {
+    if (input.value.startsWith('/') || commands) void loadCommands().then((c) => c.onSlashInput(commandHost));
   });
 
   // ---- go ------------------------------------------------------------------
