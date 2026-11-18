@@ -39,6 +39,7 @@ jobs:
       site: ${{ steps.f.outputs.site }}
       app: ${{ steps.f.outputs.app }}
       mobile: ${{ steps.f.outputs.mobile }}
+      factory: ${{ steps.f.outputs.factory }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
         with:
@@ -74,6 +75,7 @@ jobs:
             echo "site=$(hit '^(site/|docs/)')"
             echo "app=$(hit '^site/')"
             echo "mobile=$(hit '^mobile/')"
+            echo "factory=$(hit '^factory/')"
           } >> "$GITHUB_OUTPUT"
           cat "$GITHUB_OUTPUT"
 
@@ -407,6 +409,36 @@ jobs:
 
       - run: npm test
         working-directory: mobile
+
+  factory:
+    name: Factory (types, tests)
+    needs: changes
+    if: needs.changes.outputs.factory == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: factory/package-lock.json
+
+      - run: npm ci
+        working-directory: factory
+
+      - name: Type check
+        run: npm run typecheck
+        working-directory: factory
+
+      # Unauthenticated access refused, the egress allow-list (gateway and
+      # github.com only), no credential in the container, one workspace per
+      # person, OpenCode's config pinned to the image's version, and a guard
+      # that fails if wrangler.jsonc gains a route or anything else that
+      # would switch the factory on.
+      - name: Unit tests
+        run: npm test
+        working-directory: factory
 
   gitleaks:
     name: Secret scan (gitleaks)
