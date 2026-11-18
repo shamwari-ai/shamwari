@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-08-01",
   // Query strings are redacted: /callback carries the OAuth code and state, and
-  // /lite/?signin=failed carries a reason; persisted invocation logs must never store them.
+  // /chat/?signin=failed carries a reason; persisted invocation logs must never store them.
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1,
@@ -107,8 +107,8 @@
     // WorkOS sign-in for people (docs/chat-signin.md). None of these is a secret. The
     // client_id check is what keeps tokens minted for any other Mukoko app out; `aud` is deliberately NOT set (the
     // production JWT template carries none; setting it would make every token without it fail). Two applications
-    // are accepted, comma separated, and no others: Shamwari Chat (the mobile app) and Mukoko Account (the light
-    // chat at /lite/, which signs in there because Shamwari Chat has no API key for the Worker's code exchange).
+    // are accepted, comma separated, and no others: Shamwari Chat (the mobile app) and Mukoko Account (the web
+    // chat at /chat/, which signs in there because Shamwari Chat has no API key for the Worker's code exchange).
     // The JWKS URL is built from the first id; WorkOS signs every application of an environment with the same keys.
     "WORKOS_CLIENT_ID": "client_01M68PCT0T5ECHKDYH45ECT0GV,client_01KQBBSMQTSMTBN7HEC9KQBJC0",
     // The issuers a token may carry. NONE of these has been read off a real access token yet; the choice rests on the

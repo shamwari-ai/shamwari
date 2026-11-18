@@ -30,7 +30,7 @@ async function release(page: Page) {
   const base = new URL(page.url()).origin;
   expect((await page.request.get(`${base}/__sw/bump`)).ok()).toBe(true);
   await page.evaluate(async () => {
-    const reg = await navigator.serviceWorker.getRegistration('/lite/');
+    const reg = await navigator.serviceWorker.getRegistration('/chat/');
     await reg?.update();
   });
 }

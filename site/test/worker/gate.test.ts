@@ -26,11 +26,11 @@ function deps(result: CheckResult | 'throws' = { status: 'invalid' }) {
 }
 
 /** Every route the app serves, from the real build if there is one, plus the ones that matter. */
-const ROUTES = ['/lite/', '/lite/index.html', '/lite/_astro/index.astro_astro_type_script_index_0_lang.Abc123.js', '/lite/anything', '/lite/auth/other'];
+const ROUTES = ['/chat/', '/chat/index.html', '/chat/_astro/index.astro_astro_type_script_index_0_lang.Abc123.js', '/chat/anything', '/chat/auth/other'];
 
 describe('the gate: no session, no app', () => {
   it('sends an unauthenticated page request straight to the hosted sign-in, and serves nothing', async () => {
-    for (const path of ['/lite/', '/lite/index.html']) {
+    for (const path of ['/chat/', '/chat/index.html']) {
       const { d, log } = deps();
       const res = await gate(req(path), d);
       expect(res.status, path).toBe(302);
@@ -62,13 +62,13 @@ describe('the gate: no session, no app', () => {
         return new Response('APP-CONTENT', { status: 200 });
       },
     };
-    const both = new Request(`${HOST}/lite/`, { headers: { Cookie: `${SESSION_COOKIE}=OLD; ${SESSION_COOKIE}=NEW` } });
+    const both = new Request(`${HOST}/chat/`, { headers: { Cookie: `${SESSION_COOKIE}=OLD; ${SESSION_COOKIE}=NEW` } });
     const res = await gate(both, d);
     expect(res.status).toBe(200);
     expect(log).toEqual(['check:OLD', 'check:NEW']);
     // When every copy is invalid, nothing is served and both places are cleared.
     const none = await gate(
-      new Request(`${HOST}/lite/`, { headers: { Cookie: `${SESSION_COOKIE}=A; ${SESSION_COOKIE}=B` } }),
+      new Request(`${HOST}/chat/`, { headers: { Cookie: `${SESSION_COOKIE}=A; ${SESSION_COOKIE}=B` } }),
       deps({ status: 'invalid' }).d,
     );
     expect(none.status).toBe(302);
@@ -76,7 +76,7 @@ describe('the gate: no session, no app', () => {
 
   it('refuses a cookie that is not a session, clears it, and still serves nothing', async () => {
     const { d, log } = deps({ status: 'invalid' });
-    const res = await gate(req('/lite/', 'FORGED'), d);
+    const res = await gate(req('/chat/', 'FORGED'), d);
     expect(res.status).toBe(302);
     expect(res.headers.get('Location')).toBe('/auth/login');
     expect(res.headers.get('Set-Cookie')).toContain('Max-Age=0');
@@ -90,27 +90,27 @@ describe('the gate: no session, no app', () => {
   it('serves the app only when the cookie is a session, valid or merely expired, and never lets a shared cache keep it', async () => {
     for (const status of ['valid', 'expired'] as const) {
       const { d, log } = deps({ status, accessToken: 't', sid: 's' } as CheckResult);
-      const res = await gate(req('/lite/', 'GOOD'), d);
+      const res = await gate(req('/chat/', 'GOOD'), d);
       expect(res.status, status).toBe(200);
       expect(await res.text()).toBe('APP-CONTENT');
       expect(res.headers.get('Cache-Control')).toBe('private, no-cache');
       expect(res.headers.get('Vary')).toContain('Cookie');
-      expect(log).toEqual(['check:GOOD', 'asset:/lite/']);
+      expect(log).toEqual(['check:GOOD', 'asset:/chat/']);
     }
   });
 
   it('lets the browser keep a hashed script for good, but never a shared cache, and revalidates the page every time', async () => {
     const session = { status: 'valid', accessToken: 't', sid: 's' } as CheckResult;
-    const script = await gate(req('/lite/_astro/index.astro_astro_type_script_index_0_lang.BwXFjztz.js', 'GOOD'), deps(session).d);
+    const script = await gate(req('/chat/_astro/index.astro_astro_type_script_index_0_lang.BwXFjztz.js', 'GOOD'), deps(session).d);
     expect(script.headers.get('Cache-Control')).toBe('private, max-age=31536000, immutable');
-    const page = await gate(req('/lite/', 'GOOD'), deps(session).d);
+    const page = await gate(req('/chat/', 'GOOD'), deps(session).d);
     expect(page.headers.get('Cache-Control')).toBe('private, no-cache');
   });
 
   it('fails closed when it cannot tell: a 503, never the page', async () => {
     for (const result of [{ status: 'unavailable' } as CheckResult, 'throws' as const]) {
       const { d, log } = deps(result);
-      const res = await gate(req('/lite/', 'GOOD'), d);
+      const res = await gate(req('/chat/', 'GOOD'), d);
       expect(res.status).toBe(503);
       expect(res.headers.get('Retry-After')).toBeTruthy();
       expect(await res.text()).not.toContain('APP-CONTENT');
@@ -120,7 +120,7 @@ describe('the gate: no session, no app', () => {
 
   it('does not loop on a failed sign-in: it shows a plain page instead of sending the person back to sign-in', async () => {
     const { d } = deps();
-    const res = await gate(req('/lite/?signin=failed'), d);
+    const res = await gate(req('/chat/?signin=failed'), d);
     expect(res.status).toBe(401);
     expect(res.headers.get('Location')).toBeNull();
     const body = await res.text();
@@ -139,7 +139,7 @@ describe('the gate: no session, no app', () => {
   it('refuses anything but GET and HEAD', async () => {
     for (const method of ['POST', 'PUT', 'DELETE', 'PATCH']) {
       const { d, log } = deps({ status: 'valid', accessToken: 't', sid: 's' });
-      const res = await gate(req('/lite/', 'GOOD', method), d);
+      const res = await gate(req('/chat/', 'GOOD', method), d);
       expect(res.status, method).toBe(405);
       expect(log).toEqual([]);
     }
@@ -150,23 +150,23 @@ describe('what is public', () => {
   it('is exactly the privacy page, the manifest, the install icons, the service worker and the stylesheets, and nothing else', () => {
     expect([...PUBLIC_EXACT].sort()).toEqual(
       [
-        '/lite/disclaimer',
-        '/lite/disclaimer/',
-        '/lite/manifest.webmanifest',
-        '/lite/sw.js',
-        '/lite/icons/icon-192.png',
-        '/lite/icons/icon-512.png',
-        '/lite/icons/maskable-512.png',
+        '/chat/disclaimer',
+        '/chat/disclaimer/',
+        '/chat/manifest.webmanifest',
+        '/chat/sw.js',
+        '/chat/icons/icon-192.png',
+        '/chat/icons/icon-512.png',
+        '/chat/icons/maskable-512.png',
       ].sort(),
     );
-    expect(isPublic('/lite/_astro/index.D2XOePsR.css')).toBe(true);
-    for (const p of ['/lite/', '/lite/index.html', '/lite/_astro/app.Abc.js', '/lite/_astro/x.css.map', '/lite/_astro/sub/x.css', '/_astro/index.D2XOePsR.css', '/lite/disclaimer/extra', '/lite/icons/', '/lite/auth/token']) {
+    expect(isPublic('/chat/_astro/index.D2XOePsR.css')).toBe(true);
+    for (const p of ['/chat/', '/chat/index.html', '/chat/_astro/app.Abc.js', '/chat/_astro/x.css.map', '/chat/_astro/sub/x.css', '/_astro/index.D2XOePsR.css', '/chat/disclaimer/extra', '/chat/icons/', '/chat/auth/token']) {
       expect(isPublic(p), p).toBe(false);
     }
   });
 
   it('is served without a session and without asking for one', async () => {
-    for (const path of [...PUBLIC_EXACT, '/lite/_astro/index.D2XOePsR.css']) {
+    for (const path of [...PUBLIC_EXACT, '/chat/_astro/index.D2XOePsR.css']) {
       const { d, log } = deps();
       const res = await gate(req(path), d);
       expect(res.status, path).toBe(200);
@@ -184,7 +184,8 @@ describe('what is public', () => {
     }
     const walk = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
-    const outside = new Set(['/favicon.ico', '/favicon.png', '/apple-touch-icon.png', '/_headers', '/_redirects']);
+    // The retiring /lite/sw.js is outside the gate on purpose: the Worker serves it by name (worker/index.ts, OLD_SW).
+    const outside = new Set(['/favicon.ico', '/favicon.png', '/apple-touch-icon.png', '/_headers', '/_redirects', '/lite/sw.js']);
     for (const f of walk(dist)) {
       const url = f.slice(dist.length).replace(/\/index\.html$/, '/');
       if (outside.has(url)) continue;
@@ -192,7 +193,7 @@ describe('what is public', () => {
       expect(isGated(url) || isPublic(url), url).toBe(true);
     }
     // The app's own script is gated, the privacy page is not.
-    const scripts = walk(dist).filter((f) => f.endsWith('.js')).map((f) => f.slice(dist!.length)).filter((u) => u !== '/lite/sw.js');
+    const scripts = walk(dist).filter((f) => f.endsWith('.js')).map((f) => f.slice(dist!.length)).filter((u) => u !== '/chat/sw.js' && u !== '/lite/sw.js');
     expect(scripts.length).toBeGreaterThan(0);
     for (const s of scripts) expect(isPublic(s), s).toBe(false);
   });
@@ -204,7 +205,7 @@ const cookieSentTo = (cookiePath: string, requestPath: string) =>
 
 describe('the session cookie reaches everything the gate protects (the production bug: scripts at /_astro/ were gated but outside the cookie Path)', () => {
   it('every gated path starts with the cookie Path, so the browser sends the cookie on it', () => {
-    for (const p of [...ROUTES, '/lite/_astro/x.Abc123.js', '/lite/_astro/y.Abc123.css', '/lite/icons/x.png']) {
+    for (const p of [...ROUTES, '/chat/_astro/x.Abc123.js', '/chat/_astro/y.Abc123.css', '/chat/icons/x.png']) {
       if (!isGated(p)) continue;
       expect(cookieSentTo(COOKIE_PATH, p), p).toBe(true);
     }
@@ -220,14 +221,14 @@ describe('the session cookie reaches everything the gate protects (the productio
     } catch {
       return; // no build here (the CI job that runs this has just built one)
     }
-    const html = readFileSync(join(dist, 'lite/index.html'), 'utf8');
-    const refs = [...html.matchAll(/(?:src|href)="(\/lite\/_astro\/[^"]+)"/g)].map((m) => m[1]!);
-    expect(refs.some((r) => r.endsWith('.js')), 'the page names a script under /lite/_astro/').toBe(true);
+    const html = readFileSync(join(dist, 'chat/index.html'), 'utf8');
+    const refs = [...html.matchAll(/(?:src|href)="(\/chat\/_astro\/[^"]+)"/g)].map((m) => m[1]!);
+    expect(refs.some((r) => r.endsWith('.js')), 'the page names a script under /chat/_astro/').toBe(true);
     // Every script and stylesheet the page names, wherever it is: if any is outside the cookie Path, the page breaks.
     const named = [...html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"|<link\b[^>]*\brel="stylesheet"[^>]*\bhref="([^"]+)"/g)].map((m) => (m[1] ?? m[2])!);
     expect(named.length).toBeGreaterThan(0);
     const session = { status: 'valid', accessToken: 't', sid: 's' } as CheckResult;
-    for (const path of ['/lite/', ...named]) {
+    for (const path of ['/chat/', ...named]) {
       const sent = cookieSentTo(COOKIE_PATH, path);
       expect(sent, `${path} is inside the session cookie's Path`).toBe(true);
       const { d } = deps(session);
@@ -243,25 +244,37 @@ describe('the Worker in front of the gate', () => {
 
   it('fails closed with the sign-in secrets unbound: the page is a 503, the public pages still work', async () => {
     const env = { ASSETS: assets };
-    expect((await worker.fetch(req('/lite/', 'COOKIE'), env, ctx)).status).toBe(503);
-    expect((await worker.fetch(req('/lite/'), env, ctx)).status).toBe(302); // no cookie: to sign-in, nothing served
-    const privacy = await worker.fetch(req('/lite/disclaimer/'), env, ctx);
+    expect((await worker.fetch(req('/chat/', 'COOKIE'), env, ctx)).status).toBe(503);
+    expect((await worker.fetch(req('/chat/'), env, ctx)).status).toBe(302); // no cookie: to sign-in, nothing served
+    const privacy = await worker.fetch(req('/chat/disclaimer/'), env, ctx);
     expect(privacy.status).toBe(200);
-    expect(await privacy.text()).toBe('APP-CONTENT:/lite/disclaimer/');
-    expect((await worker.fetch(req('/lite/manifest.webmanifest'), env, ctx)).status).toBe(200);
+    expect(await privacy.text()).toBe('APP-CONTENT:/chat/disclaimer/');
+    expect((await worker.fetch(req('/chat/manifest.webmanifest'), env, ctx)).status).toBe(200);
   });
 
-  it('still sends /lite (no slash) to /lite/, as the static assets did, and does not guess other paths', async () => {
-    const res = await worker.fetch(req('/lite'), { ASSETS: assets }, ctx);
+  it('sends /chat (no slash) to /chat/ with its query, and does not guess other paths', async () => {
+    const res = await worker.fetch(req('/chat?x=1'), { ASSETS: assets }, ctx);
     expect(res.status).toBe(301);
-    expect(res.headers.get('Location')).toBe('https://shamwari.ai/lite/');
+    expect(res.headers.get('Location')).toBe('/chat/?x=1');
     expect((await worker.fetch(req('/_astro'), { ASSETS: assets }, ctx)).status).toBe(404);
-    // The old build-output path is not the app's any more: nothing is served there.
+    // The old build-output paths are not the app's any more: nothing is served there.
     expect((await worker.fetch(req('/_astro/index.Abc123.js'), { ASSETS: assets }, ctx)).status).toBe(404);
   });
 
+  it('serves the retiring /lite/sw.js to anyone, from the assets, never redirected and never gated', async () => {
+    const env = { ASSETS: assets };
+    for (const method of ['GET', 'HEAD']) {
+      const res = await worker.fetch(req('/lite/sw.js', undefined, method), env, ctx);
+      expect(res.status, method).toBe(200);
+      expect(res.headers.get('Location'), method).toBeNull();
+    }
+    expect(await (await worker.fetch(req('/lite/sw.js'), env, ctx)).text()).toBe('APP-CONTENT:/lite/sw.js');
+    expect((await worker.fetch(req('/lite/sw.js', undefined, 'POST'), env, ctx)).status).toBe(405);
+    expect((await worker.fetch(req('/lite/sw.js'), {}, ctx)).status).toBe(503); // no assets binding: nothing to serve
+  });
+
   it('serves nothing at all if the assets binding is missing', async () => {
-    for (const path of ['/lite/', '/lite/disclaimer/']) {
+    for (const path of ['/chat/', '/chat/disclaimer/']) {
       expect((await worker.fetch(req(path, 'COOKIE'), {}, ctx)).status, path).toBe(503);
     }
   });
@@ -277,6 +290,6 @@ describe('the Worker in front of the gate', () => {
 
   it('keeps app/wrangler.jsonc routing the gated area to the Worker', () => {
     const text = readFileSync(join(__dirname, '../../app/wrangler.jsonc'), 'utf8');
-    expect(text).toContain('"run_worker_first": ["/", "/auth/*", "/callback", "/lite/*"]');
+    expect(text).toContain('"run_worker_first": ["/", "/auth/*", "/callback", "/chat", "/chat/*", "/lite", "/lite/*"]');
   });
 });
