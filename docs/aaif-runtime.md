@@ -7,7 +7,8 @@ The agent router will [be] our routing".
 The Agentic AI Foundation (AAIF) hosts ten projects (aaif.io/projects, read 2026-11-17). Its
 standards are adopted in the Bundu register (`bundu-labs/bundu-standards`): MCP, AGENTS.md, Agent
 Skills, Open Responses, A2A, OpenSandbox and OpenEnv. This note places the AAIF _software_ in
-Shamwari's build: Agent Router, agentgateway, OpenSandbox, OpenEnv and goose. Two pieces are
+Shamwari's build: Agent Router, agentgateway, OpenSandbox, OpenEnv and goose, plus OpenCode, which
+is not an AAIF project but takes two roles below. Two pieces are
 built separately and are out of scope here: Agent Skills in Lite and the Open Responses endpoint
 on the gateway.
 
@@ -32,20 +33,22 @@ The two rules in `AGENTS.md` are enforced in this repo, and they stay here:
 | ------------ | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
 | Agent Router | v1.2.1 (formerly Envoy AI Gateway), Apache-2.0   | Model routing: tiers, provider credentials, failover, quotas, usage attribution                               | Cloudflare AI Gateway dynamic routing (`dynamic-route.json`) | Fly, beside Core (`aigw` standalone first; Envoy Gateway on Kubernetes only if scale needs it) |
 | agentgateway | v1.7.0, Apache-2.0                               | MCP and A2A traffic: Ground as an MCP server, tools, other agents. Not model routing (Agent Router owns that) | nothing; the missing MCP and A2A rows in #291                | Fly                                                                                            |
-| OpenSandbox  | Lifecycle API 0.1.0, Execd API 1.0.0, Apache-2.0 | `code.shamwari.ai`: run code an answer needs                                                                  | the planned Rust host in `shamwari-sandbox` (not started)    | Fly or our own Kubernetes, never Cloudflare Containers (Rule 1, `docs/repo-split.md`)          |
+| OpenSandbox  | Lifecycle API 0.1.0, Execd API 1.0.0, Apache-2.0 | Run code an answer needs over `personal`-scope data, which may not execute on Cloudflare                      | the planned Rust host in `shamwari-sandbox` (not started)    | Fly or our own Kubernetes, never Cloudflare Containers (Rule 1, `docs/repo-split.md`)          |
 | OpenEnv      | v0.13.0 (spec RFC 002 In Review), BSD-3-Clause   | Mind training environments: Ground-cited Q&A, with the citation as the reward signal                          | nothing; `shamwari-mind` is not started                      | the training cluster, offline                                                                  |
 | goose        | Apache-2.0                                       | A client: goose users pick Shamwari as a provider, and get Ground through MCP                                 | nothing                                                      | the user's machine                                                                             |
+| OpenCode     | MIT (Anomaly, not AAIF)                          | Shamwari Factory (#330): one OpenCode server per person, with its web UI; and a client for developers         | the Factory plan; LibreChat as a client (dropped, #328)      | Cloudflare Container run by a Durable Object (Factory); the user's machine (client)            |
 
 The request path once all of it is in:
 
 ```text
-client (Lite, LibreChat, SMS, an Open Responses SDK, goose)
+client (Shamwari Chat, SMS, an Open Responses SDK, goose, OpenCode)
   -> gateway Worker: auth, Rule 1 scope gate, Ground retrieval   (unchanged, ours)
       -> personal scope: Ground passage only, no model           (unchanged)
       -> otherwise: Agent Router on Fly -> provider or our own models
           -> served backend and model returned -> Rule 2 provenance (gateway)
       -> tools: agentgateway -> MCP servers (Ground, others) / A2A agents
-      -> code: OpenSandbox lifecycle API -> execd in a sandbox
+      -> personal-scope code: OpenSandbox lifecycle API -> execd (off Cloudflare)
+Shamwari Factory: Durable Object -> Container running OpenCode -> gateway only (Rule 1 gate applies)
 Core: second Rule 1 check, sink, Rule 2 consent                   (unchanged)
 Mind: OpenEnv environments over Ground, open-weight output only    (offline)
 ```
@@ -68,13 +71,15 @@ routing, so they wait for the owner's go.
    runs clean.
 3. **Ground as an MCP server through agentgateway.**
    - Closes the "Tools and context via MCP" FAIL in #291.
-   - goose, LibreChat and any MCP client can then search Ground with citations.
+   - goose, OpenCode and any MCP client can then search Ground with citations.
    - Personal scope stays out: Ground holds platform data only.
-4. **OpenSandbox for `code.shamwari.ai`.** **owner:** the infrastructure, and a security review
+4. **OpenSandbox for `personal`-scope code.** Coding work moved to the Factory (#330), which runs
+   OpenCode on Cloudflare and mounts no personal-layer data. OpenSandbox stays only for code that must
+   compute over `personal`-scope data. **owner:** the infrastructure, and a security review
    of egress and the credential vault. It replaces the Rust host plan, and `shamwari-sandbox`
    becomes its deployment repo.
-5. **goose: Shamwari as a provider.** Documentation and a provider config, once Open Responses
-   ships. No code in goose itself.
+5. **goose and OpenCode: Shamwari as a provider.** Documentation and a provider config for each,
+   once Open Responses ships. No code in either client.
 6. **OpenEnv in `shamwari-mind`.** When Mind training starts. Environments read only Ground and
    open-weight output (Rule 2).
 
