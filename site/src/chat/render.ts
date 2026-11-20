@@ -209,6 +209,8 @@ export function renderUser(m: StoredMessage, s: Strings, queue?: QueueActions, f
     h('p', { class: 'who' }, s.you),
     h('p', { class: 'text' }, m.text),
     renderAttachments(m, s, files),
+    // The skills it was asked with, as a part line: a personal one means cited sources only, and nothing went to a model.
+    m.ownInformation ? h('p', { class: 'part' }, s.skillsOnPersonal) : m.skills?.length ? h('p', { class: 'part' }, s.skillsOn.replace('{n}', String(m.skills.length))) : null,
   );
   updateUser(el, m, s, queue);
   return el;

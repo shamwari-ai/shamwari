@@ -86,13 +86,11 @@ No framework. Plain TypeScript, bundled by Astro, with DOM built through
 `@bundu/ui` React components are not used: they render fine statically, but
 shipping React to the browser would take most of the budget.
 
-The frame is Mzizi's own: `AppShell` from `@bundu/ui/app` (the standard app chrome, mounted
-once). It is an Astro component, so it ships as HTML and one small script, with no React. It
-brings the top bar (the brand, a new-chat action, the bell, the account menu), a drawer for the
-chats kept on the device, and a quiet footer. Its classes are Tailwind's, so the app build
-compiles Tailwind to one static stylesheet (`tailwind.app.config.mjs` scans only the chat and
-the three `@bundu/ui` parts it uses). The chat's own styles are plain CSS in `src/chat/chat.css`
-and take every size from the Bundu floor tokens (`--fs-body`, `--fs-caption`, `--target-floor`,
+The frame is plain HTML in the page (since #329; it was Mzizi's `AppShell` with Tailwind before,
+and keeps that component's `data-slot` names). The styles are plain CSS in `src/chat/chat.css`, on
+`src/chat/tokens.css`: only the Mzizi tokens the chat uses, generated from `@bundu/ui` by
+`site/scripts/chat-tokens.mjs` with their values unchanged (`test/app/tokens.test.ts` fails if the
+file and the package disagree). They take every size from the Bundu floor tokens (`--fs-body`, `--fs-caption`, `--target-floor`,
 `--inset-floor`, `--gap-floor`, `--leading-floor`), never from numbers of their own. Dark mode
 follows the device. Nothing is inlined into the page, because its content-security policy allows
 scripts and styles only from its own origin.
@@ -101,31 +99,28 @@ Where the chat departs from the library, and why:
 
 - **No web fonts.** Mzizi names Noto Sans first; the chat loads no font and falls back to the
   device's own, because the shell has to paint on 2G.
-- **A hand-drawn bell.** The icon set has no bell yet.
 - **Settings is a native `<dialog>` opened from the account row, not Mzizi's `AccountMenu`.** The
   component names a signed-in person (their initials and name); this chat has none to show until
   Mukoko sign-in is on. Switch to `AccountMenu` then. The dialog is modal (focus held, Esc closes,
   the page behind it is inert), full screen below 40rem with a pinned close button (at least the 45 px floor on touch), a centred
   box of at most 32rem above. Its markup is in the page, not a lazy chunk: the handlers it needs
   (language, delete, install, sign out) are bound at start, and the markup is the same bytes the old
-  panel had. There is no Appearance section: the page follows the device's light or dark setting and
-  there is no override to choose yet. Language is a radio group (all three in view, one tap each) and
+  panel had. There is no Appearance section: the page follows the device's light or dark setting; the
+  command menu can set dark or light on this device (see below). Language is a radio group (all three in view, one tap each) and
   the Offline mode switch lives here too; the top bar shows an Offline mode badge only while it is on, and the
   badge opens Settings.
-- **The menu, close and top-bar action buttons are lifted from 44 px to the 45 px floor** in
-  `chat.css`; `AppShell` draws them at 44 px. Worth raising upstream.
 
 The [Bundu floor](https://standards.bundu.org/bundu-floor/) 1.1.0 (17 px body on touch and 15 px with a mouse, 14 px
 minimum text, a hit region of 45 px on touch and 24 px with a mouse on every control, 7 px between controls, 14 px
-insets, 1.5 leading; the values live in `site/e2e/helpers.ts`) is measured on the rendered page by the e2e
+insets, 1.5 leading; the values the tests use live in `site/e2e/helpers.ts`) is measured on the rendered page by the e2e
 tests in `site/e2e/a11y.spec.ts`: the home screen, an answer with its citation card, the
 account menu open and the drawer open. A control that falls under it fails the build.
 
 | Budget                         | Limit                 | Measured (this build)        | Check            |
 | ------------------------------ | --------------------- | ---------------------------- | ---------------- |
-| First-load JS, gzipped         | 100 KB                | 12.3 KB                      | `site/check.mjs` |
-| Chat CSS, gzipped              | 30 KB                 | 19.0 KB                      | `site/check.mjs` |
-| Whole first load (HTML+CSS+JS) | 50 KB (R2 design)     | 34.8 KB                      | `site/check.mjs` |
+| First-load JS, gzipped         | 100 KB                | 19.7 KB                      | `site/check.mjs` |
+| Chat CSS, gzipped              | 30 KB                 | 6.0 KB                       | `site/check.mjs` |
+| Whole first load (HTML+CSS+JS) | 50 KB (R2 design)     | 31.3 KB                      | `site/check.mjs` |
 | Web fonts                      | none, system stack    | none                         | `site/check.mjs` |
 | Hit regions and text sizes     | the Bundu floor       | all at or above the floor    | e2e test         |
 | Accessibility                  | axe wcag2a/aa/21/22aa | 0 violations, light and dark | e2e test         |
@@ -298,10 +293,9 @@ Developer keys for the mock: `sk_shamwari_mock_ok` answers; `_402`, `_403`,
   white text (the "before" screenshots in `docs/ui-2026-11-12/` are byte-identical in light and dark). Now the page follows
   `prefers-color-scheme`, and an explicit `data-theme="light"` (or `"dark"`) wins. `body` takes its colour and background from the
   tokens. Tests: `e2e/theme.spec.ts`, and the floor audit and axe run in dark.
-- **Density is Mzizi's.** `@bundu/ui` 0.17.0 (Bundu floor 1.1.0): the hit region (`--target-floor`) is 45px on touch and 24px
-  on a desktop with a mouse (64rem up, fine pointer, hover, no touch). The chat's own controls take `--control-floor` (45px on
-  touch, 28px with a mouse, the smallest a control is drawn), never less. Controls are DRAWN at `--size-control-sm`, which is
-  33px on a desktop with a mouse and 49px everywhere else. The
+- **Density is Mzizi's.** `@bundu/ui` 0.17.0 (Bundu floor 1.1.0), through `src/chat/tokens.css`: the hit region
+  (`--target-floor`) is 45px on touch and 24px on a desktop with a mouse (64rem up, fine pointer, hover, no touch); controls are
+  DRAWN at `--size-control-sm`, which is 33px on a desktop with a mouse and 49px everywhere else. The
   drawer's rows (sections, foot rows, chat titles) use that token, a 14px label, a flat look (no border or fill at rest, a soft
   fill on hover, a stronger one and a marker on the open section) and 7px between rows. The foot rows (Use the API, Disclaimer and
   privacy, Settings) are text only, no icons. Tests: `e2e-desktop/density.spec.ts` (33px, flat, no icons, no overlap, light and
@@ -423,3 +417,36 @@ a build with `PUBLIC_CHAT_SKILLS=false` leaves it out and Plugins goes back to a
   (`scripts/`, `references/`, `assets/` are not read, and a skill's `allowed-tools` grants nothing: Lite runs no tools).
 - **Budget:** the first load went from 49,316 to about 50,800 bytes gzipped of the 51,200 R2 budget (the new English strings, the
   record type and the skill path in the send code); the builder and the SKILL.md reader load only when the Plugins section is opened.
+
+## A denser, quieter chat, modelled on OpenCode (2026-11-18, #329)
+
+Owner, 2026-11-18: "light needs a significant update. The ui is too bulky … I want to model my ui around opencode." The
+design language of OpenCode's web app was taken (no code, no assets): dense, quiet and text first.
+
+- **Shape.** A thin session list on the left (a slide-over below 64rem; from 64rem a 17.5rem column that the top bar's panel
+  button hides and shows, remembered on the device), a small top bar (the chat's title and a monospace subtitle, then the
+  command button, the offline badge and New chat), one reading column of at most 46rem, and one prompt box docked at the
+  bottom. Hairline borders and the small radius; no cards around messages and no bubble around the answer. The person's turn
+  is a compact tinted block; the answer is plain text.
+- **Parts.** Sources are one line each under a quiet "Sources" label (› Source, the section, Open source), opening to the
+  detail; the skills a question went with are a monospace part line under it ("Skills on in this chat: 2.", or that a personal
+  skill was on). Monospace is used only for metadata (times, the kind of question, keys, hints).
+- **The prompt box.** "+" (attach), the **mode chip** (General, Personal while a personal skill is on, Offline mode while that is
+  on), the microphone and Send. The chip only shows the state and opens the skill commands; it never chooses a scope, so Rule 1
+  is unchanged: the client still sends only `platform` (or a saved `community`), and a personal skill still sends
+  `own_information: true` and no skill text (`chat/skills.ts`, untouched; `e2e/commands.spec.ts` checks it through the chip).
+- **Commands** (`chat/commands.ts`, loaded on first use and precached): Ctrl/Cmd+K anywhere, the top bar's button, or "/" at the
+  start of the question box. They are the chat's existing actions: New chat, Search chats, each skill on or off in this chat,
+  Skills, Projects, Artifacts, pin, export this chat as a text file (on the device; nothing is sent), delete, Offline mode, the
+  three languages, dark, light or device theme, collapse the list, Settings, Install, sign out and the privacy page. Up and Down
+  move, Enter runs, Escape closes and keeps what was typed; with nothing matching, Enter sends the text as a question. Both
+  lists are the listbox pattern with `aria-activedescendant`, so focus stays where the person is typing.
+- **Kept:** the Bundu floor (17 px body, 14 px text, 49 px hit regions on touch, 32 px drawn with a mouse from 64rem behind a
+  49 px hit overlay, 14 px inset, 7 px gaps, 1.5 leading), 7:1 for quiet text, dark following the device, every id, the drawer's
+  sections, the Skills tab and builder, Settings, sign-in, offline and the service worker.
+- **Removed:** Tailwind and `AppShell` from the app build, and the 13 KB of `@bundu/ui` tokens the chat never used (all minerals,
+  heritage, status, tier and chart colours), the decorative mark on the empty screen, and the HTML comments that shipped with the
+  page. CSS went from 24.2 KB to 6.0 KB gzipped and the whole first load from 50.8 KB to 31.3 KB; first-load JS went from 19.4 KB
+  to 19.7 KB (the keyboard shortcuts and the list toggle; the menu itself is a lazy part).
+- **New strings** (`commands`, `commandPlaceholder`, `commandsEmpty`, `keyHints`, `exportChat`, `themeDark`, `themeLight`,
+  `themeDevice`) are English in the Shona and Ndebele files, as the skill builder's are, until a native speaker writes them.
