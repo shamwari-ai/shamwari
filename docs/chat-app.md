@@ -86,13 +86,11 @@ No framework. Plain TypeScript, bundled by Astro, with DOM built through
 `@bundu/ui` React components are not used: they render fine statically, but
 shipping React to the browser would take most of the budget.
 
-The frame is Mzizi's own: `AppShell` from `@bundu/ui/app` (the standard app chrome, mounted
-once). It is an Astro component, so it ships as HTML and one small script, with no React. It
-brings the top bar (the brand, a new-chat action, the bell, the account menu), a drawer for the
-chats kept on the device, and a quiet footer. Its classes are Tailwind's, so the app build
-compiles Tailwind to one static stylesheet (`tailwind.app.config.mjs` scans only the chat and
-the three `@bundu/ui` parts it uses). The chat's own styles are plain CSS in `src/chat/chat.css`
-and take every size from the Bundu floor tokens (`--fs-body`, `--fs-caption`, `--target-floor`,
+The frame is plain HTML in the page (since #329; it was Mzizi's `AppShell` with Tailwind before,
+and keeps that component's `data-slot` names). The styles are plain CSS in `src/chat/chat.css`, on
+`src/chat/tokens.css`: only the Mzizi tokens the chat uses, generated from `@bundu/ui` by
+`site/scripts/chat-tokens.mjs` with their values unchanged (`test/app/tokens.test.ts` fails if the
+file and the package disagree). They take every size from the Bundu floor tokens (`--fs-body`, `--fs-caption`, `--target-floor`,
 `--inset-floor`, `--gap-floor`, `--leading-floor`), never from numbers of their own. Dark mode
 follows the device. Nothing is inlined into the page, because its content-security policy allows
 scripts and styles only from its own origin.
@@ -101,19 +99,16 @@ Where the chat departs from the library, and why:
 
 - **No web fonts.** Mzizi names Noto Sans first; the chat loads no font and falls back to the
   device's own, because the shell has to paint on 2G.
-- **A hand-drawn bell.** The icon set has no bell yet.
 - **Settings is a native `<dialog>` opened from the account row, not Mzizi's `AccountMenu`.** The
   component names a signed-in person (their initials and name); this chat has none to show until
   Mukoko sign-in is on. Switch to `AccountMenu` then. The dialog is modal (focus held, Esc closes,
   the page behind it is inert), full screen below 40rem with a pinned 49 px close button, a centred
   box of at most 32rem above. Its markup is in the page, not a lazy chunk: the handlers it needs
   (language, delete, install, sign out) are bound at start, and the markup is the same bytes the old
-  panel had. There is no Appearance section: the page follows the device's light or dark setting and
-  there is no override to choose yet. Language is a radio group (all three in view, one tap each) and
+  panel had. There is no Appearance section: the page follows the device's light or dark setting; the
+  command menu can set dark or light on this device (see below). Language is a radio group (all three in view, one tap each) and
   the Offline mode switch lives here too; the top bar shows an Offline mode badge only while it is on, and the
   badge opens Settings.
-- **The menu, close and top-bar action buttons are lifted from 44 px to the 49 px floor** in
-  `chat.css`; `AppShell` draws them at 44 px. Worth raising upstream.
 
 The Bundu floor (17 px body, 14 px minimum text, a 49 px hit region on every control, 7 px
 between controls, 14 px insets, 1.5 leading) is measured on the rendered page by the e2e
@@ -122,9 +117,9 @@ account menu open and the drawer open. A control that falls under it fails the b
 
 | Budget                         | Limit                 | Measured (this build)        | Check            |
 | ------------------------------ | --------------------- | ---------------------------- | ---------------- |
-| First-load JS, gzipped         | 100 KB                | 12.3 KB                      | `site/check.mjs` |
-| Chat CSS, gzipped              | 30 KB                 | 19.0 KB                      | `site/check.mjs` |
-| Whole first load (HTML+CSS+JS) | 50 KB (R2 design)     | 34.8 KB                      | `site/check.mjs` |
+| First-load JS, gzipped         | 100 KB                | 19.7 KB                      | `site/check.mjs` |
+| Chat CSS, gzipped              | 30 KB                 | 6.0 KB                       | `site/check.mjs` |
+| Whole first load (HTML+CSS+JS) | 50 KB (R2 design)     | 31.3 KB                      | `site/check.mjs` |
 | Web fonts                      | none, system stack    | none                         | `site/check.mjs` |
 | Hit regions and text sizes     | the Bundu floor       | all at or above the floor    | e2e test         |
 | Accessibility                  | axe wcag2a/aa/21/22aa | 0 violations, light and dark | e2e test         |
@@ -214,7 +209,9 @@ use `plainText()`, so the clipboard and a WhatsApp message get plain words. Refs
   `personal`. A personal question gets the gateway's 409
   (`scope_requires_local_inference`), and the app explains it kindly: personal
   questions need Shamwari Mind on the device, which is not shipped yet. It is
-  never rendered as a generic error.
+  never rendered as a generic error. A question asked with a personal-scope skill
+  on still sends `scope: platform`, with `own_information: true` beside it, which the
+  gateway treats as personal scope (see "Skills" below).
 - **Language claims.** The footer says "Answered by Shamwari Cloud (a routed
   model). Answers can be wrong, so check anything important." Shamwari is a
   general-purpose assistant (agriculture, weather, news and places first), not a legal
@@ -336,7 +333,7 @@ behaviour; the geometry tests moved with it. Screenshots (light and dark; 390, 1
 
 ## Attachments, phase 1: on this device only (2026-11-12)
 
-A "+" at the left of the composer opens a menu with **Upload a file** (a skills entry is not shown until Skills has something in it), and a
+A "+" at the left of the composer opens a menu with **Upload a file** (skills are turned on in the Skills tab; a shortcut here is a follow-up), and a
 microphone records a **voice note**. Both stay on this device and go nowhere: adding, recording and removing make no network request
 (`e2e/attach.spec.ts` watches every request), and what is sent with the question is its text and nothing about the attachment.
 
@@ -367,3 +364,87 @@ cannot parse it). The same plain words are copied, shared and saved (a saved ans
 set apart by weight (600), not by a box; message text is 14px (`--fs-small`, the smallest the Bundu floor allows) and "thinking" is 14px and
 muted. Copy answer, Share answer (only where the browser can share; closing the sheet is not an error, any other failure copies the text instead)
 and Save answer are text buttons. Refusal and error boxes stay: they are notices, not bubbles.
+
+## Skills: Agent Skills from SKILL.md, with a builder (2026-11-17)
+
+Owner's request (2026-11-17), answering the audit in #291 ("Skills as SKILL.md: FAIL, the tab exists with no loader"). The drawer's
+**Plugins** row opens again, on a **Skills** tab first (Plugins and MCP still say there is nothing behind them). It is on by default;
+a build with `PUBLIC_CHAT_SKILLS=false` leaves it out and Plugins goes back to a "Coming soon" row (`chat/features.ts`, held by
+`check.mjs` and `test/app/features.test.ts`).
+
+- **The standard.** A skill is an [Agent Skill](https://agentskills.io): a `SKILL.md` with YAML frontmatter and a Markdown body. The
+  rules are copied from the spec at source, `github.com/agentskills/agentskills` `docs/specification.mdx` and its reference validator
+  `skills-ref/src/skills_ref/validator.py`, both at commit `83021e2be457a9b6679148719c1f6074f0ad975e`: `name` 1-64 characters (after
+  NFKC), lowercase letters, digits and hyphens, no leading, trailing or double hyphen; `description` 1-1024 characters; optional
+  `license`, `compatibility` (1-500), `metadata` (string to string) and `allowed-tools`; no other field. Where the spec's prose (a-z,
+  0-9) and its validator (any lowercase Unicode letter) differ, Lite follows the validator. Shamwari's own limit, not the spec's: the
+  instructions are at most 12,000 characters, because a skill that is on travels with every question.
+- **Reader and writer:** `chat/skill.ts` (`parseSkillMd`, `validateSkill`, `writeSkillMd`), with `test/app/skill.test.ts`. The YAML
+  reader is a small subset (plain, quoted, `|` and `>` values, `#` comments, one level of `metadata`); anything else is refused with its
+  line number, never guessed. What it writes any YAML reader can read.
+- **The builder** (`chat/skills-ui.ts`, loaded with the Plugins section, so the first load does not carry it): name, description and
+  instructions, checked live against the spec; each field says what is wrong under it once it has been typed in (`aria-invalid`,
+  `aria-describedby`), and Save moves focus to the first field still wrong rather than being disabled. Edit, delete (asks first), export
+  (`SKILL.md`; put it in a folder named after the skill, as the spec asks) and import (a `.md` file; one with fixable problems opens in
+  the form, a field the spec does not allow is named and left out on save). Two skills cannot share a name.
+- **Three sources.** _Personal_: written in Lite (scope `personal`). _Platform_: published by Shamwari (scope `platform`, read-only;
+  `PLATFORM_SKILLS` in `chat/skills.ts` is empty until the owner decides which to publish). _Plugin_: imported from a SKILL.md file
+  (another tool's, or the person's own), with the scope chosen at import, `personal` unless the person picks the other option.
+- **Storage.** On the device: IndexedDB `skills` (database version 4), per person like the chats. Each skill is one self-contained
+  record, `{ id, source, scope, skillMd, createdAt, updatedAt }`, where `skillMd` is the whole SKILL.md text and the source of truth,
+  so it can move to the person's Bundu Cell (proposed, `siafuDB/cell`, owned by another team) without being reshaped. Deleting chat
+  history does not delete skills; the person deletes them in the tab. Syncing skills to the person's server-side profile is **not built**
+  (a follow-up), and neither is Cell.
+- **On or off, per chat.** "On in this chat" is a switch on each skill (up to 3 at once); a new chat starts with none on. The chat's skill
+  ids are kept on the thread; each question records which platform skills were on when it was asked, so a retry sends the same ones. A
+  line above the question box says which are on.
+- **Rule 1.** A personal-scope skill never leaves the device. A question asked while one is on is marked `ownInformation`; its request
+  carries `own_information: true` and **no skill text at all** (`chat/skills.ts`), and the gateway treats it exactly as a question its
+  own rules flag: personal scope, no edge embedding, no completion, only the cited Ground passage, and Core is told
+  (`needs_own_information`). The gateway reads the flag in `resolveScope` (`gateway/src/scope.ts`), where it can only add the personal
+  flag, never remove it; an explicit `scope: personal` is still the 409. Such a question and its answer are also kept out of the context
+  of later questions that are not personal. If the skills cannot be read when a question is asked, it is treated as personal (fails
+  closed). Platform-scope skills go as `skills: [{ name, description, instructions }]` (at most 3) and the gateway adds them after the
+  constant system prompt and the Ground context, never in place of it (`gateway/src/skills.ts`); as a second check it runs the personal
+  rules over each skill's own words, and a skill that looks personal makes the request personal scope too. Tests:
+  `gateway/test/scope-decision.test.ts` ("skills: ..."), `site/test/app/skills.test.ts`, `site/e2e/skills.spec.ts`.
+- **Languages.** Every new string is in `strings.ts`, `strings-sn.ts` and `strings-nd.ts`. The builder's words are English in the Shona
+  and Ndebele files (the fallback those files already use for Plugins, Skills and MCP) except Cancel, Delete and Name, which reuse words the
+  files already have. A native speaker should write the rest.
+- **Not built yet:** a Skills entry in the "+" menu; publishing platform skills; sync to the profile; skill resources beyond `SKILL.md`
+  (`scripts/`, `references/`, `assets/` are not read, and a skill's `allowed-tools` grants nothing: Lite runs no tools).
+- **Budget:** the first load went from 49,316 to about 50,800 bytes gzipped of the 51,200 R2 budget (the new English strings, the
+  record type and the skill path in the send code); the builder and the SKILL.md reader load only when the Plugins section is opened.
+
+## A denser, quieter chat, modelled on OpenCode (2026-11-18, #329)
+
+Owner, 2026-11-18: "light needs a significant update. The ui is too bulky … I want to model my ui around opencode." The
+design language of OpenCode's web app was taken (no code, no assets): dense, quiet and text first.
+
+- **Shape.** A thin session list on the left (a slide-over below 64rem; from 64rem a 17.5rem column that the top bar's panel
+  button hides and shows, remembered on the device), a small top bar (the chat's title and a monospace subtitle, then the
+  command button, the offline badge and New chat), one reading column of at most 46rem, and one prompt box docked at the
+  bottom. Hairline borders and the small radius; no cards around messages and no bubble around the answer. The person's turn
+  is a compact tinted block; the answer is plain text.
+- **Parts.** Sources are one line each under a quiet "Sources" label (› Source, the section, Open source), opening to the
+  detail; the skills a question went with are a monospace part line under it ("Skills on in this chat: 2.", or that a personal
+  skill was on). Monospace is used only for metadata (times, the kind of question, keys, hints).
+- **The prompt box.** "+" (attach), the **mode chip** (General, Personal while a personal skill is on, Offline mode while that is
+  on), the microphone and Send. The chip only shows the state and opens the skill commands; it never chooses a scope, so Rule 1
+  is unchanged: the client still sends only `platform` (or a saved `community`), and a personal skill still sends
+  `own_information: true` and no skill text (`chat/skills.ts`, untouched; `e2e/commands.spec.ts` checks it through the chip).
+- **Commands** (`chat/commands.ts`, loaded on first use and precached): Ctrl/Cmd+K anywhere, the top bar's button, or "/" at the
+  start of the question box. They are the chat's existing actions: New chat, Search chats, each skill on or off in this chat,
+  Skills, Projects, Artifacts, pin, export this chat as a text file (on the device; nothing is sent), delete, Offline mode, the
+  three languages, dark, light or device theme, collapse the list, Settings, Install, sign out and the privacy page. Up and Down
+  move, Enter runs, Escape closes and keeps what was typed; with nothing matching, Enter sends the text as a question. Both
+  lists are the listbox pattern with `aria-activedescendant`, so focus stays where the person is typing.
+- **Kept:** the Bundu floor (17 px body, 14 px text, 49 px hit regions on touch, 32 px drawn with a mouse from 64rem behind a
+  49 px hit overlay, 14 px inset, 7 px gaps, 1.5 leading), 7:1 for quiet text, dark following the device, every id, the drawer's
+  sections, the Skills tab and builder, Settings, sign-in, offline and the service worker.
+- **Removed:** Tailwind and `AppShell` from the app build, and the 13 KB of `@bundu/ui` tokens the chat never used (all minerals,
+  heritage, status, tier and chart colours), the decorative mark on the empty screen, and the HTML comments that shipped with the
+  page. CSS went from 24.2 KB to 6.0 KB gzipped and the whole first load from 50.8 KB to 31.3 KB; first-load JS went from 19.4 KB
+  to 19.7 KB (the keyboard shortcuts and the list toggle; the menu itself is a lazy part).
+- **New strings** (`commands`, `commandPlaceholder`, `commandsEmpty`, `keyHints`, `exportChat`, `themeDark`, `themeLight`,
+  `themeDevice`) are English in the Shona and Ndebele files, as the skill builder's are, until a native speaker writes them.
