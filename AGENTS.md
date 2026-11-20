@@ -32,16 +32,16 @@ Each rule has tests. Read them before touching the files they cover.
 
 ## Layout
 
-| Path         | What                                                      | Stack                          |
-| ------------ | --------------------------------------------------------- | ------------------------------ |
-| `gateway/`   | the edge API: scope gate, routing, Ground retrieval, sink | TypeScript, Cloudflare Workers |
-| `core/`      | authoritative scope checks, Ground, auth, sink writes     | Python 3.11, FastAPI           |
-| `site/`      | shamwari.ai landing page and the chat app at `/chat/`     | Astro                          |
-| `mobile/`    | the mobile app                                            | Expo / React Native            |
-| `docs-site/` | stale mirror; pages moved to `shamwari-ai/docs`           | Astro                          |
-| `db/`        | reference SQL and Mongo setup (not run by Core)           | SQL, JS                        |
-| `scripts/`   | `e2e.sh` (Worker against real Core) and generators        | bash                           |
-| `docs/`      | design notes, runbooks, decisions                         | Markdown                       |
+| Path         | What                                                                                                                             | Stack                          |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `gateway/`   | the edge API: scope gate, routing, Ground retrieval, sink                                                                        | TypeScript, Cloudflare Workers |
+| `core/`      | authoritative scope checks, Ground, auth, sink writes                                                                            | Python 3.11, FastAPI           |
+| `site/`      | shamwari.ai landing page and the chat app at `/chat/`                                                                            | Astro                          |
+| `mobile/`    | the mobile app                                                                                                                   | Expo / React Native            |
+| `docs-site/` | stale mirror; pages moved to `shamwari-ai/docs`                                                                                  | Astro                          |
+| `db/`        | Supabase schema (`01-base-schema.sql`, run in the Supabase SQL editor; not run by Core), plus reference-only SQL and Mongo setup | SQL, JS                        |
+| `scripts/`   | `e2e.sh` (Worker against real Core) and generators                                                                               | bash                           |
+| `docs/`      | design notes, runbooks, decisions                                                                                                | Markdown                       |
 
 ## Build and test
 
