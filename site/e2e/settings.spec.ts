@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openAccount, openChat, openChats } from './helpers';
+import { openAccount, openChat, openChats, HIT_TOUCH } from './helpers';
 
 // Settings is a modal dialog (native <dialog>): it opens from the drawer's foot, the drawer closes first, the page behind it is
 // inert, Esc and the close button and a tap on the dim edge all close it. On a phone it is a full-screen sheet with a pinned close button.
@@ -15,8 +15,8 @@ test('Settings opens as a full-screen sheet on a phone, with the drawer closed b
   expect(box!.width).toBeCloseTo(360, 0);
   expect(box!.height).toBeCloseTo(640, 0);
   const close = await page.locator('#settings-close').boundingBox();
-  expect(close!.height).toBeGreaterThanOrEqual(49);
-  expect(close!.width).toBeGreaterThanOrEqual(49);
+  expect(close!.height).toBeGreaterThanOrEqual(HIT_TOUCH);
+  expect(close!.width).toBeGreaterThanOrEqual(HIT_TOUCH);
   expect(close!.y, 'the close button is pinned at the top').toBeLessThan(20);
   // Language, data, about
   for (const name of ['Language', 'Data on this device', 'About']) await expect(dialog.getByRole('heading', { name })).toBeVisible();
@@ -53,7 +53,7 @@ test('a draft language shows its review note inside Settings, and the delete con
   await expect(page.locator('#settings-dialog')).toBeVisible(); // cancelled: Settings stays
 });
 
-test('language is a radio group: every language in view, one tap each, arrow keys move between them, 49px rows', async ({ page }) => {
+test('language is a radio group: every language in view, one tap each, arrow keys move between them, 45px rows', async ({ page }) => {
   await openChat(page);
   await openAccount(page);
   const group = page.getByRole('radiogroup', { name: 'Language' });
@@ -62,7 +62,7 @@ test('language is a radio group: every language in view, one tap each, arrow key
   await expect(group.getByRole('radio', { name: 'English' })).toBeChecked();
   for (const r of await group.getByRole('radio').all()) {
     const b = (await r.boundingBox())!;
-    expect(b.height, 'the whole row is the hit region').toBeGreaterThanOrEqual(49);
+    expect(b.height, 'the whole row is the hit region').toBeGreaterThanOrEqual(HIT_TOUCH);
   }
   await group.getByRole('radio', { name: 'ChiShona' }).check();
   await expect(page.locator('html')).toHaveAttribute('lang', 'sn');

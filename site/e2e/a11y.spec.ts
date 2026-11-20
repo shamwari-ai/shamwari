@@ -65,7 +65,7 @@ test('an error is announced as an alert, an answer in the polite log, an offline
   await expect(page.locator('article.queued [role="status"]')).toBeVisible();
 });
 
-test('the home screen meets the Bundu floor: 17px body, 14px text, 49px controls, 7px gaps', async ({ page }) => {
+test('the home screen meets the Bundu floor: 17px body, 14px text, 45px controls, 7px gaps', async ({ page }) => {
   await openChat(page);
   expect(await underTheFloor(page)).toEqual([]);
 });

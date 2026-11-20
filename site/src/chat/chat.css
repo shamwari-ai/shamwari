@@ -2,7 +2,8 @@
  *
  * The frame is Mzizi's AppShell (app-src/pages/lite/index.astro). Everything here sits inside it and takes
  * its sizes from the Bundu floor in @bundu/ui's density layer, never from numbers of its own:
- *   body 17px (--fs-body), captions 14px (--fs-caption), every control a 49px hit region (--target-floor),
+ *   body 17px on touch and 15px with a mouse (--fs-body), captions 14px (--fs-caption), every control a hit region of
+ *   45px on touch and 24px with a mouse (--target-floor),
  *   14px inset (--inset-floor), 7px gaps (--gap-floor), 1.5 body leading (--leading-floor).
  * Tailwind compiles the frame's own classes at build time; this file is the chat's plain CSS beside them.
  * System fonts: the shell has to paint on 2G, so no web fonts are loaded (the token stack names Noto Sans
@@ -46,7 +47,7 @@ body {
   background: var(--card);
   padding: var(--inset-floor);
   border-radius: var(--radius-sm);
-  min-height: var(--target-floor);
+  min-height: var(--control-floor);
 }
 
 /* ---- the frame's parts ------------------------------------------------------------------------------ */
@@ -55,7 +56,7 @@ body {
   display: inline-flex;
   align-items: center;
   gap: var(--gap-floor);
-  min-height: var(--target-floor);
+  min-height: var(--control-floor);
   color: var(--foreground);
   text-decoration: none;
 }
@@ -78,8 +79,8 @@ body {
   align-items: center;
   justify-content: center;
   gap: var(--gap-floor);
-  min-height: var(--target-floor);
-  min-width: var(--target-floor);
+  min-height: var(--control-floor);
+  min-width: var(--control-floor);
   padding-inline: var(--gap-floor);
   border-radius: var(--radius-sm);
   background: transparent;
@@ -95,19 +96,19 @@ body {
 .bar-action:hover {
   background: var(--muted);
 }
-/* TopBarAction (the new-chat button) is 44px on touch in the library; the floor is 49. */
+/* TopBarAction (the new-chat button) is 44px on touch in the library; the floor is 45 (Bundu floor 1.1.0). */
 [data-slot='app-topbar'] {
-  min-height: calc(var(--target-floor) + var(--gap-floor) * 2);
+  min-height: calc(var(--control-floor) + var(--gap-floor) * 2);
   height: auto;
 }
 [data-slot='app-topbar'] [data-slot='topbar-action'],
 [data-slot='app-topbar'] > button,
 [data-slot='app-sidebar'] button:not(.side-row, .btn, .row-more, [role='tab']) {
-  min-height: var(--target-floor);
-  min-width: var(--target-floor);
+  min-height: var(--control-floor);
+  min-width: var(--control-floor);
 }
 /* AppShell draws its menu and close buttons at 44px (h-11 w-11) and TopBarAction at 44px on touch; the Bundu
-   floor is a 49px hit region, so they are lifted to it here. Worth raising upstream (mzizi-registry), where
+   floor is a 45px hit region on touch, so they are lifted to it here. Worth raising upstream (mzizi-registry), where
    the same 44px rows are listed as pending (HIT_AREA_GAPS). */
 
 .account-row {
@@ -167,7 +168,7 @@ body {
 
 /* ---- controls --------------------------------------------------------------------------------------- */
 
-/* Every interactive control is at least the 49px hit region; pills, as Mzizi's inputs and buttons are. */
+/* Every interactive control is at least the floor's hit region (45px on touch, 24px with a mouse); pills, as Mzizi's inputs and buttons are. */
 .btn,
 select,
 input:not([type='checkbox']):not([type='radio']),
@@ -178,8 +179,8 @@ textarea {
 .btn,
 select,
 input:not([type='checkbox']):not([type='radio']) {
-  min-height: var(--target-floor);
-  min-width: var(--target-floor);
+  min-height: var(--control-floor);
+  min-width: var(--control-floor);
   /* The small radius, as Mzizi's product controls have it: the pill is the marketing shape, not the app's. */
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-control, var(--border));
@@ -307,7 +308,7 @@ input:not([type='checkbox']):not([type='radio']) {
 }
 /* Suggested prompts are pills (Mzizi's suggested-prompts shape): fully rounded, a thin border, the input tint as the fill and a
    stronger tint on hover. They wrap onto as many rows as they need instead of scrolling sideways, because the page never
-   scrolls sideways and Shona and Ndebele run longer. Each is a real button: the 49px hit region on touch, drawn at the density size (32px) with a mouse, as every other control here. */
+   scrolls sideways and Shona and Ndebele run longer. Each is a real button: the 45px hit region on touch, drawn at the density size (33px) with a mouse, as every other control here. */
 .examples {
   display: flex;
   flex-wrap: wrap;
@@ -399,7 +400,7 @@ input:not([type='checkbox']):not([type='radio']) {
 }
 .composer textarea {
   flex: 1;
-  min-height: var(--target-floor);
+  min-height: var(--control-floor);
   max-height: 8rem;
   resize: none;
   border: 0;
@@ -426,7 +427,7 @@ input:not([type='checkbox']):not([type='radio']) {
 .footer-link {
   display: inline-flex;
   align-items: center;
-  min-height: var(--target-floor);
+  min-height: var(--control-floor);
   color: inherit;
   text-underline-offset: 3px;
 }
@@ -565,7 +566,7 @@ input:not([type='checkbox']):not([type='radio']) {
 }
 .cite-link {
   justify-self: start;
-  min-height: var(--target-floor);
+  min-height: var(--control-floor);
   display: inline-flex;
   align-items: center;
   color: var(--info, var(--ring));
@@ -619,7 +620,7 @@ input:not([type='checkbox']):not([type='radio']) {
 .project > summary {
   display: flex;
   align-items: center;
-  min-height: var(--target-floor);
+  min-height: var(--control-floor);
   padding-inline: var(--inset-floor);
   cursor: pointer;
   border-radius: var(--radius-sm);
@@ -738,8 +739,8 @@ main#main :where(.thread, .dock, .ask, #empty, .panel, .chat-tools) {
 }
 /* The brand is a link: its hit region is the floor even when only the mark shows. */
 .brand {
-  min-height: var(--target-floor);
-  min-width: var(--target-floor);
+  min-height: var(--control-floor);
+  min-width: var(--control-floor);
   justify-content: center;
 }
 
@@ -867,10 +868,10 @@ html[data-view='pending'] dialog {
    Chat, Projects, Factory, Artifacts, Plugins at the top; Use the API, Disclaimer and privacy, Settings at the foot;
    chat and project titles in the lists. They read as text, not as buttons: no border and no fill at rest, a soft fill
    on hover and a stronger one (with a marker) on the open section. Every size is a Mzizi token, none is a number of
-   ours: the row is DRAWN at --size-control-sm, which @bundu/ui's density layer sets to 32px on a desktop with a mouse
+   ours: the row is DRAWN at --size-control-sm, which @bundu/ui's density layer sets to 33px on a desktop with a mouse
    (64rem up, fine pointer, hover, no touch) and 49px everywhere else, and the label is the 14px caption size. The
-   49px hit region is never lowered on touch: there the row IS 49px. On a desktop the row is a composite list item, so
-   the transparent 49px overlay a button gets from the density layer is turned off here: it would overlap the next
+   45px hit region is never lowered on touch: there the row is drawn at 49px. On a desktop the row is a composite list item, so
+   the transparent overlay a button gets from the density layer is turned off here: it would overlap the next
    row (Mzizi's own guidance: list rows take their height instead). The foot rows have no icons; the section rows keep
    a 16px one in the label's colour. Colours are tokens, so they follow the light and dark themes. */
 .side-row {
@@ -958,7 +959,7 @@ html[data-view='pending'] dialog {
   flex: none;
   white-space: nowrap;
   margin-inline-start: auto;
-  /* Tight on purpose: on a desktop the drawer is 260px wide, and the icon, "Factory" and this chip must share one 32px row. */
+  /* Tight on purpose: on a desktop the drawer is 260px wide, and the icon, "Factory" and this chip must share one 33px row. */
   padding: 0 calc(var(--gap-floor) / 2);
   border: 0.5px solid var(--border-control, var(--border));
   border-radius: 999px;
@@ -979,7 +980,7 @@ html[data-view='pending'] dialog {
   padding-block-end: var(--gap-floor);
 }
 .side-tabs [role='tab'] {
-  min-height: var(--target-floor);
+  min-height: var(--control-floor);
   padding-inline: var(--inset-floor);
   border: 0;
   border-radius: var(--radius-sm);
@@ -1302,9 +1303,11 @@ html [data-slot='app-shell'] {
   flex: 0 1 auto;
   min-width: 0;
 }
-/* Only while a chat is open: with no chat the heading is invisible and must take no room (it would wrap the bar's actions). */
+/* Only while a chat is open: with no chat the heading is invisible and must take no room (it would wrap the bar's actions).
+   The hit floor, not the drawn control size: the bar's own minimum is the floor plus its gaps, so a heading taller than the
+   floor would make the bar jump when a chat opens (on touch, Mzizi draws controls at 49px over a 45px floor). */
 html[data-titled] .chat-heading {
-  min-block-size: var(--size-control-sm);
+  min-block-size: var(--control-floor);
 }
 .chat-heading .chat-title {
   flex: none;
@@ -1587,7 +1590,7 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   border-radius: var(--radius-lg);
 }
 .composer textarea {
-  min-height: var(--target-floor);
+  min-height: var(--control-floor);
   max-height: 12rem;
   padding: var(--gap-floor) 0;
   border-radius: var(--radius-sm);
@@ -1997,7 +2000,7 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 
 /* ---- Settings: a modal ----------------------------------------------------------------------------------
    A native dialog (focus trap, Esc, inert page behind it). Full screen below 40rem with the close button pinned
-   at the top; centred and capped above. Sizes are tokens: 49px hit regions, 7px gaps, 14px inset. */
+   at the top; centred and capped above. Sizes are tokens: 45px hit regions on touch, 7px gaps, 14px inset. */
 .settings-dialog {
   padding: 0;
   border: 1px solid var(--border);
@@ -2036,8 +2039,8 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   font-size: var(--fs-body, 1rem);
 }
 .settings-head .btn {
-  min-height: var(--target-floor);
-  min-width: var(--target-floor);
+  min-height: var(--control-floor);
+  min-width: var(--control-floor);
 }
 .settings-body {
   flex: 1 1 auto;
@@ -2082,7 +2085,7 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 }
 
 /* ---- Settings: the language radio group and the offline switch ----------------------------------------------
-   Each language is a row with the radio drawn over the whole row, so the hit region is the full row (49px, or the density size
+   Each language is a row with the radio drawn over the whole row, so the hit region is the full row (49px drawn on touch, or the density size
    with a mouse); the dot and ring are painted on the input itself and its focus ring is the page's own. */
 .radio-group {
   display: grid;

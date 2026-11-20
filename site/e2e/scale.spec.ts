@@ -1,10 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { ask, openAccount, openChat, openChats, underTheFloor } from './helpers';
+import { ask, openAccount, openChat, openChats, underTheFloor, HIT_FINE, HIT_TOUCH } from './helpers';
 
 // Do the components scale? The same screens at the widths people really have (320, 390, 768, 1024, 1440), in light and dark,
 // with a finger (coarse pointer, no hover) and with a mouse (fine pointer, hover): nothing scrolls sideways, nothing is under the
 // Bundu floor, the thread keeps a readable measure, and the density layer picks the size by pointer and width the way it says
-// (49px hit regions with a finger or below 64rem, the 32px density size only with a mouse from 64rem).
+// (45px hit regions with a finger or below 64rem, the 24px fine-pointer floor only with a mouse from 64rem).
 
 const WIDTHS = [320, 390, 768, 1024, 1440];
 const REM = 16;
@@ -21,8 +21,8 @@ for (const pointer of ['touch', 'mouse'] as const) {
           const wide = width >= 64 * REM;
 
           expect(await page.evaluate(() => document.documentElement.scrollWidth), 'the page does not scroll sideways').toBeLessThanOrEqual(width);
-          // The density size (32px) is allowed only with a mouse from 64rem; everywhere else the hit region is 49px.
-          const floor = { minHit: wide && pointer === 'mouse' ? 32 : 49 };
+          // The fine-pointer floor (24px) applies only with a mouse from 64rem; everywhere else the hit region is 45px.
+          const floor = { minHit: wide && pointer === 'mouse' ? HIT_FINE : HIT_TOUCH };
           expect(await underTheFloor(page, floor), 'home').toEqual([]);
 
           // The measure: the messages, the home screen and the composer keep one centred column of at most 46rem on a big screen.
@@ -33,18 +33,18 @@ for (const pointer of ['touch', 'mouse'] as const) {
           }));
           for (const [name, w] of Object.entries(measure)) expect(w, `${name} column`).toBeLessThanOrEqual(46 * REM + 1);
 
-          // Control sizes follow the pointer and the width: a finger always gets the 49px hit region; a mouse gets the density
+          // Control sizes follow the pointer and the width: a finger always gets the 45px hit region; a mouse gets the density
           // size only from 64rem, and only for controls that follow the density layer.
           const plus = (await page.locator('#plus').boundingBox())!;
           if (wide && pointer === 'mouse') expect(plus.height, '#plus with a mouse on a desktop').toBeLessThan(40);
-          else expect(plus.height, '#plus is the 49px hit region').toBeGreaterThanOrEqual(49);
+          else expect(plus.height, '#plus is at least the 45px hit region').toBeGreaterThanOrEqual(HIT_TOUCH);
           const sizes = await page.evaluate(() =>
             [...document.querySelectorAll<HTMLElement>('.side-primary .side-row:not(.side-disabled), #side-new')]
               .filter((e) => e.offsetParent !== null)
               .map((e) => Math.round(e.getBoundingClientRect().height)),
           );
           if (wide && pointer === 'mouse') for (const h of sizes) expect(h, 'a drawer row with a mouse on a desktop').toBeLessThan(40);
-          else if (sizes.length) for (const h of sizes) expect(h, `a drawer row at ${width}px with ${pointer}`).toBeGreaterThanOrEqual(49);
+          else if (sizes.length) for (const h of sizes) expect(h, `a drawer row at ${width}px with ${pointer}`).toBeGreaterThanOrEqual(HIT_TOUCH);
 
           if (!wide) {
             await openChats(page);
@@ -84,7 +84,7 @@ for (const pointer of ['touch', 'mouse'] as const) {
         await openChat(page);
         await ask(page, 'Is everyone equal under the law?');
         await expect(page.locator('.cite-link').first()).toBeVisible();
-        const floor = { minHit: width >= 64 * REM && pointer === 'mouse' ? 32 : 49 };
+        const floor = { minHit: width >= 64 * REM && pointer === 'mouse' ? HIT_FINE : HIT_TOUCH };
         expect(await underTheFloor(page, floor), 'conversation').toEqual([]);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
         expect(await page.locator('#log').evaluate((el) => el.getBoundingClientRect().width), 'the messages column').toBeLessThanOrEqual(46 * REM + 1);

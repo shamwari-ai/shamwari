@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ask, openChat } from './helpers';
+import { ask, openChat, HIT_TOUCH } from './helpers';
 
-// A round "jump to latest" button floats above the composer when the messages are scrolled up (#269). 49px target, labelled, round.
+// A round "jump to latest" button floats above the composer when the messages are scrolled up (#269). 45px target, labelled, round.
 
 async function fill(page: Page, n: number) {
   for (let i = 0; i < n; i++) {
@@ -32,7 +32,7 @@ test('hidden on the empty screen and at the end of the messages; shown once scro
   await expect(jump).toBeVisible();
 });
 
-test('it is a round 49px button, centred above the composer, and a tap goes to the latest message', async ({ page }) => {
+test('it is a round 45px button, centred above the composer, and a tap goes to the latest message', async ({ page }) => {
   await openChat(page);
   await fill(page, 5);
   await scrollThreadTo(page, 'top');
@@ -43,8 +43,8 @@ test('it is a round 49px button, centred above the composer, and a tap goes to t
     const d = document.querySelector('.dock')!.getBoundingClientRect();
     return { w: r.width, h: r.height, radius: parseFloat(getComputedStyle(el).borderTopLeftRadius), cx: r.left + r.width / 2, bottom: r.bottom, dockTop: d.top, vw: innerWidth };
   });
-  expect(geo.w).toBeGreaterThanOrEqual(49);
-  expect(geo.h).toBeGreaterThanOrEqual(49);
+  expect(geo.w).toBeGreaterThanOrEqual(HIT_TOUCH);
+  expect(geo.h).toBeGreaterThanOrEqual(HIT_TOUCH);
   expect(geo.radius).toBeGreaterThanOrEqual(geo.h / 2 - 0.5);
   expect(geo.bottom, 'above the composer').toBeLessThanOrEqual(geo.dockTop + 1);
   expect(Math.abs(geo.cx - geo.vw / 2) / geo.vw, 'centred in the page').toBeLessThan(0.25);

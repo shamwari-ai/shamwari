@@ -1,12 +1,12 @@
 import { expect, test } from '@playwright/test';
-import { ask, openChat } from './helpers';
+import { ask, openChat, HIT_TOUCH } from './helpers';
 
 // First run: one line on the empty screen, "English / ChiShona / isiNdebele", shown once and remembered (#244 row 1). Settings keeps the
 // radio group. A language already chosen (or a first question already asked) means it never shows again.
 
 const row = (page: import('@playwright/test').Page) => page.locator('#empty').getByRole('group', { name: 'Language' });
 
-test('a first visit offers the three languages on the empty screen, each a 49px button, with no sideways scroll at 320px', async ({ page }) => {
+test('a first visit offers the three languages on the empty screen, each a 45px button, with no sideways scroll at 320px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 });
   await openChat(page);
   await expect(row(page)).toBeVisible();
@@ -14,7 +14,7 @@ test('a first visit offers the three languages on the empty screen, each a 49px 
   await expect(buttons).toHaveText(['English', 'ChiShona', 'isiNdebele']);
   for (const b of await buttons.all()) {
     const box = await b.boundingBox();
-    expect(box!.height, 'a 49px hit region on touch').toBeGreaterThanOrEqual(49);
+    expect(box!.height, 'a 45px hit region on touch').toBeGreaterThanOrEqual(HIT_TOUCH);
     expect(box!.x + box!.width).toBeLessThanOrEqual(320);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);

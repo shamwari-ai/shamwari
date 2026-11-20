@@ -1,8 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ask, makeProject, openChat } from './helpers';
+import { ask, makeProject, openChat, HIT_TOUCH } from './helpers';
 
 // The top bar shows the chat as two lines (#269): the title, then a quiet subtitle (its project, else when it was last used).
-// The title block is the ONE tappable target (49px) and opens the chat menu; the subtitle is plain text. On a phone the wordmark gives way
+// The title block is the ONE tappable target (at least 45px) and opens the chat menu; the subtitle is plain text. On a phone the wordmark gives way
 // to it while a chat is open (it stays on the empty screen). The bar does not grow.
 
 const barHeight = (page: Page) => page.evaluate(() => document.querySelector('[data-slot="app-topbar"]')!.getBoundingClientRect().height);
@@ -13,7 +13,7 @@ const brandShown = (page: Page) =>
   });
 
 for (const width of [320, 360, 1280]) {
-  test(`once there is a chat the top bar has a title, a subtitle and one 49px tappable block, at ${width}px`, async ({ page }) => {
+  test(`once there is a chat the top bar has a title, a subtitle and one 45px tappable block, at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 700 });
     await openChat(page);
     const emptyBar = await barHeight(page);
@@ -32,7 +32,7 @@ for (const width of [320, 360, 1280]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     // One tappable target: the title block. The subtitle is not a button or a link.
     const hit = page.locator('#chat-title-hit');
-    expect((await hit.boundingBox())!.height, 'a 49px hit region').toBeGreaterThanOrEqual(49);
+    expect((await hit.boundingBox())!.height, 'a 45px hit region').toBeGreaterThanOrEqual(HIT_TOUCH);
     expect(await sub.evaluate((el) => !!el.closest('button, a') || !!el.querySelector('button, a'))).toBe(false);
     await hit.click();
     await expect(page.locator('#chat-tools')).toBeVisible();

@@ -1,9 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ask, openChat } from '../e2e/helpers';
+import { ask, openChat, CONTROL_SM_FINE } from '../e2e/helpers';
 
 // On a desktop with a mouse (64rem up, fine pointer, hover, no touch) Mzizi's density layer draws controls smaller, and the
-// drawer's rows follow it: 32px rows (--size-control-sm), flat, with the 7px gap between them (--gap-floor) so their hit
-// regions never overlap. The 49px hit region is never lowered on touch: e2e/density-touch.spec.ts. The foot rows have no icons.
+// drawer's rows follow it: 33px rows (--size-control-sm), flat, with the 7px gap between them (--gap-floor) so their hit
+// regions never overlap. The 45px hit region is never lowered on touch: e2e/density-touch.spec.ts. The foot rows have no icons.
 
 const rows = (page: Page, selector: string) =>
   page.locator(selector).evaluateAll((els) =>
@@ -19,7 +19,7 @@ for (const scheme of ['light', 'dark'] as const) {
   test.describe(scheme, () => {
     test.use({ colorScheme: scheme });
 
-    test(`on a desktop the drawer's rows are drawn 32px, with 7px between them and no overlap (${scheme})`, async ({ page }) => {
+    test(`on a desktop the drawer's rows are drawn 33px, with 7px between them and no overlap (${scheme})`, async ({ page }) => {
       await openChat(page);
       await ask(page, 'Is it legal?'); // a chat with a short title, so the history list has one row that does not wrap
       await expect(page.locator('.cite-link').first()).toBeVisible();
@@ -27,12 +27,12 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.locator('#history-list button.chat-row').first()).toBeVisible();
 
       expect(await page.evaluate(() => matchMedia('(pointer: fine) and (hover: hover)').matches)).toBe(true);
-      expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--size-control-sm').trim())).toBe('2rem');
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--size-control-sm').trim())).toBe('2.0625rem'); // 33px
 
       const list = (await rows(page, '.side-row')).sort((a, b) => a.top - b.top);
       expect(list.length, 'new chat, search, section rows, a chat title and the account row').toBeGreaterThanOrEqual(8);
-      for (const r of list) expect(r.h, r.text).toBeGreaterThanOrEqual(31.5);
-      for (const r of list) expect(r.h, `${r.text} is drawn at 32px, not 49`).toBeLessThanOrEqual(33);
+      for (const r of list) expect(r.h, r.text).toBeGreaterThanOrEqual(CONTROL_SM_FINE - 0.5);
+      for (const r of list) expect(r.h, `${r.text} is drawn at 33px, not the touch size`).toBeLessThanOrEqual(CONTROL_SM_FINE + 1);
       for (let i = 1; i < list.length; i++) {
         const a = list[i - 1]!, b = list[i]!;
         const gap = b.top - a.bottom;
@@ -77,7 +77,7 @@ for (const scheme of ['light', 'dark'] as const) {
 // ---- the geometry guard: widths a desktop browser really has, light and dark ------------------------------------------------
 // No label wraps (a word is never broken, a chip stays on one line), nothing scrolls sideways, the sidebar is a fixed column wide
 // enough for its labels, the top bar's actions say what they are, and nothing is a marketing pill. At 1000px the drawer is a
-// popover (below 64rem) and keeps the touch size; from 1024px it is a column of 32px rows.
+// popover (below 64rem) and keeps the touch size; from 1024px it is a column of 33px rows.
 
 /** How many lines a piece of text is drawn on: the number of distinct tops among its client rects. */
 const lines = (page: Page, selector: string) =>
@@ -177,7 +177,7 @@ test('clutter is gone: the version line is in Settings (not the drawer foot) and
   await expect(page.locator('p.install')).toHaveCount(0);
 });
 
-test('a chat row shows its "..." on hover (beside the row, the time stays) and keeps a 32px hit region', async ({ page }) => {
+test('a chat row shows its "..." on hover (beside the row, the time stays) and keeps a 33px hit region', async ({ page }) => {
   await openChat(page);
   await ask(page, 'Is it legal?');
   await expect(page.locator('.cite-link').first()).toBeVisible();
@@ -192,7 +192,7 @@ test('a chat row shows its "..." on hover (beside the row, the time stays) and k
   await li.hover();
   await expect(more, 'shown on hover').toHaveCSS('opacity', '1');
   await expect(li.locator('.chat-row-when'), 'the time stays').toHaveCSS('visibility', 'visible');
-  await expect.poll(async () => Math.round((await more.boundingBox())?.height ?? 0), 'a 32px hit region').toBe(32);
+  await expect.poll(async () => Math.round((await more.boundingBox())?.height ?? 0), 'a 33px hit region').toBe(CONTROL_SM_FINE);
   await more.click();
   await expect(page.locator('#row-menu')).toBeVisible();
 });

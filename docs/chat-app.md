@@ -57,18 +57,19 @@ Where the chat departs from the library, and why:
 - **Settings is a native `<dialog>` opened from the account row, not Mzizi's `AccountMenu`.** The
   component names a signed-in person (their initials and name); this chat has none to show until
   Mukoko sign-in is on. Switch to `AccountMenu` then. The dialog is modal (focus held, Esc closes,
-  the page behind it is inert), full screen below 40rem with a pinned 49 px close button, a centred
+  the page behind it is inert), full screen below 40rem with a pinned close button (at least the 45 px floor on touch), a centred
   box of at most 32rem above. Its markup is in the page, not a lazy chunk: the handlers it needs
   (language, delete, install, sign out) are bound at start, and the markup is the same bytes the old
   panel had. There is no Appearance section: the page follows the device's light or dark setting and
   there is no override to choose yet. Language is a radio group (all three in view, one tap each) and
   the Offline mode switch lives here too; the top bar shows an Offline mode badge only while it is on, and the
   badge opens Settings.
-- **The menu, close and top-bar action buttons are lifted from 44 px to the 49 px floor** in
+- **The menu, close and top-bar action buttons are lifted from 44 px to the 45 px floor** in
   `chat.css`; `AppShell` draws them at 44 px. Worth raising upstream.
 
-The Bundu floor (17 px body, 14 px minimum text, a 49 px hit region on every control, 7 px
-between controls, 14 px insets, 1.5 leading) is measured on the rendered page by the e2e
+The [Bundu floor](https://standards.bundu.org/bundu-floor/) 1.1.0 (17 px body on touch and 15 px with a mouse, 14 px
+minimum text, a hit region of 45 px on touch and 24 px with a mouse on every control, 7 px between controls, 14 px
+insets, 1.5 leading; the values live in `site/e2e/helpers.ts`) is measured on the rendered page by the e2e
 tests in `site/e2e/a11y.spec.ts`: the home screen, an answer with its citation card, the
 account menu open and the drawer open. A control that falls under it fails the build.
 
@@ -247,12 +248,14 @@ Developer keys for the mock: `sk_shamwari_mock_ok` answers; `_402`, `_403`,
   white text (the "before" screenshots in `docs/ui-2026-11-12/` are byte-identical in light and dark). Now the page follows
   `prefers-color-scheme`, and an explicit `data-theme="light"` (or `"dark"`) wins. `body` takes its colour and background from the
   tokens. Tests: `e2e/theme.spec.ts`, and the floor audit and axe run in dark.
-- **Density is Mzizi's.** `@bundu/ui` 0.14.0: the hit region is 49px always (`--target-floor`); controls are DRAWN at
-  `--size-control-sm`, which is 32px on a desktop with a mouse (64rem up, fine pointer, hover, no touch) and 49px everywhere else. The
+- **Density is Mzizi's.** `@bundu/ui` 0.17.0 (Bundu floor 1.1.0): the hit region (`--target-floor`) is 45px on touch and 24px
+  on a desktop with a mouse (64rem up, fine pointer, hover, no touch). The chat's own controls take `--control-floor` (45px on
+  touch, 28px with a mouse, the smallest a control is drawn), never less. Controls are DRAWN at `--size-control-sm`, which is
+  33px on a desktop with a mouse and 49px everywhere else. The
   drawer's rows (sections, foot rows, chat titles) use that token, a 14px label, a flat look (no border or fill at rest, a soft
   fill on hover, a stronger one and a marker on the open section) and 7px between rows. The foot rows (Use the API, Disclaimer and
-  privacy, Settings) are text only, no icons. Tests: `e2e-desktop/density.spec.ts` (32px, flat, no icons, no overlap, light and
-  dark) and `e2e/density-touch.spec.ts` (49px on touch at any width).
+  privacy, Settings) are text only, no icons. Tests: `e2e-desktop/density.spec.ts` (33px, flat, no icons, no overlap, light and
+  dark) and `e2e/density-touch.spec.ts` (45px on touch at any width).
 - **Owner's list (2026-11-12), each with a test:** labels never break inside a word (rows wrap at spaces only, the chip stays on one
   line, `e2e-desktop/density.spec.ts` at 1000, 1280 and 1440, light and dark); a fixed sidebar column of 17.5rem; the version line and
   the Install button live in Settings, not the drawer's foot or above the composer; the top bar says "Offline mode" and "New chat"
