@@ -259,6 +259,35 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     }
   };
 
+  // ---- skills on in this chat (chat/skills.ts; the Skills tab is chat/skills-ui.ts, loaded with the Plugins section) ----
+  let skillsUi: { refresh(): void } | null = null;
+  /** The quiet line above the question box: which skills are on here, and what a personal one means for the answer. */
+  const syncSkills = () => {
+    skillsUi?.refresh();
+    const note = $('#skills-note');
+    const th = thread;
+    const ids = th.skills ?? [];
+    if (!ids.length) {
+      note.hidden = true;
+      return;
+    }
+    void import('./skills')
+      .then((k) => k.skillsForAsk(store, ids))
+      .catch(() => ({ skills: [] as string[], ownInformation: true }))
+      .then((on) => {
+        if (th !== thread) return; // another chat is open now
+        const s = strings();
+        note.hidden = !on.ownInformation && !on.skills.length;
+        $('#skills-note-text').textContent = on.ownInformation ? s.skillsOnPersonal : s.skillsOn.replace('{n}', String(on.skills.length));
+      });
+  };
+  const setSkillsOn = async (ids: string[]) => {
+    if (ids.length) thread.skills = ids;
+    else delete thread.skills;
+    if (thread.messages.length) await save(thread); // a chat with no question yet is kept in memory until it has one
+    syncSkills();
+  };
+
   const rebuild = () => {
     // Off while rebuilding: replacing the whole thread must not be read aloud again.
     log.setAttribute('aria-live', 'off');
@@ -272,6 +301,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     if (!markdownReady() && thread.messages.some((x) => x.role === 'assistant' && x.answer)) {
       void loadMarkdown().then(() => markdownReady() && rebuild());
     }
+    syncSkills();
   };
 
   /** Close the chats drawer (a popover below 64rem) and the account menu: after an action they must not stay over the page. */
@@ -369,8 +399,20 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     });
     if (name === 'plugins' && !pluginsLoaded) {
       pluginsLoaded = true;
-      // Loaded on first use: the chat's first load does not carry the tabs.
-      void import('./plugins').then((m) => m.initPlugins(document)).catch(() => (pluginsLoaded = false));
+      // Loaded on first use: the chat's first load does not carry the tabs or the skill builder.
+      void Promise.all([import('./plugins'), import('./skills-ui')])
+        .then(([p, k]) => {
+          p.initPlugins(document);
+          skillsUi = k.initSkills(document, {
+            store,
+            strings,
+            onInChat: () => thread.skills ?? [],
+            setOnInChat: setSkillsOn,
+            say: (text) => ($('#toast').textContent = text),
+            newId,
+          });
+        })
+        .catch(() => (pluginsLoaded = false));
     }
   };
   document.querySelectorAll<HTMLElement>('[data-section]').forEach((b) => b.addEventListener('click', () => showSection(b.dataset.section as Section)));
@@ -725,8 +767,13 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   // ---- asking --------------------------------------------------------------
   const contextFor = (th: Thread, target: StoredMessage): ChatMessage[] => {
     const out: ChatMessage[] = [];
+    // A question asked with a personal skill on is personal scope, and so is its answer: neither travels as context with a
+    // question that is not (Rule 1). With one that is, nothing goes to a model anyway.
+    let personal = false;
     for (const m of th.messages) {
       if (m === target) break;
+      if (m.role === 'user') personal = !!m.ownInformation && !target.ownInformation;
+      if (personal) continue;
       if (m.role === 'assistant') out.push({ role: 'assistant', content: m.text });
       else if (!m.error && m.status !== 'queued' && m.status !== 'local') out.push({ role: 'user', content: m.text });
     }
@@ -799,10 +846,20 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
         }, SLOW_AFTER_MS);
       }
 
-      let res = await client.ask(
-        { messages: contextFor(th, m), scope: m.scope === 'community' ? 'community' : GENERAL },
-        { idempotencyKey: key, signal: stopper.signal },
-      );
+      // The question's skills (chat/skills.ts). A personal one: the flag alone, and no skill text. Platform ones: read now, so
+      // an edited skill goes as it is now. If they cannot be read, the question waits like one that did not arrive, rather
+      // than going without them.
+      const withSkills = m.ownInformation
+        ? { own_information: true }
+        : m.skills?.length
+          ? await import('./skills').then((k) => k.requestFields(store, m.skills!)).catch(() => null)
+          : {};
+      let res: Awaited<ReturnType<typeof client.ask>> = withSkills
+        ? await client.ask(
+            { messages: contextFor(th, m), scope: m.scope === 'community' ? 'community' : GENERAL, ...withSkills },
+            { idempotencyKey: key, signal: stopper.signal },
+          )
+        : { ok: false, error: { kind: 'offline', status: null, retryAfterSec: null, upgradeUrl: null } };
       // No credential could be obtained (the renewal failed on the network, say) for
       // someone who IS signed in: that is "the answer did not arrive", and the
       // question waits. It is not "signed out", and must not end their session.
@@ -950,6 +1007,14 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     setBusy('ask', true);
     try {
       const m: StoredMessage = { id: newId(), role: 'user', text: clean, at: Date.now(), scope: GENERAL, status: 'sent' };
+      // The skills on in this chat go with the question, and with every retry of it. A personal one makes it personal scope;
+      // if the skills cannot be read it is personal too (chat/skills.ts: it fails closed).
+      if (thread.skills?.length) {
+        const ids = thread.skills;
+        const on = await import('./skills').then((k) => k.skillsForAsk(store, ids)).catch(() => ({ skills: [] as string[], ownInformation: true }));
+        if (on.skills.length && !on.ownInformation) m.skills = on.skills;
+        if (on.ownInformation) m.ownInformation = true;
+      }
       // Files and voice notes are written to this device with the question and go no further: only `clean` is ever sent.
       const added = attach.take();
       if (added.length) {

@@ -73,6 +73,21 @@ Core decides again, answers with the scope it was asked for and its own
 for a different scope than the one asked, or with a chunk carrying one, is not used.
 Tests that count provider calls: `test/scope-decision.test.ts`.
 
+**Agent Skills** (`src/skills.ts`; the Lite chat's Skills tab, `docs/chat-app.md`). Two
+optional fields on `/v1/chat/completions`, read nowhere else:
+
+- `"own_information": true` says the request carries the person's own information (a
+  personal-scope skill is on). It is handled exactly as a question the rules above flag:
+  personal scope, no edge embedding, no completion, the cited passage, and Core is told.
+  It can only add that flag (`false` does not clear a flagged question), and it does not
+  change an explicit `"scope": "personal"`, which is still the 409. Not a boolean: 400.
+- `"skills": [{ "name", "description", "instructions" }]`, at most 3 (name up to 64
+  characters, description up to 1024, instructions up to 12,000): platform-scope skills,
+  added after the constant system prompt and the Ground context, never in place of
+  them. A personal-scope skill is never sent. The personal rules also run over each
+  skill's own words; one that looks personal makes the request personal scope. Malformed
+  or over a limit: 400 `invalid_skills`.
+
 ## Setup
 
 ```

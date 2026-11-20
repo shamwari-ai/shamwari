@@ -21,8 +21,8 @@ const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
 // Mukoko sign-in is the default; only a build that asks for PUBLIC_CHAT_AUTH=developer-key gets the developer-key screen
 // (chat/auth-mode.ts). check.mjs fails a build that comes out in any other mode.
 const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
-// The Skills tab is hidden until a SKILL.md loader exists (shamwari#291): a tab with nothing behind it is a promise the
-// app cannot keep. Off by default; only a build with PUBLIC_CHAT_SKILLS=true renders it (chat/features.ts).
+// The Skills tab: Agent Skills read from and written as SKILL.md (chat/skill.ts), with a builder (chat/skills-ui.ts). On by
+// default; a build with PUBLIC_CHAT_SKILLS=false leaves it out, and Plugins goes back to a "Coming soon" row (chat/features.ts).
 const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
 ---
 <!doctype html>
@@ -84,7 +84,9 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
           <li><button type="button" class="side-row" data-section="projects"><Icon name="layers" class="side-icon" /><span data-i18n="projects">{en.projects}</span></button></li>
           <li><span class="side-row side-disabled" aria-disabled="true"><Icon name="workflow" class="side-icon" /><span data-i18n="navFactory">{en.navFactory}</span><span class="side-chip" data-i18n="comingSoon">{en.comingSoon}</span></span></li>
           <li><button type="button" class="side-row" data-section="artifacts"><Icon name="clipboard" class="side-icon" /><span data-i18n="artifacts">{en.artifacts}</span></button></li>
-          <li><span class="side-row side-disabled" aria-disabled="true"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span><span class="side-chip" data-i18n="comingSoon">{en.comingSoon}</span></span></li>
+          {showSkills
+            ? (<li><button type="button" class="side-row" data-section="plugins"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span></button></li>)
+            : (<li><span class="side-row side-disabled" aria-disabled="true"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span><span class="side-chip" data-i18n="comingSoon">{en.comingSoon}</span></span></li>)}
         </ul>
       </nav>
       <!-- The menu of one chat in the list (opened by its "..."): pin, project, delete. One shared popover, inside the drawer so
@@ -128,17 +130,16 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
       </section>
       <p id="artifacts-empty" class="side-empty" data-i18n="artifactsEmpty">{en.artifactsEmpty}</p>
       </div>
-      <!-- Plugins and MCP: nothing exists behind them yet, so each says so. Skills is not rendered at all unless the build
-           turns it on (showSkills, off by default), because there is no SKILL.md loader. Its script loads only when this
-           panel is first opened. -->
+      <!-- Skills first: the person's Agent Skills, the builder, import and export (chat/skills-ui.ts fills the panel). Plugins and
+           MCP: nothing exists behind them yet, so each says so. The scripts load only when this panel is first opened. -->
       <div data-panel="plugins" hidden>
         <div role="tablist" class="side-tabs" aria-label={en.navPlugins} data-i18n-attr="aria-label:navPlugins">
-          <button type="button" role="tab" id="tab-plugins" aria-controls="tabpanel-plugins" aria-selected="true" data-i18n="pluginsTab">{en.pluginsTab}</button>
-          {showSkills && (<button type="button" role="tab" id="tab-skills" aria-controls="tabpanel-skills" aria-selected="false" tabindex="-1" data-i18n="skillsTab">{en.skillsTab}</button>)}
+          {showSkills && (<button type="button" role="tab" id="tab-skills" aria-controls="tabpanel-skills" aria-selected="true" data-i18n="skillsTab">{en.skillsTab}</button>)}
+          <button type="button" role="tab" id="tab-plugins" aria-controls="tabpanel-plugins" aria-selected={showSkills ? 'false' : 'true'} tabindex={showSkills ? '-1' : undefined} data-i18n="pluginsTab">{en.pluginsTab}</button>
           <button type="button" role="tab" id="tab-mcp" aria-controls="tabpanel-mcp" aria-selected="false" tabindex="-1" data-i18n="mcpTab">{en.mcpTab}</button>
         </div>
-        <div role="tabpanel" id="tabpanel-plugins" aria-labelledby="tab-plugins"><p class="side-empty" data-i18n="pluginsEmpty">{en.pluginsEmpty}</p></div>
-        {showSkills && (<div role="tabpanel" id="tabpanel-skills" aria-labelledby="tab-skills" hidden><p class="side-empty" data-i18n="skillsEmpty">{en.skillsEmpty}</p></div>)}
+        {showSkills && (<div role="tabpanel" id="tabpanel-skills" aria-labelledby="tab-skills"><p class="side-empty" data-i18n="skillsEmpty">{en.skillsEmpty}</p></div>)}
+        <div role="tabpanel" id="tabpanel-plugins" aria-labelledby="tab-plugins" hidden={showSkills}><p class="side-empty" data-i18n="pluginsEmpty">{en.pluginsEmpty}</p></div>
         <div role="tabpanel" id="tabpanel-mcp" aria-labelledby="tab-mcp" hidden><p class="side-empty" data-i18n="mcpEmpty">{en.mcpEmpty}</p></div>
         <p class="side-empty" data-i18n="thirdPartyNote">{en.thirdPartyNote}</p>
       </div>
@@ -235,6 +236,8 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
               <span data-i18n="offlineModeNote">{en.offlineModeNote}</span>
               <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
             </div>
+            <!-- Which skills are on in this chat, and, for a personal one, that answers then come from cited sources only. -->
+            <div id="skills-note" class="status-chip skills-note" role="status" hidden><span id="skills-note-text"></span></div>
             <div id="offline" class="status-chip" role="status" hidden>
               <span data-i18n="offlineBanner">{en.offlineBanner}</span>
               <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -257,8 +260,8 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
             </button>
           </div>
         </form>
-        <!-- The "+" menu. Upload a file is all it holds for now: a skills entry is added when Skills has something in it. Files stay
-             on this device; see chat/attach.ts. -->
+        <!-- The "+" menu. Upload a file is all it holds for now: skills are turned on in the Skills tab (a shortcut here is a
+             follow-up). Files stay on this device; see chat/attach.ts. -->
         <div id="plus-menu" class="chat-tools plus-menu" popover role="group" aria-label={en.addTo} data-i18n-attr="aria-label:addTo">
           <button type="button" id="plus-upload" class="btn" data-i18n="uploadFile">{en.uploadFile}</button>
         </div>

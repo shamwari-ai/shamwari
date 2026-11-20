@@ -21,6 +21,8 @@ import { drain } from './sink';
 import { detectLanguage } from './lang';
 import { probe, healthDoc } from './probe';
 import { preflight, withCors } from './cors';
+import { parseSkills, SKILLS_MAX, skillsNeedOwnInformation, withSkills } from './skills';
+import type { AppliedSkill } from './skills';
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body, null, 2), {
@@ -118,6 +120,13 @@ interface ChatBody {
   reach?: string;
   /** `compact` asks for the compact envelope (src/envelope.ts). */
   format?: string;
+  /**
+   * `true`: the request carries the person's own information (a personal-scope skill is on in the
+   * Lite chat). It is treated as personal scope, exactly as a question personal.ts flags is.
+   */
+  own_information?: unknown;
+  /** Platform-scope Agent Skills turned on for this conversation (src/skills.ts). */
+  skills?: unknown;
 }
 
 /**
@@ -138,6 +147,8 @@ async function admit(
       body: ChatBody;
       messages: Message[];
       decision: ScopeResolution;
+      /** Valid skills from the body; null when `skills` was sent but malformed (the chat endpoint answers 400). */
+      skills: AppliedSkill[] | null;
       /** Only meaningful with `deferQuota`: the 429, or null when there is quota left. */
       quota: () => Promise<Response | null>;
     }
@@ -192,12 +203,16 @@ async function admit(
   try {
     // The sovereignty gate first, so an explicit personal request bound for Cloud is
     // still the 409 that says why. Then the key: a key may only hold the scopes it holds.
+    // A personal-scope skill is never sent: the client says `own_information: true` instead. A skill
+    // that was sent is checked with the same personal rules as the question (skills.ts).
+    const skills = parseSkills(body.skills);
     const decision = resolveScope({
       messages,
       requested: body.scope,
       grants: permittedScopes(auth),
       env,
       capability,
+      ownInformation: body.own_information === true || skillsNeedOwnInformation(skills ?? []),
     });
     if (!permittedScopes(auth).includes(decision.scope)) {
       return {
@@ -213,7 +228,7 @@ async function admit(
         ),
       };
     }
-    return { ok: true, auth, body, messages, decision, quota };
+    return { ok: true, auth, body, messages, decision, skills, quota };
   } catch (e) {
     if (e instanceof ScopeRefusal) return { ok: false, response: json(e.toPayload(), 409) };
     throw e;
@@ -404,7 +419,16 @@ const worker = {
 
     const a = await admit(req, env, 'cloud_inference', true);
     if (!a.ok) return a.response;
-    const { auth, body, messages, decision, quota } = a;
+    const { auth, body, messages, decision, skills, quota } = a;
+
+    // Skills and the own-information flag are read only here: /v1/ground/context generates nothing
+    // and must not start refusing fields it has always ignored.
+    if (skills === null) {
+      return json({ error: 'invalid_skills', max: SKILLS_MAX, hint: 'skills is a list of {name, description, instructions}' }, 400);
+    }
+    if (body.own_information !== undefined && typeof body.own_information !== 'boolean') {
+      return json({ error: 'invalid_own_information', allowed: [true, false] }, 400);
+    }
 
     // Only this endpoint has modes. /v1/ground/context shares admit() and must
     // not start refusing a field it has always ignored.
@@ -481,7 +505,9 @@ const worker = {
           env,
           target,
           [
-            { role: 'system', content: g.systemPrompt },
+            // Skills sit beside the constant prompt, never in place of it. Only reached when the
+            // request is not personal scope (the branch above returned the cited passage).
+            { role: 'system', content: withSkills(g.systemPrompt, skills) },
             ...messages.filter((m) => m.role !== 'system'),
           ],
           {

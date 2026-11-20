@@ -1,6 +1,6 @@
 /* Shamwari Chat, on Mzizi.
  *
- * The frame is Mzizi's AppShell (app-src/pages/lite/index.astro). Everything here sits inside it and takes
+ * The frame is Mzizi's AppShell (app-src/pages/chat/index.astro). Everything here sits inside it and takes
  * its sizes from the Bundu floor in @bundu/ui's density layer, never from numbers of its own:
  *   body 17px (--fs-body), captions 14px (--fs-caption), every control a 49px hit region (--target-floor),
  *   14px inset (--inset-floor), 7px gaps (--gap-floor), 1.5 body leading (--leading-floor).
@@ -2142,4 +2142,74 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   font-size: var(--fs-small);
   color: var(--muted-text);
   line-height: var(--leading-floor);
+}
+
+/* The Skills tab (chat/skills-ui.ts): the person's skills and the builder, in the drawer. Tokens only, so light, dark and
+   forced colours follow the rest of the drawer; label-to-field and item gaps are the 7px floor. */
+#tabpanel-skills {
+  display: grid;
+  gap: var(--gap-floor);
+  padding-inline: var(--inset-floor);
+}
+#tabpanel-skills .side-empty {
+  padding-inline: 0;
+}
+#tabpanel-skills p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.skill-item {
+  display: grid;
+  gap: var(--gap-floor);
+  padding-block: var(--gap-floor);
+  border-top: 0.5px solid var(--border);
+}
+.skill-name {
+  display: flex;
+  gap: var(--gap-floor);
+  align-items: center;
+  font-weight: 600;
+}
+.skill-form,
+.skill-field,
+.skill-scope {
+  display: grid;
+  gap: var(--gap-floor);
+}
+.skill-scope {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+/* A legend is not a grid item, so the fieldset's gap does not reach it. */
+.skill-scope legend {
+  padding: 0;
+  margin-block-end: var(--gap-floor);
+}
+.skill-form input:not([type='radio']),
+.skill-form textarea {
+  inline-size: 100%;
+  box-sizing: border-box;
+}
+.skill-form textarea {
+  min-block-size: var(--target-floor);
+  padding: var(--gap-floor) var(--inset-floor);
+  border: 1px solid var(--border-control, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--input, var(--background));
+  line-height: var(--leading-floor);
+  resize: vertical;
+}
+.skill-switch[aria-checked='true'] {
+  background: var(--muted);
+  box-shadow: inset 0 0 0 1.5px var(--foreground);
+}
+.skills-note {
+  padding-block: calc(var(--gap-floor) / 2);
+  padding-inline-end: var(--inset-floor);
+}
+@media (forced-colors: active) {
+  .skill-switch[aria-checked='true'] {
+    border: 4px solid Highlight;
+  }
 }
