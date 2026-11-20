@@ -12,7 +12,7 @@ describe('the Skills tab is off unless a build asks for it (shamwari#291: no SKI
   });
 
   it('the page renders the Skills tab and its panel only behind the switch', () => {
-    const page = readFileSync(new URL('../../app-src/pages/lite/index.astro', import.meta.url), 'utf8');
+    const page = readFileSync(new URL('../../app-src/pages/chat/index.astro', import.meta.url), 'utf8');
     expect(page).toContain('skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS)');
     // Every mention of the tab and panel sits inside a {showSkills && ...} block.
     const outside = page.replace(/\{showSkills && \([\s\S]*?\)\}/g, '');

@@ -7,8 +7,9 @@ exact order to switch it on.
 connected to GitHub as a Workers Build, so it is redeployed by hand with
 `npx wrangler deploy --config app/wrangler.jsonc` from `site/`). The apex `shamwari.ai` was moved to it
 with the Workers custom-domains API (`override_existing_origin`), `www.shamwari.ai` stays on
-`shamwari-site`, and `api.shamwari.ai` is the gateway. The root `/` sends visitors to `/lite/` for now
-(`CHAT_LIVE` is `false`). The sign-in secrets are not bound yet, so sign-in answers 503 (the chat
+`shamwari-site`, and `api.shamwari.ai` is the gateway. The root `/` sends a signed-in visitor to the chat at
+`/chat/` (since 2026-11-18; the app was at `/lite/` before, and `/lite/` now redirects to `/chat/` for a release,
+see `docs/chat-app.md`). The sign-in secrets are not bound yet, so sign-in answers 503 (the chat
 is built in Mukoko sign-in mode, the default, so it shows the sign-in screen). To undo the apex move, point `shamwari.ai` back at `shamwari-site` with the
 same API call, restore the apex line in `site/wrangler.jsonc` and **remove it from
 `site/app/wrangler.jsonc`** (otherwise the next hand deploy of `shamwari-app` takes the apex back).
@@ -19,29 +20,28 @@ same API call, restore the apex line in `site/wrangler.jsonc` and **remove it fr
 | --------------- | ------------------------------------------- | -------------------------------------------------------------- |
 | Worker          | `shamwari-app`                              | `shamwari-site` (the existing one)                             |
 | Hostname        | `https://shamwari.ai` (the apex)            | `https://www.shamwari.ai`                                      |
-| Pages           | `/lite/` only. `/` answers 302 to `/chat/`. | Home, Blueprint, Project, Contact, `sitemap.xml`, `robots.txt` |
+| Pages           | `/chat/` only. `/` answers 302 to `/chat/`. | Home, Blueprint, Project, Contact, `sitemap.xml`, `robots.txt` |
 | Source          | `site/app-src/`, `site/app-public/`         | `site/src/`, `site/public/`                                    |
 | Astro config    | `site/astro.app.config.mjs`                 | `site/astro.config.mjs`                                        |
 | Wrangler config | `site/app/wrangler.jsonc`                   | `site/wrangler.jsonc`                                          |
 | Build           | `npm run build:app` into `site/dist-app/`   | `npm run build` into `site/dist/`                              |
 | CI job          | "Chat app (build, check, unit, e2e)"        | "Landing page (build, links, tokens, size)" (name unchanged)   |
-| Canonical URLs  | `https://shamwari.ai/lite/`                 | `https://www.shamwari.ai/...`                                  |
-| Service worker  | scope `/lite/`                              | none                                                           |
+| Canonical URLs  | `https://shamwari.ai/chat/`                 | `https://www.shamwari.ai/...`                                  |
+| Service worker  | scope `/chat/` (and the retiring `/lite/`)  | none                                                           |
 
 The API is a third hostname, `https://api.shamwari.ai` (the `shamwari-gateway` Worker).
 
 **Neither build can carry the other's pages.** `site/check.mjs` fails the marketing build
 if it contains any `/lite/` or `/chat/` file, and fails the app build if it contains any page
-that is not `/lite/`, if the root does not 302 to `/chat/` (the main Shamwari Chat, another
-build), or if a redirect goes anywhere except `/chat/`, `/lite/` or the marketing origin. Canonical and social URLs must be on each Worker's own
+that is not `/chat/`, any file under `/lite/` other than the retiring service worker, if the root
+can go anywhere but `/chat/`, or if a redirect goes anywhere except `/chat/` or the marketing origin. Canonical and social URLs must be on each Worker's own
 origin. The app Worker redirects the three old apex marketing links (`/blueprint/`,
 `/project/`, `/contact/`) to `www`; a redirect is not serving a page.
 
-**"Open chat" on the marketing site** points at `https://shamwari.ai/chat/`, the MAIN
-Shamwari Chat (a separate build), not the light chat this Worker serves at `/lite/`. It is
-**not shown until that chat is released** (build variable `PUBLIC_CHAT_LIVE=true` on the
-marketing build). Until then it shows "Get in touch", because a link that answers 404 would
-say the chat is ready when it is not. Do not set the variable before `/chat/` answers.
+**"Open chat" on the marketing site** points at `https://shamwari.ai/chat/`, the chat this
+Worker serves. It is **not shown until the chat is released** (build variable
+`PUBLIC_CHAT_LIVE=true` on the marketing build). Until then it shows "Get in touch", because a
+link to a chat that cannot answer yet would say the chat is ready when it is not.
 
 ## What the code now assumes about hostnames
 
@@ -52,10 +52,11 @@ say the chat is ready when it is not. Do not set the variable before `/chat/` an
   origin, so the chat works the day the gateway with this change is deployed. `www` is not
   listed: the marketing site makes no API calls. Until that deploy, the deployed gateway
   still lists both origins, which is harmless.
-- **Service worker** scope `/lite/` on the app origin; it passes `/auth/*` and `/callback` (and the old
-  `/lite/auth/*`, `/lite/callback`) straight to the network.
+- **Service worker** scope `/chat/` on the app origin; it passes `/auth/*` and `/callback` (and the old
+  `/lite/auth/*`, `/lite/callback`) straight to the network. `/lite/sw.js` is the retiring worker that
+  replaces the old app's worker on devices that used `/lite/` (`docs/chat-app.md`, "Moving from /lite/ to /chat/").
 - **WorkOS redirect URI**: `https://shamwari.ai/callback` (the sign-in is at the root of the origin since 2026-11-12, so
-  the light and the main chat share one session; it was `/lite/callback` from 2026-11-01 and `/chat/callback` before
+  the session does not depend on the app's path; it was `/lite/callback` from 2026-11-01 and `/chat/callback` before
   that). The WorkOS application must also allow the sign-in start `https://shamwari.ai/auth/login` and the logout
   return `https://shamwari.ai/`. The old `https://shamwari.ai/lite/callback` and `/lite/` stay registered while the
   old addresses redirect (one release); remove them after.
@@ -66,19 +67,16 @@ say the chat is ready when it is not. Do not set the variable before `/chat/` an
 _Done on 2026-11-11, in a different way from the steps below:_ the app Worker was created with Wrangler
 rather than from GitHub (step 2), and the apex was moved with the Workers custom-domains API rather than
 two dashboard taps (step 5). The step 6 file change is in the repo. Steps 1, 3, 4 and 6 stand as written;
-what is still open is the sign-in section below, connecting `shamwari-app` to GitHub so it deploys itself,
-and step 7 (`CHAT_LIVE`).
+what is still open is the sign-in section below, and connecting `shamwari-app` to GitHub so it deploys itself.
+Step 7 is gone: since 2026-11-18 there is one chat, at `/chat/`.
 
 Everything below is done in the Cloudflare dashboard, on a phone is fine. Do the steps in
 this order; each one is safe to stop after.
 
 **Two gates before step 5 (moving the apex).** Both come from the code review of this change:
 
-- **`https://shamwari.ai/chat/` must already answer.** After the move the apex root redirects
-  there, and today nothing serves it. Until the main chat is deployed, moving the apex would
-  turn the root URL of the company into a 404. If the main chat is not ready, either wait, or
-  change the one line in `site/app-public/_redirects` (and the matching check in
-  `site/check.mjs`) so the root goes to `/lite/` for now.
+- **`https://shamwari.ai/chat/` must already answer.** After the move the apex root redirects there.
+  Met since 2026-11-18: the app itself is served at `/chat/` by `shamwari-app`, so the apex and `/chat/` move together.
 - **Do step 6's config change in the same sitting.** Until `site/wrangler.jsonc` stops
   declaring the apex, the next routine deploy of `shamwari-site` can try to take it back from
   `shamwari-app`, and whether Wrangler does that is **not verified**. Merge step 6's change
@@ -103,7 +101,7 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
    Non-production branch deploy command `npx wrangler preview` (needs the `previews` block already in the
    file). Production branch `main`.
    (It is the same repository as `shamwari-site`; it is a second Workers Builds project.)
-3. **Check it on its own address.** Open `https://shamwari-app.nyuchi.workers.dev/lite/`.
+3. **Check it on its own address.** Open `https://shamwari-app.nyuchi.workers.dev/chat/`.
    The chat should load, and `https://shamwari-app.nyuchi.workers.dev/` should redirect to
    it. It cannot answer a question yet: it calls `https://api.shamwari.ai`, which does
    not exist until step 4. Do not go on if the page does not load.
@@ -119,8 +117,8 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
    `shamwari-site`, accept that instead: it avoids the gap. The apex is without a Worker
    for the few seconds between the two taps; that is the one unavoidable moment, and it
    is why this step is last before the check.
-6. **Verify.** `https://shamwari.ai/` goes to `/chat/` (where the main chat will live; until it is deployed that is a 404, which is expected). `https://www.shamwari.ai/` shows the
-   marketing site. `https://shamwari.ai/lite/` shows the light chat. `https://shamwari.ai/blueprint/` redirects to `www`. `https://www.shamwari.ai/chat/`
+6. **Verify.** `https://shamwari.ai/` goes to `/chat/`, which shows the chat. `https://www.shamwari.ai/` shows the
+   marketing site. `https://shamwari.ai/lite/` redirects to `/chat/`. `https://shamwari.ai/blueprint/` redirects to `www`. `https://www.shamwari.ai/chat/`
    is a 404.
    **Then make the files match the dashboard, in ONE small change:** add
    `{ "pattern": "shamwari.ai", "custom_domain": true }` to `routes` in
@@ -131,12 +129,9 @@ tokens, size)`, now covers the marketing site only; without the new one, a chang
    Whether `wrangler deploy` removes a custom domain that is missing from the file is
    **not verified**, which is the reason to keep the two in step. Watch the first deploy
    of each Worker after this change and confirm the hostnames are still attached.
-7. **When the main chat answers at `/chat/`:** set `CHAT_LIVE` to `"true"` in `site/app/wrangler.jsonc`
-   and deploy `shamwari-app`. Until then the root `https://shamwari.ai/` sends everyone to `/lite/`
-   (`site/worker/root.ts`): by connection quality it would otherwise send fast visitors to `/chat/`.
-   Nothing in this build can check that `/chat/` is served by another build, so confirm
-   `https://shamwari.ai/chat/` answers 200 first; flipping the switch early turns the root into a 404
-   for fast connections.
+7. **Removed 2026-11-18.** This step used to switch the root between a main chat at `/chat/` (a LibreChat
+   fork) and the light chat at `/lite/` with a `CHAT_LIVE` variable. The fork was dropped (owner decision,
+   2026-11-18, `docs/chat-app.md`): this app is the chat, at `/chat/`, and the root sends everyone there.
 8. **Later, not now:** register the WorkOS redirect URI `https://shamwari.ai/callback`;
    (Mukoko sign-in is on by default now and needs no build setting); set
    `PUBLIC_CHAT_LIVE=true` on the marketing build when the app is released.
@@ -148,13 +143,15 @@ as it does today.
 ## Before sign-in can work, and what the gate does
 
 The session Worker (`site/worker/`, see `docs/chat-signin.md`) ships inside `shamwari-app`, and it is also
-the **gate** in front of the light chat: it runs first for `/lite/*` (the build output is under `/lite/_astro/`, inside the session cookie's Path)
+the **gate** in front of the chat: it runs first for `/chat/*` (the build output is under `/chat/_astro/`, inside the session cookie's Path)
 (`assets.run_worker_first`), and serves the page and its scripts only to someone with a session. An
-unauthenticated request for `/lite/` is sent straight to the AuthKit hosted sign-in. The only things served
-without a session are the privacy page (`/lite/disclaimer/`), the manifest, the three install icons, the
+unauthenticated request for `/chat/` is sent straight to the AuthKit hosted sign-in. The only things served
+without a session are the privacy page (`/chat/disclaimer/`), the manifest, the three install icons, the
 service worker and the stylesheets (the list is in `site/worker/gate.ts` and is asserted exactly by
 `site/test/worker/gate.test.ts`), plus the two root icons (`/favicon.png`, `/apple-touch-icon.png`), which the
-Worker does not see.
+Worker does not see. The Worker also runs first for `/lite` and `/lite/*`, the app's old address: it answers
+301 to the same path under `/chat/` (query kept, `no-store`), except the old sign-in routes, which keep their
+behaviour, and `/lite/sw.js`, the retiring service worker, which it serves to anyone.
 
 1. **The two secrets are bound by name, with no values in git.** `site/app/wrangler.jsonc` binds
    `WORKOS_API_KEY` to the Secrets Store secret `CONSOLE_WORKOS_API_KEY` and `COOKIE_PASSWORD` to
@@ -178,13 +175,16 @@ variables and the Durable Object), so check these against `https://shamwari.ai` 
       Object) and `ASSETS` (Assets). A Worker that lists none of the secrets was deployed before they were added to
       `site/app/wrangler.jsonc`: it will answer `503` to every page until it is redeployed with them. Then the Secrets Store
       must hold `CONSOLE_WORKOS_API_KEY` and `SESSION_SECRET` (it did when this was written; names only, never values).
-- [ ] `GET /lite/` and `GET /` with no cookie answer `302` to `/auth/login`, not `503`, and not the page.
-- [ ] `GET /lite/_astro/<any script>.js` with no cookie answers `401`.
-- [ ] `GET /lite/disclaimer/`, `/lite/manifest.webmanifest` and `/lite/sw.js` answer `200` with no cookie.
+- [ ] `GET /chat/` and `GET /` with no cookie answer `302` to `/auth/login`, not `503`, and not the page.
+- [ ] `GET /chat/_astro/<any script>.js` with no cookie answers `401`.
+- [ ] `GET /chat/disclaimer/`, `/chat/manifest.webmanifest`, `/chat/sw.js` and `/lite/sw.js` answer `200` with no cookie.
+- [ ] `GET /lite/?x=1` answers `301` to `/chat/?x=1`; `GET /lite` answers `301` to `/chat/`.
 - [ ] Signing in from `/auth/login` lands on `/` (then the app) and the chat loads; `/auth/token` answers `200`; the session cookie is `Path=/`.
 - [ ] The old addresses redirect: `/lite/auth/login` is a `302` to `/auth/login`, `/lite/callback` a `302` to `/callback`, `POST /lite/auth/logout` a `307` to `/auth/logout`.
 - [ ] `https://shamwari.ai/callback` completes (it is the registered redirect URI).
-- [ ] With the cookie cleared, `/lite/` is a `302` to sign-in again.
+- [ ] With the cookie cleared, `/chat/` is a `302` to sign-in again.
+- [ ] On a phone that used `/lite/` before: opening `/lite/` once more lands on `/chat/` (after one reload), with the
+      chats still there.
 - [ ] Bindings for `WORKOS_API_KEY`, `COOKIE_PASSWORD`, `SESSION_REFRESH` and `ASSETS` are listed on the Worker.
 
 ## Things this has not verified
@@ -230,9 +230,9 @@ version is gated; it is never automatic.
    done, the gateway and Core are deployed by hand
    (`.github/workflows/deploy.yml` is the manual break-glass version and needs secrets
    the owner has chosen not to add).
-5. **Smoke:** `smoke-production.yml` checks production for up to 18 minutes: `/lite/`
-   unauthenticated is a 302 to `/auth/login`; `/lite/disclaimer/`,
-   `/lite/manifest.webmanifest` and `/lite/sw.js` are 200; a `/lite/_astro/*.js` script named in
+5. **Smoke:** `smoke-production.yml` checks production for up to 18 minutes: `/chat/`
+   unauthenticated is a 302 to `/auth/login`; `/lite/` is a 301 to `/chat/` with its query; `/chat/disclaimer/`,
+   `/chat/manifest.webmanifest`, `/chat/sw.js` and `/lite/sw.js` are 200; a `/chat/_astro/*.js` script named in
    `sw.js` is 401 without a session; `www.shamwari.ai` is 200; and `/auth/login`, followed through every redirect, does not end on
    `redirect-uri-invalid` (the WorkOS redirect address is registered; docs/chat-signin.md). It also runs every 30 minutes. On failure it opens an
    issue (or comments on the one that is open).
