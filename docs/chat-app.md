@@ -1,4 +1,4 @@
-# Shamwari Chat: the R1 chat and R2 Lite PWA
+# Shamwari Chat: the R1 chat and R2 Lite PWA, at /chat/
 
 Tracking: #83. Native apps: `docs/app-plan.md` (#86). Tiers and budgets:
 `docs/tiered-access-design.md`. Owner direction, 2026-10-31: launching the chat
@@ -12,12 +12,11 @@ answer.
 
 ## Where it lives, and why
 
-**Its own Worker on the apex, at `https://shamwari.ai/lite/`: the light edge chat.** The marketing
-site is a separate Worker on `https://www.shamwari.ai`. Owner decision, 2026-10-31 (two Workers),
-and 2026-11-01 (the main Shamwari Chat, a LibreChat fork, owns `https://shamwari.ai/chat/`; this
-original build is kept as the light edge chat at `/lite/`, and how people are routed between the
-two is designed elsewhere). The full map, the build commands and the Cloudflare steps are in
-`docs/domains-and-deploy.md`.
+**Its own Worker on the apex, at `https://shamwari.ai/chat/`.** The marketing site is a separate
+Worker on `https://www.shamwari.ai`. Owner decision, 2026-10-31 (two Workers), and 2026-11-18 (this
+app is the chat, at `/chat/`; see "Decision, 2026-11-18" below). It was served at `/lite/` from
+2026-11-01 to 2026-11-18, while a LibreChat fork was planned for `/chat/`. The full map, the build
+commands and the Cloudflare steps are in `docs/domains-and-deploy.md`.
 
 - The app is the root product, so it gets the short hostname. The marketing site is
   `www`. Neither Worker can serve the other's pages: `site/check.mjs` fails the build if
@@ -26,10 +25,59 @@ two is designed elsewhere). The full map, the build commands and the Cloudflare 
   and the checks are shared, but two Astro configs (`astro.config.mjs` for marketing,
   `astro.app.config.mjs` for the app) with separate source (`app-src/`) and public
   (`app-public/`) folders. Chat JS is built only into the app.
-- The service worker is scoped to `/lite/` on the app origin. The root `/` answers 302
-  to `/chat/` (the main chat) for now; `/chat/` itself is not served by this Worker.
+- The service worker is scoped to `/chat/` on the app origin. The root `/` answers 302
+  to `/chat/` for someone signed in, and to sign-in for anyone else.
+- `/lite` and everything under `/lite/` answer 301 to the same path under `/chat/` (query kept) for
+  one release, except the old sign-in addresses (`/lite/auth/*`, `/lite/callback`), which keep their
+  own behaviour (`docs/chat-signin.md`), and `/lite/sw.js`, which is the retiring service worker
+  described under "Moving from /lite/ to /chat/" below.
 - The cost is one more Workers Builds project to create and a hostname to move; both are
   dashboard steps in the doc above.
+
+## Decision, 2026-11-18: one chat, ours, at /chat/
+
+Owner decision, 2026-11-18 (#328): **"Go ahead, drop LibreChat and make Lite the chat."** This
+supersedes the plan in #146 (Shamwari Chat on a LibreChat fork at `/chat/`, with this app kept as the
+light edge chat at `/lite/`).
+
+- **One app we own.** The chat is this app, built in this repository, instead of a fork of a large
+  third-party application whose upstream changes would have to be merged in for every release.
+- **One Rule 1 boundary.** Every question goes from this page straight to the gateway, where the scope
+  gate decides where it may go. LibreChat would have been a second server holding conversations,
+  with its own guard (`chat/librechat/guard.mjs`) needed to prove it could reach nothing but the gateway.
+- **No MongoDB, Fly app or fork-merge burden.** The fork needed its own database, its own Fly app and
+  tunnel, and a reverse-proxy Worker (`chat/proxy/`) to put it under `/chat/`. None of it was ever
+  deployed: `https://shamwari.ai/chat/` answered 404, and no Fly app, database or Worker route existed.
+
+Removed in the same change: `chat/librechat/` (config, the Rule 1 guard, the build script and the
+stub-gateway e2e), `chat/proxy/` (the `/chat` reverse proxy Worker, which existed only to serve
+LibreChat under that path), their CI jobs and Dependabot entries, and `docs/librechat.md` (the design
+and runbook; it is in the git history before this change).
+
+## Moving from /lite/ to /chat/
+
+A browser that used the app at `/lite/` has a service worker registered for `/lite/` that answers
+every navigation there from its cache, so it would never see the 301 from the Worker on its own. The
+build therefore still writes `/lite/sw.js`, as a **retiring worker** (`site/scripts/post-build.mjs`):
+
+1. The old page asks for an update as it always does (on load, when the tab comes back to the front,
+   and every hour; `chat/update-reload.ts`). The browser fetches `/lite/sw.js` (public, `no-cache`),
+   finds it changed and installs the retiring worker, which takes over at once.
+2. On taking over it deletes the old app's cache (the cache holding the `/lite/` shell, and no other),
+   unregisters itself and claims the open pages. It has no fetch handler, so from then on every request
+   for `/lite/...` goes to the network.
+3. The takeover fires `controllerchange`, and the old page reloads once, when nothing is being sent or
+   written, exactly as for any update. With no service worker left, the reload reaches the Worker, which
+   answers 301 to the same path under `/chat/`. The page at `/chat/` registers `/chat/sw.js`.
+
+Chats, the queue and settings are in IndexedDB and local storage, which belong to the origin, not to
+a path, so they are all still there under `/chat/`. The session cookie is `Path=/` and carries over too.
+
+**An installed app (PWA) from `/lite/`** keeps its old identity (manifest `id` `/lite/`): it still opens
+`/lite/`, which now redirects to `/chat/`, outside that app's scope, so Chrome shows the address bar
+over the page. Everything works, but people get a clean window by installing again from
+`https://shamwari.ai/chat/` (manifest `id` `/chat/`, a different app) and removing the old one.
+After the redirect release, `/lite/` and its retiring worker can be removed.
 
 ## Built for poor devices
 
@@ -97,15 +145,15 @@ use `plainText()`, so the clipboard and a WhatsApp message get plain words. Refs
 
 ## Installable and offline
 
-- **Install.** A web manifest scoped to `/lite/` (standalone, sodalite theme,
+- **Install.** A web manifest scoped to `/chat/` (standalone, sodalite theme,
   192/512 and maskable icons) makes it installable from the browser on Android.
   iOS has no install event, so there people use Share, then Add to Home Screen;
   the page carries the Apple meta tags for that.
-- **Service worker** (`/lite/sw.js`, scope `/lite/`, generated by
+- **Service worker** (`/chat/sw.js`, scope `/chat/`, generated by
   `site/scripts/post-build.mjs` with the exact hashed files of that build).
   The shell opens from cache first and refreshes in the background, so it paints
-  at once on a bad connection. It answers only same-origin GETs under `/lite/`
-  and `/lite/_astro/`; the API is another origin and a POST, so a question and its
+  at once on a bad connection. It answers only same-origin GETs under `/chat/`
+  and `/chat/_astro/`; the API is another origin and a POST, so a question and its
   answer never enter a cache. `check.mjs` fails the build if a precached file
   is missing or the worker could touch API traffic.
 - **Offline queue.** Offline, or when an answer does not arrive (a timeout on
@@ -118,7 +166,7 @@ use `plainText()`, so the clipboard and a WhatsApp message get plain words. Refs
   gateway instead of answered and metered twice. Background Sync is not used:
   iOS does not have it, and the people this is for are often on iOS WebViews
   or old Android.
-- **Content Security Policy** on `/lite/*` (written to `dist/_headers`, which
+- **Content Security Policy** on `/chat/*` (written to `dist/_headers`, which
   Workers static assets honours): `script-src 'self'`, no inline script or
   style, `connect-src` only this site and the one API origin the build was
   pointed at, `frame-ancestors 'none'`. The e2e tests run under the same
@@ -233,7 +281,7 @@ the second replaces the first without touching the chat:
 cd site
 npm ci
 node chat-mock/server.mjs        # gateway stand-in on http://localhost:8788
-PUBLIC_SHAMWARI_API=http://localhost:8788 npm run dev:app   # http://localhost:4321/lite/
+PUBLIC_SHAMWARI_API=http://localhost:8788 npm run dev:app   # http://localhost:4321/chat/
 ```
 
 Developer keys for the mock: `sk_shamwari_mock_ok` answers; `_402`, `_403`,
