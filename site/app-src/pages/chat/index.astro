@@ -1,7 +1,7 @@
 ---
 // Shamwari Chat: the R1 chat app and R2 Lite PWA from shamwari-ai/shamwari#83.
 //
-// This page belongs to the APP Worker (shamwari-app, https://shamwari.ai/lite/, the light edge chat), built by
+// This page belongs to the APP Worker (shamwari-app, https://shamwari.ai/chat/, the chat), built by
 // astro.app.config.mjs from app-src/. The marketing Worker (shamwari-site, https://www.shamwari.ai) never contains it.
 //
 // The frame is drawn here in plain HTML (issue #329: modelled on OpenCode's web app, dense and text first): a thin
@@ -33,7 +33,7 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Shamwari Chat</title>
   <meta name="description" content="Ask in Shona, Ndebele or English about farming, weather, news and places, and get the answer with its source." />
-  <link rel="canonical" href="https://shamwari.ai/lite/" />
+  <link rel="canonical" href="https://shamwari.ai/chat/" />
   <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
   <link rel="icon" type="image/png" href="/favicon.png" sizes="256x256" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -42,7 +42,7 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
   <meta name="theme-color" content="#0e0d0c" media="(prefers-color-scheme: dark)" />
   <meta name="shamwari-api" content={api} />
   <meta name="shamwari-auth" content={authMode} />
-  <link rel="manifest" href="/lite/manifest.webmanifest" />
+  <link rel="manifest" href="/chat/manifest.webmanifest" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Shamwari" />
 </head>
@@ -53,7 +53,7 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
       that the top bar's panel button hides and shows. */}
   <aside id="chat-sidebar" popover aria-label={en.yourChats} data-slot="app-sidebar">
     <div class="side-head" data-slot="sidebar-head">
-      <a href="/lite/" class="brand" aria-label="shamwari"><img src="/apple-touch-icon.png" alt="" width="20" height="20" /><span class="wordmark">shamwari</span></a>
+      <a href="/chat/" class="brand" aria-label="shamwari"><img src="/apple-touch-icon.png" alt="" width="20" height="20" /><span class="wordmark">shamwari</span></a>
       <button type="button" class="icon-btn side-close" popovertarget="chat-sidebar" popovertargetaction="hide" aria-label={en.closeChats}><Icon name="close" class="i" /></button>
     </div>
     <div class="chats" data-slot="sidebar-body">
@@ -141,7 +141,7 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
     <header class="topbar" data-slot="app-topbar">
       <button type="button" class="icon-btn menu-btn" popovertarget="chat-sidebar" aria-label={en.openChats}><Icon name="menu" class="i" /></button>
       <button type="button" id="side-toggle" class="icon-btn side-toggle" aria-pressed="false" aria-controls="chat-sidebar" aria-label={en.collapseChats} data-i18n-attr="aria-label:collapseChats"><Icon name="panel-left" class="i" /></button>
-      <a href="/lite/" class="brand" aria-label="shamwari"><img src="/apple-touch-icon.png" alt="" width="20" height="20" /><span class="wordmark">shamwari</span></a>
+      <a href="/chat/" class="brand" aria-label="shamwari"><img src="/apple-touch-icon.png" alt="" width="20" height="20" /><span class="wordmark">shamwari</span></a>
       {/* The chat's title (the page's one heading) and a quiet subtitle; the whole block is one button that opens the chat's menu. */}
       <div class="chat-head">
         <div class="chat-heading">
@@ -184,7 +184,7 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
             <button type="button" class="btn chip" data-example data-i18n="example2">What is the news on maize prices this week?</button>
             <button type="button" class="btn chip" data-example data-i18n="example3">Where is the nearest market in Masvingo?</button>
           </div>
-          <p class="trust"><span data-i18n="wrongNote">{en.wrongNote}</span><span aria-hidden="true"> · </span><a class="footer-link" href="/lite/disclaimer/" data-i18n="privacyLink">{en.privacyLink}</a></p>
+          <p class="trust"><span data-i18n="wrongNote">{en.wrongNote}</span><span aria-hidden="true"> · </span><a class="footer-link" href="/chat/disclaimer/" data-i18n="privacyLink">{en.privacyLink}</a></p>
         </section>
         <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
         <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>
@@ -242,7 +242,7 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
     <p id="signin-failed" class="small bad" role="alert" hidden data-i18n="signInFailed">We could not sign you in. Please try again.</p>
     <p id="signin-offline" class="small" role="status" hidden data-i18n="signinOffline">You are offline. Sign in when you are back online.</p>
     <p id="signin-note" class="small" role="status" hidden></p>
-    <a class="footer-link" href="/lite/disclaimer/" data-i18n="disclaimerLink">Disclaimer and privacy</a>
+    <a class="footer-link" href="/chat/disclaimer/" data-i18n="disclaimerLink">Disclaimer and privacy</a>
   </main>
   {/* A saved answer, opened from the drawer. */}
   <dialog id="artifact-view" class="sheet" aria-labelledby="artifact-title-view">
@@ -285,7 +285,7 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
       </section>
       <section class="settings-section" aria-labelledby="settings-about-title">
         <h3 id="settings-about-title" data-i18n="about">{en.about}</h3>
-        <a class="side-row" href="/lite/disclaimer/"><span data-i18n="disclaimerLink">{en.disclaimerLink}</span></a>
+        <a class="side-row" href="/chat/disclaimer/"><span data-i18n="disclaimerLink">{en.disclaimerLink}</span></a>
         <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener"><span data-i18n="useApi">Use the API</span><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span></a>
         <p class="version-line" data-current-version-line hidden><span data-i18n="version">Version</span> <span data-current-version></span></p>
       </section>

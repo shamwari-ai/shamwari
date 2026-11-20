@@ -37,7 +37,7 @@ if (apiBase) {
 }
 
 // Offline shell. Registered after load so it never competes with the first paint,
-// and scoped to /lite/ so the marketing pages are never served from it.
+// and scoped to /chat/ so the marketing pages are never served from it.
 if ('serviceWorker' in navigator) {
   // Updates are forced (chat/update-reload.ts): a new release's worker takes over at once and the page reloads once,
   // when nothing is being sent or written. There is no "waiting" worker to offer any more.
@@ -57,7 +57,7 @@ if ('serviceWorker' in navigator) {
   };
   addEventListener('load', () => {
     navigator.serviceWorker
-      .register('/lite/sw.js', { scope: '/lite/', updateViaCache: 'none' })
+      .register('/chat/sw.js', { scope: '/chat/', updateViaCache: 'none' })
       .then((reg) => {
         showCurrent(navigator.serviceWorker.controller ?? reg.active);
         startUpdateChecks(reg, { document, setInterval: (fn, ms) => setInterval(fn, ms) });

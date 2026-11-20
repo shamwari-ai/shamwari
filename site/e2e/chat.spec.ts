@@ -319,7 +319,7 @@ test('the chat has no small print under it: a link opens the disclaimer and priv
   await openChats(page);
   await openAccount(page);
   await page.getByRole('link', { name: 'Disclaimer and privacy' }).click();
-  await expect(page).toHaveURL(/\/lite\/disclaimer\/$/);
+  await expect(page).toHaveURL(/\/chat\/disclaimer\/$/);
   await expect(page.getByText('not the text of your question or its answer')).toBeVisible();
   await expect(page.getByText('Answers can be wrong', { exact: false }).first()).toBeVisible();
   await expect(page.getByText(/legal advice/i)).toHaveCount(0);

@@ -1166,7 +1166,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   });
   const mukokoBtn = $<HTMLButtonElement>('#mukoko-signin');
   if (auth.kind === 'mukoko') {
-    // The session Worker sends a failed sign-in back here as /lite/?signin=failed. Say so kindly, and
+    // The session Worker sends a failed sign-in back here as /chat/?signin=failed. Say so kindly, and
     // drop the parameter so a reload does not say it again.
     const params = new URLSearchParams(location.search);
     if (params.get('signin') === 'failed') {

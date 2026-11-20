@@ -100,7 +100,7 @@ export async function commandsFor(host: CommandHost, only?: 'skills'): Promise<C
   out.push({ label: s.settings, run: press('#open-settings') });
   if (shown('#install')) out.push({ label: s.install, run: press('#install') });
   if (shown('#signout')) out.push({ label: el('#signout')!.textContent ?? s.signOut, run: press('#signout') });
-  out.push({ label: s.disclaimerLink, run: () => location.assign('/lite/disclaimer/') });
+  out.push({ label: s.disclaimerLink, run: () => location.assign('/chat/disclaimer/') });
   return out;
 }
 

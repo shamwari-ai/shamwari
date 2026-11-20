@@ -12,7 +12,7 @@ describe('the Skills tab is on unless a build turns it off (a SKILL.md reader an
   });
 
   it('the page renders the Skills tab, its panel, and the Plugins row that opens them only behind the switch', () => {
-    const page = readFileSync(new URL('../../app-src/pages/lite/index.astro', import.meta.url), 'utf8');
+    const page = readFileSync(new URL('../../app-src/pages/chat/index.astro', import.meta.url), 'utf8');
     expect(page).toContain('skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS)');
     // Every mention of the tab and panel sits inside a {showSkills && ...} block, and the opening row in a {showSkills ? ...} one.
     const outside = page.replace(/\{showSkills && \([\s\S]*?\)\}/g, '').replace(/\{showSkills\s*\n\s*\?[\s\S]*?\)\}/g, '');
@@ -20,7 +20,7 @@ describe('the Skills tab is on unless a build turns it off (a SKILL.md reader an
   });
 
   it('no comment in the chat still says there is no SKILL.md loader', () => {
-    for (const f of ['../../app-src/pages/lite/index.astro', '../../src/chat/features.ts', '../../src/chat/plugins.ts', '../../check.mjs']) {
+    for (const f of ['../../app-src/pages/chat/index.astro', '../../src/chat/features.ts', '../../src/chat/plugins.ts', '../../check.mjs']) {
       expect(readFileSync(new URL(f, import.meta.url), 'utf8'), f).not.toMatch(/no SKILL\.md loader|until a SKILL\.md loader|until a loader exists/i);
     }
   });
