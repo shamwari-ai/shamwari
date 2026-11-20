@@ -1,19 +1,19 @@
 ---
 // Shamwari Chat: the R1 chat app and R2 Lite PWA from shamwari-ai/shamwari#83.
 //
-// This page belongs to the APP Worker (shamwari-app, https://shamwari.ai/chat/, the chat),
-// built by astro.app.config.mjs from app-src/. The marketing Worker
-// (shamwari-site, https://www.shamwari.ai) never contains it.
+// This page belongs to the APP Worker (shamwari-app, https://shamwari.ai/chat/, the chat), built by
+// astro.app.config.mjs from app-src/. The marketing Worker (shamwari-site, https://www.shamwari.ai) never contains it.
 //
-// Its frame is Mzizi's AppShell (the standard app chrome, mounted once): the brand and the two icons in
-// the top bar, the chat history in the drawer, a quiet footer. No web fonts and no marketing header, and
-// the only client JS on the site. The page is complete English HTML without JavaScript; the script
-// translates it and runs the chat.
+// The frame is drawn here in plain HTML (issue #329: modelled on OpenCode's web app, dense and text first): a thin
+// session list on the left (a slide-over below 64rem), a small top bar with the chat's title and a few icon actions, one
+// reading column, and one prompt box docked at the bottom. The data-slot names are Mzizi's AppShell's, so the tests and
+// the script that knew that frame still find its parts. No web fonts, no Tailwind, and the only client JS on the site.
+// The page is complete English HTML without JavaScript; the script translates it and runs the chat. Comments are Astro
+// comments, so none of them ship.
 import '../../../src/chat/chat.css';
 import { en } from '../../../src/chat/strings';
 import { authModeOf } from '../../../src/chat/auth-mode';
 import { skillsEnabled } from '../../../src/chat/features';
-import AppShell from '@bundu/ui/app/AppShell.astro';
 import Icon from '@bundu/ui/Icon.astro';
 
 // Fixed at build time and never read from the URL (see chat/main.ts).
@@ -24,6 +24,7 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
 // The Skills tab: Agent Skills read from and written as SKILL.md (chat/skill.ts), with a builder (chat/skills-ui.ts). On by
 // default; a build with PUBLIC_CHAT_SKILLS=false leaves it out, and Plugins goes back to a "Coming soon" row (chat/features.ts).
 const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
+const x = '<path d="M6 6l12 12M18 6L6 18" />';
 ---
 <!doctype html>
 <html lang="en" class="app">
@@ -36,7 +37,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
   <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
   <link rel="icon" type="image/png" href="/favicon.png" sizes="256x256" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <!-- The browser bar takes the page's own colour in each scheme (the page background token), not the brand indigo. -->
+  {/* The browser bar takes the page's own colour in each scheme (the page background token). */}
   <meta name="theme-color" content="#f3f3f1" media="(prefers-color-scheme: light)" />
   <meta name="theme-color" content="#0e0d0c" media="(prefers-color-scheme: dark)" />
   <meta name="shamwari-api" content={api} />
@@ -45,38 +46,24 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Shamwari" />
 </head>
-<body class="text-base">
+<body>
   <a class="skip" href="#q" data-i18n="skipToQuestion">Skip to the question box</a>
-  <AppShell id="chat" accent="sodalite" navLabel="Chats" sidebarLabel="Your chats">
-    <!-- The brand, in the drawer's head and (below 64rem) in the top bar. Lower-case: a wordmark is. -->
-    <div slot="workspace" class="side-head">
-      <a href="/chat/" class="brand" aria-label="shamwari">
-        <img src="/apple-touch-icon.png" alt="" width="28" height="28" />
-        <span class="wordmark">shamwari</span>
-      </a>
-      <!-- Collapse: the shell's own checkbox (chat-collapse), driven from the top of the drawer where people look for it. -->
-      <label for="chat-collapse" class="side-collapse" title={en.collapseChats}>
-        <Icon name="panel-left" class="h-4 w-4" />
-        <span class="sr-only" data-i18n="collapseChats">{en.collapseChats}</span>
-      </label>
+  <div data-slot="app-shell" id="chat">
+  {/* The session list. Below 64rem a popover laid over the page (Escape and a tap outside close it); from 64rem a column
+      that the top bar's panel button hides and shows. */}
+  <aside id="chat-sidebar" popover aria-label={en.yourChats} data-slot="app-sidebar">
+    <div class="side-head" data-slot="sidebar-head">
+      <a href="/chat/" class="brand" aria-label="shamwari"><img src="/apple-touch-icon.png" alt="" width="20" height="20" /><span class="wordmark">shamwari</span></a>
+      <button type="button" class="icon-btn side-close" popovertarget="chat-sidebar" popovertargetaction="hide" aria-label={en.closeChats}><Icon name="close" class="i" /></button>
     </div>
-    <a slot="brand" href="/chat/" class="brand" aria-label="shamwari">
-      <img src="/apple-touch-icon.png" alt="" width="28" height="28" />
-      <span class="wordmark">shamwari</span>
-    </a>
-
-    <!-- The drawer: what is kept on this device. Pinned chats and projects, then projects, loose chats and saved
-         answers. The script fills the lists; with no script the page is just the empty states. -->
-    <div slot="nav" class="chats">
-      <!-- The sections of the drawer, at the top. Each opens its own list below; the script switches them. Factory
-           is a planned product, so it is a row that says so and is not a link or a button. -->
+    <div class="chats" data-slot="sidebar-body">
       <ul class="side-list side-actions">
-          <li><button type="button" id="side-new" class="side-row"><Icon name="plus" class="side-icon" /><span data-i18n="newChat">{en.newChat}</span></button></li>
-          <li><button type="button" id="side-search" class="side-row" aria-expanded="false" aria-controls="side-filter-wrap"><Icon name="search" class="side-icon" /><span data-i18n="searchChats">{en.searchChats}</span></button></li>
-          <li id="side-filter-wrap" hidden>
-            <label class="sr-only" for="side-filter" data-i18n="searchChats">{en.searchChats}</label>
-            <input id="side-filter" type="search" class="side-filter" autocomplete="off" data-i18n-attr="placeholder:searchChats" placeholder={en.searchChats} />
-          </li>
+        <li><button type="button" id="side-new" class="side-row"><Icon name="plus" class="side-icon" /><span data-i18n="newChat">{en.newChat}</span></button></li>
+        <li><button type="button" id="side-search" class="side-row" aria-expanded="false" aria-controls="side-filter-wrap"><Icon name="search" class="side-icon" /><span data-i18n="searchChats">{en.searchChats}</span></button></li>
+        <li id="side-filter-wrap" hidden>
+          <label class="sr-only" for="side-filter" data-i18n="searchChats">{en.searchChats}</label>
+          <input id="side-filter" type="search" class="side-filter" autocomplete="off" data-i18n-attr="placeholder:searchChats" placeholder={en.searchChats} />
+        </li>
       </ul>
       <nav class="side-primary" aria-label={en.sections} data-i18n-attr="aria-label:sections">
         <ul class="side-list">
@@ -89,104 +76,90 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
             : (<li><span class="side-row side-disabled" aria-disabled="true"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span><span class="side-chip" data-i18n="comingSoon">{en.comingSoon}</span></span></li>)}
         </ul>
       </nav>
-      <!-- The menu of one chat in the list (opened by its "..."): pin, project, delete. One shared popover, inside the drawer so
-           opening it does not close the drawer. -->
-      <div id="row-menu" class="chat-tools row-menu" popover role="group" aria-label={en.chatOptions} data-i18n-attr="aria-label:chatOptions">
+      {/* One chat's own menu in the list (its "..."): pin, project, delete. Inside the drawer, so opening it keeps the drawer open. */}
+      <div id="row-menu" class="menu row-menu" popover role="group" aria-label={en.chatOptions} data-i18n-attr="aria-label:chatOptions">
         <button type="button" id="row-pin" class="btn" aria-pressed="false">{en.pin}</button>
         <label class="sr-only" for="row-project" data-i18n="project">{en.project}</label>
         <select id="row-project"></select>
         <button type="button" id="row-delete" class="btn danger" data-i18n="deleteChat">{en.deleteChat}</button>
       </div>
       <div class="side-scroll">
-      <div data-panel="chat">
-      <details id="side-pinned" class="side-group" open hidden>
-        <summary class="chats-title"><span data-i18n="pinned">{en.pinned}</span></summary>
-        <ul id="pinned-list" class="side-list"></ul>
-      </details>
-      <details id="side-chats" class="side-group" open hidden>
-        <summary class="chats-title"><span data-i18n="recents">{en.recents}</span></summary>
-        <div id="history">
-          <ul id="history-list" class="side-list"></ul>
+        <div data-panel="chat">
+          <details id="side-pinned" class="side-group" open hidden>
+            <summary class="chats-title"><span data-i18n="pinned">{en.pinned}</span></summary>
+            <ul id="pinned-list" class="side-list"></ul>
+          </details>
+          <details id="side-chats" class="side-group" open hidden>
+            <summary class="chats-title"><span data-i18n="recents">{en.recents}</span></summary>
+            <div id="history"><ul id="history-list" class="side-list"></ul></div>
+          </details>
+          <p id="chats-empty" class="side-empty" data-i18n="chatsEmpty">{en.chatsEmpty}</p>
         </div>
-      </details>
-      <p id="chats-empty" class="side-empty" data-i18n="chatsEmpty">{en.chatsEmpty}</p>
-      </div>
-      <div data-panel="projects" hidden>
-      <section aria-labelledby="projects-title">
-        <h2 id="projects-title" class="chats-title" data-i18n="projects">Projects</h2>
-        <ul id="project-list" class="side-list"></ul>
-        <button type="button" id="new-project" class="btn link" aria-expanded="false" aria-controls="project-form" data-i18n="newProject">New project</button>
-        <form id="project-form" class="row side-form" autocomplete="off" hidden>
-          <label class="sr-only" for="project-name" data-i18n="projectName">Project name</label>
-          <input id="project-name" maxlength="60" data-i18n-attr="placeholder:projectName" placeholder="Project name" />
-          <button type="submit" class="btn" data-i18n="createProject">Create project</button>
-        </form>
-      </section>
-      </div>
-      <div data-panel="artifacts" hidden>
-      <section id="side-artifacts" aria-labelledby="artifacts-title" hidden>
-        <h2 id="artifacts-title" class="chats-title" data-i18n="artifacts">Artifacts</h2>
-        <ul id="artifact-list" class="side-list"></ul>
-      </section>
-      <p id="artifacts-empty" class="side-empty" data-i18n="artifactsEmpty">{en.artifactsEmpty}</p>
-      </div>
-      <!-- Skills first: the person's Agent Skills, the builder, import and export (chat/skills-ui.ts fills the panel). Plugins and
-           MCP: nothing exists behind them yet, so each says so. The scripts load only when this panel is first opened. -->
-      <div data-panel="plugins" hidden>
-        <div role="tablist" class="side-tabs" aria-label={en.navPlugins} data-i18n-attr="aria-label:navPlugins">
-          {showSkills && (<button type="button" role="tab" id="tab-skills" aria-controls="tabpanel-skills" aria-selected="true" data-i18n="skillsTab">{en.skillsTab}</button>)}
-          <button type="button" role="tab" id="tab-plugins" aria-controls="tabpanel-plugins" aria-selected={showSkills ? 'false' : 'true'} tabindex={showSkills ? '-1' : undefined} data-i18n="pluginsTab">{en.pluginsTab}</button>
-          <button type="button" role="tab" id="tab-mcp" aria-controls="tabpanel-mcp" aria-selected="false" tabindex="-1" data-i18n="mcpTab">{en.mcpTab}</button>
+        <div data-panel="projects" hidden>
+          <section aria-labelledby="projects-title">
+            <h2 id="projects-title" class="chats-title" data-i18n="projects">Projects</h2>
+            <ul id="project-list" class="side-list"></ul>
+            <button type="button" id="new-project" class="btn link" aria-expanded="false" aria-controls="project-form" data-i18n="newProject">New project</button>
+            <form id="project-form" class="row side-form" autocomplete="off" hidden>
+              <label class="sr-only" for="project-name" data-i18n="projectName">Project name</label>
+              <input id="project-name" maxlength="60" data-i18n-attr="placeholder:projectName" placeholder="Project name" />
+              <button type="submit" class="btn" data-i18n="createProject">Create project</button>
+            </form>
+          </section>
         </div>
-        {showSkills && (<div role="tabpanel" id="tabpanel-skills" aria-labelledby="tab-skills"><p class="side-empty" data-i18n="skillsEmpty">{en.skillsEmpty}</p></div>)}
-        <div role="tabpanel" id="tabpanel-plugins" aria-labelledby="tab-plugins" hidden={showSkills}><p class="side-empty" data-i18n="pluginsEmpty">{en.pluginsEmpty}</p></div>
-        <div role="tabpanel" id="tabpanel-mcp" aria-labelledby="tab-mcp" hidden><p class="side-empty" data-i18n="mcpEmpty">{en.mcpEmpty}</p></div>
-        <p class="side-empty" data-i18n="thirdPartyNote">{en.thirdPartyNote}</p>
+        <div data-panel="artifacts" hidden>
+          <section id="side-artifacts" aria-labelledby="artifacts-title" hidden>
+            <h2 id="artifacts-title" class="chats-title" data-i18n="artifacts">Artifacts</h2>
+            <ul id="artifact-list" class="side-list"></ul>
+          </section>
+          <p id="artifacts-empty" class="side-empty" data-i18n="artifactsEmpty">{en.artifactsEmpty}</p>
+        </div>
+        {/* Skills first: the person's Agent Skills, the builder, import and export (chat/skills-ui.ts fills the panel). Plugins
+            and MCP have nothing behind them yet, and each says so. The scripts load only when this panel is first opened. */}
+        <div data-panel="plugins" hidden>
+          <div role="tablist" class="side-tabs" aria-label={en.navPlugins} data-i18n-attr="aria-label:navPlugins">
+            {showSkills && (<button type="button" role="tab" id="tab-skills" aria-controls="tabpanel-skills" aria-selected="true" data-i18n="skillsTab">{en.skillsTab}</button>)}
+            <button type="button" role="tab" id="tab-plugins" aria-controls="tabpanel-plugins" aria-selected={showSkills ? 'false' : 'true'} tabindex={showSkills ? '-1' : undefined} data-i18n="pluginsTab">{en.pluginsTab}</button>
+            <button type="button" role="tab" id="tab-mcp" aria-controls="tabpanel-mcp" aria-selected="false" tabindex="-1" data-i18n="mcpTab">{en.mcpTab}</button>
+          </div>
+          {showSkills && (<div role="tabpanel" id="tabpanel-skills" aria-labelledby="tab-skills"><p class="side-empty" data-i18n="skillsEmpty">{en.skillsEmpty}</p></div>)}
+          <div role="tabpanel" id="tabpanel-plugins" aria-labelledby="tab-plugins" hidden={showSkills}><p class="side-empty" data-i18n="pluginsEmpty">{en.pluginsEmpty}</p></div>
+          <div role="tabpanel" id="tabpanel-mcp" aria-labelledby="tab-mcp" hidden><p class="side-empty" data-i18n="mcpEmpty">{en.mcpEmpty}</p></div>
+          <p class="side-empty" data-i18n="thirdPartyNote">{en.thirdPartyNote}</p>
+        </div>
       </div>
-      </div>
-
-      <!-- Pinned to the bottom of the drawer: the account row. It opens the Settings dialog (language, delete history, install,
-           the disclaimer, the API link and the version), none of which sit in the drawer itself. -->
+      {/* The account row: it opens Settings (language, offline mode, delete history, install, the disclaimer, the API, the version). */}
       <div class="side-foot">
         <nav class="side-nav" aria-label={en.settings} data-i18n-attr="aria-label:settings">
-          <button type="button" id="open-settings" class="side-row side-account" aria-haspopup="dialog">
-            <span class="avatar" aria-hidden="true"><Icon name="user" class="h-4 w-4" /></span>
-            <span class="side-account-name" data-i18n="settings">{en.settings}</span>
-            <Icon name="sliders" class="side-icon side-gear" />
-          </button>
+          <button type="button" id="open-settings" class="side-row" aria-haspopup="dialog"><Icon name="sliders" class="side-icon" /><span data-i18n="settings">{en.settings}</span></button>
         </nav>
       </div>
     </div>
+  </aside>
 
-    <!-- The top bar's actions, at the right: OFFLINE MODE (a switch; on, nothing is sent and nothing replays), then a new
-         chat. #new-chat is a wrapper the script listens on. -->
-    <!-- The chat's title and, beside it, its "..." menu (pin, project, delete). The menu shows once there is a chat. -->
-    <div slot="actions" class="chat-head">
-      <!-- Two lines: the title (the page's one heading) and a quiet subtitle. The block is ONE tappable target, an invisible button laid over
-           both lines (49px), that opens the chat menu; the subtitle itself is only text. -->
-      <div class="chat-heading">
-        <h1 id="chat-title" class="chat-title sr-only" data-i18n="appName">{en.appName}</h1>
-        <p id="chat-sub" class="chat-sub" hidden><span id="chat-sub-text"></span><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg></p>
-        <button type="button" id="chat-title-hit" class="chat-hit" popovertarget="chat-tools" aria-haspopup="true" hidden data-i18n-attr="aria-label:chatOptions" aria-label={en.chatOptions}></button>
+  <div data-slot="app-main">
+    <header class="topbar" data-slot="app-topbar">
+      <button type="button" class="icon-btn menu-btn" popovertarget="chat-sidebar" aria-label={en.openChats}><Icon name="menu" class="i" /></button>
+      <button type="button" id="side-toggle" class="icon-btn side-toggle" aria-pressed="false" aria-controls="chat-sidebar" aria-label={en.collapseChats} data-i18n-attr="aria-label:collapseChats"><Icon name="panel-left" class="i" /></button>
+      <a href="/chat/" class="brand" aria-label="shamwari"><img src="/apple-touch-icon.png" alt="" width="20" height="20" /><span class="wordmark">shamwari</span></a>
+      {/* The chat's title (the page's one heading) and a quiet subtitle; the whole block is one button that opens the chat's menu. */}
+      <div class="chat-head">
+        <div class="chat-heading">
+          <h1 id="chat-title" class="chat-title sr-only" data-i18n="appName">{en.appName}</h1>
+          <p id="chat-sub" class="chat-sub" hidden><span id="chat-sub-text"></span></p>
+          <button type="button" id="chat-title-hit" class="chat-hit" popovertarget="chat-tools" aria-haspopup="true" hidden data-i18n-attr="aria-label:chatOptions" aria-label={en.chatOptions}></button>
+        </div>
+        <button type="button" id="chat-menu" class="icon-btn" popovertarget="chat-tools" aria-haspopup="true" hidden data-i18n-attr="aria-label:chatOptions" aria-label={en.chatOptions}><Icon name="more" class="i" /></button>
       </div>
-      <button type="button" id="chat-menu" class="bar-action chat-menu-btn" popovertarget="chat-tools" aria-haspopup="true" hidden data-i18n-attr="aria-label:chatOptions" aria-label={en.chatOptions}>
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8" /><circle cx="12" cy="12" r="1.8" /><circle cx="19" cy="12" r="1.8" /></svg>
-      </button>
-    </div>
-    <button slot="actions" type="button" id="offline-badge" class="bar-action offline-badge" hidden>
-      <Icon name="globe" class="h-5 w-5" />
-      <span class="sr-only bar-label" data-i18n="offlineMode">{en.offlineMode}</span>
-    </button>
-    <span slot="actions" id="new-chat" class="contents">
-      <button type="button" class="bar-action">
-        <Icon name="plus" class="h-5 w-5" />
-        <span class="sr-only bar-label" data-i18n="newChat">New chat</span>
-      </button>
-    </span>
+      <div class="bar-actions">
+        <button type="button" id="open-palette" class="bar-action palette-btn" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K"><Icon name="terminal" class="i" /><span class="sr-only" data-i18n="commands">{en.commands}</span><kbd class="kbd" aria-hidden="true">Ctrl K</kbd></button>
+        <button type="button" id="offline-badge" class="bar-action offline-badge" hidden><Icon name="globe" class="i" /><span class="sr-only bar-label" data-i18n="offlineMode">{en.offlineMode}</span></button>
+        <span id="new-chat" class="contents"><button type="button" class="bar-action"><Icon name="plus" class="i" /><span class="sr-only bar-label" data-i18n="newChat">New chat</span></button></span>
+      </div>
+    </header>
 
-
-    <!-- What can be done with the open chat: pin it, file it in a project, delete it. A popover opened by the "..." beside the chat's title. -->
-    <div id="chat-tools" class="chat-tools" popover role="group" aria-labelledby="chat-tools-title" hidden>
+    {/* The open chat's tools: pin it, file it in a project, delete it. A popover opened from the title or its "...". */}
+    <div id="chat-tools" class="menu" popover role="group" aria-labelledby="chat-tools-title" hidden>
       <h2 id="chat-tools-title" class="sr-only" data-i18n="chatOptions">Chat options</h2>
       <button type="button" id="pin-chat" class="btn" aria-pressed="false" data-i18n="pin">Pin this chat</button>
       <label class="sr-only" for="chat-project" data-i18n="project">Project</label>
@@ -194,88 +167,75 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
       <button type="button" id="delete-chat" class="btn danger" data-i18n="deleteChat">Delete chat</button>
     </div>
 
-    <div id="thread" tabindex="-1" class="thread">
-      <section id="empty" aria-labelledby="greeting">
-        <img class="mark" src="/apple-touch-icon.png" alt="" width="56" height="56" />
-        <h2 id="greeting" data-i18n="greeting">Hello, friend</h2>
-        <p class="lead" data-i18n="tagline">Ask about farming, weather, news and places. Get the answer with its source.</p>
-        <!-- First run only (the script reveals it when no language has been chosen yet): one tap switches the whole screen. The
-             labels are the languages' own names, so they are not translated. Settings keeps the radio group. -->
-        <div class="first-lang" id="first-lang" role="group" aria-label={en.language} data-i18n-attr="aria-label:language" hidden>
-          <button type="button" class="btn chip" data-first-lang="en" lang="en">English</button>
-          <button type="button" class="btn chip" data-first-lang="sn" lang="sn">ChiShona</button>
-          <button type="button" class="btn chip" data-first-lang="nd" lang="nd">isiNdebele</button>
-        </div>
-        <h3 id="try" class="try" data-i18n="tryAsking">Try asking</h3>
-        <div class="examples" role="group" aria-label={en.suggestedPrompts} data-i18n-attr="aria-label:suggestedPrompts">
-          <button type="button" class="btn chip" data-example data-i18n="example1">When should I plant maize if the rains come late?</button>
-          <button type="button" class="btn chip" data-example data-i18n="example2">What is the news on maize prices this week?</button>
-          <button type="button" class="btn chip" data-example data-i18n="example3">Where is the nearest market in Masvingo?</button>
-        </div>
-        <!-- Quiet, under the prompts: answers can be wrong, and the privacy page is one tap away (it was two, in Settings). -->
-        <p class="trust"><span data-i18n="wrongNote">{en.wrongNote}</span><span aria-hidden="true"> · </span><a class="footer-link" href="/chat/disclaimer/" data-i18n="privacyLink">{en.privacyLink}</a></p>
-      </section>
-
-      <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
-      <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>
-    </div>
-
-    <!-- The dock: the composer, pinned to the bottom of the screen. (Sign-in, when it is needed, is in the page above
-         it, not in the dock: a pinned panel would cover what a person is reading.) -->
-    <div class="dock">
-      <!-- Round, above the composer, shown by the script only while the messages are scrolled up from the end. -->
-      <button type="button" id="jump-latest" class="jump-latest" hidden aria-label={en.jumpLatest} data-i18n-attr="aria-label:jumpLatest">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7" /></svg>
-      </button>
-      <section class="ask" aria-labelledby="ask-title">
-        <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
-        <form id="composer" class="composer" autocomplete="off">
-          <!-- The status chip slot: the top of the card. Offline and offline-mode notices sit here, one quiet line each, with an X. -->
-          <div class="status-chips">
-            <div id="offline-mode-note" class="status-chip" role="status" hidden>
-              <span data-i18n="offlineModeNote">{en.offlineModeNote}</span>
-              <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-            </div>
-            <!-- Which skills are on in this chat, and, for a personal one, that answers then come from cited sources only. -->
-            <div id="skills-note" class="status-chip skills-note" role="status" hidden><span id="skills-note-text"></span></div>
-            <div id="offline" class="status-chip" role="status" hidden>
-              <span data-i18n="offlineBanner">{en.offlineBanner}</span>
-              <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
-            </div>
+    <main id="main" tabindex="-1">
+      <div id="thread" tabindex="-1" class="thread">
+        <section id="empty" aria-labelledby="greeting">
+          <h2 id="greeting" data-i18n="greeting">Hello, friend</h2>
+          <p class="lead" data-i18n="tagline">Ask about farming, weather, news and places. Get the answer with its source.</p>
+          {/* First run only: one tap switches the whole screen. The labels are the languages' own names, so they are not translated. */}
+          <div class="first-lang" id="first-lang" role="group" aria-label={en.language} data-i18n-attr="aria-label:language" hidden>
+            <button type="button" class="btn chip" data-first-lang="en" lang="en">English</button>
+            <button type="button" class="btn chip" data-first-lang="sn" lang="sn">ChiShona</button>
+            <button type="button" class="btn chip" data-first-lang="nd" lang="nd">isiNdebele</button>
           </div>
-          <label class="sr-only" for="q" data-i18n="placeholder">Ask a question</label>
-          <ul id="attach-list" class="attach-list" hidden aria-label={en.attachments} data-i18n-attr="aria-label:attachments"></ul>
-          <textarea id="q" rows="1" enterkeyhint="send" data-i18n-attr="placeholder:placeholder" placeholder="Ask a question"></textarea>
-          <div class="composer-bar">
-            <button type="button" id="plus" class="bar-icon" aria-haspopup="true" aria-expanded="false" aria-controls="plus-menu" aria-label={en.addTo} data-i18n-attr="aria-label:addTo">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
-            </button>
-            <span class="composer-gap"></span>
-            <button type="button" id="mic" class="bar-icon" aria-pressed="false" aria-label={en.recordVoice} data-i18n-attr="aria-label:recordVoice">
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg>
-            </button>
-            <button type="submit" id="send" class="send-round" disabled aria-label={en.send} data-i18n-attr="aria-label:send">
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
-              <span class="sr-only" data-i18n="send">{en.send}</span>
-            </button>
+          <h3 id="try" class="try" data-i18n="tryAsking">Try asking</h3>
+          <div class="examples" role="group" aria-label={en.suggestedPrompts} data-i18n-attr="aria-label:suggestedPrompts">
+            <button type="button" class="btn chip" data-example data-i18n="example1">When should I plant maize if the rains come late?</button>
+            <button type="button" class="btn chip" data-example data-i18n="example2">What is the news on maize prices this week?</button>
+            <button type="button" class="btn chip" data-example data-i18n="example3">Where is the nearest market in Masvingo?</button>
           </div>
-        </form>
-        <!-- The "+" menu. Upload a file is all it holds for now: skills are turned on in the Skills tab (a shortcut here is a
-             follow-up). Files stay on this device; see chat/attach.ts. -->
-        <div id="plus-menu" class="chat-tools plus-menu" popover role="group" aria-label={en.addTo} data-i18n-attr="aria-label:addTo">
-          <button type="button" id="plus-upload" class="btn" data-i18n="uploadFile">{en.uploadFile}</button>
-        </div>
-        <input type="file" id="file-input" multiple hidden />
-        <p id="toast" class="toast" role="status"></p>
-      </section>
-    </div>
+          <p class="trust"><span data-i18n="wrongNote">{en.wrongNote}</span><span aria-hidden="true"> · </span><a class="footer-link" href="/chat/disclaimer/" data-i18n="privacyLink">{en.privacyLink}</a></p>
+        </section>
+        <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
+        <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>
+      </div>
 
-  </AppShell>
-  <!-- Signed out: a whole screen, and nothing else. No chat is shown behind it, and no prompt sits on top of one. With a
-       session the page never shows this; the Worker sends a request with none to the hosted sign-in, and the app goes
-       there itself when the session has ended. This is what a device sees when it cannot reach it (offline). -->
+      {/* The prompt box, docked at the bottom. */}
+      <div class="dock">
+        <button type="button" id="jump-latest" class="jump-latest" hidden aria-label={en.jumpLatest} data-i18n-attr="aria-label:jumpLatest"><Icon name="arrow-right" class="i down" /></button>
+        <section class="ask" aria-labelledby="ask-title">
+          <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
+          <form id="composer" class="composer" autocomplete="off">
+            {/* Status chips, at the top of the box: offline, offline mode, and which skills are on in this chat. */}
+            <div class="status-chips">
+              <div id="offline-mode-note" class="status-chip" role="status" hidden>
+                <span data-i18n="offlineModeNote">{en.offlineModeNote}</span>
+                <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" set:html={x} /></button>
+              </div>
+              <div id="skills-note" class="status-chip skills-note" role="status" hidden><span id="skills-note-text"></span></div>
+              <div id="offline" class="status-chip" role="status" hidden>
+                <span data-i18n="offlineBanner">{en.offlineBanner}</span>
+                <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" set:html={x} /></button>
+              </div>
+            </div>
+            <label class="sr-only" for="q" data-i18n="placeholder">Ask a question</label>
+            <ul id="attach-list" class="attach-list" hidden aria-label={en.attachments} data-i18n-attr="aria-label:attachments"></ul>
+            <textarea id="q" rows="1" enterkeyhint="send" aria-describedby="key-hints" data-i18n-attr="placeholder:placeholder" placeholder="Ask a question"></textarea>
+            <div class="composer-bar">
+              <button type="button" id="plus" class="bar-icon" aria-haspopup="true" aria-expanded="false" aria-controls="plus-menu" aria-label={en.addTo} data-i18n-attr="aria-label:addTo"><Icon name="plus" class="i" /></button>
+              {/* What kind of question this chat asks: General, or Personal while a personal skill is on (then nothing goes to an AI
+                  model). It shows the state and opens the skill commands; it never picks a scope (chat/app.ts). */}
+              <button type="button" id="mode-chip" class="mode-chip" aria-haspopup="dialog"><span class="sr-only" data-i18n="scopeLabel">{en.scopeLabel}</span><span id="mode-text" data-i18n="skillGeneral">{en.skillGeneral}</span></button>
+              <span class="composer-gap"></span>
+              <button type="button" id="mic" class="bar-icon" aria-pressed="false" aria-label={en.recordVoice} data-i18n-attr="aria-label:recordVoice"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" /></svg></button>
+              <button type="submit" id="send" class="send-round" disabled aria-label={en.send} data-i18n-attr="aria-label:send"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg><span class="sr-only" data-i18n="send">{en.send}</span></button>
+            </div>
+          </form>
+          <p id="key-hints" class="key-hints" data-i18n="keyHints">{en.keyHints}</p>
+          {/* The "+" menu: Upload a file. Files stay on this device; see chat/attach.ts. */}
+          <div id="plus-menu" class="menu plus-menu" popover role="group" aria-label={en.addTo} data-i18n-attr="aria-label:addTo">
+            <button type="button" id="plus-upload" class="btn" data-i18n="uploadFile">{en.uploadFile}</button>
+          </div>
+          <input type="file" id="file-input" multiple hidden />
+          <p id="toast" class="toast" role="status"></p>
+        </section>
+      </div>
+    </main>
+  </div>
+  </div>
+  {/* Signed out: a whole screen, and nothing else. With a session the page never shows this. */}
   <main id="auth" class="signin-screen" aria-labelledby="auth-title" hidden>
-    <img class="mark" src="/apple-touch-icon.png" alt="" width="72" height="72" />
+    <img class="mark" src="/apple-touch-icon.png" alt="" width="48" height="48" />
     <h1 id="auth-title" tabindex="-1" data-i18n="appName">Shamwari Chat</h1>
     <button type="button" id="mukoko-signin" class="btn primary" disabled aria-describedby="mukoko-soon" data-i18n="authMukoko">Sign in with Mukoko</button>
     <p id="mukoko-soon" class="small" data-i18n="authMukokoSoon">Mukoko sign-in is coming soon.</p>
@@ -284,8 +244,8 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
     <p id="signin-note" class="small" role="status" hidden></p>
     <a class="footer-link" href="/chat/disclaimer/" data-i18n="disclaimerLink">Disclaimer and privacy</a>
   </main>
-  <!-- A saved answer, opened from the drawer. A native dialog: focus is held and Escape closes it. -->
-  <dialog id="artifact-view" class="artifact-view" aria-labelledby="artifact-title-view">
+  {/* A saved answer, opened from the drawer. */}
+  <dialog id="artifact-view" class="sheet" aria-labelledby="artifact-title-view">
     <h2 id="artifact-title-view"></h2>
     <p id="artifact-text" class="artifact-text"></p>
     <ul id="artifact-cites" class="side-list"></ul>
@@ -295,8 +255,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
       <button type="button" id="artifact-close" class="btn primary" data-i18n="close">Close</button>
     </div>
   </dialog>
-  <!-- Settings: a modal of its own (native dialog: focus is held inside, Esc closes, the page behind is inert). It opens from
-       the drawer's foot; the drawer closes first. Full screen below 40rem, centred above. -->
+  {/* Settings: a modal (focus held, Esc closes, the page behind is inert). Full screen below 40rem, a centred box above. */}
   <dialog id="settings-dialog" class="settings-dialog" aria-labelledby="settings-title">
     <div class="settings-head">
       <h2 id="settings-title" data-i18n="settings">{en.settings}</h2>
@@ -306,9 +265,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
       <section class="settings-section" aria-labelledby="settings-lang-title">
         <h3 id="settings-lang-title" data-i18n="language">Language</h3>
         <div id="lang" class="radio-group" role="radiogroup" aria-labelledby="settings-lang-title" aria-describedby="review"></div>
-        <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">
-          This language is a draft and still needs review by a native speaker.
-        </p>
+        <p id="review" class="notice" data-review-note hidden data-i18n="reviewNote">This language is a draft and still needs review by a native speaker.</p>
       </section>
       <section class="settings-section" aria-labelledby="settings-conn-title">
         <h3 id="settings-conn-title" data-i18n="settingsConnection">{en.settingsConnection}</h3>
@@ -320,26 +277,22 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
       </section>
       <section class="settings-section" aria-labelledby="settings-data-title">
         <h3 id="settings-data-title" data-i18n="settingsData">{en.settingsData}</h3>
-        <div class="account-row">
+        <div class="row">
           <button type="button" id="delete-history" class="btn danger" data-i18n="deleteHistory">Delete history</button>
           <button type="button" id="signout" class="btn" hidden data-i18n="authDevClear">Remove key</button>
-        </div>
-        <div class="account-row">
           <button type="button" id="install" class="btn" hidden data-i18n="install">Install app</button>
         </div>
       </section>
       <section class="settings-section" aria-labelledby="settings-about-title">
         <h3 id="settings-about-title" data-i18n="about">{en.about}</h3>
         <a class="side-row" href="/chat/disclaimer/"><span data-i18n="disclaimerLink">{en.disclaimerLink}</span></a>
-        <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener">
-          <span data-i18n="useApi">Use the API</span><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span>
-        </a>
+        <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener"><span data-i18n="useApi">Use the API</span><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span></a>
         <p class="version-line" data-current-version-line hidden><span data-i18n="version">Version</span> <span data-current-version></span></p>
       </section>
     </div>
   </dialog>
-  <!-- Signing out of a Mukoko account: the messages stay on this device unless the person also chooses to delete them. -->
-  <dialog id="signout-dialog" class="artifact-view" aria-labelledby="signout-title">
+  {/* Signing out of a Mukoko account: the messages stay on this device unless the person also chooses to delete them. */}
+  <dialog id="signout-dialog" class="sheet" aria-labelledby="signout-title">
     <h2 id="signout-title" data-i18n="signOutTitle">{en.signOutTitle}</h2>
     <p data-i18n="signOutKept">{en.signOutKept}</p>
     <p class="row">

@@ -1,40 +1,115 @@
-/* Shamwari Chat, on Mzizi.
+/* Shamwari Chat (issue #329): dense, quiet and text first, in the spirit of OpenCode's web app.
  *
- * The frame is Mzizi's AppShell (app-src/pages/chat/index.astro). Everything here sits inside it and takes
- * its sizes from the Bundu floor in @bundu/ui's density layer, never from numbers of its own:
- *   body 17px (--fs-body), captions 14px (--fs-caption), every control a 49px hit region (--target-floor),
- *   14px inset (--inset-floor), 7px gaps (--gap-floor), 1.5 body leading (--leading-floor).
- * Tailwind compiles the frame's own classes at build time; this file is the chat's plain CSS beside them.
- * System fonts: the shell has to paint on 2G, so no web fonts are loaded (the token stack names Noto Sans
- * first and falls back to the device's own). Dark follows the device (color-scheme.css).
+ * One reading column, no cards around messages, hairline borders and the small radius. The person's turn is a compact
+ * tinted block; the answer is plain text; sources and skills are one-line "parts". Monospace only for metadata (time,
+ * scope, keys). Colours, sizes and the Bundu floor come from Mzizi (tokens.css, generated from @bundu/ui): body 17px,
+ * nothing under 14px, 14px inset, 7px gaps, 1.5 leading, a 49px hit region on touch (controls drawn at 32px only with a
+ * mouse from 64rem). No web fonts and no Tailwind: the shell has to paint on 2G. Dark follows the device; data-theme wins.
  */
-@import 'tailwindcss';
-@import '@bundu/ui/styles/globals.css';
-/* Light and dark: tokens.css switches to dark only under .dark or [data-theme='dark'], and nothing here sets either, so
-   without this file the page stayed light on a dark phone while the browser turned the text white. color-scheme.css repeats
-   the dark tokens under prefers-color-scheme, and an explicit data-theme='light' still wins. Order matters: theme and
-   tokens (globals), then this, then the brand overlay last. */
-@import '@bundu/ui/styles/color-scheme.css';
-@import '@bundu/ui/styles/brand-shamwari.css';
-
-@config '../../tailwind.app.config.mjs';
+@import './tokens.css';
 
 :root {
-  color-scheme: light dark;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', Arial, sans-serif;
+  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  /* Quiet text that still reaches the floor's 7:1: the page text mixed 80% into its background. */
+  --quiet: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  /* Fills are opaque, so text on them is measured against what is really drawn. */
+  --fill: color-mix(in oklab, var(--foreground) 7%, var(--background));
+  --fill-on: color-mix(in oklab, var(--foreground) 12%, var(--background));
+  --tint: color-mix(in oklab, var(--foreground) 6%, var(--background));
+  --line: var(--border);
+  /* The dim behind a slide-over or a dialog: the same in both themes, so a dark page dims rather than greys. */
+  --scrim: rgb(0 0 0 / 0.45);
+  --ctl: var(--size-control-sm);
+  --box: 8px;
+  --page-inset: max(var(--inset-floor), env(safe-area-inset-left), env(safe-area-inset-right));
+  /* One sidebar width, as the slide-over on a phone and as the column from 64rem, so crossing 64rem does not jump. */
+  --side-w: 17.5rem;
+  --col: 46rem;
 }
 
+*,
+::before,
+::after {
+  box-sizing: border-box;
+}
 html {
   -webkit-text-size-adjust: 100%;
+  overflow-wrap: anywhere;
 }
-/* Body text is 17px on every device (the Bundu floor); Mzizi names it `text-base` and the body carries that class. */
 body {
+  margin: 0;
+  font-family: var(--sans);
   font-size: var(--fs-body);
-  line-height: var(--lh-body);
-  /* From the theme, not the browser's default: that is black or white by colour-scheme, whatever the tokens say. */
+  line-height: max(var(--lh-body), var(--leading-floor));
   color: var(--foreground);
-  background-color: var(--background);
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
 }
-
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+blockquote,
+figure {
+  margin: 0;
+}
+h1,
+h2,
+h3 {
+  font-size: inherit;
+  font-weight: 600;
+}
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+:where(button, input, select, textarea) {
+  font: inherit;
+  color: inherit;
+  margin: 0;
+}
+:where(button) {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-align: inherit;
+}
+a {
+  color: inherit;
+}
+kbd,
+code,
+pre {
+  font-family: var(--mono);
+}
+img,
+svg {
+  flex: none;
+}
+[hidden] {
+  display: none !important;
+}
+.contents {
+  display: contents;
+}
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.sr-only,
+.msg .who {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
 .skip {
   position: absolute;
   left: -999px;
@@ -42,998 +117,231 @@ body {
 .skip:focus {
   left: 8px;
   top: 8px;
-  z-index: 50;
-  background: var(--card);
-  padding: var(--inset-floor);
-  border-radius: var(--radius-sm);
-  min-height: var(--target-floor);
-}
-
-/* ---- the frame's parts ------------------------------------------------------------------------------ */
-
-.brand {
+  z-index: 70;
   display: inline-flex;
   align-items: center;
-  gap: var(--gap-floor);
   min-height: var(--target-floor);
-  color: var(--foreground);
-  text-decoration: none;
-}
-.brand img {
+  padding-inline: var(--inset-floor);
   border-radius: var(--radius-sm);
+  background: var(--card);
 }
-/* The wordmark: the brand name in lower case, in the serif face. */
-.wordmark {
-  font-family: var(--font-serif);
-  font-size: 1.25rem;
-  font-weight: 600;
-  line-height: var(--leading-floor);
-  color: var(--color-sodalite-on-container, var(--foreground));
+[data-slot='icon'] {
+  width: 1em;
+  height: 1em;
+}
+.i {
+  width: 18px;
+  height: 18px;
+}
+.side-icon {
+  width: 16px;
+  height: 16px;
+}
+.down {
+  transform: rotate(90deg);
 }
 
-/* A top bar action, drawn like Mzizi's TopBarAction (the bell has no icon in the set yet, and the
-   account menu is a disclosure): the hit region is the floor, the glyph smaller inside it. */
-.bar-action {
+/* ---- controls ------------------------------------------------------------------------------------------- */
+
+:where(.btn) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--gap-floor);
-  min-height: var(--target-floor);
-  min-width: var(--target-floor);
-  padding-inline: var(--gap-floor);
+  min-height: var(--ctl);
+  min-width: var(--ctl);
+  padding: 0 var(--inset-floor);
+  border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--foreground);
-  font: inherit;
-  font-size: var(--fs-caption);
-  cursor: pointer;
-  list-style: none;
+  font-size: var(--fs-small);
+  line-height: 1.3;
+  text-decoration: none;
+  white-space: normal;
 }
-.bar-action::-webkit-details-marker {
-  display: none;
+:where(.btn):hover {
+  background: var(--fill);
 }
-.bar-action:hover {
-  background: var(--muted);
-}
-/* TopBarAction (the new-chat button) is 44px on touch in the library; the floor is 49. */
-[data-slot='app-topbar'] {
-  min-height: calc(var(--target-floor) + var(--gap-floor) * 2);
-  height: auto;
-}
-[data-slot='app-topbar'] [data-slot='topbar-action'],
-[data-slot='app-topbar'] > button,
-[data-slot='app-sidebar'] button:not(.side-row, .btn, .row-more, [role='tab']) {
-  min-height: var(--target-floor);
-  min-width: var(--target-floor);
-}
-/* AppShell draws its menu and close buttons at 44px (h-11 w-11) and TopBarAction at 44px on touch; the Bundu
-   floor is a 49px hit region, so they are lifted to it here. Worth raising upstream (mzizi-registry), where
-   the same 44px rows are listed as pending (HIT_AREA_GAPS). */
-
-.account-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--gap-floor);
-  margin: 0;
-}
-
-/* The drawer: chats kept on this device. */
-.chats {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-floor);
-  min-width: 0;
-  /* The drawer's body is ONE scroller (this column): the sections, the list and the foot scroll together. Nothing is
-     pinned, because on a short phone the sections (five rows) and the foot (four) alone are about the height of the drawer,
-     and pinning both would leave the list no room. On a tall screen the list grows to fill the column, so the foot sits at
-     the bottom; on a short one the column scrolls, so the foot (Settings, Delete history) is always reachable. */
-  flex: 1 1 0;
-  min-height: 0;
-  padding-inline: var(--gap-floor);
-  /* A row that is focused is scrolled to a token below the column's top edge, never flush against the drawer's head. */
-  scroll-padding-block-start: var(--gap-floor);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-.chats > * {
-  min-width: 0;
-}
-.chats-title {
-  margin: 0;
-  padding-block: var(--gap-floor);
-  font-size: var(--fs-caption);
-  font-weight: 600;
-  color: var(--muted-foreground);
-}
-.chats-empty {
-  margin: 0;
-  font-size: var(--fs-caption);
-  color: var(--muted-foreground);
-}
-#history[hidden] ~ .chats-empty {
-  display: block;
-}
-#history:not([hidden]) ~ .chats-empty {
-  display: none;
-}
-#history ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--gap-floor);
-}
-
-/* ---- controls --------------------------------------------------------------------------------------- */
-
-/* Every interactive control is at least the 49px hit region; pills, as Mzizi's inputs and buttons are. */
-.btn,
-select,
-input:not([type='checkbox']):not([type='radio']),
-textarea {
-  font: inherit;
-  color: var(--foreground);
-}
-.btn,
-select,
-input:not([type='checkbox']):not([type='radio']) {
-  min-height: var(--target-floor);
-  min-width: var(--target-floor);
-  /* The small radius, as Mzizi's product controls have it: the pill is the marketing shape, not the app's. */
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-control, var(--border));
-  background: var(--card);
-  padding-inline: var(--inset-floor);
-  cursor: pointer;
-}
-input:not([type='checkbox']):not([type='radio']) {
-  cursor: text;
-  background: var(--input, var(--background));
-}
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: var(--leading-floor);
-  white-space: nowrap;
-}
-/* The brand fill and its text come as a pair in both themes (Mzizi sodalite-brand / on-brand). */
 .btn.primary {
-  background: var(--color-sodalite-brand);
-  color: var(--color-sodalite-on-brand);
   border-color: transparent;
-  font-weight: 600;
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 .btn.danger {
-  color: var(--destructive-text, var(--destructive));
+  color: var(--destructive-text);
 }
 .btn.link {
-  border: 0;
-  background: none;
-  text-decoration: underline;
+  border-color: transparent;
+  padding-inline: var(--gap-floor);
+  color: var(--quiet);
 }
-.btn:disabled {
-  opacity: 0.5;
+.btn.link:hover {
+  color: var(--foreground);
+}
+/* The suggested prompts and the first-run languages are Mzizi's pills; nothing else is. */
+.btn.chip {
+  border-radius: 999px;
+  color: var(--quiet);
+}
+.btn.chip:hover {
+  color: var(--foreground);
+}
+button:disabled {
   cursor: not-allowed;
 }
-:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-.notice {
-  margin: 0;
-  padding: var(--inset-floor);
-  font-size: var(--fs-caption);
-  line-height: var(--leading-floor);
-  background: var(--accent);
-  color: var(--foreground);
+select,
+input:not([type='checkbox'], [type='radio'], [type='file']),
+.skill-form textarea {
+  min-height: var(--ctl);
+  max-width: 100%;
+  padding: 0 var(--inset-floor);
+  border: 1px solid var(--border-control);
   border-radius: var(--radius-sm);
+  background: var(--input);
 }
-.notice[hidden],
-[hidden] {
-  display: none !important;
+.skill-form textarea {
+  inline-size: 100%;
+  padding-block: var(--gap-floor);
+  line-height: var(--leading-floor);
+  resize: vertical;
 }
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-.small {
-  font-size: var(--fs-caption);
-  color: var(--muted-foreground);
-}
-.bad {
-  color: var(--destructive-text, var(--destructive));
+input[type='checkbox'] {
+  inline-size: 1.25rem;
+  block-size: 1.25rem;
+  accent-color: var(--primary);
 }
 .row {
   display: flex;
-  gap: var(--gap-floor);
   flex-wrap: wrap;
   align-items: center;
-}
-.contents {
-  display: contents;
-}
-
-/* ---- the thread ------------------------------------------------------------------------------------- */
-
-.thread {
-  display: flex;
-  flex-direction: column;
   gap: var(--gap-floor);
-  min-height: 40dvh;
-  outline: none;
 }
-.lead {
-  color: var(--muted-text);
-  margin: 0;
-}
-#empty {
-  margin: auto;
-  text-align: center;
-  max-width: 34rem;
-  padding-block: var(--inset-floor);
-}
-#empty .mark {
-  border-radius: var(--radius-lg);
-  margin-inline: auto;
-}
-#empty h2 {
-  margin: var(--gap-floor) 0;
-  font-size: 1.75rem;
-  font-weight: 500;
-  line-height: 1.2;
-}
-.first-lang {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--gap-floor);
-  margin: var(--inset-floor) 0 0;
-}
-.first-lang[hidden] {
-  display: none;
-}
-.try {
-  margin: var(--inset-floor) 0 var(--gap-floor);
-  font-size: var(--fs-caption);
-  font-weight: 600;
-  color: var(--muted-text);
-}
-/* Suggested prompts are pills (Mzizi's suggested-prompts shape): fully rounded, a thin border, the input tint as the fill and a
-   stronger tint on hover. They wrap onto as many rows as they need instead of scrolling sideways, because the page never
-   scrolls sideways and Shona and Ndebele run longer. Each is a real button: the 49px hit region on touch, drawn at the density size (32px) with a mouse, as every other control here. */
-.examples {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--gap-floor);
-  margin: 0;
-}
-.btn.chip {
-  max-width: 100%;
-  min-height: var(--size-control-sm);
-  white-space: normal;
-  text-align: center;
-  padding-block: calc(var(--gap-floor) / 2);
-  border-radius: var(--radius-full);
-  background: color-mix(in oklab, var(--input) 30%, transparent);
-}
-.btn.chip:hover {
-  background: color-mix(in oklab, var(--input) 50%, transparent);
-}
-.install {
-  margin: 0;
-  text-align: center;
-}
-
-/* ---- the dock: sign-in when needed, then the composer, pinned above the device's own bottom bar ------- */
-
-.jump-latest {
-  position: absolute;
-  inset-inline: 0;
-  inset-block-end: calc(100% + var(--gap-floor));
-  margin-inline: auto;
+.icon-btn,
+.bar-action,
+.bar-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: var(--size-control-sm);
-  block-size: var(--size-control-sm);
-  padding: 0;
-  border: 1px solid var(--border-control, var(--border));
-  border-radius: 50%;
-  background: var(--background);
+  gap: var(--gap-floor);
+  min-height: var(--ctl);
+  min-width: var(--ctl);
+  border-radius: var(--radius-sm);
+  color: var(--quiet);
+  font-size: var(--fs-small);
+}
+.bar-action {
+  padding-inline: var(--gap-floor);
+}
+:is(.icon-btn, .bar-action, .bar-icon):hover {
+  background: var(--fill);
   color: var(--foreground);
-  box-shadow: 0 2px 8px color-mix(in oklab, var(--foreground) 18%, transparent);
-  cursor: pointer;
 }
-.jump-latest:hover {
-  background: var(--muted);
+.kbd {
+  padding: 0 0.3em;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: var(--fs-small);
+  line-height: 1.4;
+  color: var(--quiet);
 }
-.dock {
-  position: relative;
-  flex: none;
-  /* The divider between the messages and the composer: the canonical hairline token, so it moves with the dock and
-     never scrolls away. Raised to a full pixel in high-contrast and forced-colors modes. */
-  border-top: 0.5px solid var(--border);
-  display: grid;
-  gap: var(--gap-floor);
-  padding-block: var(--gap-floor) max(var(--gap-floor), env(safe-area-inset-bottom));
-  background: var(--background);
-}
-.panel {
-  margin-block: var(--gap-floor);
-  padding: var(--inset-floor);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--card);
-}
-.panel h2 {
-  margin: 0 0 var(--gap-floor);
-  font-size: 1.125rem;
-}
-.panel h3 {
-  margin: var(--inset-floor) 0 var(--gap-floor);
-  font-size: var(--fs-body);
-}
-.panel p {
-  margin: var(--gap-floor) 0;
-}
-.panel input {
-  flex: 1;
-  min-width: 12rem;
-}
-.composer {
-  display: flex;
-  align-items: flex-end;
-  gap: var(--gap-floor);
-  padding: var(--gap-floor) var(--gap-floor) var(--gap-floor) var(--inset-floor);
-  border: 1px solid var(--border-control, var(--border));
-  border-radius: var(--radius-md);
-  background: var(--card);
-}
-.composer textarea {
-  flex: 1;
-  min-height: var(--target-floor);
-  max-height: 8rem;
-  resize: none;
-  border: 0;
-  background: transparent;
-  padding: var(--inset-floor) var(--gap-floor);
-  border-radius: var(--radius-md);
+.note,
+.small,
+.toast,
+.settings-hint,
+.version-line {
+  font-size: var(--fs-small);
+  color: var(--quiet);
   line-height: var(--leading-floor);
 }
-.toast {
-  margin: 0;
-  min-height: 0;
-  font-size: var(--fs-caption);
-  color: var(--muted-foreground);
+/* Sign-in is not on in a developer-key build: a button that cannot be pressed is not shown. */
+[data-auth='developer-key'] #mukoko-signin {
+  display: none;
 }
-.trust {
-  margin: var(--inset-floor) 0 0;
-  font-size: var(--fs-caption);
-  color: var(--muted-text);
+.bad {
+  color: var(--destructive-text);
 }
-.trust .footer-link {
-  display: inline-flex;
-  padding-inline: var(--gap-floor);
+.notice {
+  font-size: var(--fs-small);
+  padding: var(--gap-floor) var(--inset-floor);
+  border-inline-start: 2px solid var(--info);
+  background: var(--tint);
 }
 .footer-link {
   display: inline-flex;
   align-items: center;
-  min-height: var(--target-floor);
-  color: inherit;
-  text-underline-offset: 3px;
-}
-.legal h1 {
-  margin: 0;
-  font: inherit;
-  font-size: 1.5rem;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.legal p {
-  margin: 0;
-}
-.legal section {
-  display: grid;
-  gap: var(--gap-floor);
-  padding-block-end: var(--inset-floor);
-  border-bottom: 1px solid var(--border);
-}
-.legal {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: var(--inset-floor);
-  display: grid;
-  gap: var(--gap-floor);
-}
-
-/* ---- messages ---------------------------------------------------------------------------------------- */
-
-#log {
-  display: grid;
-  gap: var(--gap-floor);
-}
-.msg {
-  border-radius: var(--radius-lg);
-  padding: var(--inset-floor);
-  max-width: 100%;
-  overflow-wrap: anywhere;
-}
-.msg .who {
-  margin: 0 0 var(--gap-floor);
-  font-size: var(--fs-caption);
-  font-weight: 600;
-  color: var(--muted-foreground);
-}
-.msg .text {
-  margin: 0;
-  white-space: pre-wrap;
-}
-.msg.bot {
-  background: var(--card);
-  border: 1px solid var(--border);
-  margin-right: 4%;
-}
-.msg.refusal {
-  border-color: var(--info, var(--ring));
-  border-width: 2px;
-}
-.msg.refusal h2 {
-  font-size: var(--fs-body);
-  margin: var(--gap-floor) 0;
-}
-.msg.error {
-  border-color: var(--destructive-text, var(--destructive));
-}
-.msg .btn {
-  margin-top: var(--gap-floor);
-  text-decoration: none;
-}
-.note,
-.meta {
-  margin: var(--gap-floor) 0 0;
-  font-size: var(--fs-caption);
-  color: var(--muted-foreground);
-}
-.dots {
-  letter-spacing: 2px;
-}
-@media (prefers-reduced-motion: no-preference) {
-  html {
-    scroll-behavior: smooth;
-  }
-  .pending .dots {
-    animation: pulse 1.2s ease-in-out infinite;
-  }
-  @keyframes pulse {
-    50% {
-      opacity: 0.3;
-    }
-  }
-}
-
-/* citations: first-class cards under the answer */
-.sources h2 {
-  font-size: var(--fs-caption);
-  margin: var(--inset-floor) 0 var(--gap-floor);
-  color: var(--muted-foreground);
-}
-.sources ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--gap-floor);
-}
-.cite {
-  display: grid;
-  gap: var(--gap-floor);
-  padding: var(--inset-floor);
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--color-sodalite);
-  border-radius: var(--radius-lg);
-  background: var(--background);
-}
-.cite .badge {
-  justify-self: start;
-  font-size: var(--fs-caption);
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: 0 var(--gap-floor);
-  border-radius: 9999px;
-  background: var(--color-sodalite-brand);
-  color: var(--color-sodalite-on-brand);
-}
-.cite-heading {
-  font-size: var(--fs-body);
-}
-.cite-title {
-  font-size: var(--fs-body);
-}
-.cite-explain,
-.cite-meta {
-  font-size: var(--fs-caption);
-  color: var(--muted-foreground);
-}
-.cite-link {
-  justify-self: start;
-  min-height: var(--target-floor);
-  display: inline-flex;
-  align-items: center;
-  color: var(--info, var(--ring));
+  min-height: var(--ctl);
+  padding-inline: var(--gap-floor);
   text-underline-offset: 3px;
 }
 
-/* Sign-in is not on yet in a developer-key build: a button that cannot be pressed is not shown. */
-[data-auth='developer-key'] #mukoko-signin {
-  display: none;
-}
-#new-project {
-  margin-block-start: var(--gap-floor);
-}
+/* ---- the frame: a session list and the main column. The shell never scrolls; the messages and the list do. ---- */
 
-/* The drawer's lists: pinned, projects, loose chats, saved answers. */
-.side-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  /* One column that may shrink below its content: a long chat title wraps instead of widening the whole drawer. */
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--gap-floor);
-}
-.side-list .btn.link {
-  min-height: var(--size-control-sm);
-  font-size: var(--fs-small);
-  max-width: 100%;
-  justify-content: flex-start;
-  text-align: start;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.side-form {
-  margin-top: var(--gap-floor);
-}
-.side-form {
-  flex-wrap: wrap;
-}
-.side-form input {
-  flex: 1 1 8rem;
-  min-width: 0;
-}
-.side-nav {
-  display: grid;
-  gap: var(--gap-floor);
-  /* The foot rows are muted and sit under one hairline (the same token as the composer's divider), no heavy container. */
-  border-top: 0.5px solid var(--border);
-  padding-top: var(--gap-floor);
-}
-.project > summary {
-  display: flex;
-  align-items: center;
-  min-height: var(--target-floor);
-  padding-inline: var(--inset-floor);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-}
-.project > .side-list,
-.project > .row {
-  padding-inline-start: var(--inset-floor);
-  padding-block: var(--gap-floor);
-}
-[aria-current='true'] {
-  font-weight: 600;
-}
-
-/* The open chat's tools, above the thread. */
-.chat-tools {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--gap-floor);
-  padding: var(--gap-floor) var(--inset-floor);
-}
-.chat-tools[hidden] {
-  display: none;
-}
-.chat-tools select {
-  max-width: 100%;
-}
-.save-answer {
-  margin-top: var(--gap-floor);
-}
-
-/* A saved answer, in a native dialog. */
-.artifact-view {
-  width: min(40rem, calc(100vw - 2 * var(--inset-floor)));
-  max-height: 85vh;
-  overflow: auto;
-  padding: var(--inset-floor);
-  border: 1px solid var(--border);
-  border-radius: var(--radius, 1rem);
-  background: var(--card);
-  color: var(--foreground);
-}
-.artifact-view::backdrop {
-  background: rgb(0 0 0 / 0.5);
-}
-.artifact-text {
-  white-space: pre-wrap;
-  line-height: var(--leading-floor);
-}
-
-.side-foot {
-  flex: none;
-  display: grid;
-  gap: var(--gap-floor);
-  padding-block: var(--gap-floor) max(var(--gap-floor), env(safe-area-inset-bottom));
-  background: var(--background);
-}
-
-/* ---- the global page layout ----------------------------------------------------------------------------
-   One layout for every screen of the app, from the Bundu floor (Mzizi): 14px between content and the edge of
-   the screen, 7px between neighbouring blocks, nothing wider than the screen, and text that wraps. The e2e
-   floor audit measures all four on every state, so a screen that breaks one fails the build. */
-:root {
-  --page-inset: max(var(--inset-floor), env(safe-area-inset-left), env(safe-area-inset-right));
-}
-html {
-  overflow-wrap: anywhere; /* a long word or address wraps instead of widening the page */
-}
-[data-slot='app-topbar'] {
-  padding-inline: var(--page-inset);
-}
-main#main {
-  padding-inline: var(--page-inset);
-}
-/* The page's own column: a track may shrink below its content, so one wide child cannot push the page wider. */
-main#main > .grid {
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--gap-floor);
-}
-main#main :where(.thread, .dock, .ask, #empty, .panel, .chat-tools) {
-  min-width: 0;
-}
-.dock,
-.ask {
-  grid-template-columns: minmax(0, 1fr);
-}
-.ask {
-  display: grid;
-  gap: var(--gap-floor);
-}
-[data-slot='sidebar-head'] {
-  padding-inline: var(--page-inset);
-  padding-block-end: var(--gap-floor);
-}
-.chats {
-  padding-inline: var(--page-inset);
-}
-.msg,
-.msg .text,
-.cite {
-  overflow-wrap: anywhere;
-  min-width: 0;
-}
-
-/* On a narrow screen the top bar has room for the menu, the brand, the bell and the account: New chat is in the
-   drawer's foot, and below 360px the wordmark gives way to the mark (the drawer still shows it). */
-@media (max-width: 30rem) {
-  [data-slot='app-topbar'] #new-chat {
-    display: none;
-  }
-}
-@media (max-width: 20rem) {
-  [data-slot='app-topbar'] .wordmark {
-    display: none;
-  }
-}
-/* The brand is a link: its hit region is the floor even when only the mark shows. */
-.brand {
-  min-height: var(--target-floor);
-  min-width: var(--target-floor);
-  justify-content: center;
-}
-
-.version-line {
-  margin: 0;
-  font-size: var(--fs-caption);
-  color: var(--muted-text);
-}
-
-/* ---- the shell never scrolls -----------------------------------------------------------------------------
-   On the chat page (html.app) the document does not scroll and neither does the app area. Exactly two regions
-   scroll: the MESSAGES (#thread) and, in the drawer, its column (.chats: the sections, the list and the foot together). The top bar, the
-   composer with its divider, and the drawer's head and foot are fixed in the column around them, so there is
-   nothing pinned over a scroller and nothing for a scroll to slide under. Every other page (the disclaimer)
-   is an ordinary scrolling document, so none of this applies to it. Each scroller has overscroll-behavior:
-   contain, so the end of one never moves the page behind it or the other region. The regions that must not
-   scroll are `overflow: clip`, not `hidden`: a clipped box cannot be scrolled by a script or by focus, so a
-   focused control can never drift the top bar off the screen. (`hidden` is kept first, for old browsers.) */
 html.app,
 html.app body {
   height: 100%;
   overflow: hidden;
 }
-html.app [data-slot='app-main'] {
+[data-slot='app-shell'] {
+  display: flex;
   height: 100dvh;
-  min-height: 0;
-  overflow: hidden;
-  overflow: clip;
 }
-html.app main#main {
+[data-slot='app-main'] {
   flex: 1 1 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  overflow: clip;
-}
-html.app main#main > .grid {
-  flex: 1 1 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-html.app #thread {
-  flex: 1 1 0;
-  /* Never squeezed to nothing by the things around it, whatever they add. */
-  min-height: 6rem;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
-  /* A reply scrolled to the top, or the thinking bubble to the bottom, keeps the Bundu 7px from the edge. The
-     last message does not end flush against the composer either. */
-  scroll-padding-block: var(--gap-floor);
-  padding-block-end: var(--gap-floor);
-}
-/* The drawer: head and foot stay, the list between them scrolls. */
-[data-slot='sidebar-body'] {
+  min-width: 0;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   overflow: clip;
 }
-.side-scroll {
-  /* Not a scroller: it grows with its content (and fills the space on a tall screen, which keeps the foot at the bottom). */
-  flex: 1 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-floor);
-}
-
-@media (prefers-contrast: more), (forced-colors: active) {
-  .dock {
-    border-top-width: 1px;
-    border-top-color: var(--border-control, CanvasText);
-  }
-}
-
-/* ---- signed out: a whole screen ---------------------------------------------------------------------------
-   The sign-in is a view of its own, not a card on the chat. While it shows, the chat (and the dialog) is not
-   in the page at all, so there is no thread, no composer and no picker behind it. */
 html[data-view='signin'] [data-slot='app-shell'],
 html[data-view='pending'] [data-slot='app-shell'],
 html[data-view='signin'] dialog,
 html[data-view='pending'] dialog {
   display: none;
 }
-.signin-screen {
+
+[data-slot='app-sidebar'] {
   position: fixed;
-  inset: 0;
-  z-index: 60;
-  overflow-y: auto;
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: var(--inset-floor);
-  padding: var(--inset-floor) var(--page-inset);
-  padding-block-end: max(var(--inset-floor), env(safe-area-inset-bottom));
-  text-align: center;
-  background: var(--background);
-  color: var(--foreground);
-}
-.signin-screen[hidden] {
-  display: none;
-}
-.signin-screen .mark {
-  border-radius: var(--radius-lg);
-}
-.signin-screen h1 {
-  margin: 0;
-  font-family: inherit;
-  font-size: 1.75rem;
-  font-weight: 500;
-  line-height: 1.2;
-  outline: none;
-}
-.signin-screen .btn.primary {
-  width: 100%;
-  max-width: 24rem;
-}
-.signin-screen p {
-  margin: 0;
-}
-
-/* ---- the drawer's rows ---------------------------------------------------------------------------------------
-   Chat, Projects, Factory, Artifacts, Plugins at the top; Use the API, Disclaimer and privacy, Settings at the foot;
-   chat and project titles in the lists. They read as text, not as buttons: no border and no fill at rest, a soft fill
-   on hover and a stronger one (with a marker) on the open section. Every size is a Mzizi token, none is a number of
-   ours: the row is DRAWN at --size-control-sm, which @bundu/ui's density layer sets to 32px on a desktop with a mouse
-   (64rem up, fine pointer, hover, no touch) and 49px everywhere else, and the label is the 14px caption size. The
-   49px hit region is never lowered on touch: there the row IS 49px. On a desktop the row is a composite list item, so
-   the transparent 49px overlay a button gets from the density layer is turned off here: it would overlap the next
-   row (Mzizi's own guidance: list rows take their height instead). The foot rows have no icons; the section rows keep
-   a 16px one in the label's colour. Colours are tokens, so they follow the light and dark themes. */
-.side-row {
-  box-sizing: border-box;
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: calc(var(--gap-floor) * 1.5);
-  width: 100%;
-  min-height: var(--size-control-sm);
-  padding-inline: var(--inset-floor);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  /* Not the muted token: that one is about 6:1 on this surface, under the Bundu floor's 7:1 for text. This is the
-     foreground eased toward the surface, built from the two tokens (no colour of its own), so it follows light and dark. */
-  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
-  font: inherit;
-  font-size: var(--fs-small);
-  line-height: var(--leading-floor);
-  text-decoration: none;
-  cursor: pointer;
-  list-style: none;
-}
-.side-row::after {
-  display: none;
-}
-.side-row::-webkit-details-marker {
-  display: none;
-}
-.side-row:hover {
-  background: var(--muted);
-  color: var(--foreground);
-}
-.side-row .side-icon {
-  flex: none;
-  width: 1rem;
-  height: 1rem;
-  color: currentColor;
-}
-
-/* ---- the drawer's sections ---------------------------------------------------------------------------------
-   Chat, Projects, Factory, Artifacts, Plugins: the same quiet rows as the foot, at the top. The open one is full
-   strength with the soft fill and aria-current; Factory is a planned product, so it is plain text with a chip, no
-   hover, no pointer and not focusable. */
-.side-primary {
-  flex: none;
-  padding-block-end: var(--gap-floor);
-}
-.side-primary .side-list {
-  display: grid;
-  gap: var(--gap-floor);
+  inset: 0 auto 0 0;
+  width: min(var(--side-w), 86vw);
+  height: 100dvh;
+  max-height: none;
   margin: 0;
   padding: 0;
-  list-style: none;
-}
-.side-primary .side-row {
   border: 0;
-}
-.side-row[aria-current='page'] {
-  background: var(--muted);
+  border-inline-end: 1px solid var(--line);
+  background: var(--background);
   color: var(--foreground);
-  font-weight: 500;
-}
-.side-row[aria-current='page']::before {
-  content: '';
-  position: absolute;
-  inset-block: var(--gap-floor);
-  inset-inline-start: 0;
-  inline-size: 0.125rem;
-  border-radius: 9999px;
-  background: var(--app-accent, var(--primary));
-}
-.side-row.side-disabled {
-  cursor: default;
-  /* At large text the chip does not fit beside the label: it goes to a second line rather than off the screen. */
-  flex-wrap: wrap;
-  row-gap: var(--gap-floor);
-}
-.side-row.side-disabled:hover {
-  background: transparent;
-  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
-}
-.side-chip {
-  flex: none;
-  white-space: nowrap;
-  margin-inline-start: auto;
-  /* Tight on purpose: on a desktop the drawer is 260px wide, and the icon, "Factory" and this chip must share one 32px row. */
-  padding: 0 calc(var(--gap-floor) / 2);
-  border: 0.5px solid var(--border-control, var(--border));
-  border-radius: 999px;
-  font-size: 0.875rem;
-  line-height: 1.5;
-}
-.side-empty {
-  margin: 0;
-  padding: var(--gap-floor) var(--inset-floor);
+  flex-direction: column;
+  overflow: hidden;
   font-size: var(--fs-small);
-  color: var(--muted-foreground);
-  line-height: var(--leading-floor);
 }
-.side-tabs {
+[data-slot='app-sidebar']:popover-open {
   display: flex;
-  gap: var(--gap-floor);
-  padding-inline: var(--inset-floor);
-  padding-block-end: var(--gap-floor);
 }
-.side-tabs [role='tab'] {
-  min-height: var(--target-floor);
-  padding-inline: var(--inset-floor);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
-  font: inherit;
-  cursor: pointer;
-}
-.side-tabs [role='tab'][aria-selected='true'] {
-  background: var(--muted);
-  color: var(--foreground);
-  font-weight: 600;
-}
-.side-tabs [role='tab']:hover {
-  background: var(--muted);
-  color: var(--foreground);
-}
-
-/* ---- the drawer on a phone or tablet ----------------------------------------------------------------------
-   Below 64rem the drawer is a popover (Mzizi's AppShell) laid OVER the whole page with a dim backdrop. The page does not move
-   and nothing of it is cut off by the drawer: it is dimmed, inert (script) and cannot be reached while the drawer is open. A tap
-   on the dim part or Esc closes it. Only the drawer's own transform animates, and the dim fades in; with reduced motion
-   the change is instant. */
-:root {
-  /* Quiet text (hints, section labels) that still reaches the floor's 7:1 against the page: the page text mixed 80% into its background,
-     the same colour the drawer rows use. Mzizi's muted-foreground alone measures about 6:1 in light. */
-  --muted-text: color-mix(in oklab, var(--foreground) 80%, var(--background));
-  /* One sidebar width, as the drawer on a phone and as the column from 64rem, so crossing 64rem does not make it jump. */
-  --sidebar-w: 17.5rem;
-  --drawer-w: min(var(--sidebar-w), 86vw);
+[data-slot='app-sidebar']::backdrop {
+  background: var(--scrim);
 }
 @media (max-width: 63.999rem) {
-  /* `html` raises the specificity above AppShell's own width (min(18rem, 86vw)), which would otherwise win by coming later. */
-  html [data-slot='app-sidebar'] {
-    width: var(--drawer-w);
+  [data-slot='app-sidebar'] {
     transform: translateX(-100%);
   }
   [data-slot='app-sidebar']:popover-open {
     transform: none;
   }
-  /* The dim is Mzizi's own (AppShell: the foreground colour at 30%); it is not restyled here, only faded in. */
+  .side-toggle {
+    display: none;
+  }
   @media (prefers-reduced-motion: no-preference) {
-    /* The drawer also keeps `display` and `overlay` for the length of the slide out, so it is not cut off mid-way. */
-    [data-slot='app-sidebar'] {
-      transition:
-        transform 220ms ease,
-        display 220ms allow-discrete,
-        overlay 220ms allow-discrete;
-    }
+    [data-slot='app-sidebar'],
     [data-slot='app-sidebar']::backdrop {
       transition:
-        background-color 220ms ease,
-        display 220ms allow-discrete,
-        overlay 220ms allow-discrete;
+        transform 200ms ease,
+        background-color 200ms ease,
+        display 200ms allow-discrete,
+        overlay 200ms allow-discrete;
     }
     @starting-style {
       [data-slot='app-sidebar']:popover-open {
@@ -1045,171 +353,183 @@ html[data-view='pending'] dialog {
     }
   }
 }
-
-/* The top bar's actions say what they are from 40rem up ("New chat"); below that only the icon shows and the
-   name stays for screen readers (the labels carry Tailwind's sr-only below that). The Tailwind sm:not-sr-only these used was
-   not in the build, so the labels never showed. */
-@media (min-width: 40rem) {
-  .sr-only.bar-label {
-    position: static;
-    inline-size: auto;
-    block-size: auto;
-    margin: 0;
-    overflow: visible;
-    clip: auto;
-    clip-path: none;
+@media (min-width: 64rem) {
+  [data-slot='app-sidebar'] {
+    position: relative;
+    inset: auto;
+    display: flex;
+    flex: none;
+    width: var(--side-w);
+  }
+  html[data-side='closed'] [data-slot='app-sidebar'],
+  .menu-btn,
+  .side-close,
+  [data-slot='app-topbar'] .brand {
+    display: none;
   }
 }
 
-/* ---- the OFFLINE MODE switch, in Settings ---------------------------------------------------------------------
-   A switch (role="switch", aria-checked) in the Settings dialog. Off it is a plain button; on, it is filled, the top bar shows a
-   badge and the page says so in words (#offline-mode-note), so the state never rests on colour. */
-.offline-switch .offline-state {
+.side-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor) var(--page-inset);
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-floor);
+  min-height: var(--ctl);
+  min-width: var(--ctl);
+  text-decoration: none;
+}
+.brand img {
+  border-radius: 5px;
+}
+.wordmark {
+  font-family: var(--mono);
+  font-size: var(--fs-small);
   font-weight: 600;
+  letter-spacing: 0.02em;
 }
-.offline-switch[aria-checked='true'] {
-  background: var(--muted);
-  box-shadow: inset 0 0 0 1.5px var(--foreground);
+/* The list's one scroller: actions, sections, the chats and the account row scroll together, so on a short phone Settings
+   is always reachable; on a tall screen the chats fill the space and the account row sits at the bottom. */
+.chats {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor) var(--page-inset) 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block-start: var(--gap-floor);
 }
-
-/* ---- large text ------------------------------------------------------------------------------------------------
-   With text at 200% the top bar's menu, brand and actions (the offline badge, New chat) no longer fit one row on a phone. The
-   bar wraps instead of pushing the last action off the screen: the actions drop to a second line, right-aligned. */
-[data-slot='app-topbar'] {
-  flex-wrap: wrap;
-  row-gap: var(--gap-floor);
-  padding-block: var(--gap-floor);
+.side-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+  min-width: 0;
 }
-[data-slot='app-topbar'] > div.ml-auto {
-  flex-wrap: wrap;
-  justify-content: flex-end;
+.side-scroll {
+  flex: 1 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
 }
-
-/* In the drawer, a label that does not fit wraps (at 200% text "Delete history" is wider than the drawer), and the
-   Plugins / Skills / MCP tabs wrap onto a second line instead of running off the screen. */
-.chats .btn {
-  white-space: normal;
-  overflow-wrap: anywhere;
+.side-scroll > div {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
 }
-/* A row's label wraps at spaces when it must (large text) and never breaks inside a word: "Factory" is not "Factor / y". */
-.chats .side-row {
+.side-foot {
+  flex: none;
+  padding-block: var(--gap-floor) max(var(--gap-floor), env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+}
+/* A row reads as text: no border and no fill at rest, a soft fill on hover, a stronger one on the open section. */
+.side-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
+  inline-size: 100%;
+  min-height: var(--ctl);
+  min-width: var(--ctl);
+  padding: 0 var(--gap-floor);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--quiet);
+  font-size: var(--fs-small);
+  font-weight: 400;
+  line-height: 1.3;
+  text-decoration: none;
+  text-align: start;
   white-space: normal;
   overflow-wrap: normal;
-  word-break: normal;
-  hyphens: manual;
 }
-.side-tabs {
-  flex-wrap: wrap;
-}
-
-/* ---- the shell, rebuilt as a chat console ---------------------------------------------------------------------
-   The drawer is a slim 260px column of plain rows (New chat, Search, the sections), then the history under muted,
-   collapsible labels (Pinned, Recents, and Today / Yesterday / Previous 7 days / Older inside Recents): one line per
-   chat, the title cut with an ellipsis and its time muted at the right, a soft fill on the open one. The account row
-   is pinned at the bottom and holds everything else. The page is ONE centred column (46rem): the chat's title in a
-   thin top bar, replies as plain prose, the person's own questions as a soft block, and the composer a single
-   rounded container with a round send button. Sizes, colours and radii are Mzizi tokens; none is a number of ours. */
-html [data-slot='app-shell'] {
-  /* 17.5rem (280px) is the width CI proved holds for "Factory" and its "Coming soon" chip on one line with a wider fallback font too. */
-  --app-sidebar-w: var(--sidebar-w);
-}
-@media (min-width: 64rem) {
-  .side-row.side-disabled {
-    flex-wrap: nowrap;
-  }
-}
-/* The collapse toggle moves from the drawer's foot to the top of the drawer, beside the brand. */
-[data-slot='sidebar-foot'] {
-  display: none !important;
-}
-.side-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--gap-floor);
-}
-.side-collapse {
-  display: none;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  inline-size: var(--size-control-sm);
-  block-size: var(--size-control-sm);
-  border-radius: var(--radius-sm);
-  color: var(--muted-foreground);
-  cursor: pointer;
-}
-.side-collapse:hover {
-  background: var(--muted);
+.side-row:hover {
+  background: var(--fill);
   color: var(--foreground);
 }
-@media (min-width: 64rem) {
-  .side-collapse {
-    display: inline-flex;
-  }
+.side-row[aria-current] {
+  background: var(--fill-on);
+  color: var(--foreground);
 }
-[data-slot='app-shell']:has([data-shell-collapse]:checked) .side-head {
+.side-disabled,
+.side-disabled:hover {
+  background: none;
+  color: var(--quiet);
+  cursor: default;
+}
+.side-chip {
+  margin-inline-start: auto;
+  padding: 0 0.4em;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--mono);
+  font-size: var(--fs-small);
+  white-space: nowrap;
+}
+.side-filter {
+  inline-size: 100%;
+}
+.chats-title,
+.side-date {
+  display: flex;
+  align-items: center;
+  min-height: var(--ctl);
+  padding-inline: var(--gap-floor);
+  font-size: var(--fs-small);
+  font-weight: 400;
+  color: var(--quiet);
+  list-style: none;
+  cursor: default;
+}
+summary.chats-title {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+summary.chats-title::-webkit-details-marker {
+  display: none;
+}
+summary.chats-title::before {
+  content: '▾';
+  order: 2;
+  margin-inline-start: auto;
+  font-size: var(--fs-small);
+}
+details:not([open]) > summary.chats-title::before {
+  content: '▸';
+}
+.side-date-group {
+  display: flex;
   flex-direction: column;
+  gap: var(--gap-floor);
 }
-/* Chats whose label is a group: muted, small, and collapsible. */
-.side-group > summary,
-.chats-title {
+.side-empty {
+  padding-inline: var(--gap-floor);
+  font-size: var(--fs-small);
+  color: var(--quiet);
+  line-height: var(--leading-floor);
+}
+/* One chat per line: the title cut with an ellipsis, its time muted at the right. */
+.chat-li {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--gap-floor);
-  min-height: var(--size-control-sm);
-  padding-inline: var(--inset-floor);
-  font-size: var(--fs-small);
-  font-weight: 500;
-  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
-  cursor: pointer;
-  list-style: none;
 }
-.side-group > summary::-webkit-details-marker {
-  display: none;
-}
-.side-group > summary::after {
-  content: '';
-  margin-inline-start: auto;
-  inline-size: 0.4rem;
-  block-size: 0.4rem;
-  border-inline-end: 1.5px solid currentColor;
-  border-block-end: 1.5px solid currentColor;
-  transform: rotate(-45deg);
-  transition: transform 150ms ease;
-}
-.side-group[open] > summary::after {
-  transform: rotate(45deg);
-}
-@media (prefers-reduced-motion: reduce) {
-  .side-group > summary::after {
-    transition: none;
-  }
-}
-.side-date {
-  margin: 0;
-  padding: var(--gap-floor) var(--inset-floor) 0;
-  font-size: var(--fs-small);
-  font-weight: 500;
-  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
-}
-.side-group[open] > summary {
-  margin-bottom: var(--gap-floor);
-}
-.side-date-group {
-  list-style: none;
-  display: grid;
-  gap: var(--gap-floor);
-}
-/* One line per chat: the title is cut, the time is muted at the right. */
-.side-list .chat-row {
-  text-decoration: none;
-  font-weight: 400;
-  justify-content: space-between;
-  white-space: nowrap;
+.chat-row {
+  flex: 1 1 0;
+  min-width: 0;
 }
 .chat-row-title {
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1217,209 +537,503 @@ html [data-slot='app-shell'] {
 }
 .chat-row-when {
   flex: none;
+  font-family: var(--mono);
   font-size: var(--fs-small);
-  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+  color: var(--quiet);
 }
-.chat-row[aria-current='true'] {
-  background: var(--muted);
-  color: var(--foreground);
-  font-weight: 400;
-}
-.side-filter {
-  inline-size: 100%;
-  box-sizing: border-box;
-  min-height: var(--size-control-sm);
-  border: 1px solid var(--border-control, var(--border));
-  border-radius: var(--radius-sm);
-  font: inherit;
-  font-size: var(--fs-small);
-}
-/* New chat is a plain row like the others: no outline, no fill. */
-#side-new.side-row {
-  border: 0;
-  color: var(--foreground);
-  font-weight: 500;
-}
-/* The account row. */
-.side-nav {
-  grid-template-columns: minmax(0, 1fr);
-}
-.side-account {
-  gap: var(--gap-floor);
-}
-.avatar {
+.row-more {
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: 1.5rem;
-  block-size: 1.5rem;
-  border-radius: 50%;
-  background: var(--muted);
+  min-height: var(--ctl);
+  min-width: var(--ctl);
+  border-radius: var(--radius-sm);
+  color: var(--quiet);
+}
+.row-more:hover,
+.row-more[aria-expanded='true'] {
+  background: var(--fill);
   color: var(--foreground);
 }
-.side-account-name {
-  flex: 1 1 0;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* With a mouse the "..." sits over the time, shown on hover and on focus; on touch it is always beside the row. */
+@media (hover: hover) and (pointer: fine) {
+  .row-more {
+    position: absolute;
+    inset-inline-end: 0;
+    opacity: 0;
+    background: var(--background);
+  }
+  .chat-li:hover .row-more,
+  .row-more:focus-visible,
+  .row-more[aria-expanded='true'] {
+    opacity: 1;
+  }
 }
-.side-gear {
-  margin-inline-start: auto;
+.project > summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--ctl);
+  padding-inline: var(--gap-floor);
+  border-radius: var(--radius-sm);
+  color: var(--quiet);
+  cursor: pointer;
+}
+.project > summary:hover {
+  background: var(--fill);
+  color: var(--foreground);
+}
+/* A disclosure's content is not its flex item, so the 7px between its summary and what it opens is a margin. */
+:is(.side-group, .project) > :not(summary) {
+  margin-block-start: var(--gap-floor);
+}
+[data-panel] > section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+}
+.side-form input {
+  flex: 1 1 8rem;
+}
+.side-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-floor);
+}
+.side-tabs [role='tab'] {
+  min-height: var(--ctl);
+  min-width: var(--ctl);
+  padding-inline: var(--gap-floor);
+  border-radius: var(--radius-sm);
+  color: var(--quiet);
+  font-size: var(--fs-small);
+}
+.side-tabs [aria-selected='true'] {
+  background: var(--fill-on);
+  color: var(--foreground);
+}
+[role='tabpanel'] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
 }
 
-/* The top bar: thin, no rule, the chat's title at the left of the actions. */
-[data-slot='app-topbar'] {
-  border-bottom: 0;
+/* The Skills tab (chat/skills-ui.ts): label-to-field and item gaps are the 7px floor. */
+.skill-item,
+.skill-form,
+.skill-field,
+.skill-scope,
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
 }
-[data-slot='app-topbar'] > div.ml-auto {
+.skill-item {
+  padding-block: var(--gap-floor);
+  border-top: 1px solid var(--line);
+}
+.skill-name {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
+  font-family: var(--mono);
+  font-weight: 600;
+}
+.skill-scope {
+  border: 0;
+  padding: 0;
+}
+.skill-scope legend {
+  padding: 0;
+  margin-block-end: var(--gap-floor);
+}
+.skill-switch[aria-checked='true'],
+.offline-switch[aria-checked='true'] {
+  background: var(--fill-on);
+  box-shadow: inset 0 0 0 1.5px var(--foreground);
+}
+.offline-switch {
+  justify-content: space-between;
+}
+.offline-state {
+  font-family: var(--mono);
+}
+
+/* ---- the top bar ------------------------------------------------------------------------------------------ */
+
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
+  padding: var(--gap-floor) var(--page-inset);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-small);
+}
+.chat-head {
   flex: 1 1 0;
-}
-.chat-title {
-  margin: 0;
-  flex: 1 1 6rem; /* takes the room the actions leave, and is cut with an ellipsis rather than wrapping the bar */
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
+}
+.chat-heading {
+  position: relative;
+  min-width: 0;
+  min-height: var(--ctl);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.chat-title,
+.chat-sub {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: var(--fs-small);
-  font-weight: 500;
-  line-height: var(--leading-floor);
-}
-.chat-title.sr-only {
-  /* Not drawn, but still the page's heading for a screen reader. */
-  position: absolute;
-  flex: none;
-}
-/* The title and its subtitle are two lines; one invisible button over both is the single tappable target (it opens the chat menu).
-   On a phone the wordmark gives way to them while a chat is open. */
-.chat-heading {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  flex: 0 1 auto;
-  min-width: 0;
-}
-/* Only while a chat is open: with no chat the heading is invisible and must take no room (it would wrap the bar's actions). */
-html[data-titled] .chat-heading {
-  min-block-size: var(--size-control-sm);
-}
-.chat-heading .chat-title {
-  flex: none;
   line-height: 1.3;
 }
 .chat-sub {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  margin: 0;
-  min-width: 0;
-  font-size: var(--fs-caption);
-  line-height: 1.3;
-  color: var(--muted-text);
-}
-.chat-sub span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.chat-sub svg {
-  flex: none;
+  font-family: var(--mono);
+  color: var(--quiet);
 }
 .chat-hit {
   position: absolute;
   inset: 0;
-  padding: 0;
-  border: 0;
   border-radius: var(--radius-sm);
-  background: transparent;
-  cursor: pointer;
 }
 .chat-hit:hover {
-  background: color-mix(in oklab, var(--foreground) 6%, transparent);
+  background: var(--fill);
 }
+/* On a phone the wordmark gives way to the chat's title while a chat is open. */
 @media (max-width: 63.999rem) {
   html[data-titled] [data-slot='app-topbar'] .brand {
     display: none;
   }
 }
-
-/* One centred column. */
-html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
-  inline-size: 100%;
-  max-inline-size: 46rem;
-  margin-inline: auto;
-  box-sizing: border-box;
+.bar-actions {
+  flex: none;
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
 }
-.dock {
-  border-top: 0;
-  background: transparent;
-}
-
-/* Replies are plain prose; the person's own question is a soft block at the right. */
-#log {
-  gap: calc(var(--inset-floor) * 1.5);
-}
-.msg.bot {
-  background: none;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
-  margin-right: 0;
-}
-/* The person's own message is a soft rounded bubble at the right: a slightly darker tint of the page, no border. Replies stay plain text.
-   (Owner reference, #269.) The tint is a fraction of the text colour over the page, so it follows light and dark by itself. */
-.msg.user {
-  justify-self: end;
-  background: color-mix(in oklab, var(--foreground) 7%, var(--background));
+.offline-badge {
   color: var(--foreground);
-  margin: 0;
-  max-inline-size: min(100%, 34rem);
-  padding: var(--inset-floor);
-  border-radius: var(--radius-lg);
-  font-weight: 400;
+  box-shadow: inset 0 0 0 1.5px var(--foreground);
 }
-@media (prefers-contrast: more), (forced-colors: active) {
-  /* A tint is not enough for everyone: the bubble gets an edge too. */
-  .msg.user {
-    border: 1px solid CanvasText;
+.palette-btn .kbd {
+  display: none;
+}
+@media (max-width: 39.999rem) {
+  .palette-btn {
+    display: none;
   }
 }
-.msg {
-  position: relative; /* the hidden name below is placed against the message, not the page */
+@media (max-width: 30rem) {
+  [data-slot='app-topbar'] #new-chat {
+    display: none;
+  }
 }
-.msg .who {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
+/* From 40rem the top bar's actions say what they are. */
+@media (min-width: 40rem) {
+  .sr-only.bar-label {
+    position: static;
+    inline-size: auto;
+    block-size: auto;
+    overflow: visible;
+    clip-path: none;
+  }
+}
+@media (min-width: 64rem) and (pointer: fine) {
+  .palette-btn .kbd {
+    display: inline;
+  }
+}
+
+/* ---- the reading column ------------------------------------------------------------------------------------- */
+
+main#main {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
+  overflow: clip;
 }
-/* Message text is the small size (14px, the smallest the Bundu floor allows), not the 17px body size. */
+main:focus,
+#thread:focus {
+  outline: none;
+}
+#thread {
+  flex: 1 1 0;
+  min-height: 6rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--inset-floor) var(--page-inset) 0;
+  scroll-padding-block: var(--gap-floor);
+}
+#empty,
+#log,
+.ask {
+  max-width: var(--col);
+  min-width: 0;
+  margin-inline: auto;
+}
+#empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+  padding-block-start: clamp(0px, 14vh, 7rem);
+}
+#greeting {
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+.lead,
+.trust {
+  font-size: var(--fs-small);
+  color: var(--quiet);
+}
+.try {
+  margin-block-start: var(--inset-floor);
+  font-family: var(--mono);
+  font-size: var(--fs-small);
+  font-weight: 400;
+  color: var(--quiet);
+}
+.examples,
+.first-lang {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-floor);
+}
+.trust {
+  margin-block-start: var(--inset-floor);
+}
+
+/* Messages: no bubbles around the answer, no cards. */
+#log {
+  display: flex;
+  flex-direction: column;
+  gap: var(--inset-floor);
+}
+.msg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+  min-width: 0;
+  font-size: var(--fs-small);
+}
 .msg .text {
   font-size: var(--fs-small);
   line-height: 1.6;
+  white-space: pre-wrap;
+  min-width: 0;
 }
-/* "Thinking..." is a status, not a message: as small as the floor allows, and muted. */
+/* The person's turn: a compact tinted block at the right, set apart by its tint, not by weight. */
+.msg.user {
+  align-self: flex-end;
+  max-width: min(85%, 36rem);
+  padding: var(--inset-floor);
+  border-radius: 10px;
+  background: var(--tint);
+}
+.msg.user .text {
+  line-height: var(--leading-floor);
+}
+/* "Thinking" is a status: as small as the floor allows, muted, with quiet dots. */
 .msg.pending .text {
-  font-size: var(--fs-small);
-  font-weight: 400;
-  color: var(--muted-foreground);
+  color: var(--quiet);
 }
+.dots {
+  font-family: var(--mono);
+  letter-spacing: 0.1em;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .dots {
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+/* Notices (the personal-scope explanation, an error): a rule at the left, not a box. */
 .msg.refusal,
 .msg.error {
-  border: 2px solid var(--info, var(--ring));
-  border-radius: var(--radius-lg);
-  padding: var(--inset-floor);
+  padding: var(--gap-floor) var(--inset-floor);
+  border-inline-start: 2px solid var(--info);
+  background: var(--tint);
 }
 .msg.error {
-  border-color: var(--destructive-text, var(--destructive));
+  border-color: var(--destructive-text);
 }
-/* A formatted answer (markdown.ts): paragraphs, lists, quotes, code and tables, all from Mzizi tokens. Blocks are 7px apart
-   (the floor), headings are as big as the body at the smallest, and text never goes under 14px, so code is not shrunk. */
+.msg :is(.refusal, .error) h2,
+.msg.refusal h2 {
+  font-size: var(--fs-small);
+}
+.msg > .btn,
+.msg > a.btn {
+  align-self: flex-start;
+}
+.queue-extra {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+}
+/* Metadata reads in monospace: the kind of question, the skills a question went with. */
+.meta,
+.part {
+  font-family: var(--mono);
+  font-size: var(--fs-small);
+  color: var(--quiet);
+}
+.part::before {
+  content: '◆ ';
+}
+.msg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-floor);
+}
+.msg-actions .btn {
+  font-size: var(--fs-small);
+}
+/* Sources, as parts: one compact line each (› Source  the section  Open source), the detail one tap away. */
+.sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+}
+.sources h2 {
+  font-family: var(--mono);
+  font-size: var(--fs-small);
+  font-weight: 400;
+  color: var(--quiet);
+}
+.sources ul {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+  padding-inline-start: var(--gap-floor);
+  border-inline-start: 1px solid var(--line);
+}
+.cite {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gap-floor);
+  min-width: 0;
+}
+.cite-more {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.cite-more > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
+  min-height: var(--ctl);
+  padding-inline: var(--gap-floor);
+  border-radius: var(--radius-sm);
+  list-style: none;
+  cursor: pointer;
+}
+.cite-more > summary::-webkit-details-marker {
+  display: none;
+}
+.cite-more > summary::before {
+  content: '›';
+  font-family: var(--mono);
+  color: var(--quiet);
+}
+.cite-more[open] > summary::before {
+  content: '⌄';
+}
+.cite-more > summary:hover {
+  background: var(--fill);
+}
+.badge {
+  flex: none;
+  font-family: var(--mono);
+  color: var(--quiet);
+}
+.cite-heading,
+summary > .cite-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+.cite-more > span {
+  display: block;
+  margin-block-start: var(--gap-floor);
+  padding-inline: calc(var(--gap-floor) * 2 + 0.6em) var(--gap-floor);
+  color: var(--quiet);
+}
+.cite-meta {
+  font-family: var(--mono);
+}
+.cite-link {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--ctl);
+  padding-inline: var(--gap-floor);
+  font-family: var(--mono);
+  color: var(--quiet);
+  text-underline-offset: 3px;
+}
+.cite-link:hover {
+  color: var(--foreground);
+}
+.attachments,
+.attach-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+}
+.attach-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gap-floor);
+  min-width: 0;
+  padding-inline-start: var(--inset-floor);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-small);
+}
+.attach-name {
+  font-family: var(--mono);
+  min-width: 0;
+}
+.attach-meta {
+  color: var(--quiet);
+}
+.attach-open,
+.attach-remove {
+  min-height: var(--ctl);
+  min-width: var(--ctl);
+  margin-inline-start: auto;
+  padding-inline: var(--inset-floor);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-small);
+  color: var(--quiet);
+}
+.attach-open:hover,
+.attach-remove:hover {
+  background: var(--fill);
+  color: var(--foreground);
+}
+.attach-recording {
+  border-color: var(--destructive-text);
+}
+
+/* A formatted answer (markdown.ts): blocks 7px apart, headings no larger than the body, code and tables in their own box. */
 .msg .text.md {
   white-space: normal;
 }
@@ -1433,23 +1047,22 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   white-space: pre-wrap;
 }
 .md .md-h {
-  font-weight: 700;
   margin-block-start: var(--inset-floor);
+  font-weight: 700;
 }
 .md > .md-h:first-child {
   margin-block-start: 0;
 }
 .md .md-h1,
 .md .md-h2 {
-  font-size: var(--fs-body);
-  line-height: var(--leading-floor);
+  font-size: 1rem;
 }
 .md ul,
 .md ol {
   padding-inline-start: 1.5em;
 }
 .md ul {
-  list-style: disc; /* the page's reset removes markers; an answer's lists need them */
+  list-style: disc;
 }
 .md ol {
   list-style: decimal;
@@ -1457,66 +1070,48 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .md ul ul {
   list-style: circle;
 }
-.md li + li {
+.md li + li,
+.md li > :is(ul, ol, p, blockquote, pre, .md-table) {
   margin-block-start: var(--gap-floor);
-}
-.md li > ul,
-.md li > ol,
-.md li > p,
-.md li > blockquote,
-.md li > pre,
-.md li > .md-table {
-  margin-block: var(--gap-floor) 0;
 }
 .md strong {
   font-weight: 700;
 }
 .md blockquote {
-  margin-inline: 0;
   padding-inline-start: var(--inset-floor);
-  border-inline-start: 3px solid var(--border);
-  color: var(--muted-foreground);
+  border-inline-start: 2px solid var(--line);
+  color: var(--quiet);
 }
 .md hr {
   border: 0;
-  border-block-start: 1px solid var(--border);
+  border-block-start: 1px solid var(--line);
 }
 .md a {
-  color: inherit;
-  text-decoration: underline;
   text-underline-offset: 0.2em;
 }
 .md code {
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, 'Liberation Mono', monospace;
-  background: var(--muted);
-  color: var(--foreground);
-  border-radius: var(--radius-sm);
   padding-inline: 0.3em;
+  border-radius: 4px;
+  background: var(--fill);
 }
-/* A code block scrolls inside its own box: the page never scrolls sideways. */
-.md pre {
-  background: var(--muted);
-  color: var(--foreground);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  padding: var(--gap-floor) var(--inset-floor);
-  max-inline-size: 100%;
-  overflow-x: auto;
-  white-space: pre;
-  overflow-wrap: normal;
-  word-break: normal;
-  tab-size: 2;
-}
-.md pre code {
-  background: none;
-  border-radius: 0;
-  padding: 0;
-}
+.md pre,
 .md .md-table {
   max-inline-size: 100%;
   overflow-x: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+.md pre {
+  padding: var(--gap-floor) var(--inset-floor);
+  background: var(--tint);
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 2;
+}
+.md pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
 }
 .md table {
   border-collapse: collapse;
@@ -1526,7 +1121,7 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .md th,
 .md td {
   padding: var(--gap-floor);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   text-align: start;
   vertical-align: top;
   min-inline-size: 7rem;
@@ -1534,8 +1129,7 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   overflow-wrap: break-word;
 }
 .md th {
-  background: var(--muted);
-  font-weight: 700;
+  background: var(--tint);
 }
 .md .md-r {
   text-align: end;
@@ -1543,556 +1137,366 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
 .md .md-c {
   text-align: center;
 }
-@media (prefers-contrast: more), (forced-colors: active) {
-  .md pre,
-  .md .md-table,
-  .md th,
-  .md td,
-  .md blockquote,
-  .md hr {
-    border-color: var(--border-control, CanvasText);
-  }
-  .md blockquote {
-    border-inline-start-width: 4px;
-  }
-}
 
-/* A quiet row of actions under a reply. */
-.msg-actions {
+/* ---- the prompt box ------------------------------------------------------------------------------------------ */
+
+.dock {
+  position: relative;
+  flex: none;
+  margin-block-start: var(--gap-floor);
+  padding: 0 var(--page-inset) max(var(--gap-floor), env(safe-area-inset-bottom));
+}
+.ask {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--gap-floor);
-  margin-top: var(--gap-floor);
-}
-.msg-actions .btn.link {
-  margin: 0;
-  min-height: var(--size-control-sm);
-  padding-inline: var(--gap-floor);
-  border-radius: var(--radius-sm);
-  font-size: var(--fs-small);
-  text-decoration: none;
-  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
-}
-.msg-actions .btn.link:hover {
-  background: var(--muted);
-  color: var(--foreground);
-}
-
-/* The composer: one big rounded container with the text above and its actions below. */
-.composer {
   flex-direction: column;
-  align-items: stretch;
   gap: var(--gap-floor);
-  padding: var(--inset-floor);
-  border-radius: var(--radius-lg);
 }
-.composer textarea {
-  min-height: var(--target-floor);
-  max-height: 12rem;
-  padding: var(--gap-floor) 0;
-  border-radius: var(--radius-sm);
-}
-.composer-bar {
+.composer {
   display: flex;
-  flex-wrap: wrap; /* at large text the three buttons do not fit one row: they wrap instead of leaving the screen */
-  align-items: center;
+  flex-direction: column;
   gap: var(--gap-floor);
+  padding: var(--gap-floor);
+  border: 1px solid var(--border-control);
+  border-radius: var(--box);
+  background: var(--card);
 }
-.send-round {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  inline-size: var(--size-control-sm);
-  block-size: var(--size-control-sm);
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: var(--color-sodalite-brand);
-  color: var(--color-sodalite-on-brand);
-  cursor: pointer;
+/* The box is the only edge, and its ring is the focus ring; the text area keeps a transparent outline for forced colours. */
+.composer:focus-within {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
 }
-.send-round:disabled {
-  background: var(--muted);
-  color: var(--muted-foreground);
-  cursor: not-allowed;
-}
-/* A short screen (a phone on its side): the text and the send button share one row, so the composer leaves room for the messages. */
-@media (max-height: 32rem) {
-  .composer {
-    flex-direction: row;
-    align-items: flex-end;
-  }
-  .composer textarea {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-}
-/* The open chat's tools (pin, project, delete) are a quiet row, not three bordered buttons. */
-.chat-tools {
-  padding-inline: 0;
-  justify-content: flex-start;
-}
-.chat-tools .btn,
-.chat-tools select {
-  min-height: var(--size-control-sm);
-  border-color: transparent;
-  background: transparent;
-  font-size: var(--fs-small);
-  border-radius: var(--radius-sm);
-}
-.chat-tools .btn:hover,
-.chat-tools select:hover {
-  background: var(--muted);
-}
-.side-group > summary > span {
-  flex: none;
-}
-
-/* ---- the composer's one edge, the chat's "..." menu, compact sources ------------------------------------------ */
-
-/* The container is the only edge. The text box inside has none of its own: no border, no fill. Its focus ring is the
-   container's (:focus-within); the box keeps a transparent outline, which a high-contrast mode still draws. */
-.composer textarea {
+#q {
+  display: block;
+  inline-size: 100%;
+  min-height: var(--ctl);
+  max-height: 12rem;
+  padding: var(--gap-floor);
   border: 0;
   background: transparent;
-  box-shadow: none;
+  resize: none;
+  line-height: var(--leading-floor);
   outline: 2px solid transparent;
   outline-offset: 0;
 }
-.composer:focus-within {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-}
-
-/* The title and its "..." in the top bar. */
-.chat-head {
-  display: flex;
-  align-items: center;
-  flex: 1 1 6rem;
-  min-width: 0;
-  gap: var(--gap-floor);
-}
-.chat-head .chat-title {
-  flex: 0 1 auto;
-}
-.chat-menu-btn {
-  flex: none;
-}
-/* The menu itself: a small popover under the button, not a loose toolbar above the thread. */
-#chat-tools:not(:popover-open) {
-  display: none;
-}
-#chat-tools[popover]:popover-open {
-  position: fixed;
-  inset: auto;
-  top: 3.25rem;
-  right: var(--page-inset);
-  margin: 0;
-  inline-size: min(16rem, calc(100vw - 2 * var(--page-inset)));
-  max-inline-size: none;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--gap-floor);
-  padding: var(--gap-floor);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--popover, var(--background));
-  color: var(--popover-foreground, var(--foreground));
-  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
-}
-#chat-tools .btn,
-#chat-tools select {
-  justify-content: flex-start;
-  inline-size: 100%;
-  text-align: start;
-}
-
-/* Sources: one compact row each, the detail under a disclosure. */
-.cite {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--gap-floor);
-  padding: 0;
-  border-left-width: 3px;
-  border-radius: var(--radius-md);
-}
-.cite-more {
-  flex: 1 1 0;
-  min-width: 0;
-  display: grid;
-}
-.cite-more > summary {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-floor);
-  min-height: var(--size-control-sm);
-  padding-inline: var(--inset-floor);
-  cursor: pointer;
-  list-style: none;
-  min-width: 0;
-}
-.cite-more > summary::-webkit-details-marker {
-  display: none;
-}
-.cite-more > summary > strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--fs-small);
-  font-weight: 500;
-}
-.cite-more[open] > summary > strong {
-  white-space: normal;
-}
-.cite-more > :not(summary) {
-  padding-inline: var(--inset-floor);
-  padding-block-end: var(--gap-floor);
-}
-.cite .cite-link {
-  flex: none;
-  min-height: var(--size-control-sm);
-  padding-inline: var(--gap-floor);
-  font-size: var(--fs-small);
-}
-.cite .badge {
-  flex: none;
-}
-
-/* ---- a chat row's own "..." menu --------------------------------------------------------------------------- */
-.chat-li {
-  position: relative;
-  list-style: none;
-}
-.row-more {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
-  font: inherit;
-  font-size: var(--fs-small);
-  line-height: 1;
-  cursor: pointer;
-}
-.row-more::after {
-  display: none;
-}
-/* The "..." sits beside the row, never over it: the row's hit region stops short of it. */
-.chat-li {
-  display: flex;
-  gap: var(--gap-floor);
-  align-items: stretch;
-}
-.chat-li > .chat-row {
-  flex: 1 1 0;
-  min-width: 0;
-  inline-size: auto;
-}
-.row-more {
-  flex: none;
-  align-self: center;
-  display: inline-flex;
-  inline-size: var(--size-control-sm);
-  min-block-size: var(--size-control-sm);
-}
-/* A mouse: the slot is always kept, and the "..." appears on hover and when anything in the row has focus. The time stays. */
-@media (hover: hover) and (pointer: fine) {
-  .row-more {
-    block-size: var(--size-control-sm);
-    padding: 0;
-    opacity: 0;
-    background: var(--muted);
-  }
-  .chat-li:hover .row-more,
-  .chat-li:focus-within .row-more,
-  .row-more[aria-expanded='true'] {
-    opacity: 1;
-  }
-}
-/* The menu is the chat menu's look, anchored by script under the "...". */
-#row-menu:not(:popover-open) {
-  display: none;
-}
-#row-menu[popover]:popover-open {
-  position: fixed;
-  inset: auto;
-  margin: 0;
-  inline-size: 16rem;
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--gap-floor);
-  padding: var(--gap-floor);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--popover, var(--background));
-  color: var(--popover-foreground, var(--foreground));
-  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
-}
-
-/* ---- attachments: "+", the microphone, and what has been added ------------------------------------------------- */
-.composer-gap {
-  flex: 1 1 0; /* "+" at the left, the microphone and send at the right */
-}
 .status-chips {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--gap-floor);
 }
-.status-chips:not(:has(.status-chip:not([hidden]))) {
+.status-chips:not(:has(> :not([hidden]))) {
   display: none;
 }
 .status-chip {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--gap-floor);
   padding-inline-start: var(--inset-floor);
-  border-radius: var(--radius-lg);
-  background: var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--tint);
   color: var(--foreground);
-  font-size: var(--fs-caption);
+  font-size: var(--fs-small);
   line-height: var(--leading-floor);
 }
-.status-chip[hidden] {
-  display: none;
+.status-chip > span {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.skills-note {
+  padding-block: calc(var(--gap-floor) / 2);
+  padding-inline-end: var(--inset-floor);
 }
 .chip-x {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  flex: none;
-  inline-size: var(--size-control-sm);
-  block-size: var(--size-control-sm);
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
+  min-height: var(--ctl);
+  min-width: var(--ctl);
+  border-radius: var(--radius-sm);
 }
 .chip-x:hover {
-  background: var(--muted);
+  background: var(--fill);
 }
-.bar-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  inline-size: var(--size-control-sm);
-  block-size: var(--size-control-sm);
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
-  cursor: pointer;
-}
-.bar-icon:hover {
-  background: var(--muted);
-  color: var(--foreground);
-}
-.bar-icon[aria-pressed='true'] {
-  background: var(--destructive-text, var(--destructive));
-  color: var(--background);
-}
-.bar-icon[hidden] {
-  display: none;
-}
-/* The "+" menu: opens upward from the button, placed by script. */
-#plus-menu:not(:popover-open) {
-  display: none;
-}
-#plus-menu[popover]:popover-open {
-  position: fixed;
-  inset: auto;
-  margin: 0;
-  inline-size: 16rem;
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-floor);
-  padding: var(--gap-floor);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--popover, var(--background));
-  color: var(--popover-foreground, var(--foreground));
-  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 18%, transparent);
-}
-#plus-menu .btn {
-  justify-content: flex-start;
-  inline-size: 100%;
-}
-/* What is waiting to be sent, above the text, and what a sent question kept. Each says it stayed on this device. */
-.attach-list,
-.attachments {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-floor);
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.attach-list[hidden] {
-  display: none;
-}
-.attach-chip {
+.composer-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0 var(--gap-floor);
-  padding: var(--gap-floor) var(--inset-floor);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--muted);
-  font-size: var(--fs-small);
-  min-width: 0;
+  gap: var(--gap-floor);
 }
-.attach-name {
-  flex: 1 1 8rem;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 500;
+.composer-gap {
+  flex: 1 1 0;
 }
-.attach-meta {
-  flex: 2 1 12rem;
-  color: color-mix(in oklab, var(--foreground) 80%, var(--background));
+.bar-icon,
+.send-round,
+.jump-latest {
+  border-radius: 50%;
 }
-.attach-remove,
-.attach-open {
-  flex: none;
-  min-inline-size: var(--size-control-sm);
-  min-block-size: var(--size-control-sm);
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
+#plus[aria-expanded='true'],
+#mic[aria-pressed='true'] {
+  background: var(--fill-on);
+  color: var(--foreground);
 }
-.attach-remove:hover,
-.attach-open:hover {
-  background: color-mix(in oklab, var(--foreground) 10%, transparent);
-}
-.attach-open {
-  text-decoration: underline;
+.mode-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--ctl);
+  min-width: var(--ctl);
   padding-inline: var(--gap-floor);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: var(--fs-small);
+  color: var(--quiet);
+  white-space: nowrap;
 }
-.attach-remove::after,
-.attach-open::after {
+.mode-chip:hover {
+  background: var(--fill);
+  color: var(--foreground);
+}
+html[data-mode='personal'] .mode-chip,
+html[data-offline-mode] .mode-chip {
+  border-color: currentColor;
+  color: var(--foreground);
+}
+.send-round {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--ctl);
+  min-width: var(--ctl);
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.send-round:disabled {
+  background: var(--fill-on);
+  color: var(--quiet);
+}
+.key-hints {
   display: none;
+  font-family: var(--mono);
+  font-size: var(--fs-small);
+  color: var(--quiet);
 }
-.msg.user .attachments {
-  margin-top: var(--gap-floor);
+@media (min-width: 64rem) and (pointer: fine) and (hover: hover) {
+  .key-hints {
+    display: block;
+  }
+  #q {
+    font-size: 15px;
+  }
+  select,
+  input:not([type='checkbox'], [type='radio'], [type='file']),
+  .skill-form textarea {
+    font-size: var(--fs-small);
+  }
 }
-.msg.user .attach-chip {
-  font-weight: 400; /* the question's weight is for its words, not its attachments */
-  background: color-mix(in oklab, var(--foreground) 12%, transparent); /* a step darker than the bubble it sits in */
+/* An empty status line takes no room (it stays in the page, so what it says later is still announced). */
+.toast:empty {
+  position: absolute;
+}
+.jump-latest {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-end: calc(100% + var(--gap-floor));
+  margin-inline: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--ctl);
+  block-size: var(--ctl);
+  border: 1px solid var(--line);
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--foreground) 14%, transparent);
 }
 
-/* ---- Settings: a modal ----------------------------------------------------------------------------------
-   A native dialog (focus trap, Esc, inert page behind it). Full screen below 40rem with the close button pinned
-   at the top; centred and capped above. Sizes are tokens: 49px hit regions, 7px gaps, 14px inset. */
-.settings-dialog {
-  padding: 0;
-  border: 1px solid var(--border);
+/* ---- menus, the command palette and the slash menu --------------------------------------------------------------- */
+
+.menu,
+.slash-menu {
+  margin: 0;
+  padding: var(--gap-floor);
+  border: 1px solid var(--line);
+  border-radius: var(--box);
   background: var(--card);
   color: var(--foreground);
-  max-width: none;
-  max-height: none;
+  box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 14%, transparent);
+  font-size: var(--fs-small);
 }
-.settings-dialog:not([open]) {
-  display: none;
-}
-.settings-dialog[open] {
+.menu:popover-open {
+  position: fixed;
+  inset: auto;
+  inline-size: min(16rem, calc(100vw - 2 * var(--page-inset)));
   display: flex;
   flex-direction: column;
-  inset: 0;
-  margin: 0;
-  inline-size: 100%;
-  block-size: 100%;
-  border-radius: 0;
-  border: 0;
+  gap: var(--gap-floor);
 }
-.settings-dialog::backdrop {
-  background: rgb(0 0 0 / 0.5);
+#chat-tools:popover-open {
+  top: calc(var(--ctl) + var(--gap-floor) * 3);
+  right: var(--page-inset);
+}
+.menu .btn,
+.menu select {
+  inline-size: 100%;
+  justify-content: flex-start;
+  border-color: transparent;
+}
+.palette {
+  inline-size: min(36rem, calc(100vw - 2 * var(--page-inset)));
+  max-height: min(28rem, 80dvh);
+  margin: 12dvh auto auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--box);
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 16px 48px color-mix(in oklab, var(--foreground) 18%, transparent);
+  overflow: hidden;
+}
+.palette[open] {
+  display: flex;
+  flex-direction: column;
+}
+.palette::backdrop,
+.settings-dialog::backdrop,
+.sheet::backdrop {
+  background: var(--scrim);
+}
+.palette input {
+  inline-size: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  font-size: var(--fs-small);
+}
+.palette input:focus-visible {
+  outline: none;
+}
+.cmd-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: var(--gap-floor);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+}
+.cmd-list [role='option'] {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
+  min-height: var(--ctl);
+  padding-inline: var(--gap-floor);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.cmd-list [role='option'][aria-selected='true'] {
+  background: var(--fill-on);
+}
+.cmd-hint {
+  margin-inline-start: auto;
+  font-family: var(--mono);
+  color: var(--quiet);
+  white-space: nowrap;
+}
+.cmd-empty {
+  padding: var(--gap-floor);
+  color: var(--quiet);
+}
+.slash-menu {
+  position: absolute;
+  inset-inline: var(--page-inset);
+  inset-block-end: calc(100% + var(--gap-floor));
+  z-index: 20;
+  max-width: var(--col);
+  margin-inline: auto;
+}
+.slash-menu .cmd-list {
+  padding: 0;
+}
+
+/* ---- dialogs ------------------------------------------------------------------------------------------------------- */
+
+.settings-dialog,
+.sheet {
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--box);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: var(--fs-small);
+}
+.sheet {
+  inline-size: min(40rem, calc(100vw - 2 * var(--inset-floor)));
+  max-height: 85dvh;
+  padding: var(--inset-floor);
+  overflow: auto;
+}
+.sheet[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+}
+.artifact-text {
+  white-space: pre-wrap;
+  line-height: var(--leading-floor);
+}
+.settings-dialog {
+  inline-size: 100vw;
+  max-inline-size: none;
+  block-size: 100dvh;
+  max-block-size: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (min-width: 40rem) {
+  .settings-dialog {
+    inline-size: min(32rem, calc(100vw - 2 * var(--inset-floor)));
+    block-size: auto;
+    max-block-size: 85dvh;
+    margin: auto;
+    border: 1px solid var(--line);
+    border-radius: var(--box);
+  }
 }
 .settings-head {
-  flex: none;
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--gap-floor);
-  padding: var(--gap-floor) var(--page-inset);
-  border-bottom: 1px solid var(--border);
-}
-.settings-head h2 {
-  margin: 0;
-  font-size: var(--fs-body, 1rem);
-}
-.settings-head .btn {
-  min-height: var(--target-floor);
-  min-width: var(--target-floor);
+  padding: calc(var(--gap-floor) / 2) var(--page-inset);
+  border-bottom: 1px solid var(--line);
+  background: var(--card);
 }
 .settings-body {
-  flex: 1 1 auto;
-  overflow: auto;
-  display: grid;
-  align-content: start;
+  display: flex;
+  flex-direction: column;
   gap: var(--inset-floor);
-  padding: var(--inset-floor) var(--page-inset) max(var(--inset-floor), env(safe-area-inset-bottom));
+  padding: var(--inset-floor) var(--page-inset);
 }
 .settings-section {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--gap-floor);
-  min-width: 0;
 }
 .settings-section h3 {
-  margin: 0;
+  font-family: var(--mono);
   font-size: var(--fs-small);
-  font-weight: 600;
-  color: var(--muted-text);
+  font-weight: 400;
+  color: var(--quiet);
 }
-.settings-dialog :is(h2, h3) {
-  font-family: inherit;
-}
-.settings-section .btn {
-  max-inline-size: 100%;
-  white-space: normal; /* at 200% text a long label wraps inside the dialog instead of running to its edge */
-}
-.settings-section .side-row {
-  padding-inline: 0;
-  justify-content: flex-start;
-}
-@media (min-width: 40rem) {
-  .settings-dialog[open] {
-    inset: 0;
-    margin: auto;
-    inline-size: min(32rem, calc(100vw - 2 * var(--page-inset)));
-    block-size: auto;
-    max-block-size: calc(100dvh - 2 * var(--page-inset));
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg, 1rem);
-  }
-}
-
-/* ---- Settings: the language radio group and the offline switch ----------------------------------------------
-   Each language is a row with the radio drawn over the whole row, so the hit region is the full row (49px, or the density size
-   with a mouse); the dot and ring are painted on the input itself and its focus ring is the page's own. */
-.radio-group {
-  display: grid;
-  gap: var(--gap-floor);
-}
+/* A language is a row with the radio drawn over the whole row, so the whole row is the hit region. */
 .radio-row {
   position: relative;
   display: flex;
   align-items: center;
-  min-height: var(--size-control-sm);
+  min-height: var(--ctl);
   padding-inline: calc(var(--inset-floor) + 1.75rem) var(--inset-floor);
   cursor: pointer;
 }
@@ -2102,114 +1506,106 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   inset: 0;
   inline-size: 100%;
   block-size: 100%;
-  margin: 0;
-  border: 1px solid var(--border-control, var(--border));
+  border: 1px solid var(--line);
   border-radius: var(--radius-sm);
-  background:
-    radial-gradient(circle at calc(var(--inset-floor) + 0.5rem) 50%, transparent 0 0.3rem, var(--foreground) 0.3rem 0.4rem, transparent 0.4rem) no-repeat,
-    transparent;
+  background: radial-gradient(circle at calc(var(--inset-floor) + 0.5rem) 50%, transparent 0 0.3rem, var(--foreground) 0.3rem 0.4rem, transparent 0.4rem) no-repeat;
   cursor: pointer;
 }
 .radio-row input:checked {
   background:
     radial-gradient(circle at calc(var(--inset-floor) + 0.5rem) 50%, var(--foreground) 0 0.3rem, transparent 0.3rem 0.4rem, var(--foreground) 0.4rem 0.45rem, transparent 0.45rem) no-repeat,
-    var(--muted);
+    var(--fill-on);
 }
 .radio-row span {
   position: relative;
   pointer-events: none;
 }
-.offline-badge {
-  background: var(--muted);
-  box-shadow: inset 0 0 0 1.5px var(--foreground);
-}
-.settings-section .offline-switch {
-  justify-content: space-between;
-  gap: var(--gap-floor);
-}
 
-@media (forced-colors: active) {
-  /* The dot and fill are backgrounds, which forced colours drop: the chosen language keeps a thick border instead. */
-  .radio-row input:checked {
-    border: 4px solid Highlight;
-  }
-  .offline-switch[aria-checked='true'] {
-    border: 4px solid Highlight;
-  }
-}
-.settings-hint {
-  margin: 0;
-  font-size: var(--fs-small);
-  color: var(--muted-text);
-  line-height: var(--leading-floor);
-}
+/* ---- signed out: a whole screen ---------------------------------------------------------------------------------- */
 
-/* The Skills tab (chat/skills-ui.ts): the person's skills and the builder, in the drawer. Tokens only, so light, dark and
-   forced colours follow the rest of the drawer; label-to-field and item gaps are the 7px floor. */
-#tabpanel-skills {
+.signin-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow-y: auto;
   display: grid;
-  gap: var(--gap-floor);
-  padding-inline: var(--inset-floor);
+  align-content: center;
+  justify-items: center;
+  gap: var(--inset-floor);
+  padding: var(--inset-floor) var(--page-inset) max(var(--inset-floor), env(safe-area-inset-bottom));
+  text-align: center;
+  background: var(--background);
 }
-#tabpanel-skills .side-empty {
-  padding-inline: 0;
-}
-#tabpanel-skills p {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.skill-item {
-  display: grid;
-  gap: var(--gap-floor);
-  padding-block: var(--gap-floor);
-  border-top: 0.5px solid var(--border);
-}
-.skill-name {
-  display: flex;
-  gap: var(--gap-floor);
-  align-items: center;
+.signin-screen h1 {
+  font-size: 1.5rem;
   font-weight: 600;
+  line-height: 1.2;
+  outline: none;
 }
-.skill-form,
-.skill-field,
-.skill-scope {
+.signin-screen .mark {
+  border-radius: var(--box);
+}
+.signin-screen .btn.primary {
+  inline-size: 100%;
+  max-inline-size: 24rem;
+  font-size: var(--fs-body);
+}
+
+/* The privacy page. */
+.legal {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--inset-floor);
   display: grid;
   gap: var(--gap-floor);
 }
-.skill-scope {
-  border: 0;
-  margin: 0;
-  padding: 0;
+.legal h1 {
+  font-size: 1.5rem;
+  line-height: 1.3;
 }
-/* A legend is not a grid item, so the fieldset's gap does not reach it. */
-.skill-scope legend {
-  padding: 0;
-  margin-block-end: var(--gap-floor);
+.legal section {
+  display: grid;
+  gap: var(--gap-floor);
+  padding-block-end: var(--inset-floor);
+  border-bottom: 1px solid var(--line);
 }
-.skill-form input:not([type='radio']),
-.skill-form textarea {
-  inline-size: 100%;
-  box-sizing: border-box;
+
+/* ---- the 49px hit region with a mouse ------------------------------------------------------------------------------
+   With a mouse from 64rem controls are DRAWN at 32px; a transparent overlay keeps the hit region at the floor's 49px, as
+   @bundu/ui's density layer does. A control that clips its overflow keeps its drawn size. */
+@media (min-width: 64rem) and (pointer: fine) and (hover: hover) and (not (any-pointer: coarse)) {
+  :where(button, summary, .side-row, .btn, [role='tab'], [role='switch']):not(.chat-hit, .radio-row *) {
+    position: relative;
+  }
+  :where(button, summary, .side-row, .btn, [role='tab'], [role='switch']):not(.chat-hit, .radio-row *)::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, var(--target-floor));
+    height: max(100%, var(--target-floor));
+    transform: translate(-50%, -50%);
+  }
+  .row-more {
+    position: absolute;
+  }
 }
-.skill-form textarea {
-  min-block-size: var(--target-floor);
-  padding: var(--gap-floor) var(--inset-floor);
-  border: 1px solid var(--border-control, var(--border));
-  border-radius: var(--radius-sm);
-  background: var(--input, var(--background));
-  line-height: var(--leading-floor);
-  resize: vertical;
-}
-.skill-switch[aria-checked='true'] {
-  background: var(--muted);
-  box-shadow: inset 0 0 0 1.5px var(--foreground);
-}
-.skills-note {
-  padding-block: calc(var(--gap-floor) / 2);
-  padding-inline-end: var(--inset-floor);
+
+/* ---- forced colours, high contrast --------------------------------------------------------------------------------- */
+
+@media (prefers-contrast: more), (forced-colors: active) {
+  :root {
+    --line: var(--border-control);
+  }
 }
 @media (forced-colors: active) {
+  .radio-row input:checked,
+  .offline-switch[aria-checked='true'],
   .skill-switch[aria-checked='true'] {
     border: 4px solid Highlight;
+  }
+  .side-row[aria-current],
+  .cmd-list [aria-selected='true'] {
+    outline: 2px solid Highlight;
   }
 }
