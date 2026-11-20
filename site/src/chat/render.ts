@@ -146,7 +146,7 @@ export function renderAnswer(
       : null;
   share?.addEventListener('click', () => {
     const from = a.citations.map((c) => (c.heading ? `${c.heading}, ${c.title}` : c.title)).join('\n');
-    const text = [words, from, `${location.origin}/lite/`].filter(Boolean).join('\n\n');
+    const text = [words, from, `${location.origin}/chat/`].filter(Boolean).join('\n\n');
     void navigator.share({ title: s.shamwari, text }).catch((e: unknown) => {
       // Closing the share sheet is not an error. Anything else (no share target, blocked): the words go to the clipboard instead.
       if ((e as { name?: string })?.name !== 'AbortError') void navigator.clipboard?.writeText(text).catch(() => undefined);

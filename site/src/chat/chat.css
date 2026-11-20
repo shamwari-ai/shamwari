@@ -1,6 +1,6 @@
 /* Shamwari Chat, on Mzizi.
  *
- * The frame is Mzizi's AppShell (app-src/pages/lite/index.astro). Everything here sits inside it and takes
+ * The frame is Mzizi's AppShell (app-src/pages/chat/index.astro). Everything here sits inside it and takes
  * its sizes from the Bundu floor in @bundu/ui's density layer, never from numbers of its own:
  *   body 17px (--fs-body), captions 14px (--fs-caption), every control a 49px hit region (--target-floor),
  *   14px inset (--inset-floor), 7px gaps (--gap-floor), 1.5 body leading (--leading-floor).

@@ -1,7 +1,7 @@
 ---
 // Shamwari Chat: the R1 chat app and R2 Lite PWA from shamwari-ai/shamwari#83.
 //
-// This page belongs to the APP Worker (shamwari-app, https://shamwari.ai/lite/, the light edge chat),
+// This page belongs to the APP Worker (shamwari-app, https://shamwari.ai/chat/, the chat),
 // built by astro.app.config.mjs from app-src/. The marketing Worker
 // (shamwari-site, https://www.shamwari.ai) never contains it.
 //
@@ -32,7 +32,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Shamwari Chat</title>
   <meta name="description" content="Ask in Shona, Ndebele or English about farming, weather, news and places, and get the answer with its source." />
-  <link rel="canonical" href="https://shamwari.ai/lite/" />
+  <link rel="canonical" href="https://shamwari.ai/chat/" />
   <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
   <link rel="icon" type="image/png" href="/favicon.png" sizes="256x256" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -41,7 +41,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
   <meta name="theme-color" content="#0e0d0c" media="(prefers-color-scheme: dark)" />
   <meta name="shamwari-api" content={api} />
   <meta name="shamwari-auth" content={authMode} />
-  <link rel="manifest" href="/lite/manifest.webmanifest" />
+  <link rel="manifest" href="/chat/manifest.webmanifest" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Shamwari" />
 </head>
@@ -50,7 +50,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
   <AppShell id="chat" accent="sodalite" navLabel="Chats" sidebarLabel="Your chats">
     <!-- The brand, in the drawer's head and (below 64rem) in the top bar. Lower-case: a wordmark is. -->
     <div slot="workspace" class="side-head">
-      <a href="/lite/" class="brand" aria-label="shamwari">
+      <a href="/chat/" class="brand" aria-label="shamwari">
         <img src="/apple-touch-icon.png" alt="" width="28" height="28" />
         <span class="wordmark">shamwari</span>
       </a>
@@ -60,7 +60,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
         <span class="sr-only" data-i18n="collapseChats">{en.collapseChats}</span>
       </label>
     </div>
-    <a slot="brand" href="/lite/" class="brand" aria-label="shamwari">
+    <a slot="brand" href="/chat/" class="brand" aria-label="shamwari">
       <img src="/apple-touch-icon.png" alt="" width="28" height="28" />
       <span class="wordmark">shamwari</span>
     </a>
@@ -213,7 +213,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
           <button type="button" class="btn chip" data-example data-i18n="example3">Where is the nearest market in Masvingo?</button>
         </div>
         <!-- Quiet, under the prompts: answers can be wrong, and the privacy page is one tap away (it was two, in Settings). -->
-        <p class="trust"><span data-i18n="wrongNote">{en.wrongNote}</span><span aria-hidden="true"> · </span><a class="footer-link" href="/lite/disclaimer/" data-i18n="privacyLink">{en.privacyLink}</a></p>
+        <p class="trust"><span data-i18n="wrongNote">{en.wrongNote}</span><span aria-hidden="true"> · </span><a class="footer-link" href="/chat/disclaimer/" data-i18n="privacyLink">{en.privacyLink}</a></p>
       </section>
 
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
@@ -282,7 +282,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
     <p id="signin-failed" class="small bad" role="alert" hidden data-i18n="signInFailed">We could not sign you in. Please try again.</p>
     <p id="signin-offline" class="small" role="status" hidden data-i18n="signinOffline">You are offline. Sign in when you are back online.</p>
     <p id="signin-note" class="small" role="status" hidden></p>
-    <a class="footer-link" href="/lite/disclaimer/" data-i18n="disclaimerLink">Disclaimer and privacy</a>
+    <a class="footer-link" href="/chat/disclaimer/" data-i18n="disclaimerLink">Disclaimer and privacy</a>
   </main>
   <!-- A saved answer, opened from the drawer. A native dialog: focus is held and Escape closes it. -->
   <dialog id="artifact-view" class="artifact-view" aria-labelledby="artifact-title-view">
@@ -330,7 +330,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
       </section>
       <section class="settings-section" aria-labelledby="settings-about-title">
         <h3 id="settings-about-title" data-i18n="about">{en.about}</h3>
-        <a class="side-row" href="/lite/disclaimer/"><span data-i18n="disclaimerLink">{en.disclaimerLink}</span></a>
+        <a class="side-row" href="/chat/disclaimer/"><span data-i18n="disclaimerLink">{en.disclaimerLink}</span></a>
         <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener">
           <span data-i18n="useApi">Use the API</span><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span>
         </a>

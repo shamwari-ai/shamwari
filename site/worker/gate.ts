@@ -3,7 +3,7 @@ import { AUTH_LOGIN, clearSessionCookies, readCookies, SESSION_COOKIE, type Chec
 /**
  * The gate in front of the light chat.
  *
- * Nothing under /lite/ (and none of the app's scripts) is served to someone with no session. An
+ * Nothing under /chat/ (and none of the app's scripts) is served to someone with no session. An
  * unauthenticated request for the page goes straight to the AuthKit hosted sign-in
  * (/auth/login); it never sees a shell with a login button on it.
  *
@@ -16,39 +16,38 @@ import { AUTH_LOGIN, clearSessionCookies, readCookies, SESSION_COOKIE, type Chec
  * changes without that test changing with it.
  *
  * What this does NOT cover, on purpose: a device that has signed in has the service worker, and the service
- * worker answers /lite/ from its cache so the chat opens with no network (offline mode). On that device the
+ * worker answers /chat/ from its cache so the chat opens with no network (offline mode). On that device the
  * shell is shown without asking this Worker; the page then asks /auth/token and a 401 means the session
  * is over. Sending that case to sign-in (instead of showing the in-page sign-in) is a client change that comes
  * after the drawer and sign-in changes in #188. The service worker's own install and update also need a
  * session, because they fetch the gated shell: while signed out an update fails and the old worker stays.
  */
 export const PUBLIC_EXACT: readonly string[] = [
-  '/lite/disclaimer',
-  '/lite/disclaimer/',
-  '/lite/manifest.webmanifest',
-  '/lite/sw.js',
-  '/lite/icons/icon-192.png',
-  '/lite/icons/icon-512.png',
-  '/lite/icons/maskable-512.png',
+  '/chat/disclaimer',
+  '/chat/disclaimer/',
+  '/chat/manifest.webmanifest',
+  '/chat/sw.js',
+  '/chat/icons/icon-192.png',
+  '/chat/icons/icon-512.png',
+  '/chat/icons/maskable-512.png',
 ];
-/** Build output stylesheets: /lite/_astro/<name>.<hash>.css and nothing else under /lite/_astro/ (scripts there are gated). */
-const PUBLIC_STYLESHEET = /^\/lite\/_astro\/[A-Za-z0-9._-]+\.css$/;
+/** Build output stylesheets: /chat/_astro/<name>.<hash>.css and nothing else under /chat/_astro/ (scripts there are gated). */
+const PUBLIC_STYLESHEET = /^\/chat\/_astro\/[A-Za-z0-9._-]+\.css$/;
 
 export const isPublic = (pathname: string): boolean => PUBLIC_EXACT.includes(pathname) || PUBLIC_STYLESHEET.test(pathname);
 
 /**
- * Everything this Worker gates: the light chat and the build output its page loads, all under /lite/. The sign-in routes
- * are NOT under /lite/ (they are at the root: session.ts AUTH_ROUTES), and the session cookie is Path=/, so it reaches
- * every gated path. When the main chat is served by this Worker, its prefix (/chat/) is added here and to
- * `assets.run_worker_first`; until then it is not this Worker's to gate.
+ * Everything this Worker gates: the chat and the build output its page loads, all under /chat/. The sign-in routes
+ * are NOT under /chat/ (they are at the root: session.ts AUTH_ROUTES), and the session cookie is Path=/, so it reaches
+ * every gated path. The old /lite/ address is not gated: it only redirects to /chat/ (worker/index.ts).
  */
-export const GATED_PREFIXES: readonly string[] = ['/lite/'];
+export const GATED_PREFIXES: readonly string[] = ['/chat/'];
 export const isGated = (pathname: string): boolean => GATED_PREFIXES.some((p) => pathname.startsWith(p));
 
-/** Build output, named by content hash: /lite/_astro/<name>.<hash>.<ext>. */
-const HASHED = /^\/lite\/_astro\/[A-Za-z0-9._-]+\.[A-Za-z0-9_-]{6,}\.(js|css)$/;
+/** Build output, named by content hash: /chat/_astro/<name>.<hash>.<ext>. */
+const HASHED = /^\/chat\/_astro\/[A-Za-z0-9._-]+\.[A-Za-z0-9_-]{6,}\.(js|css)$/;
 
-const SHELL = new Set(['/lite/', '/lite/index.html']);
+const SHELL = new Set(['/chat/', '/chat/index.html']);
 
 export interface GateDeps {
   /** Unseal the session cookie and say whether it is a session. */
@@ -127,7 +126,7 @@ export async function gate(req: Request, deps: GateDeps): Promise<Response> {
   const res = await deps.asset(req);
   const out = new Response(res.body, res);
   // Never kept by a shared cache. The page is revalidated every time; a build-output file has a content hash in
-  // its name, so the browser may keep it for good (the policy _headers sets for /lite/_astro/, minus `public`).
+  // its name, so the browser may keep it for good (the policy _headers sets for /chat/_astro/, minus `public`).
   out.headers.set(
     'Cache-Control',
     HASHED.test(url.pathname) ? 'private, max-age=31536000, immutable' : 'private, no-cache',
