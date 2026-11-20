@@ -2195,7 +2195,7 @@ html.app :where(#log, #empty, .ask, .chat-tools, .notice) {
   box-sizing: border-box;
 }
 .skill-form textarea {
-  min-block-size: var(--target-floor);
+  min-block-size: var(--control-floor);
   padding: var(--gap-floor) var(--inset-floor);
   border: 1px solid var(--border-control, var(--border));
   border-radius: var(--radius-sm);
