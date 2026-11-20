@@ -1,0 +1,135 @@
+---
+title: Use Shamwari from OpenCode and other OpenAI-compatible clients
+nav: OpenCode and API clients
+summary: >-
+  The gateway speaks the OpenAI Chat Completions shape at
+  https://api.shamwari.ai/v1. What works today, the OpenCode configuration,
+  and what is not live yet.
+order: 9
+---
+
+import Note from '../../components/Note.astro';
+
+Shamwari Cloud's gateway accepts the OpenAI Chat Completions request shape, so
+a client that lets you set a base URL and an API key can call it. This page
+says exactly how far that goes today, because a client that half works is
+worse than one that says it does not.
+
+<Note label="Not live yet">
+There is no self-serve sign-up or key page yet: API keys are issued by hand.
+Ask at [hello@shamwari.ai](mailto:hello@shamwari.ai). Prices for API use are
+not published yet either, so none are given here.
+
+OpenCode does not work against the gateway yet: see
+[OpenCode](#opencode) below for why, and what has to land first.
+
+</Note>
+
+## The endpoint
+
+|            |                                                                |
+| ---------- | -------------------------------------------------------------- |
+| Base URL   | `https://api.shamwari.ai/v1`                                   |
+| Chat       | `POST /v1/chat/completions`                                    |
+| Model list | `GET /v1/models`                                               |
+| Credential | `Authorization: Bearer <your key>`. Keys start `sk_shamwari_`. |
+
+Both endpoints need the key. `GET /v1/models` returns the model ids below in
+OpenAI's list shape; it is not metered.
+
+## Models
+
+| Model id            | Model behind it    | Weights                    |
+| ------------------- | ------------------ | -------------------------- |
+| `shamwari-economy`  | Z.ai GLM-5.3-Flash | open weights, MIT          |
+| `shamwari-standard` | Z.ai GLM-5.3       | open weights, Z.ai licence |
+
+Both are served on Cloudflare Workers AI. Naming one of these ids pins the
+tier. Leaving `model` out, or sending any other id, is not an error: the
+gateway picks the tier itself from the question ([Routing](/routing)).
+
+An id is a tier, not a frozen model. The response says which model actually
+answered, in `shamwari.model_served`, and `shamwari.model_substituted` is
+`true` when a fallback answered instead of the model asked for. Premium is
+not offered.
+
+## What works today
+
+A non-streaming chat request, with text messages:
+
+```bash
+curl https://api.shamwari.ai/v1/chat/completions \
+  -H "Authorization: Bearer $SHAMWARI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "shamwari-standard",
+    "messages": [{"role": "user", "content": "What does the Labour Act say about notice periods?"}]
+  }'
+```
+
+The answer has the usual `choices`, `finish_reason` and `usage`, plus a
+`shamwari` object with the citations the answer was grounded on, the scope,
+the language and the model that served.
+
+Things that differ from a plain model API, on purpose:
+
+- **Your system messages are dropped.** Shamwari sets the system prompt
+  itself, with the cited Ground passages in it.
+- **Some questions are not sent to a model at all.** A question that needs the
+  person's own information gets a `409` (`scope_requires_local_inference`) or
+  only the cited Ground passage, with nothing generated ([Scopes](/scopes)).
+- **Sampling is fixed.** `temperature`, `top_p` and reasoning effort from the
+  request are not used, and an answer is at most 2,048 tokens
+  (`finish_reason: "length"` when it is cut off).
+- **No streaming.** `stream: true` is ignored: the whole answer comes back as
+  one JSON body.
+- **No tools.** `tools` and `tool_choice` are ignored, and the model never
+  returns a tool call.
+- **Text only.** Message `content` is a string; image parts are not supported.
+
+The OpenAI SDKs work with `base_url` set to `https://api.shamwari.ai/v1`, as
+long as they make non-streaming calls.
+
+## OpenCode
+
+OpenCode streams every reply and leans on tool calls and its own system
+prompt, which are the three things the gateway does not do yet. Until
+streaming lands, OpenCode cannot read the gateway's answers. The configuration
+below is what to use once it does; it uses OpenCode's custom provider shape
+([opencode.ai/docs/providers](https://opencode.ai/docs/providers/)).
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "shamwari": {
+      "name": "Shamwari",
+      "env": ["SHAMWARI_API_KEY"],
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://api.shamwari.ai/v1"
+      },
+      "models": {
+        "shamwari-standard": {
+          "name": "Shamwari Standard (GLM-5.3)",
+          "capabilities": { "tools": false, "input": ["text"], "output": ["text"] },
+          "limit": { "context": 1000000, "output": 2048 }
+        },
+        "shamwari-economy": {
+          "name": "Shamwari Economy (GLM-5.3-Flash)",
+          "capabilities": { "tools": false, "input": ["text"], "output": ["text"] },
+          "limit": { "context": 1000000, "output": 2048 }
+        }
+      }
+    }
+  }
+}
+```
+
+Set `SHAMWARI_API_KEY` in your environment, then pick
+`shamwari/shamwari-standard` with `/models`. `tools: false` stops OpenCode
+from offering tools the gateway would ignore.
+
+Shamwari is not in OpenCode's built-in catalog (which comes from
+[models.dev](https://models.dev)) yet. A listing is prepared but waits on
+the same things this page lists as not live.
