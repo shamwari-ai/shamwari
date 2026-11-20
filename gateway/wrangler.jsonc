@@ -85,7 +85,10 @@
     // Workers AI model ids, billed through Cloudflare; there is no Z.ai API
     // and no provider key. See docs/workers-ai-models.md. These are the
     // intended models; dynamic-route.json decides what actually answers.
-    "ECONOMY_MODEL": "@cf/zai-org/glm-5.3-flash",
+    // Economy was @cf/zai-org/glm-5.3-flash until Cloudflare retired it on 2026-11-20 (410 Gone,
+    // changelog 2026-11-05-planned-model-deprecations). It now uses GLM-5.3, the one model already
+    // on the Rule 2 allowlist, until a cheaper replacement's licence has been read (owner decision).
+    "ECONOMY_MODEL": "@cf/zai-org/glm-5.3",
     "STANDARD_MODEL": "@cf/zai-org/glm-5.3",
     "SURFACE": "shamwari.ai",
 
@@ -118,9 +121,9 @@
     // If every token is refused, Workers Logs has a "workos token refused: claim=iss iss=..." line with the real value.
     // The signature (JWKS), client_id and exp stay required whatever the issuer. A trailing slash is tolerated.
     "WORKOS_ISSUER": "https://auth.mukoko.com,https://auth.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0,https://accounts.mukoko.com,https://accounts.mukoko.com/user_management/client_01KQBBSMQTSMTBN7HEC9KQBJC0",
-    // Tokens per person per month. About $0.20 at the economy model's blended price (pricing.json:
-    // 85% input at $0.15/M, 15% output at $0.50/M is about $0.20/M, so 1M tokens), the unit-cost
-    // target in docs/tiered-access-design.md. An estimate; the owner's number replaces it.
+    // Tokens per person per month. Set for about $0.20 at GLM-5.3-Flash's blended price (85% input
+    // at $0.15/M, 15% output at $0.50/M). With economy on GLM-5.3 (85% at $1.40/M, 15% at $4.40/M,
+    // about $1.85/M) the same cap is worth about $1.85 per person. The owner decides the new number.
     "WORKOS_MONTHLY_TOKEN_CAP": "1000000",
   },
 
