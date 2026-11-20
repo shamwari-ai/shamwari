@@ -73,6 +73,21 @@ Core decides again, answers with the scope it was asked for and its own
 for a different scope than the one asked, or with a chunk carrying one, is not used.
 Tests that count provider calls: `test/scope-decision.test.ts`.
 
+**Agent Skills** (`src/skills.ts`; the Lite chat's Skills tab, `docs/chat-app.md`). Two
+optional fields on `/v1/chat/completions`, read nowhere else:
+
+- `"own_information": true` says the request carries the person's own information (a
+  personal-scope skill is on). It is handled exactly as a question the rules above flag:
+  personal scope, no edge embedding, no completion, the cited passage, and Core is told.
+  It can only add that flag (`false` does not clear a flagged question), and it does not
+  change an explicit `"scope": "personal"`, which is still the 409. Not a boolean: 400.
+- `"skills": [{ "name", "description", "instructions" }]`, at most 3 (name up to 64
+  characters, description up to 1024, instructions up to 12,000): platform-scope skills,
+  added after the constant system prompt and the Ground context, never in place of
+  them. A personal-scope skill is never sent. The personal rules also run over each
+  skill's own words; one that looks personal makes the request personal scope. Malformed
+  or over a limit: 400 `invalid_skills`.
+
 ## Setup
 
 ```
@@ -160,11 +175,11 @@ Do it in two passes, because two fields have no published shape:
 on `workersai`, the only provider slug these model families have natively,
 so it needs no custom provider and no API key:
 
-| Node          | Model                       | Why                                                                                                                               |
-| ------------- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `economy`     | `@cf/zai-org/glm-5.3-flash` | fast, MIT-licensed, natively multimodal — the bulk tier                                                                           |
-| `standard`    | `@cf/zai-org/glm-5.3`       | GLM-5.3 flagship; both tiers are natively on Workers AI, unlike Kimi K3 before it                                                 |
-| `last_resort` | `@cf/zai-org/glm-5.3-flash` | same weights as `economy`, Cloudflare-hosted — deliberately redundant, matches `WORKERS_AI_FALLBACK_MODEL` in `src/provenance.ts` |
+| Node          | Model                 | Why                                                                                                                               |
+| ------------- | --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `economy`     | `@cf/zai-org/glm-5.3` | was GLM-5.3-Flash until Cloudflare retired it on 2026-11-20; GLM-5.3 until a cheaper model is cleared                             |
+| `standard`    | `@cf/zai-org/glm-5.3` | GLM-5.3 flagship; both tiers are natively on Workers AI, unlike Kimi K3 before it                                                 |
+| `last_resort` | `@cf/zai-org/glm-5.3` | same weights as `economy`, Cloudflare-hosted — deliberately redundant, matches `WORKERS_AI_FALLBACK_MODEL` in `src/provenance.ts` |
 
 Save and deploy; it is a working route.
 
@@ -225,8 +240,8 @@ exists when you wire its output:
 | #   | Node           | Type         | Settings                                                              | Wire outputs to                                  |
 | --- | -------------- | ------------ | --------------------------------------------------------------------- | ------------------------------------------------ |
 | 1   | `done`         | End          | —                                                                     | —                                                |
-| 2   | `workers_ai`   | Model        | Workers AI · `@cf/zai-org/glm-5.3-flash` · timeout 15000 · retries 0  | success → `done`, fallback → `done`              |
-| 3   | `economy_glm`  | Model        | Workers AI · `@cf/zai-org/glm-5.3-flash` · timeout 20000 · retries 1  | success → `done`, fallback → `workers_ai`        |
+| 2   | `workers_ai`   | Model        | Workers AI · `@cf/zai-org/glm-5.3` · timeout 15000 · retries 0        | success → `done`, fallback → `done`              |
+| 3   | `economy_glm`  | Model        | Workers AI · `@cf/zai-org/glm-5.3` · timeout 20000 · retries 1        | success → `done`, fallback → `workers_ai`        |
 | 4   | `standard_glm` | Model        | Workers AI · `@cf/zai-org/glm-5.3` · timeout 30000 · retries 1        | success → `done`, fallback → `economy_glm`       |
 | 5   | `tier_check`   | Conditional  | `metadata.tier` equals `standard`                                     | true → `standard_glm`, false → `economy_glm`     |
 | 6   | `budget_month` | Budget Limit | cost · key `metadata.ownerEntityId` · limit 50 · window 2592000 (30d) | success → `tier_check`, fallback → `economy_glm` |

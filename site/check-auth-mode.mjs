@@ -11,9 +11,9 @@ export function authModeProblem(html, env = process.env) {
   const want = asked ? 'developer-key' : 'mukoko';
   const got = builtAuthMode(html);
   if (got === want) return null;
-  if (got === null) return 'the built /lite/ page has no <meta name="shamwari-auth">: the page would not know how to sign people in';
+  if (got === null) return 'the built /chat/ page has no <meta name="shamwari-auth">: the page would not know how to sign people in';
   return (
-    `the built /lite/ page is in "${got}" mode, expected "${want}"` +
+    `the built /chat/ page is in "${got}" mode, expected "${want}"` +
     (want === 'mukoko'
       ? ': a release must sign people in with Mukoko (the developer-key screen says "Mukoko sign-in is coming soon"); only PUBLIC_CHAT_AUTH=developer-key may build that screen'
       : '')

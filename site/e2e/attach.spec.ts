@@ -11,7 +11,7 @@ const watch = (page: Page) => {
   const seen: { method: string; url: string; body: string }[] = [];
   // The app's own script files (the attachments code loads on first use, from the service worker's cache) are not "requests about the
   // attachment": everything else is.
-  page.on('request', (r) => !new URL(r.url()).pathname.startsWith('/lite/_astro/') && seen.push({ method: r.method(), url: r.url(), body: r.postData() ?? '' }));
+  page.on('request', (r) => !new URL(r.url()).pathname.startsWith('/chat/_astro/') && seen.push({ method: r.method(), url: r.url(), body: r.postData() ?? '' }));
   return seen;
 };
 

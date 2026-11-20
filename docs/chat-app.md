@@ -1,4 +1,4 @@
-# Shamwari Chat: the R1 chat and R2 Lite PWA
+# Shamwari Chat: the R1 chat and R2 Lite PWA, at /chat/
 
 Tracking: #83. Native apps: `docs/app-plan.md` (#86). Tiers and budgets:
 `docs/tiered-access-design.md`. Owner direction, 2026-10-31: launching the chat
@@ -12,12 +12,11 @@ answer.
 
 ## Where it lives, and why
 
-**Its own Worker on the apex, at `https://shamwari.ai/lite/`: the light edge chat.** The marketing
-site is a separate Worker on `https://www.shamwari.ai`. Owner decision, 2026-10-31 (two Workers),
-and 2026-11-01 (the main Shamwari Chat, a LibreChat fork, owns `https://shamwari.ai/chat/`; this
-original build is kept as the light edge chat at `/lite/`, and how people are routed between the
-two is designed elsewhere). The full map, the build commands and the Cloudflare steps are in
-`docs/domains-and-deploy.md`.
+**Its own Worker on the apex, at `https://shamwari.ai/chat/`.** The marketing site is a separate
+Worker on `https://www.shamwari.ai`. Owner decision, 2026-10-31 (two Workers), and 2026-11-18 (this
+app is the chat, at `/chat/`; see "Decision, 2026-11-18" below). It was served at `/lite/` from
+2026-11-01 to 2026-11-18, while a LibreChat fork was planned for `/chat/`. The full map, the build
+commands and the Cloudflare steps are in `docs/domains-and-deploy.md`.
 
 - The app is the root product, so it gets the short hostname. The marketing site is
   `www`. Neither Worker can serve the other's pages: `site/check.mjs` fails the build if
@@ -26,10 +25,59 @@ two is designed elsewhere). The full map, the build commands and the Cloudflare 
   and the checks are shared, but two Astro configs (`astro.config.mjs` for marketing,
   `astro.app.config.mjs` for the app) with separate source (`app-src/`) and public
   (`app-public/`) folders. Chat JS is built only into the app.
-- The service worker is scoped to `/lite/` on the app origin. The root `/` answers 302
-  to `/chat/` (the main chat) for now; `/chat/` itself is not served by this Worker.
+- The service worker is scoped to `/chat/` on the app origin. The root `/` answers 302
+  to `/chat/` for someone signed in, and to sign-in for anyone else.
+- `/lite` and everything under `/lite/` answer 301 to the same path under `/chat/` (query kept) for
+  one release, except the old sign-in addresses (`/lite/auth/*`, `/lite/callback`), which keep their
+  own behaviour (`docs/chat-signin.md`), and `/lite/sw.js`, which is the retiring service worker
+  described under "Moving from /lite/ to /chat/" below.
 - The cost is one more Workers Builds project to create and a hostname to move; both are
   dashboard steps in the doc above.
+
+## Decision, 2026-11-18: one chat, ours, at /chat/
+
+Owner decision, 2026-11-18 (#328): **"Go ahead, drop LibreChat and make Lite the chat."** This
+supersedes the plan in #146 (Shamwari Chat on a LibreChat fork at `/chat/`, with this app kept as the
+light edge chat at `/lite/`).
+
+- **One app we own.** The chat is this app, built in this repository, instead of a fork of a large
+  third-party application whose upstream changes would have to be merged in for every release.
+- **One Rule 1 boundary.** Every question goes from this page straight to the gateway, where the scope
+  gate decides where it may go. LibreChat would have been a second server holding conversations,
+  with its own guard (`chat/librechat/guard.mjs`) needed to prove it could reach nothing but the gateway.
+- **No MongoDB, Fly app or fork-merge burden.** The fork needed its own database, its own Fly app and
+  tunnel, and a reverse-proxy Worker (`chat/proxy/`) to put it under `/chat/`. None of it was ever
+  deployed: `https://shamwari.ai/chat/` answered 404, and no Fly app, database or Worker route existed.
+
+Removed in the same change: `chat/librechat/` (config, the Rule 1 guard, the build script and the
+stub-gateway e2e), `chat/proxy/` (the `/chat` reverse proxy Worker, which existed only to serve
+LibreChat under that path), their CI jobs and Dependabot entries, and `docs/librechat.md` (the design
+and runbook; it is in the git history before this change).
+
+## Moving from /lite/ to /chat/
+
+A browser that used the app at `/lite/` has a service worker registered for `/lite/` that answers
+every navigation there from its cache, so it would never see the 301 from the Worker on its own. The
+build therefore still writes `/lite/sw.js`, as a **retiring worker** (`site/scripts/post-build.mjs`):
+
+1. The old page asks for an update as it always does (on load, when the tab comes back to the front,
+   and every hour; `chat/update-reload.ts`). The browser fetches `/lite/sw.js` (public, `no-cache`),
+   finds it changed and installs the retiring worker, which takes over at once.
+2. On taking over it deletes the old app's cache (the cache holding the `/lite/` shell, and no other),
+   unregisters itself and claims the open pages. It has no fetch handler, so from then on every request
+   for `/lite/...` goes to the network.
+3. The takeover fires `controllerchange`, and the old page reloads once, when nothing is being sent or
+   written, exactly as for any update. With no service worker left, the reload reaches the Worker, which
+   answers 301 to the same path under `/chat/`. The page at `/chat/` registers `/chat/sw.js`.
+
+Chats, the queue and settings are in IndexedDB and local storage, which belong to the origin, not to
+a path, so they are all still there under `/chat/`. The session cookie is `Path=/` and carries over too.
+
+**An installed app (PWA) from `/lite/`** keeps its old identity (manifest `id` `/lite/`): it still opens
+`/lite/`, which now redirects to `/chat/`, outside that app's scope, so Chrome shows the address bar
+over the page. Everything works, but people get a clean window by installing again from
+`https://shamwari.ai/chat/` (manifest `id` `/chat/`, a different app) and removing the old one.
+After the redirect release, `/lite/` and its retiring worker can be removed.
 
 ## Built for poor devices
 
@@ -98,15 +146,15 @@ use `plainText()`, so the clipboard and a WhatsApp message get plain words. Refs
 
 ## Installable and offline
 
-- **Install.** A web manifest scoped to `/lite/` (standalone, sodalite theme,
+- **Install.** A web manifest scoped to `/chat/` (standalone, sodalite theme,
   192/512 and maskable icons) makes it installable from the browser on Android.
   iOS has no install event, so there people use Share, then Add to Home Screen;
   the page carries the Apple meta tags for that.
-- **Service worker** (`/lite/sw.js`, scope `/lite/`, generated by
+- **Service worker** (`/chat/sw.js`, scope `/chat/`, generated by
   `site/scripts/post-build.mjs` with the exact hashed files of that build).
   The shell opens from cache first and refreshes in the background, so it paints
-  at once on a bad connection. It answers only same-origin GETs under `/lite/`
-  and `/lite/_astro/`; the API is another origin and a POST, so a question and its
+  at once on a bad connection. It answers only same-origin GETs under `/chat/`
+  and `/chat/_astro/`; the API is another origin and a POST, so a question and its
   answer never enter a cache. `check.mjs` fails the build if a precached file
   is missing or the worker could touch API traffic.
 - **Offline queue.** Offline, or when an answer does not arrive (a timeout on
@@ -119,7 +167,7 @@ use `plainText()`, so the clipboard and a WhatsApp message get plain words. Refs
   gateway instead of answered and metered twice. Background Sync is not used:
   iOS does not have it, and the people this is for are often on iOS WebViews
   or old Android.
-- **Content Security Policy** on `/lite/*` (written to `dist/_headers`, which
+- **Content Security Policy** on `/chat/*` (written to `dist/_headers`, which
   Workers static assets honours): `script-src 'self'`, no inline script or
   style, `connect-src` only this site and the one API origin the build was
   pointed at, `frame-ancestors 'none'`. The e2e tests run under the same
@@ -167,7 +215,9 @@ use `plainText()`, so the clipboard and a WhatsApp message get plain words. Refs
   `personal`. A personal question gets the gateway's 409
   (`scope_requires_local_inference`), and the app explains it kindly: personal
   questions need Shamwari Mind on the device, which is not shipped yet. It is
-  never rendered as a generic error.
+  never rendered as a generic error. A question asked with a personal-scope skill
+  on still sends `scope: platform`, with `own_information: true` beside it, which the
+  gateway treats as personal scope (see "Skills" below).
 - **Language claims.** The footer says "Answered by Shamwari Cloud (a routed
   model). Answers can be wrong, so check anything important." Shamwari is a
   general-purpose assistant (agriculture, weather, news and places first), not a legal
@@ -234,7 +284,7 @@ the second replaces the first without touching the chat:
 cd site
 npm ci
 node chat-mock/server.mjs        # gateway stand-in on http://localhost:8788
-PUBLIC_SHAMWARI_API=http://localhost:8788 npm run dev:app   # http://localhost:4321/lite/
+PUBLIC_SHAMWARI_API=http://localhost:8788 npm run dev:app   # http://localhost:4321/chat/
 ```
 
 Developer keys for the mock: `sk_shamwari_mock_ok` answers; `_402`, `_403`,
@@ -291,7 +341,7 @@ behaviour; the geometry tests moved with it. Screenshots (light and dark; 390, 1
 
 ## Attachments, phase 1: on this device only (2026-11-12)
 
-A "+" at the left of the composer opens a menu with **Upload a file** (a skills entry is not shown until Skills has something in it), and a
+A "+" at the left of the composer opens a menu with **Upload a file** (skills are turned on in the Skills tab; a shortcut here is a follow-up), and a
 microphone records a **voice note**. Both stay on this device and go nowhere: adding, recording and removing make no network request
 (`e2e/attach.spec.ts` watches every request), and what is sent with the question is its text and nothing about the attachment.
 
@@ -322,3 +372,54 @@ cannot parse it). The same plain words are copied, shared and saved (a saved ans
 set apart by weight (600), not by a box; message text is 14px (`--fs-small`, the smallest the Bundu floor allows) and "thinking" is 14px and
 muted. Copy answer, Share answer (only where the browser can share; closing the sheet is not an error, any other failure copies the text instead)
 and Save answer are text buttons. Refusal and error boxes stay: they are notices, not bubbles.
+
+## Skills: Agent Skills from SKILL.md, with a builder (2026-11-17)
+
+Owner's request (2026-11-17), answering the audit in #291 ("Skills as SKILL.md: FAIL, the tab exists with no loader"). The drawer's
+**Plugins** row opens again, on a **Skills** tab first (Plugins and MCP still say there is nothing behind them). It is on by default;
+a build with `PUBLIC_CHAT_SKILLS=false` leaves it out and Plugins goes back to a "Coming soon" row (`chat/features.ts`, held by
+`check.mjs` and `test/app/features.test.ts`).
+
+- **The standard.** A skill is an [Agent Skill](https://agentskills.io): a `SKILL.md` with YAML frontmatter and a Markdown body. The
+  rules are copied from the spec at source, `github.com/agentskills/agentskills` `docs/specification.mdx` and its reference validator
+  `skills-ref/src/skills_ref/validator.py`, both at commit `83021e2be457a9b6679148719c1f6074f0ad975e`: `name` 1-64 characters (after
+  NFKC), lowercase letters, digits and hyphens, no leading, trailing or double hyphen; `description` 1-1024 characters; optional
+  `license`, `compatibility` (1-500), `metadata` (string to string) and `allowed-tools`; no other field. Where the spec's prose (a-z,
+  0-9) and its validator (any lowercase Unicode letter) differ, Lite follows the validator. Shamwari's own limit, not the spec's: the
+  instructions are at most 12,000 characters, because a skill that is on travels with every question.
+- **Reader and writer:** `chat/skill.ts` (`parseSkillMd`, `validateSkill`, `writeSkillMd`), with `test/app/skill.test.ts`. The YAML
+  reader is a small subset (plain, quoted, `|` and `>` values, `#` comments, one level of `metadata`); anything else is refused with its
+  line number, never guessed. What it writes any YAML reader can read.
+- **The builder** (`chat/skills-ui.ts`, loaded with the Plugins section, so the first load does not carry it): name, description and
+  instructions, checked live against the spec; each field says what is wrong under it once it has been typed in (`aria-invalid`,
+  `aria-describedby`), and Save moves focus to the first field still wrong rather than being disabled. Edit, delete (asks first), export
+  (`SKILL.md`; put it in a folder named after the skill, as the spec asks) and import (a `.md` file; one with fixable problems opens in
+  the form, a field the spec does not allow is named and left out on save). Two skills cannot share a name.
+- **Three sources.** _Personal_: written in Lite (scope `personal`). _Platform_: published by Shamwari (scope `platform`, read-only;
+  `PLATFORM_SKILLS` in `chat/skills.ts` is empty until the owner decides which to publish). _Plugin_: imported from a SKILL.md file
+  (another tool's, or the person's own), with the scope chosen at import, `personal` unless the person picks the other option.
+- **Storage.** On the device: IndexedDB `skills` (database version 4), per person like the chats. Each skill is one self-contained
+  record, `{ id, source, scope, skillMd, createdAt, updatedAt }`, where `skillMd` is the whole SKILL.md text and the source of truth,
+  so it can move to the person's Bundu Cell (proposed, `siafuDB/cell`, owned by another team) without being reshaped. Deleting chat
+  history does not delete skills; the person deletes them in the tab. Syncing skills to the person's server-side profile is **not built**
+  (a follow-up), and neither is Cell.
+- **On or off, per chat.** "On in this chat" is a switch on each skill (up to 3 at once); a new chat starts with none on. The chat's skill
+  ids are kept on the thread; each question records which platform skills were on when it was asked, so a retry sends the same ones. A
+  line above the question box says which are on.
+- **Rule 1.** A personal-scope skill never leaves the device. A question asked while one is on is marked `ownInformation`; its request
+  carries `own_information: true` and **no skill text at all** (`chat/skills.ts`), and the gateway treats it exactly as a question its
+  own rules flag: personal scope, no edge embedding, no completion, only the cited Ground passage, and Core is told
+  (`needs_own_information`). The gateway reads the flag in `resolveScope` (`gateway/src/scope.ts`), where it can only add the personal
+  flag, never remove it; an explicit `scope: personal` is still the 409. Such a question and its answer are also kept out of the context
+  of later questions that are not personal. If the skills cannot be read when a question is asked, it is treated as personal (fails
+  closed). Platform-scope skills go as `skills: [{ name, description, instructions }]` (at most 3) and the gateway adds them after the
+  constant system prompt and the Ground context, never in place of it (`gateway/src/skills.ts`); as a second check it runs the personal
+  rules over each skill's own words, and a skill that looks personal makes the request personal scope too. Tests:
+  `gateway/test/scope-decision.test.ts` ("skills: ..."), `site/test/app/skills.test.ts`, `site/e2e/skills.spec.ts`.
+- **Languages.** Every new string is in `strings.ts`, `strings-sn.ts` and `strings-nd.ts`. The builder's words are English in the Shona
+  and Ndebele files (the fallback those files already use for Plugins, Skills and MCP) except Cancel, Delete and Name, which reuse words the
+  files already have. A native speaker should write the rest.
+- **Not built yet:** a Skills entry in the "+" menu; publishing platform skills; sync to the profile; skill resources beyond `SKILL.md`
+  (`scripts/`, `references/`, `assets/` are not read, and a skill's `allowed-tools` grants nothing: Lite runs no tools).
+- **Budget:** the first load went from 49,316 to about 50,800 bytes gzipped of the 51,200 R2 budget (the new English strings, the
+  record type and the skill path in the send code); the builder and the SKILL.md reader load only when the Plugins section is opened.

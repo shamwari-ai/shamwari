@@ -1,7 +1,7 @@
 ---
 // Shamwari Chat: the R1 chat app and R2 Lite PWA from shamwari-ai/shamwari#83.
 //
-// This page belongs to the APP Worker (shamwari-app, https://shamwari.ai/lite/, the light edge chat),
+// This page belongs to the APP Worker (shamwari-app, https://shamwari.ai/chat/, the chat),
 // built by astro.app.config.mjs from app-src/. The marketing Worker
 // (shamwari-site, https://www.shamwari.ai) never contains it.
 //
@@ -21,8 +21,8 @@ const api = import.meta.env.PUBLIC_SHAMWARI_API ?? 'https://api.shamwari.ai';
 // Mukoko sign-in is the default; only a build that asks for PUBLIC_CHAT_AUTH=developer-key gets the developer-key screen
 // (chat/auth-mode.ts). check.mjs fails a build that comes out in any other mode.
 const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
-// The Skills tab is hidden until a SKILL.md loader exists (shamwari#291): a tab with nothing behind it is a promise the
-// app cannot keep. Off by default; only a build with PUBLIC_CHAT_SKILLS=true renders it (chat/features.ts).
+// The Skills tab: Agent Skills read from and written as SKILL.md (chat/skill.ts), with a builder (chat/skills-ui.ts). On by
+// default; a build with PUBLIC_CHAT_SKILLS=false leaves it out, and Plugins goes back to a "Coming soon" row (chat/features.ts).
 const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
 ---
 <!doctype html>
@@ -32,7 +32,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
   <title>Shamwari Chat</title>
   <meta name="description" content="Ask in Shona, Ndebele or English about farming, weather, news and places, and get the answer with its source." />
-  <link rel="canonical" href="https://shamwari.ai/lite/" />
+  <link rel="canonical" href="https://shamwari.ai/chat/" />
   <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
   <link rel="icon" type="image/png" href="/favicon.png" sizes="256x256" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -41,7 +41,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
   <meta name="theme-color" content="#0e0d0c" media="(prefers-color-scheme: dark)" />
   <meta name="shamwari-api" content={api} />
   <meta name="shamwari-auth" content={authMode} />
-  <link rel="manifest" href="/lite/manifest.webmanifest" />
+  <link rel="manifest" href="/chat/manifest.webmanifest" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Shamwari" />
 </head>
@@ -50,7 +50,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
   <AppShell id="chat" accent="sodalite" navLabel="Chats" sidebarLabel="Your chats">
     <!-- The brand, in the drawer's head and (below 64rem) in the top bar. Lower-case: a wordmark is. -->
     <div slot="workspace" class="side-head">
-      <a href="/lite/" class="brand" aria-label="shamwari">
+      <a href="/chat/" class="brand" aria-label="shamwari">
         <img src="/apple-touch-icon.png" alt="" width="28" height="28" />
         <span class="wordmark">shamwari</span>
       </a>
@@ -60,7 +60,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
         <span class="sr-only" data-i18n="collapseChats">{en.collapseChats}</span>
       </label>
     </div>
-    <a slot="brand" href="/lite/" class="brand" aria-label="shamwari">
+    <a slot="brand" href="/chat/" class="brand" aria-label="shamwari">
       <img src="/apple-touch-icon.png" alt="" width="28" height="28" />
       <span class="wordmark">shamwari</span>
     </a>
@@ -84,7 +84,9 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
           <li><button type="button" class="side-row" data-section="projects"><Icon name="layers" class="side-icon" /><span data-i18n="projects">{en.projects}</span></button></li>
           <li><span class="side-row side-disabled" aria-disabled="true"><Icon name="workflow" class="side-icon" /><span data-i18n="navFactory">{en.navFactory}</span><span class="side-chip" data-i18n="comingSoon">{en.comingSoon}</span></span></li>
           <li><button type="button" class="side-row" data-section="artifacts"><Icon name="clipboard" class="side-icon" /><span data-i18n="artifacts">{en.artifacts}</span></button></li>
-          <li><span class="side-row side-disabled" aria-disabled="true"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span><span class="side-chip" data-i18n="comingSoon">{en.comingSoon}</span></span></li>
+          {showSkills
+            ? (<li><button type="button" class="side-row" data-section="plugins"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span></button></li>)
+            : (<li><span class="side-row side-disabled" aria-disabled="true"><Icon name="grid" class="side-icon" /><span data-i18n="navPlugins">{en.navPlugins}</span><span class="side-chip" data-i18n="comingSoon">{en.comingSoon}</span></span></li>)}
         </ul>
       </nav>
       <!-- The menu of one chat in the list (opened by its "..."): pin, project, delete. One shared popover, inside the drawer so
@@ -128,17 +130,16 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
       </section>
       <p id="artifacts-empty" class="side-empty" data-i18n="artifactsEmpty">{en.artifactsEmpty}</p>
       </div>
-      <!-- Plugins and MCP: nothing exists behind them yet, so each says so. Skills is not rendered at all unless the build
-           turns it on (showSkills, off by default), because there is no SKILL.md loader. Its script loads only when this
-           panel is first opened. -->
+      <!-- Skills first: the person's Agent Skills, the builder, import and export (chat/skills-ui.ts fills the panel). Plugins and
+           MCP: nothing exists behind them yet, so each says so. The scripts load only when this panel is first opened. -->
       <div data-panel="plugins" hidden>
         <div role="tablist" class="side-tabs" aria-label={en.navPlugins} data-i18n-attr="aria-label:navPlugins">
-          <button type="button" role="tab" id="tab-plugins" aria-controls="tabpanel-plugins" aria-selected="true" data-i18n="pluginsTab">{en.pluginsTab}</button>
-          {showSkills && (<button type="button" role="tab" id="tab-skills" aria-controls="tabpanel-skills" aria-selected="false" tabindex="-1" data-i18n="skillsTab">{en.skillsTab}</button>)}
+          {showSkills && (<button type="button" role="tab" id="tab-skills" aria-controls="tabpanel-skills" aria-selected="true" data-i18n="skillsTab">{en.skillsTab}</button>)}
+          <button type="button" role="tab" id="tab-plugins" aria-controls="tabpanel-plugins" aria-selected={showSkills ? 'false' : 'true'} tabindex={showSkills ? '-1' : undefined} data-i18n="pluginsTab">{en.pluginsTab}</button>
           <button type="button" role="tab" id="tab-mcp" aria-controls="tabpanel-mcp" aria-selected="false" tabindex="-1" data-i18n="mcpTab">{en.mcpTab}</button>
         </div>
-        <div role="tabpanel" id="tabpanel-plugins" aria-labelledby="tab-plugins"><p class="side-empty" data-i18n="pluginsEmpty">{en.pluginsEmpty}</p></div>
-        {showSkills && (<div role="tabpanel" id="tabpanel-skills" aria-labelledby="tab-skills" hidden><p class="side-empty" data-i18n="skillsEmpty">{en.skillsEmpty}</p></div>)}
+        {showSkills && (<div role="tabpanel" id="tabpanel-skills" aria-labelledby="tab-skills"><p class="side-empty" data-i18n="skillsEmpty">{en.skillsEmpty}</p></div>)}
+        <div role="tabpanel" id="tabpanel-plugins" aria-labelledby="tab-plugins" hidden={showSkills}><p class="side-empty" data-i18n="pluginsEmpty">{en.pluginsEmpty}</p></div>
         <div role="tabpanel" id="tabpanel-mcp" aria-labelledby="tab-mcp" hidden><p class="side-empty" data-i18n="mcpEmpty">{en.mcpEmpty}</p></div>
         <p class="side-empty" data-i18n="thirdPartyNote">{en.thirdPartyNote}</p>
       </div>
@@ -212,7 +213,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
           <button type="button" class="btn chip" data-example data-i18n="example3">Where is the nearest market in Masvingo?</button>
         </div>
         <!-- Quiet, under the prompts: answers can be wrong, and the privacy page is one tap away (it was two, in Settings). -->
-        <p class="trust"><span data-i18n="wrongNote">{en.wrongNote}</span><span aria-hidden="true"> · </span><a class="footer-link" href="/lite/disclaimer/" data-i18n="privacyLink">{en.privacyLink}</a></p>
+        <p class="trust"><span data-i18n="wrongNote">{en.wrongNote}</span><span aria-hidden="true"> · </span><a class="footer-link" href="/chat/disclaimer/" data-i18n="privacyLink">{en.privacyLink}</a></p>
       </section>
 
       <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
@@ -235,6 +236,8 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
               <span data-i18n="offlineModeNote">{en.offlineModeNote}</span>
               <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
             </div>
+            <!-- Which skills are on in this chat, and, for a personal one, that answers then come from cited sources only. -->
+            <div id="skills-note" class="status-chip skills-note" role="status" hidden><span id="skills-note-text"></span></div>
             <div id="offline" class="status-chip" role="status" hidden>
               <span data-i18n="offlineBanner">{en.offlineBanner}</span>
               <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg></button>
@@ -257,8 +260,8 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
             </button>
           </div>
         </form>
-        <!-- The "+" menu. Upload a file is all it holds for now: a skills entry is added when Skills has something in it. Files stay
-             on this device; see chat/attach.ts. -->
+        <!-- The "+" menu. Upload a file is all it holds for now: skills are turned on in the Skills tab (a shortcut here is a
+             follow-up). Files stay on this device; see chat/attach.ts. -->
         <div id="plus-menu" class="chat-tools plus-menu" popover role="group" aria-label={en.addTo} data-i18n-attr="aria-label:addTo">
           <button type="button" id="plus-upload" class="btn" data-i18n="uploadFile">{en.uploadFile}</button>
         </div>
@@ -279,7 +282,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
     <p id="signin-failed" class="small bad" role="alert" hidden data-i18n="signInFailed">We could not sign you in. Please try again.</p>
     <p id="signin-offline" class="small" role="status" hidden data-i18n="signinOffline">You are offline. Sign in when you are back online.</p>
     <p id="signin-note" class="small" role="status" hidden></p>
-    <a class="footer-link" href="/lite/disclaimer/" data-i18n="disclaimerLink">Disclaimer and privacy</a>
+    <a class="footer-link" href="/chat/disclaimer/" data-i18n="disclaimerLink">Disclaimer and privacy</a>
   </main>
   <!-- A saved answer, opened from the drawer. A native dialog: focus is held and Escape closes it. -->
   <dialog id="artifact-view" class="artifact-view" aria-labelledby="artifact-title-view">
@@ -327,7 +330,7 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
       </section>
       <section class="settings-section" aria-labelledby="settings-about-title">
         <h3 id="settings-about-title" data-i18n="about">{en.about}</h3>
-        <a class="side-row" href="/lite/disclaimer/"><span data-i18n="disclaimerLink">{en.disclaimerLink}</span></a>
+        <a class="side-row" href="/chat/disclaimer/"><span data-i18n="disclaimerLink">{en.disclaimerLink}</span></a>
         <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener">
           <span data-i18n="useApi">Use the API</span><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span>
         </a>

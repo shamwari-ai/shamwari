@@ -65,7 +65,7 @@ test('the foot rows are quiet text rows, not buttons: no button chrome, no icon,
   for (const { name } of ROWS.filter((r) => r.name !== 'Settings')) await check(name);
   // The names a screen reader hears are unchanged: links are links, and Settings is a button that opens a dialog.
   await expect(page.getByRole('link', { name: 'Use the API' })).toHaveAttribute('href', 'https://platform.nyuchi.com');
-  await expect(page.getByRole('link', { name: 'Disclaimer and privacy' })).toHaveAttribute('href', '/lite/disclaimer/');
+  await expect(page.getByRole('link', { name: 'Disclaimer and privacy' })).toHaveAttribute('href', '/chat/disclaimer/');
   await expect(page.locator('#open-settings')).toHaveText('Settings');
 });
 

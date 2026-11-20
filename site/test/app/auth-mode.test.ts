@@ -76,7 +76,7 @@ describe('the real build', () => {
         encoding: 'utf8',
       });
       expect(r.status, r.stderr).toBe(0);
-      return readFileSync(join(out, 'lite/index.html'), 'utf8');
+      return readFileSync(join(out, 'chat/index.html'), 'utf8');
     } finally {
       rmSync(out, { recursive: true, force: true });
     }

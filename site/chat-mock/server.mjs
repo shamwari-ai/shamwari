@@ -12,6 +12,7 @@
 //   key  sk_shamwari_mock_503       -> 503        key  ..._403  -> 403
 //   anything else not starting with sk_shamwari_  -> 401
 //   body.scope === 'personal'       -> 409 scope_requires_local_inference
+//   body.own_information === true   -> an extractive answer (inference_path 'extractive'), as the gateway gives
 //   a question containing "slow"    -> answers after 3 s
 //   a question containing "hang"    -> answers after 60 s (a test stops it)
 //   a question containing "nosource"-> an answer with no citations
@@ -181,8 +182,10 @@ export function createMock() {
         language: null,
         grounded: !/nosource/i.test(q),
         truncated: false,
-        inference_path: 'gateway',
-        model_served: 'workers-ai/mock',
+        // `own_information: true` (a personal-scope skill is on in the chat) takes the gateway's personal path: the cited
+        // passage, with nothing generated (gateway/src/skills.ts, index.ts).
+        inference_path: body.own_information === true ? 'extractive' : 'gateway',
+        ...(body.own_information === true ? { answered_without_own_information: true } : { model_served: 'workers-ai/mock' }),
         citations: /nosource/i.test(q) ? [] : fx.citations,
       },
     };

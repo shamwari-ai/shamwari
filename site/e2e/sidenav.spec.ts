@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { makeProject, openChat, openChats, openSection, HIT_TOUCH } from './helpers';
 
-// The drawer's sections, at the top: Chat, Projects, Factory (coming soon), Artifacts, Plugins.
+// The drawer's sections, at the top: Chat, Projects, Factory (coming soon), Artifacts, Plugins (Skills, Plugins, MCP).
 
 const nav = (page: import('@playwright/test').Page) => page.locator('.side-primary');
 
@@ -9,7 +9,7 @@ test('the sections are in the specified order, Factory is plain text with a chip
   await openChat(page);
   await openChats(page);
   const rows = nav(page).locator('li');
-  await expect(rows).toHaveText([/^Chat$/, /^Projects$/, /^Factory\s*Coming soon$/, /^Artifacts$/, /^Plugins\s*Coming soon$/]);
+  await expect(rows).toHaveText([/^Chat$/, /^Projects$/, /^Factory\s*Coming soon$/, /^Artifacts$/, /^Plugins$/]);
   await expect(nav(page)).toHaveAttribute('aria-label', 'Sections');
   // Every row has one decorative icon from the Mzizi set.
   for (const li of await rows.all()) {
@@ -46,23 +46,40 @@ test('each section opens its own list, aria-current follows, and the other lists
   await expect(page.locator('[data-panel]:not([hidden])')).toHaveCount(1);
 });
 
-test('Factory and Plugins are not available yet: each is plain text with a "Coming soon" chip, inert, not focusable, and skipped by Tab', async ({ page }) => {
+test('Plugins opens on Skills; Plugins and MCP say there is nothing; the scripts load only then and nothing is sent', async ({ page }) => {
+  const scripts: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().endsWith('.js')) scripts.push(r.url());
+  });
   await openChat(page);
-  await openChats(page);
-  for (const name of ['Factory', 'Plugins']) {
-    const row = page.locator('.side-primary .side-disabled', { hasText: name });
-    await expect(row, name).toHaveCount(1);
-    await expect(row).toHaveAttribute('aria-disabled', 'true');
-    await expect(row.locator('.side-chip')).toHaveText('Coming soon');
-    await expect(nav(page).getByRole('button', { name }), `${name} is not a button`).toHaveCount(0);
-    expect(await row.evaluate((el) => getComputedStyle(el).cursor), `${name} does not look tappable`).not.toBe('pointer');
-  }
+  expect(scripts.some((u) => /\/(plugins|skills-ui)\./.test(u)), 'not loaded with the chat').toBe(false);
+  await openSection(page, 'Plugins');
+  await expect.poll(() => scripts.some((u) => /\/plugins\./.test(u)) && scripts.some((u) => /\/skills-ui\./.test(u))).toBe(true);
+  const tabs = page.getByRole('tab');
+  await expect(tabs).toHaveText(['Skills', 'Plugins', 'MCP']);
+  await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByText('No skills yet. Write one, or import a SKILL.md file.')).toBeVisible();
+  await expect(page.getByText('A plugin or an MCP server would be run by someone else')).toBeVisible();
+  // Arrow keys move between tabs (one tab in the tab order), and Plugins and MCP say honestly there is nothing.
+  await tabs.first().focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByText('No plugins yet.')).toBeVisible();
+  await page.keyboard.press('End');
+  await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByText('No MCP servers are connected.')).toBeVisible();
+  // No network request is made by opening any of it.
+  const requests: string[] = [];
+  page.on('request', (r) => requests.push(r.url()));
+  await tabs.first().click();
+  await tabs.nth(2).click();
+  expect(requests).toEqual([]);
 });
 
 test('the rows meet the 45px floor and are keyboard reachable in order', async ({ page }) => {
   await openChat(page);
   await openChats(page);
-  for (const name of ['Chat', 'Projects', 'Artifacts']) {
+  for (const name of ['Chat', 'Projects', 'Artifacts', 'Plugins']) {
     const b = nav(page).getByRole('button', { name });
     expect((await b.boundingBox())!.height, name).toBeGreaterThanOrEqual(HIT_TOUCH);
   }
