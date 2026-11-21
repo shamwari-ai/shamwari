@@ -38,6 +38,23 @@
   --leading-floor: 1.5;
   --control-floor: 2.8125rem;
   --size-control-sm: 3.0625rem;
+  --space-page-x: 1.0625rem;
+  --space-page-x-wide-dense: 1.3125rem;
+  --space-container: 1.75rem;
+  --space-container-dense: 1.3125rem;
+  --space-container-gap: 1.3125rem;
+  --space-container-gap-dense: 0.875rem;
+  --space-card-dense: 0.875rem;
+  --space-card-gap: 0.875rem;
+  --space-control-x: 1.0625rem;
+  --space-control-x-dense: 0.75rem;
+  --space-field-x: 1.0625rem;
+  --space-field-x-dense: 0.75rem;
+  --space-control-gap: 0.5625rem;
+  --space-control-gap-dense: 0.4375rem;
+  --space-control-between: 0.5625rem;
+  --space-chip-x-dense: 0.5625rem;
+  --space-label-gap: 0.4375rem;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {

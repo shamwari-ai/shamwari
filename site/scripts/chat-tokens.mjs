@@ -51,6 +51,24 @@ export const FLOOR = [
   '--leading-floor',
   '--control-floor',
   '--size-control-sm',
+  // The spacing layers (Bundu floor 1.1.0, owner 2026-11-19): each layer's default and dense floor.
+  '--space-page-x',
+  '--space-page-x-wide-dense',
+  '--space-container',
+  '--space-container-dense',
+  '--space-container-gap',
+  '--space-container-gap-dense',
+  '--space-card-dense',
+  '--space-card-gap',
+  '--space-control-x',
+  '--space-control-x-dense',
+  '--space-field-x',
+  '--space-field-x-dense',
+  '--space-control-gap',
+  '--space-control-gap-dense',
+  '--space-control-between',
+  '--space-chip-x-dense',
+  '--space-label-gap',
 ];
 
 const require = createRequire(import.meta.url);

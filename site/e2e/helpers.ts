@@ -9,6 +9,8 @@ export const HIT_FINE = 24; // hit area with a fine pointer from 64rem
 export const CONTROL_SM_FINE = 33; // the small control height Mzizi draws with a fine pointer (--size-control-sm)
 export const BODY_TOUCH = 17;
 export const BODY_FINE = 15;
+export const CONTROL_GAP = 9; // between adjacent controls, both densities (spacing.control.between)
+export const PAGE_EDGE = 17; // the phone page edge (spacing.page.edge); wider windows are larger
 /** The floor's fine-pointer tier, word for word (floor.json, tiers.finePointer). */
 export const FINE_POINTER = '(pointer: fine) and (hover: hover) and (min-width: 64rem) and (not (any-pointer: coarse))';
 
@@ -135,14 +137,14 @@ export async function openChatMenu(page: Page) {
 /**
  * The Bundu floor 1.1.0 (https://standards.bundu.org/bundu-floor/), measured on the rendered page: body text 17px on
  * touch and 15px with a mouse, nothing readable under 14px, every interactive control a 45px hit region on touch, and
- * 7px between neighbouring controls.
+ * 9px between neighbouring controls (--space-control-between), and the page edge at least 17px on a phone.
  * Hit regions may touch but never overlap; text links inside a sentence are exempt from the size, as they are
  * in the floor. Returns what is under the floor, so a failure names it.
  * `minHit` is the smallest hit region allowed: HIT_TOUCH (45) by default, HIT_FINE (24) only with a mouse from 64rem.
  */
 export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) {
   const minHit = (opts.minHit ?? HIT_TOUCH) - 0.1;
-  return page.evaluate(([minHit, fineQuery, bodyTouch, bodyFine]) => {
+  return page.evaluate(([minHit, fineQuery, bodyTouch, bodyFine, CONTROL_GAP, PAGE_EDGE]) => {
     const seen = (el: Element) => {
       const s = getComputedStyle(el);
       const b = el.getBoundingClientRect();
@@ -219,11 +221,11 @@ export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) 
         }
         // Neighbours side by side or one above the other: the gap along the axis where they do not overlap.
         const gap = Math.max(dx, dy);
-        if (gap >= 0 && gap < 6.9) out.push(`controls ${gap.toFixed(1)}px apart (floor 7px): ${label(a)} and ${label(b)}`);
+        if (gap >= 0 && gap < CONTROL_GAP - 0.1) out.push(`controls ${gap.toFixed(1)}px apart (floor ${CONTROL_GAP}px): ${label(a)} and ${label(b)}`);
       }
     }
 
-    // ---- the page layout: no overflow, 14px from the edges, 7px between neighbouring blocks -------------------------
+    // ---- the page layout: no overflow, 17px from the edges (the phone page edge), 7px between neighbouring blocks -------------------------
     const slack = 0.6;
     if (document.documentElement.scrollWidth > innerWidth + slack) {
       out.push(`the page scrolls sideways: ${document.documentElement.scrollWidth}px wide in a ${innerWidth}px screen`);
@@ -231,10 +233,10 @@ export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) 
     // Text is measured where it is drawn (its line boxes), controls by their hit region. Parked, clipped and
     // screen-reader-only things are not on the page for anyone's eyes.
     const hiddenAway = (el: Element) => !!el.closest('[hidden], .sr-only, .skip, [aria-hidden="true"], svg, script, style, noscript');
-    const insetFloor = 14;
+    const insetFloor = PAGE_EDGE;
     const edge = (what: string, el: Element, left: number, right: number) => {
       if (left < -slack || right > innerWidth + slack) out.push(`overflows the screen (${Math.round(left)}..${Math.round(right)} of ${innerWidth}px): ${what} ${label(el)}`);
-      else if (left < insetFloor - slack || right > innerWidth - insetFloor + slack) out.push(`closer than 14px to the edge (${Math.round(left)}..${Math.round(right)} of ${innerWidth}px): ${what} ${label(el)}`);
+      else if (left < insetFloor - slack || right > innerWidth - insetFloor + slack) out.push(`closer than ${PAGE_EDGE}px to the edge (${Math.round(left)}..${Math.round(right)} of ${innerWidth}px): ${what} ${label(el)}`);
     };
     for (const el of controls) {
       const r = el.getBoundingClientRect();
@@ -284,5 +286,5 @@ export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) 
       if (across > 1 && gap > -0.5 && gap < 6.9) out.push(`blocks ${gap.toFixed(1)}px apart (floor 7px): ${label(a)} and ${label(b)}`);
     }
     return out;
-  }, [minHit, FINE_POINTER, BODY_TOUCH, BODY_FINE] as const);
+  }, [minHit, FINE_POINTER, BODY_TOUCH, BODY_FINE, CONTROL_GAP, PAGE_EDGE] as const);
 }

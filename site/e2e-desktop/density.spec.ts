@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ask, openChat, CONTROL_SM_FINE } from '../e2e/helpers';
+import { ask, openChat, CONTROL_SM_FINE, CONTROL_GAP } from '../e2e/helpers';
 
 // On a desktop with a mouse (64rem up, fine pointer, hover, no touch) Mzizi's density layer draws controls smaller, and the
 // drawer's rows follow it: 33px rows (--size-control-sm), flat, with the 7px gap between them (--gap-floor) so their hit
@@ -37,7 +37,7 @@ for (const scheme of ['light', 'dark'] as const) {
         const a = list[i - 1]!, b = list[i]!;
         const gap = b.top - a.bottom;
         // Rows may sit beside each other only if they do not overlap; stacked ones keep the 7px floor.
-        if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1) expect(gap, `${a.text} / ${b.text}`).toBeGreaterThanOrEqual(6.9);
+        if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1) expect(gap, `${a.text} / ${b.text}`).toBeGreaterThanOrEqual(CONTROL_GAP - 0.1);
       }
     });
 

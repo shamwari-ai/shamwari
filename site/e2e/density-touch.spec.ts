@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { closeChats, openChat, openChats, HIT_TOUCH } from './helpers';
+import { closeChats, openChat, openChats, HIT_TOUCH, CONTROL_GAP } from './helpers';
 
 // On touch (a phone, or a tablet or a laptop with a touch screen at any width) every drawer row keeps the Bundu floor:
 // drawn and hit at 45px or more, 7px between rows, no overlap. The desktop density (33px) is for a mouse only and is
@@ -17,7 +17,7 @@ const measure = (page: import('@playwright/test').Page) =>
 
 for (const [name, size] of [['a phone', { width: 360, height: 640 }], ['a touch laptop or tablet at 1280px', { width: 1280, height: 800 }]] as const) {
   for (const scheme of ['light', 'dark'] as const) {
-    test(`on ${name} the drawer's rows are at least 45px, 7px apart, not overlapping (${scheme})`, async ({ page }) => {
+    test(`on ${name} the drawer's rows are at least 45px, 9px apart, not overlapping (${scheme})`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
       await page.setViewportSize(size);
       await openChat(page);
@@ -29,7 +29,7 @@ for (const [name, size] of [['a phone', { width: 360, height: 640 }], ['a touch 
       for (let i = 1; i < list.length; i++) {
         const a = list[i - 1]!, b = list[i]!;
         if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1) {
-          expect(b.top - a.bottom, `${a.text} / ${b.text}: no overlap, 7px apart`).toBeGreaterThanOrEqual(6.9);
+          expect(b.top - a.bottom, `${a.text} / ${b.text}: no overlap, 9px apart`).toBeGreaterThanOrEqual(CONTROL_GAP - 0.1);
         }
       }
       if (size.width < 1024) await closeChats(page);

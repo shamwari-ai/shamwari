@@ -23,10 +23,16 @@
   --scrim: rgb(0 0 0 / 0.45);
   --ctl: var(--size-control-sm);
   --box: 8px;
-  --page-inset: max(var(--inset-floor), env(safe-area-inset-left), env(safe-area-inset-right));
+  --page-inset: max(var(--space-page-x), env(safe-area-inset-left), env(safe-area-inset-right));
   /* One sidebar width, as the slide-over on a phone and as the column from 64rem, so crossing 64rem does not jump. */
   --side-w: 17.5rem;
   --col: 46rem;
+}
+/* The page edge: 17px on a phone, the dense wide edge (21px) from a medium window up (Bundu floor 1.1.0, --space-page-x*). */
+@media (min-width: 37.5rem) {
+  :root {
+    --page-inset: max(var(--space-page-x-wide-dense), env(safe-area-inset-left), env(safe-area-inset-right));
+  }
 }
 
 *,
@@ -122,7 +128,7 @@ svg {
   display: inline-flex;
   align-items: center;
   min-height: var(--target-floor);
-  padding-inline: var(--inset-floor);
+  padding-inline: var(--space-control-x-dense);
   border-radius: var(--radius-sm);
   background: var(--card);
 }
@@ -148,10 +154,10 @@ svg {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--gap-floor);
+  gap: var(--space-control-gap);
   min-height: var(--ctl);
   min-width: var(--ctl);
-  padding: 0 var(--inset-floor);
+  padding: 0 var(--space-control-x);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: transparent;
@@ -174,7 +180,7 @@ svg {
 }
 .btn.link {
   border-color: transparent;
-  padding-inline: var(--gap-floor);
+  padding-inline: var(--space-control-x-dense);
   color: var(--quiet);
 }
 .btn.link:hover {
@@ -196,7 +202,7 @@ input:not([type='checkbox'], [type='radio'], [type='file']),
 .skill-form textarea {
   min-height: var(--ctl);
   max-width: 100%;
-  padding: 0 var(--inset-floor);
+  padding: 0 var(--space-field-x);
   border: 1px solid var(--border-control);
   border-radius: var(--radius-sm);
   background: var(--input);
@@ -216,7 +222,7 @@ input[type='checkbox'] {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .icon-btn,
 .bar-action,
@@ -232,7 +238,7 @@ input[type='checkbox'] {
   font-size: var(--fs-small);
 }
 .bar-action {
-  padding-inline: var(--gap-floor);
+  padding-inline: var(--space-control-x-dense);
 }
 :is(.icon-btn, .bar-action, .bar-icon):hover {
   background: var(--fill);
@@ -264,7 +270,7 @@ input[type='checkbox'] {
 }
 .notice {
   font-size: var(--fs-small);
-  padding: var(--gap-floor) var(--inset-floor);
+  padding: var(--gap-floor) var(--space-card-dense);
   border-inline-start: 2px solid var(--info);
   background: var(--tint);
 }
@@ -272,7 +278,7 @@ input[type='checkbox'] {
   display: inline-flex;
   align-items: center;
   min-height: var(--ctl);
-  padding-inline: var(--gap-floor);
+  padding-inline: var(--space-control-x-dense);
   text-underline-offset: 3px;
 }
 
@@ -375,14 +381,14 @@ html[data-view='pending'] dialog {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--gap-floor);
-  padding: var(--gap-floor) var(--page-inset);
+  gap: var(--space-control-between);
+  padding: var(--space-control-between) var(--page-inset);
   border-bottom: 1px solid var(--line);
 }
 .brand {
   display: inline-flex;
   align-items: center;
-  gap: var(--gap-floor);
+  gap: var(--space-control-gap-dense);
   min-height: var(--ctl);
   min-width: var(--ctl);
   text-decoration: none;
@@ -404,7 +410,7 @@ html[data-view='pending'] dialog {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
   padding: var(--gap-floor) var(--page-inset) 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -413,19 +419,19 @@ html[data-view='pending'] dialog {
 .side-list {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
   min-width: 0;
 }
 .side-scroll {
   flex: 1 0 auto;
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .side-scroll > div {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .side-foot {
   flex: none;
@@ -436,11 +442,11 @@ html[data-view='pending'] dialog {
 .side-row {
   display: flex;
   align-items: center;
-  gap: var(--gap-floor);
+  gap: var(--space-control-gap-dense);
   inline-size: 100%;
   min-height: var(--ctl);
   min-width: var(--ctl);
-  padding: 0 var(--gap-floor);
+  padding: 0 var(--space-control-x-dense);
   border: 0;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -484,7 +490,7 @@ html[data-view='pending'] dialog {
   display: flex;
   align-items: center;
   min-height: var(--ctl);
-  padding-inline: var(--gap-floor);
+  padding-inline: var(--space-control-x-dense);
   font-size: var(--fs-small);
   font-weight: 400;
   color: var(--quiet);
@@ -510,10 +516,10 @@ details:not([open]) > summary.chats-title::before {
 .side-date-group {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .side-empty {
-  padding-inline: var(--gap-floor);
+  padding-inline: var(--space-control-x-dense);
   font-size: var(--fs-small);
   color: var(--quiet);
   line-height: var(--leading-floor);
@@ -523,7 +529,7 @@ details:not([open]) > summary.chats-title::before {
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .chat-row {
   flex: 1 1 0;
@@ -575,7 +581,7 @@ details:not([open]) > summary.chats-title::before {
   display: flex;
   align-items: center;
   min-height: var(--ctl);
-  padding-inline: var(--gap-floor);
+  padding-inline: var(--space-control-x-dense);
   border-radius: var(--radius-sm);
   color: var(--quiet);
   cursor: pointer;
@@ -586,12 +592,12 @@ details:not([open]) > summary.chats-title::before {
 }
 /* A disclosure's content is not its flex item, so the 7px between its summary and what it opens is a margin. */
 :is(.side-group, .project) > :not(summary) {
-  margin-block-start: var(--gap-floor);
+  margin-block-start: var(--space-control-between);
 }
 [data-panel] > section {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .side-form input {
   flex: 1 1 8rem;
@@ -599,12 +605,12 @@ details:not([open]) > summary.chats-title::before {
 .side-tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .side-tabs [role='tab'] {
   min-height: var(--ctl);
   min-width: var(--ctl);
-  padding-inline: var(--gap-floor);
+  padding-inline: var(--space-control-x-dense);
   border-radius: var(--radius-sm);
   color: var(--quiet);
   font-size: var(--fs-small);
@@ -616,7 +622,7 @@ details:not([open]) > summary.chats-title::before {
 [role='tabpanel'] {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 
 /* The Skills tab (chat/skills-ui.ts): label-to-field and item gaps are the 7px floor. */
@@ -627,7 +633,11 @@ details:not([open]) > summary.chats-title::before {
 .radio-group {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
+}
+/* A label and its own field sit at the label gap, closer than the fields to each other (Bundu floor 1.1.0). */
+.skill-field {
+  gap: var(--space-label-gap);
 }
 .skill-item {
   padding-block: var(--gap-floor);
@@ -646,7 +656,7 @@ details:not([open]) > summary.chats-title::before {
 }
 .skill-scope legend {
   padding: 0;
-  margin-block-end: var(--gap-floor);
+  margin-block-end: var(--space-label-gap);
 }
 .skill-switch[aria-checked='true'],
 .offline-switch[aria-checked='true'] {
@@ -666,8 +676,8 @@ details:not([open]) > summary.chats-title::before {
   flex: none;
   display: flex;
   align-items: center;
-  gap: var(--gap-floor);
-  padding: var(--gap-floor) var(--page-inset);
+  gap: var(--space-control-between);
+  padding: var(--space-control-between) var(--page-inset);
   border-bottom: 1px solid var(--line);
   font-size: var(--fs-small);
 }
@@ -676,7 +686,7 @@ details:not([open]) > summary.chats-title::before {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .chat-heading {
   position: relative;
@@ -717,7 +727,7 @@ details:not([open]) > summary.chats-title::before {
   margin-inline-start: auto;
   display: flex;
   align-items: center;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .offline-badge {
   color: var(--foreground);
@@ -807,7 +817,7 @@ main:focus,
 .first-lang {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .trust {
   margin-block-start: var(--inset-floor);
@@ -817,7 +827,7 @@ main:focus,
 #log {
   display: flex;
   flex-direction: column;
-  gap: var(--inset-floor);
+  gap: var(--space-card-gap);
 }
 .msg {
   position: relative;
@@ -837,7 +847,7 @@ main:focus,
 .msg.user {
   align-self: flex-end;
   max-width: min(85%, 36rem);
-  padding: var(--inset-floor);
+  padding: var(--space-card-dense);
   border-radius: 10px;
   background: var(--tint);
 }
@@ -865,7 +875,7 @@ main:focus,
 /* Notices (the personal-scope explanation, an error): a rule at the left, not a box. */
 .msg.refusal,
 .msg.error {
-  padding: var(--gap-floor) var(--inset-floor);
+  padding: var(--gap-floor) var(--space-card-dense);
   border-inline-start: 2px solid var(--info);
   background: var(--tint);
 }
@@ -883,7 +893,7 @@ main:focus,
 .queue-extra {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 /* Metadata reads in monospace: the kind of question, the skills a question went with. */
 .meta,
@@ -898,7 +908,7 @@ main:focus,
 .msg-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .msg-actions .btn {
   font-size: var(--fs-small);
@@ -918,14 +928,14 @@ main:focus,
 .sources ul {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
   padding-inline-start: var(--gap-floor);
   border-inline-start: 1px solid var(--line);
 }
 .cite {
   display: flex;
   align-items: flex-start;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
   min-width: 0;
 }
 .cite-more {
@@ -937,7 +947,7 @@ main:focus,
   align-items: center;
   gap: var(--gap-floor);
   min-height: var(--ctl);
-  padding-inline: var(--gap-floor);
+  padding-inline: var(--space-control-x-dense);
   border-radius: var(--radius-sm);
   list-style: none;
   cursor: pointer;
@@ -983,7 +993,7 @@ summary > .cite-title {
   display: inline-flex;
   align-items: center;
   min-height: var(--ctl);
-  padding-inline: var(--gap-floor);
+  padding-inline: var(--space-control-x-dense);
   font-family: var(--mono);
   color: var(--quiet);
   text-underline-offset: 3px;
@@ -995,7 +1005,7 @@ summary > .cite-title {
 .attach-list {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .attach-chip {
   display: flex;
@@ -1155,7 +1165,7 @@ summary > .cite-title {
 .composer {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
   padding: var(--gap-floor);
   border: 1px solid var(--border-control);
   border-radius: var(--box);
@@ -1171,7 +1181,7 @@ summary > .cite-title {
   inline-size: 100%;
   min-height: var(--ctl);
   max-height: 12rem;
-  padding: var(--gap-floor);
+  padding: var(--gap-floor) var(--space-field-x-dense);
   border: 0;
   background: transparent;
   resize: none;
@@ -1182,7 +1192,7 @@ summary > .cite-title {
 .status-chips {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .status-chips:not(:has(> :not([hidden]))) {
   display: none;
@@ -1222,7 +1232,7 @@ summary > .cite-title {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .composer-gap {
   flex: 1 1 0;
@@ -1242,7 +1252,7 @@ summary > .cite-title {
   align-items: center;
   min-height: var(--ctl);
   min-width: var(--ctl);
-  padding-inline: var(--gap-floor);
+  padding-inline: var(--space-chip-x-dense);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   font-family: var(--mono);
@@ -1316,7 +1326,7 @@ html[data-offline-mode] .mode-chip {
 .menu,
 .slash-menu {
   margin: 0;
-  padding: var(--gap-floor);
+  padding: var(--space-container-dense);
   border: 1px solid var(--line);
   border-radius: var(--box);
   background: var(--card);
@@ -1330,7 +1340,7 @@ html[data-offline-mode] .mode-chip {
   inline-size: min(16rem, calc(100vw - 2 * var(--page-inset)));
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 #chat-tools:popover-open {
   top: calc(var(--ctl) + var(--gap-floor) * 3);
@@ -1380,14 +1390,14 @@ html[data-offline-mode] .mode-chip {
   padding: var(--gap-floor);
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .cmd-list [role='option'] {
   display: flex;
   align-items: center;
   gap: var(--gap-floor);
   min-height: var(--ctl);
-  padding-inline: var(--gap-floor);
+  padding-inline: var(--space-control-x-dense);
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
@@ -1428,15 +1438,15 @@ html[data-offline-mode] .mode-chip {
   font-size: var(--fs-small);
 }
 .sheet {
-  inline-size: min(40rem, calc(100vw - 2 * var(--inset-floor)));
+  inline-size: min(40rem, calc(100vw - 2 * var(--space-page-x)));
   max-height: 85dvh;
-  padding: var(--inset-floor);
+  padding: var(--space-container-dense);
   overflow: auto;
 }
 .sheet[open] {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-container-gap-dense);
 }
 .artifact-text {
   white-space: pre-wrap;
@@ -1455,7 +1465,7 @@ html[data-offline-mode] .mode-chip {
 }
 @media (min-width: 40rem) {
   .settings-dialog {
-    inline-size: min(32rem, calc(100vw - 2 * var(--inset-floor)));
+    inline-size: min(32rem, calc(100vw - 2 * var(--space-page-x)));
     block-size: auto;
     max-block-size: 85dvh;
     margin: auto;
@@ -1470,7 +1480,7 @@ html[data-offline-mode] .mode-chip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
   padding: calc(var(--gap-floor) / 2) var(--page-inset);
   border-bottom: 1px solid var(--line);
   background: var(--card);
@@ -1478,13 +1488,13 @@ html[data-offline-mode] .mode-chip {
 .settings-body {
   display: flex;
   flex-direction: column;
-  gap: var(--inset-floor);
-  padding: var(--inset-floor) var(--page-inset);
+  gap: var(--space-container-gap);
+  padding: var(--space-container-dense) var(--page-inset);
 }
 .settings-section {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-floor);
+  gap: var(--space-control-between);
 }
 .settings-section h3 {
   font-family: var(--mono);

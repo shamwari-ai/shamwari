@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ask, openAccount, openChat, HIT_FINE, HIT_TOUCH } from './helpers';
+import { ask, openAccount, openChat, HIT_FINE, HIT_TOUCH, PAGE_EDGE } from './helpers';
 
 // OFFLINE MODE: a switch in Settings, with a badge in the top bar only while it is on. While it is on nothing is sent, no queue replays, and it is remembered.
 
@@ -44,7 +44,7 @@ test('the switch is in Settings, a real switch with the floor size and a visible
   const bar = (await page.locator('[data-slot="app-topbar"]').boundingBox())!;
   const bb = (await badge.boundingBox())!;
   expect(bb.height).toBeGreaterThanOrEqual(HIT_TOUCH);
-  expect(bb.x + bb.width, 'inside the screen with a 14px edge').toBeLessThanOrEqual(page.viewportSize()!.width - 14);
+  expect(bb.x + bb.width, 'inside the screen with the 17px page edge').toBeLessThanOrEqual(page.viewportSize()!.width - PAGE_EDGE);
   expect(bb.y).toBeGreaterThanOrEqual(bar.y);
   // The badge opens Settings, where the switch is.
   await badge.click();
