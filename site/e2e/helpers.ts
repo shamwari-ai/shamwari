@@ -6,7 +6,7 @@ import { expect, type Page } from '@playwright/test';
  */
 export const HIT_TOUCH = 45; // hit area on touch, and below 64rem with any pointer
 export const HIT_FINE = 24; // hit area with a fine pointer from 64rem
-export const CONTROL_SM_FINE = 33; // the small control height Mzizi draws with a fine pointer (--size-control-sm)
+export const CONTROL_FINE = 28; // the chat draws its controls at Mzizi's drawn minimum with a fine pointer (--control-floor)
 export const BODY_TOUCH = 17;
 export const BODY_FINE = 15;
 export const CONTROL_GAP = 9; // between adjacent controls, both densities (spacing.control.between)

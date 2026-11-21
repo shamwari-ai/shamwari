@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { openChat, HIT_FINE } from './helpers';
 
 // The suggested prompts are pills (Mzizi's suggested-prompts shape) that WRAP onto more rows rather than scrolling sideways,
-// each a real button with a 45px hit region (33px drawn with a desktop mouse), in light and dark, at the widths people use.
+// each a real button with a 45px hit region (28px drawn with a desktop mouse), in light and dark, at the widths people use.
 
 for (const scheme of ['light', 'dark'] as const) {
   for (const width of [320, 390, 1440]) {

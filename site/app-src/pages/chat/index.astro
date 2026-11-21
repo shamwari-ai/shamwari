@@ -139,7 +139,8 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
 
   <div data-slot="app-main">
     <header class="topbar" data-slot="app-topbar">
-      <button type="button" class="icon-btn menu-btn" popovertarget="chat-sidebar" aria-label={en.openChats}><Icon name="menu" class="i" /></button>
+      {/* The panel icon on every screen, the same one the desktop collapse uses: one picture for "the chat list", never a hamburger (owner, 2026-11-21). */}
+      <button type="button" class="icon-btn menu-btn" popovertarget="chat-sidebar" aria-label={en.openChats}><Icon name="panel-left" class="i" /></button>
       <button type="button" id="side-toggle" class="icon-btn side-toggle" aria-pressed="false" aria-controls="chat-sidebar" aria-label={en.collapseChats} data-i18n-attr="aria-label:collapseChats"><Icon name="panel-left" class="i" /></button>
       <a href="/chat/" class="brand" aria-label="shamwari"><img src="/apple-touch-icon.png" alt="" width="20" height="20" /><span class="wordmark">shamwari</span></a>
       {/* The chat's title (the page's one heading) and a quiet subtitle; the whole block is one button that opens the chat's menu. */}

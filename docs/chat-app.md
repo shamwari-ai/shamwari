@@ -295,10 +295,12 @@ Developer keys for the mock: `sk_shamwari_mock_ok` answers; `_402`, `_403`,
   tokens. Tests: `e2e/theme.spec.ts`, and the floor audit and axe run in dark.
 - **Density is Mzizi's.** `@bundu/ui` 0.17.0 (Bundu floor 1.1.0), through `src/chat/tokens.css`: the hit region
   (`--target-floor`) is 45px on touch and 24px on a desktop with a mouse (64rem up, fine pointer, hover, no touch); controls are
-  DRAWN at `--size-control-sm`, which is 33px on a desktop with a mouse and 49px everywhere else. The
+  DRAWN at `--control-floor`, Mzizi's drawn minimum and the densest the floor allows: 28px on a desktop with a mouse and
+  45px everywhere else. Spacing uses the floor's dense layer tokens (`--space-*`): 9px between controls, 12px control insets,
+  21px popover and dialog padding; only the gap between messages and the Skills form's label gap keep the default. The
   drawer's rows (sections, foot rows, chat titles) use that token, a 14px label, a flat look (no border or fill at rest, a soft
   fill on hover, a stronger one and a marker on the open section) and 7px between rows. The foot rows (Use the API, Disclaimer and
-  privacy, Settings) are text only, no icons. Tests: `e2e-desktop/density.spec.ts` (33px, flat, no icons, no overlap, light and
+  privacy, Settings) are text only, no icons. Tests: `e2e-desktop/density.spec.ts` (28px, flat, no icons, no overlap, light and
   dark) and `e2e/density-touch.spec.ts` (45px on touch at any width).
 - **Owner's list (2026-11-12), each with a test:** labels never break inside a word (rows wrap at spaces only, the chip stays on one
   line, `e2e-desktop/density.spec.ts` at 1000, 1280 and 1440, light and dark); a fixed sidebar column of 17.5rem; the version line and

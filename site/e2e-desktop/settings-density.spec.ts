@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openChat, CONTROL_SM_FINE, HIT_FINE, CONTROL_GAP } from '../e2e/helpers';
+import { openChat, CONTROL_FINE, HIT_FINE, CONTROL_GAP } from '../e2e/helpers';
 
 // With a mouse on a desktop the Settings radio rows and the offline switch are drawn at the density size, and a draft language's
 // rows still leave the 7px floor gap between them.
@@ -14,7 +14,7 @@ test('on a desktop the Settings language rows and the offline switch are drawn a
   );
   expect(rows).toHaveLength(3);
   for (const r of rows) {
-    expect(r.h).toBeGreaterThanOrEqual(CONTROL_SM_FINE - 0.5);
+    expect(r.h).toBeGreaterThanOrEqual(CONTROL_FINE - 0.5);
     expect(r.h).toBeLessThan(40);
   }
   for (let i = 1; i < rows.length; i++) expect(rows[i].top - rows[i - 1].bottom).toBeGreaterThanOrEqual(CONTROL_GAP - 0.1);

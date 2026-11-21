@@ -4,7 +4,7 @@
  * tinted block; the answer is plain text; sources and skills are one-line "parts". Monospace only for metadata (time,
  * scope, keys). Colours, sizes and the Bundu floor come from Mzizi (tokens.css, generated from @bundu/ui): body 17px,
  * nothing under 14px, 14px inset, 7px gaps, 1.5 leading, a 45px hit region on touch and 24px with a mouse (Bundu floor
- * 1.1.0; controls drawn at 33px only with a mouse from 64rem). No web fonts and no Tailwind: the shell has to paint on
+ * 1.1.0; controls drawn at Mzizi's minimum: 45px on touch, 28px with a mouse from 64rem). No web fonts and no Tailwind: the shell has to paint on
  * 2G. Dark follows the device; data-theme wins.
  */
 @import './tokens.css';
@@ -21,7 +21,9 @@
   --line: var(--border);
   /* The dim behind a slide-over or a dialog: the same in both themes, so a dark page dims rather than greys. */
   --scrim: rgb(0 0 0 / 0.45);
-  --ctl: var(--size-control-sm);
+  /* Controls are drawn at Mzizi's drawn minimum (--control-floor: 45px on touch, 28px with a mouse from 64rem), the densest the
+     Bundu floor allows; the hit region never goes under the floor's 45px / 24px. */
+  --ctl: var(--control-floor);
   --box: 8px;
   --page-inset: max(var(--space-page-x), env(safe-area-inset-left), env(safe-area-inset-right));
   /* One sidebar width, as the slide-over on a phone and as the column from 64rem, so crossing 64rem does not jump. */
@@ -154,10 +156,10 @@ svg {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-control-gap);
+  gap: var(--space-control-gap-dense);
   min-height: var(--ctl);
   min-width: var(--ctl);
-  padding: 0 var(--space-control-x);
+  padding: 0 var(--space-control-x-dense);
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: transparent;
@@ -202,7 +204,7 @@ input:not([type='checkbox'], [type='radio'], [type='file']),
 .skill-form textarea {
   min-height: var(--ctl);
   max-width: 100%;
-  padding: 0 var(--space-field-x);
+  padding: 0 var(--space-field-x-dense);
   border: 1px solid var(--border-control);
   border-radius: var(--radius-sm);
   background: var(--input);
@@ -635,7 +637,8 @@ details:not([open]) > summary.chats-title::before {
   flex-direction: column;
   gap: var(--space-control-between);
 }
-/* A label and its own field sit at the label gap, closer than the fields to each other (Bundu floor 1.1.0). */
+/* A label and its own field sit at the label gap, closer than the fields to each other (Bundu floor 1.1.0). Default, not
+   dense: this is a form, and the same gap also spaces the field's hint and count, which are text blocks (7px floor). */
 .skill-field {
   gap: var(--space-label-gap);
 }
@@ -1488,7 +1491,7 @@ html[data-offline-mode] .mode-chip {
 .settings-body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-container-gap);
+  gap: var(--space-container-gap-dense);
   padding: var(--space-container-dense) var(--page-inset);
 }
 .settings-section {
@@ -1582,7 +1585,7 @@ html[data-offline-mode] .mode-chip {
 }
 
 /* ---- the hit region with a mouse -----------------------------------------------------------------------------------
-   With a mouse from 64rem controls are DRAWN at 33px; a transparent overlay keeps the hit region at least at the floor
+   With a mouse from 64rem controls are DRAWN at 28px; a transparent overlay keeps the hit region at least at the floor
    (--target-floor, 24px there under Bundu floor 1.1.0), as @bundu/ui's density layer does. A control drawn at or above
    the floor gets no larger target from it. A control that clips its overflow keeps its drawn size. */
 @media (min-width: 64rem) and (pointer: fine) and (hover: hover) and (not (any-pointer: coarse)) {

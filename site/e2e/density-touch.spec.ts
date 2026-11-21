@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { closeChats, openChat, openChats, HIT_TOUCH, CONTROL_GAP } from './helpers';
 
 // On touch (a phone, or a tablet or a laptop with a touch screen at any width) every drawer row keeps the Bundu floor:
-// drawn and hit at 45px or more, 7px between rows, no overlap. The desktop density (33px) is for a mouse only and is
+// drawn and hit at 45px or more, 9px between rows, no overlap. The desktop density (28px) is for a mouse only and is
 // tested in e2e-desktop/density.spec.ts. The foot rows have no icons.
 
 const measure = (page: import('@playwright/test').Page) =>

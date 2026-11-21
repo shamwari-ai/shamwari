@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { openChat, CONTROL_SM_FINE } from '../e2e/helpers';
+import { openChat, CONTROL_FINE } from '../e2e/helpers';
 
-// With a mouse on a desktop the pills are drawn at the density size (33px), still separated by the 7px floor gap.
-test('on a desktop the suggested prompts are drawn at the density size with 7px between them', async ({ page }) => {
+// With a mouse on a desktop the pills are drawn at the density size (28px), still separated by the 9px control gap.
+test('on a desktop the suggested prompts are drawn at the density size with 9px between them', async ({ page }) => {
   await openChat(page);
   const boxes = await page.getByRole('group', { name: 'Suggested prompts' }).getByRole('button').evaluateAll((els) =>
     els.map((e) => {
@@ -11,7 +11,7 @@ test('on a desktop the suggested prompts are drawn at the density size with 7px 
     }),
   );
   for (const b of boxes) {
-    expect(b.h, 'drawn at the density size, not the touch size').toBeGreaterThanOrEqual(CONTROL_SM_FINE - 0.5);
+    expect(b.h, 'drawn at the density size, not the touch size').toBeGreaterThanOrEqual(CONTROL_FINE - 0.5);
     expect(b.h).toBeLessThan(40);
   }
   for (let i = 1; i < boxes.length; i++) {
