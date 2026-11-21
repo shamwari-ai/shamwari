@@ -68,9 +68,8 @@ const fail = [];
 if (TARGET === 'marketing' && pages.length < 4) fail.push(`expected at least 4 built pages, found ${pages.length}`);
 
 // Two Workers, two origins, and neither may carry the other's pages. The chat app
-// is https://shamwari.ai/lite/ (shamwari-app); the main Shamwari Chat at /chat/ is another
-// build. The marketing site is
-// https://www.shamwari.ai (shamwari-site).
+// is https://shamwari.ai/chat/ (shamwari-app; it was at /lite/ until 2026-11-18, and /lite/
+// now only redirects there). The marketing site is https://www.shamwari.ai (shamwari-site).
 const MARKETING_ORIGIN = 'https://www.shamwari.ai';
 const APP_ORIGIN = 'https://shamwari.ai';
 // Every built page names an icon (a browser also asks for /favicon.ico by default), and the files they name exist.
@@ -90,24 +89,30 @@ if (TARGET === 'marketing') {
 if (TARGET === 'app') {
   for (const p of pages) {
     // The chat, and its disclaimer and privacy page (no script, no marketing).
-    if (!p.endsWith('/lite/index.html') && !p.endsWith('/lite/disclaimer/index.html')) fail.push(`app build contains a page that is not the chat: ${p.slice(DIST.length)}`);
+    if (!p.endsWith('/chat/index.html') && !p.endsWith('/chat/disclaimer/index.html')) fail.push(`app build contains a page that is not the chat: ${p.slice(DIST.length)}`);
   }
-  if (!pages.some((p) => p.endsWith('/lite/index.html'))) fail.push('app build has no /lite/ page');
+  if (!pages.some((p) => p.endsWith('/chat/index.html'))) fail.push('app build has no /chat/ page');
+  // The old address /lite/ only redirects (worker/index.ts). The one file the build still puts there is the retiring service
+  // worker, which a browser that used /lite/ fetches as its update: anything else there would be a second copy of the app.
+  for (const f of files) {
+    const rel = f.slice(DIST.length);
+    if (rel.startsWith('/lite/') && rel !== '/lite/sw.js') fail.push(`app build: ${rel} is under the old /lite/ address, which only redirects to /chat/`);
+  }
   // The sign-in mode is part of the build: a build that comes out in the developer-key mode (the default used to be that,
   // and a Workers Build without the flag shipped "Mukoko sign-in is coming soon" to everyone) fails here.
-  const litePage = pages.find((p) => p.endsWith('/lite/index.html'));
-  if (litePage) {
-    const liteHtml = readFileSync(litePage, 'utf8');
-    const problem = authModeProblem(liteHtml);
+  const chatPage = pages.find((p) => p.endsWith('/chat/index.html'));
+  if (chatPage) {
+    const chatPageHtml = readFileSync(chatPage, 'utf8');
+    const problem = authModeProblem(chatPageHtml);
     if (problem) fail.push(`app build: ${problem}`);
     // No Skills tab until a SKILL.md loader exists (shamwari#291, chat/features.ts). Only a build that asks for it may carry it.
-    if (process.env.PUBLIC_CHAT_SKILLS !== 'true' && /id="tab-skills"|id="tabpanel-skills"/.test(liteHtml)) {
+    if (process.env.PUBLIC_CHAT_SKILLS !== 'true' && /id="tab-skills"|id="tabpanel-skills"/.test(chatPageHtml)) {
       fail.push('app build: the Skills tab is in the page, but there is no SKILL.md loader (set PUBLIC_CHAT_SKILLS=true only once there is)');
     }
   }
   const redirects = files.includes(`${DIST}/_redirects`) ? readFileSync(`${DIST}/_redirects`, 'utf8') : '';
-  // The apex root is answered by the Worker (worker/root.ts), which chooses /chat/ or /lite/ by
-  // the visitor's connection. A static rule for it in _redirects would be a second, silent
+  // The apex root is answered by the Worker (worker/root.ts), which sends a signed-in visitor to
+  // /chat/ (and anyone else to sign-in). A static rule for it in _redirects would be a second, silent
   // answer, so it must not exist; and the Worker must be told to take the root first.
   if (/^\/\s/m.test(redirects)) fail.push('app build: the root / belongs to the Worker (worker/root.ts), not _redirects');
   // Parsed, not pattern-matched: a commented-out line must not satisfy it. The file is JSONC, so
@@ -126,14 +131,17 @@ if (TARGET === 'app') {
   }
   if (wrangler) {
     if (!Array.isArray(wrangler.assets?.run_worker_first) || !wrangler.assets.run_worker_first.includes('/')) fail.push('app/wrangler.jsonc: assets.run_worker_first must list "/" so the Worker answers the root');
-    // The switch that lets the root send anyone to /chat/ must be present and exactly "true" or "false".
-    if (!['true', 'false'].includes(wrangler.vars?.CHAT_LIVE)) fail.push('app/wrangler.jsonc: vars.CHAT_LIVE must be the string "true" or "false"');
+    // The Worker gates /chat/ and redirects the old /lite/: the platform must hand both to it first, or the app would be
+    // served ungated and /lite/ would be a 404 instead of a redirect.
+    for (const need of ['/chat/*', '/lite/*']) {
+      if (!wrangler.assets?.run_worker_first?.includes(need)) fail.push(`app/wrangler.jsonc: assets.run_worker_first must list "${need}"`);
+    }
   }
-  // It may send a visitor only to the main chat or the light chat.
+  // It may send a visitor only to the chat.
   const rootSrc = readFileSync('worker/root.ts', 'utf8');
-  const dests = [...rootSrc.matchAll(/export const (?:CHAT|LITE) = '([^']*)'/g)].map((m) => m[1]).sort().join(',');
-  if (dests !== '/chat/,/lite/') fail.push(`worker/root.ts: the root may go only to /chat/ and /lite/, found ${dests || 'nothing'}`);
-  // Redirects may only go to the chat, the light chat, or the marketing origin: the app Worker
+  const dests = [...rootSrc.matchAll(/export const [A-Z_]+ = '(\/[^']*)'/g)].map((m) => m[1]).sort().join(',');
+  if (dests !== '/chat/') fail.push(`worker/root.ts: the root may go only to /chat/, found ${dests || 'nothing'}`);
+  // Redirects may only go to the chat or the marketing origin: the app Worker
   // sends old marketing links to www but never serves a marketing page itself. The destination
   // is parsed, not prefix-matched, so "//host", "/chat/../x" and "/chat//host" cannot slip past.
   const redirectDestinationOk = (dest) => {
@@ -144,14 +152,14 @@ if (TARGET === 'app') {
     } catch {
       return false;
     }
-    if (u.origin === APP_ORIGIN) return !u.pathname.includes('//') && (u.pathname.startsWith('/chat/') || u.pathname.startsWith('/lite/'));
+    if (u.origin === APP_ORIGIN) return !u.pathname.includes('//') && u.pathname.startsWith('/chat/');
     return u.origin === MARKETING_ORIGIN;
   };
   for (const line of redirects.split('\n')) {
     const t = line.trim();
     if (!t || t.startsWith('#')) continue;
     const dest = t.split(/\s+/)[1] ?? '';
-    if (!redirectDestinationOk(dest)) fail.push(`app _redirects: "${t}" goes somewhere other than /chat/, /lite/ or ${MARKETING_ORIGIN}`);
+    if (!redirectDestinationOk(dest)) fail.push(`app _redirects: "${t}" goes somewhere other than /chat/ or ${MARKETING_ORIGIN}`);
   }
 }
 
@@ -294,13 +302,13 @@ for (const page of pages) {
   // No client JavaScript anywhere except the chat app. @bundu/ui's React
   // primitives render server-side with no client:* directive, so the
   // marketing pages ship none. The chat page is the one exception, and it may
-  // load only its own bundled module from /lite/_astro/ (no third-party script, no
+  // load only its own bundled module from /chat/_astro/ (no third-party script, no
   // inline script), whose size is held to the budget below.
   const scripts = [...html.matchAll(/<script\b([^>]*)>/gi)].filter((m) => !/type="application\/ld\+json"/i.test(m[1]));
-  if (where === 'lite/index.html') {
+  if (where === 'chat/index.html') {
     for (const [, attrs] of scripts) {
       const src = attrs.match(/\bsrc="([^"]+)"/)?.[1];
-      if (!src || !src.startsWith('/lite/_astro/')) fail.push(`${where}: script is not a bundled /lite/_astro/ module (${attrs.trim().slice(0, 60)})`);
+      if (!src || !src.startsWith('/chat/_astro/')) fail.push(`${where}: script is not a bundled /chat/_astro/ module (${attrs.trim().slice(0, 60)})`);
       else chatScripts.add(src);
     }
     if (!scripts.length) fail.push(`${where}: the chat page ships no script`);
@@ -324,7 +332,7 @@ const visit = (src) => {
   if (closure.has(src)) return;
   closure.add(src);
   const code = readFileSync(DIST + src, 'utf8');
-  for (const [, dep] of code.matchAll(/(?:^|[;}\s])(?:import|export)[^'"`;]*?from\s*["']\.\/([^"']+)["']/g)) visit('/lite/_astro/' + dep);
+  for (const [, dep] of code.matchAll(/(?:^|[;}\s])(?:import|export)[^'"`;]*?from\s*["']\.\/([^"']+)["']/g)) visit('/chat/_astro/' + dep);
 };
 for (const src of chatScripts) if (assets.has(src)) visit(src);
 const chatJs = [...closure].reduce((n, src) => n + gz(DIST + src), 0);
@@ -332,7 +340,7 @@ if (chatJs > CHAT_JS_BUDGET) fail.push(`chat first-load JS is ${chatJs} B gzippe
 
 let chatCss = 0;
 let chatFirstLoad = 0;
-const chatHtml = pages.find((p) => p.endsWith('lite/index.html'));
+const chatHtml = pages.find((p) => p.endsWith('/chat/index.html'));
 if (chatHtml) {
   for (const [, href] of readFileSync(chatHtml, 'utf8').matchAll(/<link[^>]+rel="stylesheet"[^>]+href="([^"]+)"/g)) chatCss += gz(DIST + href);
   if (chatCss > CHAT_CSS_BUDGET) fail.push(`chat CSS is ${chatCss} B gzipped, over the ${CHAT_CSS_BUDGET} B budget`);
@@ -347,33 +355,48 @@ if (chatHtml) {
 // app then has no offline mode: so every precache entry is checked here.
 if (chatHtml) {
   const html = readFileSync(chatHtml, 'utf8');
-  if (!/<link rel="manifest" href="\/lite\/manifest\.webmanifest"/.test(html)) fail.push('chat: no <link rel="manifest">');
+  if (!/<link rel="manifest" href="\/chat\/manifest\.webmanifest"/.test(html)) fail.push('chat: no <link rel="manifest">');
   if (!/<meta name="theme-color" content="#[0-9a-f]{6}" media="\(prefers-color-scheme: light\)"/i.test(html) || !/<meta name="theme-color" content="#[0-9a-f]{6}" media="\(prefers-color-scheme: dark\)"/i.test(html)) {
     fail.push('chat: theme-color must have a light and a dark variant (the browser bar follows the scheme)');
   }
-  if (!assets.has('/lite/manifest.webmanifest')) fail.push('chat: manifest missing from the build');
+  if (!assets.has('/chat/manifest.webmanifest')) fail.push('chat: manifest missing from the build');
   else {
-    const m = JSON.parse(readFileSync(`${DIST}/lite/manifest.webmanifest`, 'utf8'));
-    if (m.start_url !== '/lite/' || m.scope !== '/lite/') fail.push('chat manifest: start_url and scope must both be /lite/');
+    const m = JSON.parse(readFileSync(`${DIST}/chat/manifest.webmanifest`, 'utf8'));
+    if (m.start_url !== '/chat/' || m.scope !== '/chat/') fail.push('chat manifest: start_url and scope must both be /chat/');
+    // A new id, not the old app's (/lite/): with the same id the browser would call the app already installed and never offer it
+    // at /chat/, and an app installed from /lite/ keeps opening /lite/ (now a redirect) whatever this file says.
+    if (m.id !== '/chat/') fail.push('chat manifest: id must be /chat/');
     if ('orientation' in m) fail.push('chat manifest: do not lock orientation (WCAG 1.3.4)');
     if (m.display !== 'standalone') fail.push('chat manifest: display must be standalone');
     const sizes = new Set((m.icons ?? []).map((i) => `${i.sizes}/${i.purpose}`));
     for (const want of ['192x192/any', '512x512/any', '512x512/maskable']) if (!sizes.has(want)) fail.push(`chat manifest: missing icon ${want}`);
     for (const i of m.icons ?? []) if (!assets.has(i.src)) fail.push(`chat manifest: missing icon file ${i.src}`);
   }
-  if (!assets.has('/lite/sw.js')) fail.push('chat: sw.js missing (post-build did not run?)');
+  if (!assets.has('/chat/sw.js')) fail.push('chat: sw.js missing (post-build did not run?)');
   else {
-    const sw = readFileSync(`${DIST}/lite/sw.js`, 'utf8');
+    const sw = readFileSync(`${DIST}/chat/sw.js`, 'utf8');
     const list = JSON.parse(sw.match(/const PRECACHE = (\[.*?\]);/)?.[1] ?? '[]');
-    if (!list.includes('/lite/')) fail.push('chat sw: the shell (/lite/) is not precached');
+    if (!list.includes('/chat/')) fail.push('chat sw: the shell (/chat/) is not precached');
+    if (!sw.includes("const SCOPE = '/chat/';")) fail.push('chat sw: its scope must be /chat/');
     for (const f of list) if (!assets.has(f) && !routes.has(f)) fail.push(`chat sw: precaches ${f}, which the build did not produce`);
     if (/caches\.put\([^)]*v1\/chat/.test(sw) || /completions/.test(sw)) fail.push('chat sw: must never cache API traffic');
+  }
+  // The retiring worker for the old /lite/ address (docs/chat-app.md, "Moving from /lite/ to /chat/"). It must exist (the old
+  // page's update check fetches it, and a 404 or a redirect would leave the old worker serving the old app for good), take
+  // over at once, answer nothing (no fetch handler: every request reaches the Worker and its 301), and unregister itself.
+  if (!assets.has('/lite/sw.js')) fail.push('the retiring /lite/sw.js is missing: an old /lite/ service worker would keep serving the old app');
+  else {
+    const old = readFileSync(`${DIST}/lite/sw.js`, 'utf8');
+    if (/addEventListener\(\s*'fetch'/.test(old) || /respondWith/.test(old)) fail.push('retiring /lite/sw.js: must not answer any request');
+    if (!/skipWaiting\(\)/.test(old)) fail.push('retiring /lite/sw.js: must take over at once (skipWaiting)');
+    if (!/registration\.unregister\(\)/.test(old)) fail.push('retiring /lite/sw.js: must unregister itself');
+    if (!/c\.match\('\/lite\/'\)/.test(old)) fail.push('retiring /lite/sw.js: must delete only the cache that holds the old /lite/ shell');
   }
   if (!assets.has('/_headers')) fail.push('chat: _headers missing');
   else {
     const headers = readFileSync(`${DIST}/_headers`, 'utf8');
     const csp = headers.match(/Content-Security-Policy:\s*(.+)/)?.[1] ?? '';
-    if (!csp) fail.push('chat: no Content-Security-Policy on /lite/*');
+    if (!csp) fail.push('chat: no Content-Security-Policy on /chat/*');
     const metaApi = html.match(/<meta name="shamwari-api" content="([^"]+)"/)?.[1];
     if (!metaApi || !csp.includes(`connect-src 'self' ${new URL(metaApi).origin}`)) fail.push('chat CSP: connect-src does not name the API origin the page calls');
     if (/unsafe-(inline|eval)/.test(csp)) fail.push('chat CSP: unsafe-inline / unsafe-eval are not allowed');
@@ -411,6 +434,6 @@ if (fail.length) {
 }
 console.log(
   TARGET === 'app'
-    ? `ok (app) — ${pages.length} page, links and assets resolve, client JS only on /lite/ (${chatJs} B gzipped first load, budget ${CHAT_JS_BUDGET}; CSS ${chatCss} B, budget ${CHAT_CSS_BUDGET}; whole first load ${chatFirstLoad} B, budget ${CHAT_FIRST_LOAD_BUDGET}), language rules held`
+    ? `ok (app) — ${pages.length} page, links and assets resolve, client JS only on /chat/ (${chatJs} B gzipped first load, budget ${CHAT_JS_BUDGET}; CSS ${chatCss} B, budget ${CHAT_CSS_BUDGET}; whole first load ${chatFirstLoad} B, budget ${CHAT_FIRST_LOAD_BUDGET}), language rules held`
     : `ok (marketing) — ${pages.length} pages, largest ${biggest} bytes, links and assets resolve, no client JS, no app files, canonical and sitemap on ${MARKETING_ORIGIN}, language rules held`,
 );

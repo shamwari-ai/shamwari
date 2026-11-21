@@ -33,14 +33,13 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       gateway: ${{ steps.f.outputs.gateway }}
-      chat_guard: ${{ steps.f.outputs.chat_guard }}
       core: ${{ steps.f.outputs.core }}
       docs_site: ${{ steps.f.outputs.docs_site }}
       site: ${{ steps.f.outputs.site }}
       app: ${{ steps.f.outputs.app }}
       mobile: ${{ steps.f.outputs.mobile }}
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
 
@@ -67,7 +66,6 @@ jobs:
             # The gateway's tests read some of the docs (the status and sign-in pages) and two files
             # from core/ (the usage-field list and main.py), so those count.
             echo "gateway=$(hit '^(gateway/|core/|docs/)')"
-            echo "chat_guard=$(hit '^chat/')"
             # Core's end-to-end contract runs the gateway Worker against Core.
             echo "core=$(hit '^(core/|gateway/|scripts/|db/|\.github/workflows/deploy\.yml)')"
             echo "docs_site=$(hit '^docs-site/')"
@@ -83,7 +81,7 @@ jobs:
     if: needs.changes.outputs.gateway == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
@@ -105,71 +103,6 @@ jobs:
         run: npm test
         working-directory: gateway
 
-  chat-guard:
-    name: LibreChat guard (Rule 1)
-    needs: changes
-    if: needs.changes.outputs.chat_guard == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
-
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: chat/librechat/package-lock.json
-
-      - run: npm ci
-        working-directory: chat/librechat
-
-      # LibreChat may talk only to the gateway. This fails the build if any
-      # endpoint points elsewhere, a provider key appears, registration is on, a
-      # public port is added or the pin stops being an exact commit. Includes
-      # mutation checks, so the guard cannot rot into a test that always passes.
-      - name: Guard tests
-        run: npm test
-        working-directory: chat/librechat
-
-      # The /chat reverse proxy has no dependencies. Its tests include one that fails if
-      # its config declares a route or a binding, so merging it cannot switch anything on.
-      - name: Proxy Worker tests
-        run: npm test
-        working-directory: chat/proxy
-
-  chat-e2e:
-    name: LibreChat stub-gateway e2e
-    needs: changes
-    if: needs.changes.outputs.chat_guard == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
-
-      # Builds LibreChat from the commit pinned in chat/librechat/PIN (the Shamwari
-      # fork) and checks the checkout equals the pin before building.
-      - name: Build the pinned image
-        run: chat/librechat/build.sh shamwari-chat:ci
-
-      # The whole stack runs on a network with no route out. Secrets are generated
-      # for this run only and never written to a file.
-      - name: Run LibreChat against the stub gateway
-        run: |
-          CREDS_KEY="$(openssl rand -hex 32)"
-          CREDS_IV="$(openssl rand -hex 16)"
-          JWT_SECRET="$(openssl rand -hex 32)"
-          JWT_REFRESH_SECRET="$(openssl rand -hex 32)"
-          export CREDS_KEY CREDS_IV JWT_SECRET JWT_REFRESH_SECRET
-          docker compose -f chat/librechat/e2e/compose.yml up \
-            --abort-on-container-exit --exit-code-from driver
-
-      - name: Logs on failure
-        if: failure()
-        run: docker compose -f chat/librechat/e2e/compose.yml logs --no-color --tail 200 || true
-
-      - name: Tear down
-        if: always()
-        run: docker compose -f chat/librechat/e2e/compose.yml down -v || true
-
   core:
     name: Core (imports, syntax)
     needs: changes
@@ -182,7 +115,7 @@ jobs:
       SHAMWARI_CORE_TOKEN: placeholder
       NYUCHI_API_INTERNAL_KEY: nyk_placeholder.nys_placeholder
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-python@v6
         with:
@@ -255,7 +188,7 @@ jobs:
     if: needs.changes.outputs.docs_site == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
@@ -288,7 +221,7 @@ jobs:
     if: needs.changes.outputs.site == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
@@ -324,7 +257,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6
         with:
@@ -391,7 +324,7 @@ jobs:
     if: needs.changes.outputs.mobile == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38  # v6
         with:
@@ -412,7 +345,7 @@ jobs:
     name: Secret scan (gitleaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 

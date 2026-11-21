@@ -24,10 +24,11 @@ real key — which is random and has no ellipsis — is still reported.
 Also the obviously fake credentials the "no secret reaches a log, error or usage
 event" tests search for (gateway/test/keys.test.ts, core/test_image.py). They are
 spelled `...SECRET-1`, `...SECRET-2`, `...SECRET-3`; a real credential is random
-and never contains that.
+and never contains that. The test keys `sk_shamwari_e2e_0123456789abcdef` and
+`sk_shamwari_test_0123456789abcdef` are counting digits and hex letters in order.
 """
 regexTarget = "line"
-regexes = ['''Bearer sk_shamwari_\.\.\.''', '''SECRET-\d''', '''sk_shamwari_e2e_0123456789abcdef''']
+regexes = ['''Bearer sk_shamwari_\.\.\.''', '''SECRET-\d''', '''sk_shamwari_(e2e|test)_0123456789abcdef''']
 
 # The obviously fake end-to-end key `sk_shamwari_e2e_0123456789abcdef` that #122 put in
 # core/e2e_app.py. #128 builds that value at runtime, so no current file carries it, but
