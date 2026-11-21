@@ -82,8 +82,8 @@ interface Config {
 function config(env: Env): Config | null {
   const { WORKOS_CLIENT_ID: clientIdList, WORKOS_ISSUER: issuer, WORKOS_AUDIENCE: audience } = env;
   const cap = Number(env.WORKOS_MONTHLY_TOKEN_CAP);
-  // One or more client ids, comma separated (the mobile app signs in through Shamwari Chat, the light chat
-  // through Mukoko Account). Blank entries are dropped; a list with nothing left is a configuration error,
+  // One or more client ids, comma separated (the mobile app signs in through Shamwari Chat, the web chat
+  // at /chat/ through Mukoko Account). Blank entries are dropped; a list with nothing left is a configuration error,
   // never "accept any".
   const clientIds = (clientIdList ?? '')
     .split(',')

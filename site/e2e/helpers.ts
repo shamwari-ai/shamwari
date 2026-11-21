@@ -14,7 +14,7 @@ export const OK_KEY = 'sk_shamwari_mock_ok';
  */
 export async function openChat(page: Page, key: string | null = OK_KEY, opts: { settle?: boolean } = {}) {
   if (key) await page.addInitScript((k) => localStorage.setItem('shamwari.devkey', k), key);
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-ready="true"]');
   if (opts.settle === false) return;
   await page.waitForFunction(() => !!navigator.serviceWorker?.controller);
@@ -43,8 +43,8 @@ export async function makeProject(page: Page, name: string) {
   await page.getByRole('button', { name: 'Create project' }).click();
 }
 
-/** Open one section of the drawer (Chat, Projects, Artifacts) from its row at the top. */
-export async function openSection(page: Page, name: 'Chat' | 'Projects' | 'Artifacts') {
+/** Open one section of the drawer (Chat, Projects, Artifacts, Plugins) from its row at the top. */
+export async function openSection(page: Page, name: 'Chat' | 'Projects' | 'Artifacts' | 'Plugins') {
   await openChats(page);
   await page.locator('.side-primary').getByRole('button', { name }).click();
 }

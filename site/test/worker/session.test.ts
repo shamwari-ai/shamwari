@@ -11,6 +11,7 @@ import {
   LEGACY_ROUTES,
   MAX_COOKIE_VALUE,
   SESSION_COOKIE,
+  SIGNIN_FAILED,
   STATE_COOKIE,
   handle,
   jwtClaims,
@@ -74,7 +75,7 @@ describe('login and callback', () => {
     const port = fakePort();
     const res = await handle(req(path, { cookie }), deps(port));
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe('/lite/?signin=failed');
+    expect(res.headers.get('Location')).toBe('/chat/?signin=failed');
     expect(port.calls).toEqual([]);
     expect(setCookies(res).some((c) => c.startsWith(`${SESSION_COOKIE}=S`))).toBe(false);
     expect(setCookies(res).some((c) => c.startsWith(`${STATE_COOKIE}=;`))).toBe(true);
@@ -89,7 +90,7 @@ describe('login and callback', () => {
       }),
       deps(port),
     );
-    expect(res.headers.get('Location')).toBe('/lite/?signin=failed');
+    expect(res.headers.get('Location')).toBe('/chat/?signin=failed');
     expect(setCookies(res).some((c) => c.startsWith(`${SESSION_COOKIE}=S`))).toBe(false);
   });
 
@@ -101,7 +102,7 @@ describe('login and callback', () => {
 });
 
 describe('cookie scope', () => {
-  it('the session is one cookie for the whole origin (Path=/), so /lite/ and /chat/ share it; the old /lite/ copy is expired alongside', async () => {
+  it('the session is one cookie for the whole origin (Path=/), so the app at /chat/ kept the session it had at /lite/; the old /lite/ copy is expired alongside', async () => {
     const port = fakePort();
     const callback = await handle(
       req('/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
@@ -175,12 +176,16 @@ describe('a device holding both an old /lite/ session cookie and a new one', () 
   });
 });
 
-describe('the sign-in routes are at the root, never under /lite/', () => {
-  it('AUTH_ROUTES are /auth/login, /callback, /auth/token and /auth/logout, and none starts with /lite/', () => {
+describe('the sign-in routes are at the root, never under the app\'s path (/chat/, or the old /lite/)', () => {
+  it('AUTH_ROUTES are /auth/login, /callback, /auth/token and /auth/logout, and none starts with /lite/ or /chat/', () => {
     expect([...AUTH_ROUTES].sort()).toEqual([AUTH_CALLBACK, AUTH_LOGIN, AUTH_LOGOUT, AUTH_TOKEN].sort());
     expect(AUTH_LOGIN).toBe('/auth/login');
     expect(AUTH_CALLBACK).toBe('/callback');
-    for (const r of AUTH_ROUTES) expect(r.startsWith('/lite/'), r).toBe(false);
+    for (const r of AUTH_ROUTES) expect(r.startsWith('/lite/') || r.startsWith('/chat/'), r).toBe(false);
+  });
+
+  it('a failed sign-in lands on the app at /chat/, marked so the gate does not loop it', () => {
+    expect(SIGNIN_FAILED).toBe('/chat/?signin=failed');
   });
 
   it('the handler answers the root routes, and the session cookie it sets is not under /lite/', async () => {
@@ -395,7 +400,7 @@ describe('token', () => {
       req('/callback?code=c1&state=STATE123', { cookie: `${STATE_COOKIE}=STATE123` }),
       deps(port),
     );
-    expect(cb.headers.get('Location')).toBe('/lite/?signin=failed');
+    expect(cb.headers.get('Location')).toBe('/chat/?signin=failed');
     expect(setCookies(cb).some((c) => c.startsWith(`${SESSION_COOKIE}=x`))).toBe(false);
     // Renewal: the session ends honestly (401 + cleared) rather than looping on a cookie that never lands.
     const p2 = fakePort();

@@ -75,7 +75,7 @@
       "type": "model",
       "properties": {
         "provider": "workers-ai",
-        "model": "@cf/zai-org/glm-5.3-flash",
+        "model": "@cf/zai-org/glm-5.3",
         "timeout": 20000,
         "retries": 1
       },
@@ -93,7 +93,7 @@
       "type": "model",
       "properties": {
         "provider": "workers-ai",
-        "model": "@cf/zai-org/glm-5.3-flash",
+        "model": "@cf/zai-org/glm-5.3",
         "timeout": 15000,
         "retries": 0
       },
