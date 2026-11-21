@@ -109,7 +109,7 @@ export function initAttach(root: Document, o: Options): Attach {
     return true;
   };
 
-  // ---- the "+" menu: Upload a file. (A skills entry will join it when Skills has something in it; until then it is not shown.)
+  // ---- the "+" menu: Upload a file. (Skills are turned on in the Skills tab; a shortcut here is a follow-up.)
   plus.addEventListener('click', () => {
     if (menu.matches(':popover-open')) return;
     const r = plus.getBoundingClientRect();
