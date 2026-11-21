@@ -29,7 +29,7 @@ const seen = async (page: Page) => ((await (await page.request.get(`${MOCK}/__se
 const reset = (page: Page) => page.request.delete(`${MOCK}/__seen`);
 
 async function open(page: Page) {
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-ready="true"]');
   await page.waitForSelector('html[data-auth-ready="true"]'); // the silent start-up renewal has answered
 }
@@ -173,7 +173,7 @@ test('the Mukoko button starts sign-in on the Worker, which the service worker m
   await page.reload();
   await page.waitForSelector('html[data-auth-ready="true"]');
   await page.getByRole('button', { name: 'Sign in with Mukoko' }).click();
-  await page.waitForURL('**/lite/');
+  await page.waitForURL('**/chat/');
   // The login route set the session: the shell the service worker serves is the SAME page,
   // so the only proof it reached the network is the state the stub recorded.
   expect((await state(page)).session).toBe(true);
@@ -196,7 +196,7 @@ test('signing out keeps the messages on this device by default, and says they ar
   await expect(page.locator('#log article')).toHaveCount(0); // not on screen for the next person
   // The same person signs in again: their messages are there.
   await steer(page, { session: true, tokens: [tokenFor('user-A')] });
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-auth-ready="true"]');
   await expect(page.locator('article.msg.user')).toContainText('Is everyone equal');
 });
@@ -209,7 +209,7 @@ test('another person signing in on the same device does not read them; the first
   await signOut(page);
 
   await steer(page, { session: true, tokens: [tokenFor('user-B')] });
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-auth-ready="true"]');
   await expect(page.locator('#log article')).toHaveCount(0);
   await openChats(page);
@@ -221,7 +221,7 @@ test('another person signing in on the same device does not read them; the first
   await signOut(page);
 
   await steer(page, { session: true, tokens: [tokenFor('user-A')] });
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-auth-ready="true"]');
   await expect(page.locator('article.msg.user')).toContainText('Is everyone equal');
   await expect(page.getByText('Question from B')).toHaveCount(0);
@@ -235,12 +235,12 @@ test('chats from before stores were per person go to the first person who signs 
   await expect(page.locator('.cite').first()).toBeVisible();
   await signOut(page);
   await steer(page, { session: true, tokens: [tokenFor('user-A')] });
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-auth-ready="true"]');
   await expect(page.locator('article.msg.user')).toContainText('Old question'); // adopted by the first person
   await signOut(page);
   await steer(page, { session: true, tokens: [tokenFor('user-B')] });
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-auth-ready="true"]');
   await expect(page.getByText('Old question')).toHaveCount(0);
 });
@@ -251,12 +251,12 @@ test('when the session has ended by the time the page loads, the previous person
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('.cite').first()).toBeVisible();
   await steer(page, { session: false, tokenStatus: 401 }); // the session ended while the page was closed
-  await page.goto('/lite/?signin=failed'); // stay on the sign-in screen, no redirect
+  await page.goto('/chat/?signin=failed'); // stay on the sign-in screen, no redirect
   await page.waitForSelector('html[data-auth-ready="true"]');
   await expect(page.locator('#auth')).toBeVisible();
   await expect(page.getByText('Is everyone equal')).toHaveCount(0); // not even hidden in the page
   await steer(page, { session: true, tokens: [tokenFor('user-A')] });
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-auth-ready="true"]');
   await expect(page.locator('article.msg.user')).toContainText('Is everyone equal'); // still theirs, on the device
 });
@@ -270,7 +270,7 @@ test('"Also delete messages from this device" removes them, and signing in again
   await expect(page.locator('#signin-note')).toContainText('removed from this device');
   await expect(page.locator('#log article')).toHaveCount(0);
   await steer(page, { session: true, tokens: [tokenFor('user-A')] });
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-auth-ready="true"]');
   await expect(page.locator('#log article')).toHaveCount(0);
   await openChats(page);
@@ -289,7 +289,7 @@ test('signing out leaves the chat at once even when the sign-out request hangs',
 
 test('a question sent while the start-up renewal is still in flight waits for it and is not dropped', async ({ page }) => {
   await steer(page, { session: true, tokens: [VALID], tokenDelayMs: 1_500 });
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-ready="true"]'); // the renewal has been asked for, not answered
   await ask(page, 'Is everyone equal under the law?');
   await expect(page.locator('article.msg.bot:not(.pending) .cite').first()).toBeVisible({ timeout: 15_000 });
@@ -313,7 +313,7 @@ test('a start-up renewal that fails on the network is not a sign-out: the questi
 
 test('a failed sign-in sends the person back with a kind message on the sign-in screen, once', async ({ page }) => {
   await steer(page, { session: false });
-  await page.goto('/lite/?signin=failed');
+  await page.goto('/chat/?signin=failed');
   await page.waitForSelector('html[data-ready="true"]');
   await expect(page.locator('#signin-failed')).toContainText('could not sign you in');
   await SIGNIN_SCREEN_ONLY(page); // and it does not bounce straight back to sign-in
@@ -332,7 +332,7 @@ test('a device whose session has ended goes straight to the hosted sign-in: no c
     reached += 1;
     return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>hosted</title><p id="hosted">HOSTED SIGN-IN</p>' });
   });
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await expect(page.locator('#hosted')).toBeVisible();
   expect(new URL(page.url()).pathname).toBe('/auth/login');
   expect(reached).toBe(1);
@@ -343,9 +343,9 @@ test('if that sign-in comes straight back signed out, it stops on the sign-in sc
   let reached = 0;
   await page.route('**/auth/login', (route) => {
     reached += 1;
-    return route.fulfill({ status: 302, headers: { Location: '/lite/' } }); // back, still no session
+    return route.fulfill({ status: 302, headers: { Location: '/chat/' } }); // back, still no session
   });
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-ready="true"]');
   await page.waitForSelector('html[data-auth-ready="true"]');
   await SIGNIN_SCREEN_ONLY(page);
@@ -354,7 +354,7 @@ test('if that sign-in comes straight back signed out, it stops on the sign-in sc
 });
 
 test('offline: a device that held a session opens the chat; one that did not sees the sign-in screen and says it is offline', async ({ page, context }) => {
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-auth-ready="true"]'); // signed in (the beforeEach session): the hint is set
   await expect.poll(() => page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
   await context.setOffline(true);
@@ -370,7 +370,7 @@ test('offline: a device that held a session opens the chat; one that did not see
   await expect(page.locator('#auth')).toBeVisible();
   await expect(page.locator('#signin-offline')).toBeVisible();
   await expect(page.locator('#q')).toBeHidden();
-  expect(new URL(page.url()).pathname).toBe('/lite/'); // it did not try to leave for a page it cannot reach
+  expect(new URL(page.url()).pathname).toBe('/chat/'); // it did not try to leave for a page it cannot reach
 });
 
 test('the enabled Mukoko button no longer points at the "coming soon" text', async ({ page }) => {
@@ -382,7 +382,7 @@ test('the enabled Mukoko button no longer points at the "coming soon" text', asy
 
 test('while the first answer from the session is awaited, neither the sign-in nor the chat flashes', async ({ page }) => {
   await steer(page, { session: true, tokens: [VALID], tokenDelayMs: 1500 }); // a session, but no hint on this device
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-ready="true"]');
   await expect(page.locator('html')).toHaveAttribute('data-view', 'pending');
   await expect(page.locator('#auth')).toBeHidden();
