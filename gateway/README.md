@@ -135,6 +135,22 @@ production.
 The keyword buckets are `en`, `sn` and `nd`. Ndebele is empty today; that is
 a visible gap rather than a hidden one.
 
+### Listing the models: `GET /v1/models`
+
+`GET /v1/models` returns the ids a caller may put in `model`, in OpenAI's list
+shape (`{"object": "list", "data": [{"id", "object": "model", "owned_by"}]}`),
+so OpenAI-compatible clients can discover them. It needs the same
+`Authorization: Bearer` credential as the chat endpoint and answers a bad key
+or an auth outage the same way (401, 403, 503), but it is not metered or
+quota-checked. It carries no CORS headers, like every endpoint but the chat one.
+
+The list is derived in `src/models.ts`, not written down: the aliases in
+`model_aliases` whose tier has a model configured in `targets()` and is
+`open_weight`. Premium is never listed, even if an alias for it is added
+(`test/models.test.ts`). `created` is left out because an alias has no creation
+date to report. Asking for a model id that is not an alias is not an error: the
+heuristic above picks the tier, as before.
+
 ## AI Gateway dynamic route
 
 `dynamic-route.json` specifies the target route for AI Gateway's Dynamic
