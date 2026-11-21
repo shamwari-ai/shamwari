@@ -326,6 +326,43 @@ describe.skipIf(!CORE)('gateway -> Core -> Ground -> answer (real HTTP, fake mod
     });
   });
 
+  describe('Open Responses: /v1/responses runs the same chat path', () => {
+    it('answers in the Open Responses shape, with the citation and provenance, and Core stores the same row', async () => {
+      const w = world();
+      const r = await w.call('/v1/responses', { input: 'What does section 56 say about equality?' });
+      expect(r.status).toBe(200);
+      expect(r.body.object).toBe('response');
+      expect(r.body.status).toBe('completed');
+      expect(r.body.output[0].type).toBe('message');
+      expect(r.body.output[0].content[0].type).toBe('output_text');
+      expect(r.body.output[0].content[0].text).toContain('s 56 Equality and non-discrimination');
+      expect(r.body.shamwari.citations[0].heading).toBe('s 56 Equality and non-discrimination');
+      expect(r.body.shamwari.model_served).toBe('workers-ai/@cf/zai-org/glm-5.3-flash');
+
+      await w.flush();
+      const s = await coreState();
+      expect(s.stored['shamwari.conversations']![0]!).toMatchObject({
+        scope: 'platform',
+        licenseClass: 'open_weight',
+        trainingEligible: true,
+      });
+    });
+
+    it('an explicit personal scope is a 409 with zero provider, embedding and store calls', async () => {
+      const w = world({ scopes: ['personal', 'community', 'platform'] });
+      const r = await w.call('/v1/responses', { input: 'what is on my payslip?', scope: 'personal' });
+      expect(r.status).toBe(409);
+      expect(r.body.error.code).toBe('scope_requires_local_inference');
+      expect(w.wire.inference).toHaveLength(0);
+      expect(w.wire.ai).toHaveLength(0);
+      expect(w.wire.core.filter((c) => c.path === '/ground/search')).toHaveLength(0);
+      expect(w.wire.sink).toHaveLength(0);
+      const st = await coreState();
+      expect(st.embed_calls).toBe(0);
+      expect(st.api.filter((c) => c.path !== '/v1/shamwari/usage/rollup')).toEqual([]);
+    });
+  });
+
   describe('the system decides the scope (#81): a personal-looking question, Cloud-only mode', () => {
     it('is answered from the cited Ground passage with the notice, and reaches no model (shamwari#291)', async () => {
       const w = world();
