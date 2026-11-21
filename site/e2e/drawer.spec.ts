@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openAccount, openChat, openChats } from './helpers';
+import { openAccount, openChat, openChats, HIT_TOUCH } from './helpers';
 
 // The account row and the links in Settings (Use the API, Disclaimer and privacy) are quiet rows, not buttons.
 
@@ -50,8 +50,8 @@ test('the foot rows are quiet text rows, not buttons: no button chrome, no icon,
     });
     expect(style.bg, `${name} has no fill`).toBe('rgba(0, 0, 0, 0)');
     expect(parseFloat(style.border), `${name} has no outline`).toBe(0);
-    // On touch the row is the 49px hit region (small-android here); a desktop mouse gets Mzizi's 32px (e2e-desktop/density.spec.ts).
-    expect(style.height, `${name} keeps the 49px hit region on touch`).toBeGreaterThanOrEqual(49);
+    // On touch the row is at least the 45px hit region (small-android here); a desktop mouse gets Mzizi's 28px drawn minimum (e2e-desktop/density.spec.ts).
+    expect(style.height, `${name} keeps the 45px hit region on touch`).toBeGreaterThanOrEqual(HIT_TOUCH);
     // Text only: the foot rows have no icon of any kind (owner, 2026-11-12), not even the "opens in a new tab" mark; the
     // label (and, for Use the API, a screen-reader note) carries the meaning.
     if (name !== 'Settings') await expect(r.locator('svg'), `${name} has no icon`).toHaveCount(0); // the account row has its avatar and gear

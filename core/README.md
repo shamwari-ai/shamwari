@@ -39,8 +39,8 @@ question, and the response carries `needs_own_information` so the gateway shows
 it. `core/scope_cases.json` is run by both Core's and the gateway's tests so the
 two copies of the rules cannot drift.
 
-This is what makes "sovereign AI companion" a technical fact rather than a
-marketing line. It also makes Shamwari Mind load-bearing: if Personal cannot
+This is what lets us promise a person that their own information stays theirs,
+as a technical fact rather than a marketing line. It also makes Shamwari Mind load-bearing: if Personal cannot
 go to Cloud, and Personal is what makes a companion a companion, then Mind is
 the product and Cloud is the general-knowledge fallback.
 

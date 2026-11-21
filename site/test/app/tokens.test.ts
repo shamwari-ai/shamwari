@@ -19,7 +19,10 @@ describe('chat tokens', () => {
   });
 
   it('keeps the Bundu floor and the Shamwari brand overlay', () => {
-    expect(css).toMatch(/--target-floor: 3\.0625rem;/); // 49px, never lowered
+    // The Bundu floor 1.1.0 (owner, 2026-11-19): a 45px hit region on touch, 24px with a fine pointer from 64rem.
+    expect(css).toMatch(/:root \{[^}]*--target-floor: 2\.8125rem;/); // 45px on touch
+    expect(css).toMatch(/--target-floor: 1\.5rem;/); // 24px with a mouse
+    expect(css).toMatch(/--control-floor: 1\.75rem;/); // never drawn under 28px with a mouse
     expect(css).toMatch(/--inset-floor: 0\.875rem;/);
     expect(css).toMatch(/--gap-floor: 0\.4375rem;/);
     expect(css).toMatch(/--leading-floor: 1\.5;/);

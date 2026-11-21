@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openChat } from './helpers';
+import { openChat, HIT_TOUCH } from './helpers';
 
 // The composer is one rounded card. Its top holds a status chip slot (#269): the offline and offline-mode notices sit there, one quiet
 // dismissible line, instead of a banner across the top of the page. "+" and send are round.
@@ -15,7 +15,7 @@ test('offline: the notice is a chip inside the composer card, above the box, and
   expect(c!.x).toBeGreaterThanOrEqual(card!.x);
   expect(c!.x + c!.width).toBeLessThanOrEqual(card!.x + card!.width + 1);
   const x = chip.getByRole('button', { name: 'Close' });
-  expect((await x.boundingBox())!.height, 'a 49px hit region').toBeGreaterThanOrEqual(49);
+  expect((await x.boundingBox())!.height, 'a 45px hit region').toBeGreaterThanOrEqual(HIT_TOUCH);
   await x.click();
   await expect(chip).toBeHidden();
   // Dismissed is for this stretch offline only: going online and offline again shows it again.

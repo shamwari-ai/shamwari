@@ -32,17 +32,17 @@ Each rule has tests. Read them before touching the files they cover.
 
 ## Layout
 
-| Path            | What                                                      | Stack                          |
-| --------------- | --------------------------------------------------------- | ------------------------------ |
-| `gateway/`      | the edge API: scope gate, routing, Ground retrieval, sink | TypeScript, Cloudflare Workers |
-| `core/`         | authoritative scope checks, Ground, auth, sink writes     | Python 3.11, FastAPI           |
-| `site/`         | shamwari.ai landing page and the chat app at `/chat/`     | Astro                          |
-| `mobile/`       | the mobile app                                            | Expo / React Native            |
-| `docs-site/`    | stale mirror; pages moved to `shamwari-ai/docs`           | Astro                          |
-| `db/`           | reference SQL and Mongo setup (not run by Core)           | SQL, JS                        |
-| `scripts/`      | `e2e.sh` (Worker against real Core) and generators        | bash                           |
-| `docs/`         | design notes, runbooks, decisions                         | Markdown                       |
-| `integrations/` | entries prepared for outside catalogs (models.dev)        | TOML, SVG                      |
+| Path            | What                                                                                                                             | Stack                          |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
+| `gateway/`      | the edge API: scope gate, routing, Ground retrieval, sink                                                                        | TypeScript, Cloudflare Workers |
+| `core/`         | authoritative scope checks, Ground, auth, sink writes                                                                            | Python 3.11, FastAPI           |
+| `site/`         | shamwari.ai landing page and the chat app at `/chat/`                                                                            | Astro                          |
+| `mobile/`       | the mobile app                                                                                                                   | Expo / React Native            |
+| `docs-site/`    | stale mirror; pages moved to `shamwari-ai/docs`                                                                                  | Astro                          |
+| `db/`           | Supabase schema (`01-base-schema.sql`, run in the Supabase SQL editor; not run by Core), plus reference-only SQL and Mongo setup | SQL, JS                        |
+| `scripts/`      | `e2e.sh` (Worker against real Core) and generators                                                                               | bash                           |
+| `docs/`         | design notes, runbooks, decisions                                                                                                | Markdown                       |
+| `integrations/` | entries prepared for outside catalogs (models.dev)                                                                               | TOML, SVG                      |
 
 ## Build and test
 
@@ -81,15 +81,15 @@ PR-title lint and the gitleaks secret scan, all in CI.
 
 ## Branches
 
-- **`staging` is the integration branch.** Open pull requests against it.
-- `main` is released from `staging` automatically: the organisation's
-  `bundu-release` app opens one release PR to `main` with auto-merge on, and it
-  merges with a merge commit, so `staging` stays part of `main`'s history. Do
-  not open feature PRs against `main`, and never squash a release PR.
-- A push to `main` deploys (`deploy.yml`); `staging` pushes get a patch version
-  tag (`staging-version.yml`).
-- CI runs on pull requests to `main`, `staging` and `claude/**`, so a stacked PR
-  targets the branch below it and still gets checks.
+- **`main` is the integration branch.** Open pull requests against it. `staging`
+  was retired on 2026-11-21 (owner decision; its commits land on `main` in #344).
+- Production deploys from `main` through the platforms' own GitHub connections:
+  Cloudflare Workers Builds (the gateway, `site/` and the chat app) and Fly
+  (Core). `deploy.yml` is a manual break-glass deploy only; nothing triggers it.
+- CI runs on pull requests to `main`, `staging` and `claude/**`
+  (`.github/workflows/ci.yml`), so a stacked PR gets checks only when the branch
+  below it is one of those. `ci.yml` and `staging-version.yml` still name
+  `staging`; tidying them is a follow-up to its retirement.
 
 ## Commits and pull requests
 

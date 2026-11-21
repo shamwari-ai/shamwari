@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { ask, openChat, underTheFloor } from "./helpers";
+import { ask, openChat, underTheFloor, HIT_TOUCH } from "./helpers";
 
 // An answer is drawn formatted (markdown.ts), from untrusted text: bold, lists, code, links and tables show as such; anything
 // hostile stays inert; Copy and Share still give plain words; and the page never scrolls sideways.
@@ -261,7 +261,7 @@ for (const width of [320, 360, 768]) {
     await a.locator(".text pre").focus();
     await expect(a.locator(".text pre")).toBeFocused();
     expect(
-      await underTheFloor(page, { minHit: 49 }),
+      await underTheFloor(page, { minHit: HIT_TOUCH }),
       "nothing under the Bundu floor",
     ).toEqual([]);
   });

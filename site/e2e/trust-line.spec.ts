@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { openAccount, openChat } from './helpers';
+import { openAccount, openChat, HIT_TOUCH } from './helpers';
 
 // A quiet line on the empty screen: "Answers can be wrong · Privacy". One tap reaches the disclaimer and privacy page (it used to be two
 // taps deep, in Settings). It is not a legal-advice line: Shamwari is a general-purpose assistant (#267, #244 row 4).
@@ -13,7 +13,7 @@ test('the empty screen says answers can be wrong and Privacy is one tap from the
   const link = line.getByRole('link', { name: 'Privacy' });
   await expect(link).toHaveText('Privacy');
   const box = await link.boundingBox();
-  expect(box!.height, 'a 49px hit region on touch').toBeGreaterThanOrEqual(49);
+  expect(box!.height, 'a 45px hit region on touch').toBeGreaterThanOrEqual(HIT_TOUCH);
   await link.click();
   await expect(page).toHaveURL(/\/chat\/disclaimer\/$/);
 });

@@ -210,7 +210,7 @@ core/                          FastAPI, runs on Nyuchi infrastructure
   main.py                      owns Mongo · Ground · auth · scope enforcement
   ingest_ground.py             corpus ingestion, heading-aware chunking
 
-db/supabase/                   reference SQL (not run by Core)
+db/supabase/                   01: Supabase schema (run in the SQL editor, not by Core); 02: reference only
 db/mongodb/                    reference only — live cluster differs
 scripts/                       generator for the gateway, kept for reference
 ```

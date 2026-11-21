@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
-import { openChat } from '../e2e/helpers';
+import { openChat, CONTROL_FINE, HIT_FINE, CONTROL_GAP } from '../e2e/helpers';
 
 // With a mouse on a desktop the Settings radio rows and the offline switch are drawn at the density size, and a draft language's
 // rows still leave the 7px floor gap between them.
-test('on a desktop the Settings language rows and the offline switch are drawn at the density size, 7px apart', async ({ page }) => {
+test('on a desktop the Settings language rows and the offline switch are drawn at the density size, 9px apart', async ({ page }) => {
   await openChat(page);
   await page.locator('#open-settings').click();
   const rows = await page.locator('#lang .radio-row').evaluateAll((els) =>
@@ -14,11 +14,11 @@ test('on a desktop the Settings language rows and the offline switch are drawn a
   );
   expect(rows).toHaveLength(3);
   for (const r of rows) {
-    expect(r.h).toBeGreaterThanOrEqual(32);
+    expect(r.h).toBeGreaterThanOrEqual(CONTROL_FINE - 0.5);
     expect(r.h).toBeLessThan(40);
   }
-  for (let i = 1; i < rows.length; i++) expect(rows[i].top - rows[i - 1].bottom).toBeGreaterThanOrEqual(7);
+  for (let i = 1; i < rows.length; i++) expect(rows[i].top - rows[i - 1].bottom).toBeGreaterThanOrEqual(CONTROL_GAP - 0.1);
   const sw = (await page.locator('#offline-mode').boundingBox())!;
-  expect(sw.height).toBeGreaterThanOrEqual(32);
+  expect(sw.height).toBeGreaterThanOrEqual(HIT_FINE);
   expect(sw.height).toBeLessThan(55);
 });

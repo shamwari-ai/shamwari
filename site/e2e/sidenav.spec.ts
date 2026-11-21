@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { makeProject, openChat, openChats, openSection } from './helpers';
+import { makeProject, openChat, openChats, openSection, HIT_TOUCH } from './helpers';
 
 // The drawer's sections, at the top: Chat, Projects, Factory (coming soon), Artifacts, Plugins (Skills, Plugins, MCP).
 
@@ -76,12 +76,12 @@ test('Plugins opens on Skills; Plugins and MCP say there is nothing; the scripts
   expect(requests).toEqual([]);
 });
 
-test('the rows meet the 49px floor and are keyboard reachable in order', async ({ page }) => {
+test('the rows meet the 45px floor and are keyboard reachable in order', async ({ page }) => {
   await openChat(page);
   await openChats(page);
   for (const name of ['Chat', 'Projects', 'Artifacts', 'Plugins']) {
     const b = nav(page).getByRole('button', { name });
-    expect((await b.boundingBox())!.height, name).toBeGreaterThanOrEqual(49);
+    expect((await b.boundingBox())!.height, name).toBeGreaterThanOrEqual(HIT_TOUCH);
   }
   await nav(page).getByRole('button', { name: 'Chat' }).focus();
   await page.keyboard.press('Tab');

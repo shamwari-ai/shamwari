@@ -87,7 +87,7 @@ test('an error is announced as an alert, an answer in the polite log, an offline
   await expect(page.locator('article.queued [role="status"]')).toBeVisible();
 });
 
-test('the home screen meets the Bundu floor: 17px body, 14px text, 49px controls, 7px gaps', async ({ page }) => {
+test('the home screen meets the Bundu floor: 17px body, 14px text, 45px controls, 7px gaps', async ({ page }) => {
   await openChat(page);
   expect(await underTheFloor(page)).toEqual([]);
 });
@@ -166,7 +166,7 @@ test('weak network: the answer still arrives and the slow hint appears', async (
 // The same floor on the other screens people have: a very small phone, a large phone, a tablet and a desktop
 // (where the drawer is a permanent column). A long unbroken word must wrap, not widen the page.
 for (const [name, width, height] of [['320px phone', 320, 568], ['390px phone', 390, 844], ['768px tablet', 768, 1024], ['1280px desktop', 1280, 800]] as const) {
-  test(`the page layout holds at ${name}: no overflow, 14px edges, 7px between blocks, text wraps`, async ({ page }) => {
+  test(`the page layout holds at ${name}: no overflow, 17px edges, 7px between blocks, text wraps`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await openChat(page);
     expect(await underTheFloor(page), `${name}: home`).toEqual([]);

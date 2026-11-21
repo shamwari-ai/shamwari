@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
-import { openChat } from './helpers';
+import { openChat, HIT_FINE } from './helpers';
 
 // The suggested prompts are pills (Mzizi's suggested-prompts shape) that WRAP onto more rows rather than scrolling sideways,
-// each a real button with a 49px hit region (32px drawn on a desktop mouse), in light and dark, at the widths people use.
+// each a real button with a 45px hit region (28px drawn with a desktop mouse), in light and dark, at the widths people use.
 
 for (const scheme of ['light', 'dark'] as const) {
   for (const width of [320, 390, 1440]) {
@@ -26,7 +26,7 @@ for (const scheme of ['light', 'dark'] as const) {
         expect(g.right, 'inside the right edge').toBeLessThanOrEqual(width);
         expect(g.radius, 'a pill: the corner radius is at least half the height').toBeGreaterThanOrEqual(g.h / 2);
         expect(g.border).toBe('1px');
-        expect(g.h, 'a hit region of at least 32px drawn').toBeGreaterThanOrEqual(32);
+        expect(g.h, 'a hit region of at least the fine-pointer floor').toBeGreaterThanOrEqual(HIT_FINE);
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth), 'the page does not scroll sideways').toBeLessThanOrEqual(width);
       if (width <= 390) {
