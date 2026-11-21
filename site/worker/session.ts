@@ -8,14 +8,14 @@
  * WorkOS SDK, behind the `AuthKitPort` below (workos-port.ts). This file is the
  * HTTP shape and the rules, and is tested against a fake port.
  *
- * Routes. They are at the ROOT of the origin, not under /lite/, so the light chat (/lite/) and the main chat (/chat/)
- * share one sign-in and one session cookie (Path=/). test/worker/session.test.ts and root.test.ts fail if one moves
- * back under /lite/.
+ * Routes. They are at the ROOT of the origin, not under the app's path (/chat/, and /lite/ before 2026-11-18), so a
+ * change of the app's path never moves sign-in, and there is one session cookie (Path=/). test/worker/session.test.ts and
+ * root.test.ts fail if one moves under /lite/ or /chat/.
  *   GET  /auth/login    start sign-in; sets a one-time state cookie, 302 to AuthKit
  *   GET  /callback      AuthKit returns here; checks state, sets the session cookie, 302 /
  *   GET  /auth/token    {access_token, expires_at}, no-store; 401 = the session is over
  *   POST /auth/logout   revokes the session, clears the cookies, 204
- * The old /lite/ addresses live on for a release so open tabs and installed PWAs keep working: /lite/auth/login,
+ * The old /lite/ sign-in addresses live on for a release so open tabs and installed PWAs keep working: /lite/auth/login,
  * /lite/callback and /lite/auth/logout redirect to the root routes (legacyRedirect), and /lite/auth/token is answered
  * as /auth/token.
  *
@@ -61,8 +61,8 @@ export interface Deps {
 }
 
 /**
- * One session for the whole origin: the light chat at /lite/ and the main chat at /chat/ share it, so the cookie is
- * Path=/. (`__Secure-` still requires HTTPS; a `__Host-` name would also be possible now that the Path is /, but it would
+ * One session for the whole origin, so the cookie is Path=/ (the app moved from /lite/ to /chat/ without signing anyone
+ * out). (`__Secure-` still requires HTTPS; a `__Host-` name would also be possible now that the Path is /, but it would
  * sign everyone out once and the two names would have to be told apart, so the name is kept.) It used to be Path=/lite/:
  * LEGACY_COOKIE_PATH is expired whenever the session cookie is set or cleared, so a device never holds two copies, one
  * of them spent.
@@ -74,12 +74,14 @@ export const LEGACY_COOKIE_PATH = '/lite/';
 /** The one-time state cookie is only ever needed by the callback, so it is only sent there. */
 export const STATE_COOKIE_PATH = '/callback';
 
-/** The sign-in routes. None may live under /lite/ (a test walks them). */
+/** The sign-in routes. None may live under /lite/ or /chat/ (a test walks them). */
 export const AUTH_LOGIN = '/auth/login';
 export const AUTH_CALLBACK = '/callback';
 export const AUTH_TOKEN = '/auth/token';
 export const AUTH_LOGOUT = '/auth/logout';
 export const AUTH_ROUTES: readonly string[] = [AUTH_LOGIN, AUTH_CALLBACK, AUTH_TOKEN, AUTH_LOGOUT];
+/** Where a failed sign-in lands: the app, which says so and stays on its sign-in screen (the gate does not loop it). */
+export const SIGNIN_FAILED = '/chat/?signin=failed';
 /** The old addresses, kept for one release (see the header). */
 export const LEGACY_LOGIN = '/lite/auth/login';
 export const LEGACY_CALLBACK = '/lite/callback';
@@ -255,10 +257,10 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     const code = url.searchParams.get('code');
     // The state cookie is single-use whatever happens next.
     const spent = clearStateCookies();
-    if (!expected || !got || !eq(expected, got)) return redirect('/lite/?signin=failed', spent);
-    if (url.searchParams.has('error') || !code) return redirect('/lite/?signin=failed', spent);
+    if (!expected || !got || !eq(expected, got)) return redirect(SIGNIN_FAILED, spent);
+    if (url.searchParams.has('error') || !code) return redirect(SIGNIN_FAILED, spent);
     const session = await deps.port.exchangeCode(code);
-    if (!session || session.sealed.length > MAX_COOKIE_VALUE) return redirect('/lite/?signin=failed', spent);
+    if (!session || session.sealed.length > MAX_COOKIE_VALUE) return redirect(SIGNIN_FAILED, spent);
     return redirect('/', [...spent, ...sessionCookies(session.sealed)]);
   }
 

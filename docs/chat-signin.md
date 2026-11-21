@@ -160,7 +160,7 @@ person out. So the part that holds the session is a server.
 
 **Built in `site/worker/`, as part of the `shamwari-app` Worker** (not a third Worker): static
 assets answer everything, and `assets.run_worker_first` in `site/app/wrangler.jsonc` sends only
-the sign-in routes at the ROOT of the origin, `/auth/login`, `/auth/token`, `/auth/logout` and `/callback` (not under `/lite/`, so the light chat and the main chat share one sign-in), to the script, plus `/` and `/lite/*`. The old `/lite/auth/login`, `/lite/callback` and `/lite/auth/logout` addresses redirect to the root routes for one release (so open tabs and installed PWAs keep working) and `/lite/auth/token` is answered as `/auth/token`; `test/worker/root.test.ts` and `session.test.ts` fail if a route moves back under `/lite/`.
+the sign-in routes at the ROOT of the origin, `/auth/login`, `/auth/token`, `/auth/logout` and `/callback` (not under the app's path, so moving the app never moves sign-in), to the script, plus `/`, `/chat/*` (the app, behind the gate) and `/lite/*` (the app's old address, redirected to `/chat/` since 2026-11-18). The old `/lite/auth/login`, `/lite/callback` and `/lite/auth/logout` addresses redirect to the root routes for one release (so open tabs and installed PWAs keep working) and `/lite/auth/token` is answered as `/auth/token`; `test/worker/root.test.ts` and `session.test.ts` fail if a route moves under `/lite/` or `/chat/`.
 It uses the **WorkOS SDK** (`@workos-inc/node`, its `workerd` build) for the authorization URL,
 the code exchange, cookie sealing, JWT verification, refresh and session revocation. There is no
 PKCE, sealing or token-refresh code of our own. (The Console's own pattern in
@@ -197,7 +197,7 @@ browser                    shamwari-app Worker (worker/)         WorkOS
   so even when the new access token cannot be used (no readable `exp`) the new sealed cookie is set and
   the answer is a quick `503` retry.
 - **The cookie size is checked where it can be seen.** A sealed session over 3800 characters is refused
-  (sign-in goes back to `/lite/?signin=failed`; a renewal ends the session honestly) rather than being
+  (sign-in goes back to `/chat/?signin=failed`; a renewal ends the session honestly) rather than being
   silently dropped by the browser. The real size with an access token, refresh token and user record
   has still not been measured.
 - **Sign-out revokes the WorkOS session even when the access token has expired**, which is the usual
@@ -210,7 +210,7 @@ browser                    shamwari-app Worker (worker/)         WorkOS
   navigation to sign-in lands back on the app with `?signin=failed` instead of a JSON page.
 - **No open redirect:** after sign-in the person always lands on `/` (which sends a signed-in visitor to the app); the request cannot choose.
   The login `state` is random, single-use and compared in constant time. A failed sign-in returns to
-  `/lite/?signin=failed` (the page does not show a message for it yet).
+  `/chat/?signin=failed` (`/lite/?signin=failed` before 2026-11-18).
 - `/auth/token` and `/auth/logout` refuse requests the browser marks `Sec-Fetch-Site: cross-site`.
 - Sign-out is `POST /auth/logout`: it clears both cookies at once (and the old `/lite/`-path copy of the session cookie) and revokes the WorkOS session
   in the background; a failed revocation does not stop the sign-out.
@@ -331,7 +331,7 @@ owning-entity key.
 | Gateway accepts and verifies a WorkOS token                                               | built, 59 tests, guards mutation-checked                                                                                                                    |
 | One fixed grant, no permissions, no `personal`                                            | built, tested                                                                                                                                               |
 | Per-person metering on the canonical person id                                            | built; person ids must never equal entity ids (G6)                                                                                                          |
-| Session Worker (`site/worker/`), `mukoko` AuthProvider, and the gate in front of `/lite/` | built, tested against a fake WorkOS and under the Workers runtime locally; secrets bound by name in `app/wrangler.jsonc`; **not deployed from this change** |
+| Session Worker (`site/worker/`), `mukoko` AuthProvider, and the gate in front of `/chat/` | built, tested against a fake WorkOS and under the Workers runtime locally; secrets bound by name in `app/wrangler.jsonc`; **not deployed from this change** |
 | Revocation by `sid` deny list                                                             | not built, not asked for                                                                                                                                    |
 
 ## Needs the owner
@@ -342,7 +342,7 @@ owning-entity key.
   logout `https://shamwari.ai/chat/`, web origin `https://shamwari.ai`. **The sign-in page is now the light
   chat at `/lite/` (owner, 2026-11-01), so the app also needs the redirect URI
   `https://shamwari.ai/lite/callback`, the sign-in start `https://shamwari.ai/lite/auth/login` and the
-  logout return `https://shamwari.ai/lite/` (since 2026-11-12 these are `https://shamwari.ai/callback`, `https://shamwari.ai/auth/login` and `https://shamwari.ai/`; the `/lite/` ones stay registered while the old addresses redirect); the `/chat/` values are for the main chat and are left alone.** So
+  logout return `https://shamwari.ai/lite/` (since 2026-11-12 these are `https://shamwari.ai/callback`, `https://shamwari.ai/auth/login` and `https://shamwari.ai/`; the `/lite/` ones stay registered while the old addresses redirect); the `/chat/` values were for the planned main chat, a LibreChat fork, dropped on 2026-11-18, and are not used by anything in this repository.** So
   `WORKOS_CLIENT_ID=client_01M68PCT0T5ECHKDYH45ECT0GV`, and the revocation window is about five
   minutes. The shared "Mukoko Account" app was not used because it has about forty redirect URIs
   and a five-hour access-token lifetime.
@@ -388,16 +388,16 @@ owning-entity key.
   `https://shamwari.ai/`. `/lite/auth/login`, `/lite/callback` and `/lite/auth/logout` redirect to them for one release
   (a callback started before the move fails once, because its state cookie was set for `/lite/`; signing in again works),
   and `/lite/auth/token` is answered in place.
-- **Cookie:** `__Secure-shamwari_session` is `Path=/`, so the light chat (`/lite/`) and the main chat (`/chat/`) share one
-  session. The old `Path=/lite/` copy is expired every time the session cookie is set or cleared, so a device never holds
+- **Cookie:** `__Secure-shamwari_session` is `Path=/`, so it does not depend on the app's path (the app moved from
+  `/lite/` to `/chat/` on 2026-11-18 without signing anyone out). The old `Path=/lite/` copy is expired every time the session cookie is set or cleared, so a device never holds
   two copies (a spent one next to a fresh one would sign the person out on the next refresh). The one-time OAuth state
   cookie is `Path=/callback`: only the callback ever needs it.
-- **Gate rule:** a signed-out visitor at `/` or anywhere under `/lite/` goes straight to `/auth/login` (the whole sign-in
-  screen, no shell); a signed-in visitor at `/` is sent to the app by connection quality (`worker/root.ts`). A cookie that
+- **Gate rule:** a signed-out visitor at `/` or anywhere under `/chat/` goes straight to `/auth/login` (the whole sign-in
+  screen, no shell); a signed-in visitor at `/` is sent to the app at `/chat/` (`worker/root.ts`). A cookie that
   is no longer a session is cleared on the way. If the session cannot be checked at `/` (a fault, secrets unbound) the
-  visitor is still sent on to the app, whose own gate fails closed. `/chat/` is not served by this Worker yet; when it is,
-  its prefix is added to `GATED_PREFIXES` (`worker/gate.ts`) and to `assets.run_worker_first`.
-- **Service worker:** scope is still `/lite/`, and it passes `/auth/*` and `/callback` (and the old `/lite/` addresses)
+  visitor is still sent on to the app, whose own gate fails closed. `/chat/` is the gated prefix (`GATED_PREFIXES` in
+  `worker/gate.ts`, and `assets.run_worker_first`); `/lite/` is not gated, it only redirects (`docs/chat-app.md`).
+- **Service worker:** scope is `/chat/` (it was `/lite/` until 2026-11-18), and it passes `/auth/*` and `/callback` (and the old `/lite/` addresses)
   straight to the network. `test/app/sw-signin.test.ts` runs the generated worker's fetch handler against each address.
 
 ## If sign-in says the redirect address does not match
