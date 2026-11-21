@@ -15,7 +15,7 @@ test('the empty screen says answers can be wrong and Privacy is one tap from the
   const box = await link.boundingBox();
   expect(box!.height, 'a 49px hit region on touch').toBeGreaterThanOrEqual(49);
   await link.click();
-  await expect(page).toHaveURL(/\/lite\/disclaimer\/$/);
+  await expect(page).toHaveURL(/\/chat\/disclaimer\/$/);
 });
 
 test('the line goes once a conversation starts, and Settings still holds the same link', async ({ page }) => {

@@ -1,7 +1,8 @@
 /**
- * The Plugins / MCP tabs in the drawer (and Skills, only in a build that turns it on: chat/features.ts). Loaded the first time the Plugins section is opened and not before,
- * so the chat's first load does not carry it. Nothing sits behind the tabs yet: each panel says so. This is only the
- * tab behaviour of the WAI-ARIA pattern (arrow keys, Home, End, one tab in the tab order).
+ * The Skills / Plugins / MCP tabs in the drawer (Skills is on unless a build turns it off: chat/features.ts). Loaded the
+ * first time the Plugins section is opened and not before, so the chat's first load does not carry it. Skills is filled by
+ * chat/skills-ui.ts; nothing sits behind Plugins and MCP yet, and each panel says so. This is only the tab behaviour of the
+ * WAI-ARIA pattern (arrow keys, Home, End, one tab in the tab order).
  */
 export function initPlugins(root: ParentNode = document): void {
   const list = root.querySelector<HTMLElement>('.side-tabs[role="tablist"]');
