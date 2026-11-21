@@ -32,17 +32,18 @@ Each rule has tests. Read them before touching the files they cover.
 
 ## Layout
 
-| Path         | What                                                        | Stack                          |
-| ------------ | ----------------------------------------------------------- | ------------------------------ |
-| `gateway/`   | the edge API: scope gate, routing, Ground retrieval, sink   | TypeScript, Cloudflare Workers |
-| `core/`      | authoritative scope checks, Ground, auth, sink writes       | Python 3.11, FastAPI           |
-| `site/`      | shamwari.ai landing page and the Lite chat app (`app-src/`) | Astro                          |
-| `chat/`      | LibreChat config, its guard, and the `/chat` proxy Worker   | Node                           |
-| `mobile/`    | the mobile app                                              | Expo / React Native            |
-| `docs-site/` | stale mirror; pages moved to `shamwari-ai/docs`             | Astro                          |
-| `db/`        | reference SQL and Mongo setup (not run by Core)             | SQL, JS                        |
-| `scripts/`   | `e2e.sh` (Worker against real Core) and generators          | bash                           |
-| `docs/`      | design notes, runbooks, decisions                           | Markdown                       |
+| Path         | What                                                        | Stack                            |
+| ------------ | ----------------------------------------------------------- | -------------------------------- |
+| `gateway/`   | the edge API: scope gate, routing, Ground retrieval, sink   | TypeScript, Cloudflare Workers   |
+| `core/`      | authoritative scope checks, Ground, auth, sink writes       | Python 3.11, FastAPI             |
+| `site/`      | shamwari.ai landing page and the Lite chat app (`app-src/`) | Astro                            |
+| `chat/`      | LibreChat config, its guard, and the `/chat` proxy Worker   | Node                             |
+| `mobile/`    | the mobile app                                              | Expo / React Native              |
+| `factory/`   | Shamwari Factory: OpenCode per person in a Container (#330) | TypeScript, Workers + Containers |
+| `docs-site/` | stale mirror; pages moved to `shamwari-ai/docs`             | Astro                            |
+| `db/`        | reference SQL and Mongo setup (not run by Core)             | SQL, JS                          |
+| `scripts/`   | `e2e.sh` (Worker against real Core) and generators          | bash                             |
+| `docs/`      | design notes, runbooks, decisions                           | Markdown                         |
 
 ## Build and test
 
@@ -72,6 +73,9 @@ npm run build:app && npm run check:app && npm run test:app && npm run e2e
 npm ci && npm test
 
 # mobile/
+npm ci && npm run typecheck && npm test
+
+# factory/
 npm ci && npm run typecheck && npm test
 
 # docs-site/

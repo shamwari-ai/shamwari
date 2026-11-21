@@ -10,6 +10,7 @@ updates:
       - /chat/librechat
       - /chat/proxy
       - /docs-site
+      - /factory
       - /gateway
       - /mobile
       - /site
@@ -23,6 +24,17 @@ updates:
         patterns:
           - "astro"
           - "@astrojs/*"
+
+  # The factory image's base images are pinned by digest; this proposes the
+  # updates. The OpenCode pin inside it is changed by hand, together with
+  # factory/src/opencode.ts (its config shape follows the pinned release).
+  - package-ecosystem: docker
+    directory: /factory
+    target-branch: staging
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
 
   - package-ecosystem: pip
     directory: /core
