@@ -138,7 +138,7 @@ for (const width of [1000, 1280, 1440]) {
   }
 }
 
-test('no control is a marketing pill except the suggested prompts (Mzizi\'s pills) and Send: buttons use the small radius, the composer a soft one', async ({ page }) => {
+test('no control is a marketing pill except the suggested prompts (Mzizi\'s pills) and Send: buttons use the small radius, the composer Mzizi\'s 17px radius', async ({ page }) => {
   await openChat(page);
   const radii = await page.evaluate(() => {
     const r = (sel: string) => {
@@ -147,10 +147,9 @@ test('no control is a marketing pill except the suggested prompts (Mzizi\'s pill
     };
     return { newChat: r('#side-new'), composer: r('.composer') };
   });
-  for (const [name, v] of Object.entries(radii)) {
-    expect(v, name).not.toBeNull();
-    expect(v!, `${name} is not a pill`).toBeLessThanOrEqual(16);
-  }
+  // Mzizi's radius scale: 7px for controls and rows, 17px (--radius-xl) for the prompt box. Neither is a pill.
+  expect(radii.newChat, 'a row uses the 7px control radius').toBe(7);
+  expect(radii.composer, 'the prompt box uses the 17px radius').toBe(17);
   // The suggested prompts are the one exception: pills, as Mzizi's suggested-prompts component draws them.
   expect(await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.btn.chip')!).borderTopLeftRadius))).toBeGreaterThan(100);
 });

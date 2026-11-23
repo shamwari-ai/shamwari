@@ -38,6 +38,16 @@ export const WANTED = [
   '--color-sodalite-on-container',
   '--radius-sm',
   '--radius-md',
+  '--radius-lg',
+  '--radius-xl',
+  '--radius-full',
+  // The surface ladder: page (--background, the base step), panel, container, overlay, raised.
+  '--surface',
+  '--container',
+  '--overlay',
+  '--raised',
+  '--popover',
+  '--surface-muted',
 ];
 /** The Bundu floor (density.css): sizes, never colours. */
 export const FLOOR = [
