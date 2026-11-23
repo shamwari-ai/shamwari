@@ -1,5 +1,6 @@
 import type { Env, GroundChunk, Message } from './types';
 import { core } from './core';
+import { groundSearch, groundStoreConfigured } from './ground-store';
 import { providerScope, ScopeRefusal } from './scope';
 import type { ScopeResolution } from './scope';
 
@@ -104,27 +105,29 @@ export async function ground(
   try {
     // Core runs $rankFusion over the vector and lexical indexes and applies
     // the scope filter. It also logs the miss if there is one.
-    const res = await core<{
-      chunks: GroundChunk[];
-      hit: boolean;
-      scope?: string;
-      needs_own_information?: boolean;
-    }>(env, '/ground/search', {
-      method: 'POST',
-      body: {
-        query: lastUser.content,
-        ...(embedding ? { embedding } : {}),
-        owner_entity_id: ownerEntityId,
-        scope,
-        destination,
-        language,
-        top_k: Number(env.GROUND_TOP_K),
-        // Core decides again from the same facts and may refuse (Core's
-        // resolve_scope is authoritative; scope.ts is the fast path).
-        granted_scopes: decision.grants,
-        needs_own_information: decision.withoutOwnInformation,
-      },
-    });
+    const body = {
+      query: lastUser.content,
+      ...(embedding ? { embedding } : {}),
+      owner_entity_id: ownerEntityId,
+      scope,
+      destination,
+      language,
+      top_k: Number(env.GROUND_TOP_K),
+      // The store decides again from the same facts and may refuse (its own Rule 1 checks are
+      // authoritative; scope.ts is the fast path).
+      granted_scopes: decision.grants,
+      needs_own_information: decision.withoutOwnInformation,
+    };
+    // Supabase (pgvector) when configured; Core otherwise. Both answer in the same shape and both
+    // make the Rule 1 checks before they read anything.
+    const res = groundStoreConfigured(env)
+      ? await groundSearch(env, body)
+      : await core<{
+          chunks: GroundChunk[];
+          hit: boolean;
+          scope?: string;
+          needs_own_information?: boolean;
+        }>(env, '/ground/search', { method: 'POST', body });
     // Core must answer for exactly the scope that was asked. A different scope, or a
     // chunk that carries one, means the two sides disagree about a scope decision; the
     // answer is not used. Fail closed, the same way Core does for the data API.
