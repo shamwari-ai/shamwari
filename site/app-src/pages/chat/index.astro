@@ -24,7 +24,6 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
 // The Skills tab: Agent Skills read from and written as SKILL.md (chat/skill.ts), with a builder (chat/skills-ui.ts). On by
 // default; a build with PUBLIC_CHAT_SKILLS=false leaves it out, and Plugins goes back to a "Coming soon" row (chat/features.ts).
 const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
-const x = '<path d="M6 6l12 12M18 6L6 18" />';
 ---
 <!doctype html>
 <html lang="en" class="app">
@@ -86,11 +85,11 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
       <div class="side-scroll">
         <div data-panel="chat">
           <details id="side-pinned" class="side-group" open hidden>
-            <summary class="chats-title"><span data-i18n="pinned">{en.pinned}</span></summary>
+            <summary class="chats-title"><span data-i18n="pinned">{en.pinned}</span><Icon name="chevron-down" class="chats-chev" /></summary>
             <ul id="pinned-list" class="side-list"></ul>
           </details>
           <details id="side-chats" class="side-group" open hidden>
-            <summary class="chats-title"><span data-i18n="recents">{en.recents}</span></summary>
+            <summary class="chats-title"><span data-i18n="recents">{en.recents}</span><Icon name="chevron-down" class="chats-chev" /></summary>
             <div id="history"><ul id="history-list" class="side-list"></ul></div>
           </details>
           <p id="chats-empty" class="side-empty" data-i18n="chatsEmpty">{en.chatsEmpty}</p>
@@ -139,7 +138,7 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
 
   <div data-slot="app-main">
     <header class="topbar" data-slot="app-topbar">
-      <button type="button" class="icon-btn menu-btn" popovertarget="chat-sidebar" aria-label={en.openChats}><Icon name="menu" class="i" /></button>
+      <button type="button" class="icon-btn menu-btn" popovertarget="chat-sidebar" aria-label={en.openChats}><Icon name="panel-left" class="i" /></button>
       <button type="button" id="side-toggle" class="icon-btn side-toggle" aria-pressed="false" aria-controls="chat-sidebar" aria-label={en.collapseChats} data-i18n-attr="aria-label:collapseChats"><Icon name="panel-left" class="i" /></button>
       <a href="/chat/" class="brand" aria-label="shamwari"><img src="/apple-touch-icon.png" alt="" width="20" height="20" /><span class="wordmark">shamwari</span></a>
       {/* The chat's title (the page's one heading) and a quiet subtitle; the whole block is one button that opens the chat's menu. */}
@@ -203,12 +202,12 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
             <div class="status-chips">
               <div id="offline-mode-note" class="status-chip" role="status" hidden>
                 <span data-i18n="offlineModeNote">{en.offlineModeNote}</span>
-                <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" set:html={x} /></button>
+                <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><Icon name="close" class="i chip-x-i" /></button>
               </div>
               <div id="skills-note" class="status-chip skills-note" role="status" hidden><span id="skills-note-text"></span></div>
               <div id="offline" class="status-chip" role="status" hidden>
                 <span data-i18n="offlineBanner">{en.offlineBanner}</span>
-                <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" set:html={x} /></button>
+                <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><Icon name="close" class="i chip-x-i" /></button>
               </div>
             </div>
             <label class="sr-only" for="q" data-i18n="placeholder">Ask a question</label>

@@ -103,6 +103,7 @@ export function renderCitation(c: Citation, s: Strings, lang: Language): HTMLEle
       h(
         'summary',
         {},
+        h('span', { class: 'chev', 'aria-hidden': 'true' }, glyph('chevron-right')),
         h('span', { class: 'badge' }, s.ground),
         h('strong', { class: c.heading ? 'cite-heading' : 'cite-title' }, c.heading || c.title),
       ),

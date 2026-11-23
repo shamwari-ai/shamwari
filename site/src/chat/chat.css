@@ -503,14 +503,15 @@ summary.chats-title {
 summary.chats-title::-webkit-details-marker {
   display: none;
 }
-summary.chats-title::before {
-  content: '▾';
-  order: 2;
+/* Mzizi's chevron, not a text triangle: down when the group is open, right when it is folded. */
+.chats-chev {
+  inline-size: 1rem;
+  block-size: 1rem;
   margin-inline-start: auto;
-  font-size: var(--fs-small);
+  flex: none;
 }
-details:not([open]) > summary.chats-title::before {
-  content: '▸';
+details:not([open]) > summary .chats-chev {
+  rotate: -90deg;
 }
 .side-date-group {
   display: flex;
@@ -1018,7 +1019,7 @@ main:focus,
     opacity: 1;
   }
 }
-/* Sources, as parts: one compact line each (› Source  the section  Open source), the detail one tap away. */
+/* Sources, as parts: one compact line each (a chevron, Source, the section, Open source), the detail one tap away. */
 .sources {
   display: flex;
   flex-direction: column;
@@ -1060,13 +1061,12 @@ main:focus,
 .cite-more > summary::-webkit-details-marker {
   display: none;
 }
-.cite-more > summary::before {
-  content: '›';
-  font-family: var(--mono);
+.cite-more .chev {
+  display: inline-flex;
   color: var(--quiet);
 }
-.cite-more[open] > summary::before {
-  content: '⌄';
+.cite-more[open] .chev {
+  rotate: 90deg;
 }
 .cite-more > summary:hover {
   background: var(--fill);
@@ -1829,4 +1829,10 @@ html[data-offline-mode] .mode-chip {
 }
 .composer {
   box-shadow: 0 1px 2px color-mix(in oklab, var(--foreground) 6%, transparent), 0 4px 16px color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+
+/* The status chip's close: Mzizi's own X, at the chip's small size. */
+.chip-x .chip-x-i {
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
 }
