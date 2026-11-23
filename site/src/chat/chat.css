@@ -291,10 +291,26 @@ html.app,
 html.app body {
   height: 100%;
   overflow: hidden;
+  overflow: clip;
+  /* No rubber-band pull and no scroll chaining from a list to the page. */
+  overscroll-behavior: none;
+}
+/* The shell is pinned to the device. Safari on iOS ignores overflow: hidden on html and body for touch, so a finger could
+   still drag the whole page sideways or off the top. A fixed body cannot be dragged at all. Only the message list and the
+   session list scroll. Pinch zoom stays on. */
+html.app body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: 100%;
 }
 [data-slot='app-shell'] {
   display: flex;
+  width: 100%;
+  max-width: 100%;
   height: 100dvh;
+  overflow: hidden;
+  overflow: clip;
 }
 [data-slot='app-main'] {
   flex: 1 1 0;
