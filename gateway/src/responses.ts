@@ -409,6 +409,11 @@ async function translateError(res: Response): Promise<Response> {
     const v = res.headers.get(h);
     if (v !== null) headers[h] = v;
   }
+  // Every inference path failed with nothing from Ground: the chat path says so as a retryable 503
+  // (inference_unavailable, with Retry-After). In the spec's shape that is a model_error.
+  if (code === 'inference_unavailable') {
+    return errorResponse(res.status, 'model_unavailable', 'No model could answer this request. Retry later.', null, headers, 'model_error');
+  }
   return errorResponse(res.status, code, message, params[code] ?? null, headers);
 }
 

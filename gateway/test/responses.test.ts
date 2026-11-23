@@ -585,14 +585,16 @@ describe('unsupported features are a 400 naming the param, never silently droppe
     expect(((await res.json()) as any).error).toMatchObject({ type: 'invalid_request', code: 'invalid_reach', param: 'reach' });
   });
 
-  it('a failure on every inference path with nothing from Ground is a model_error, not an opaque 500', async () => {
+  it('a failure on every inference path with nothing from Ground is a retryable model_error, not an opaque 500', async () => {
     const { env } = setup({ inferenceFails: true, chunks: [] });
     // The Workers AI fallback is the AI binding; make it fail too.
     (env.AI.run as any).mockImplementation(async () => {
       throw new Error('workers ai down');
     });
     const res = await worker.fetch(responses({ input: PLAIN_Q }), env, ctx);
-    expect(res.status).toBe(500);
+    // The chat path answers this as a 503 the caller may retry, with when; the spec's shape keeps both.
+    expect(res.status).toBe(503);
+    expect(res.headers.get('Retry-After')).toBe('15');
     expect(((await res.json()) as any).error).toMatchObject({ type: 'model_error', code: 'model_unavailable' });
   });
 });
