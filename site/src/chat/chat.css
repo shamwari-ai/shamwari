@@ -981,11 +981,42 @@ main:focus,
 .msg-actions .btn {
   font-size: var(--fs-small);
 }
-/* Copy, Share, Save: each icon in front of its words. */
+/* Copy, Share, Save: icon-only squares with no border or fill at rest; the words are their accessible name and tooltip.
+   On touch each is a full 45px target (the floor is never lowered there); with a mouse they are drawn small (28px, over the
+   24px desktop floor), and under every answer but the latest they stay out of sight until the answer is hovered or focused. */
+.msg-actions {
+  gap: var(--gap-floor);
+}
 .btn.act {
   display: inline-flex;
   align-items: center;
-  gap: var(--gap-floor);
+  justify-content: center;
+  inline-size: var(--ctl);
+  block-size: var(--ctl);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+@media (hover: hover) {
+  .btn.act:hover {
+    background: var(--fill);
+  }
+}
+@media (min-width: 64rem) and (pointer: fine) and (hover: hover) and (not (any-pointer: coarse)) {
+  .btn.act {
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
+    min-width: 1.75rem;
+    min-height: 1.75rem;
+  }
+  .msg.bot:not(:last-child) .msg-actions {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .msg.bot:hover .msg-actions,
+  .msg.bot:focus-within .msg-actions {
+    opacity: 1;
+  }
 }
 /* Sources, as parts: one compact line each (› Source  the section  Open source), the detail one tap away. */
 .sources {

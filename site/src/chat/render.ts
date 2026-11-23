@@ -35,9 +35,12 @@ export function glyph(name: string): SVGElement | null {
   return svg ? (svg.cloneNode(true) as SVGElement) : null;
 }
 
-/** A quiet action under an answer: its icon in front, then its words. */
+/**
+ * A quiet action under an answer: only its icon is drawn. Its words are its accessible name (read by a screen reader,
+ * kept in the DOM, visually hidden) and its tooltip, so the button still says what it does.
+ */
 function action(cls: string, icon: string, label: string): HTMLButtonElement {
-  return h('button', { type: 'button', class: `btn link act ${cls}` }, glyph(icon), h('span', {}, label));
+  return h('button', { type: 'button', class: `btn link act ${cls}`, title: label }, glyph(icon), h('span', { class: 'sr-only' }, label));
 }
 
 /**
@@ -171,7 +174,12 @@ export function renderAnswer(
   const words = plainText(a.text);
   const copy = typeof navigator.clipboard?.writeText === 'function' ? action('copy-answer', 'copy', s.copyAnswer) : null;
   // Copied: the icon turns to a tick and the words say so, then both go back.
-  const mark = (done: boolean) => copy?.replaceChildren(...[glyph(done ? 'check' : 'copy'), h('span', {}, done ? s.copied : s.copyAnswer)].filter((n): n is NonNullable<typeof n> => !!n));
+  const mark = (done: boolean) => {
+    if (!copy) return;
+    const label = done ? s.copied : s.copyAnswer;
+    copy.title = label;
+    copy.replaceChildren(...[glyph(done ? 'check' : 'copy'), h('span', { class: 'sr-only' }, label)].filter((n): n is NonNullable<typeof n> => !!n));
+  };
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
   copy?.addEventListener('click', () => {
     void navigator.clipboard.writeText(words).then(
