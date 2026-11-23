@@ -25,6 +25,14 @@ export interface StoredMessage {
   error?: Pick<AskError, 'kind' | 'retryAfterSec' | 'upgradeUrl'>;
   /** Files and voice notes the person added. Kept on this device only: never sent anywhere (the bytes are in `files`). */
   attachments?: AttachmentMeta[];
+  /** Platform-scope skills that were on when this was asked (their ids): sent with it, and with every retry of it. */
+  skills?: string[];
+  /**
+   * A personal-scope skill was on when this was asked (or the skills could not be read). The question is then sent as the
+   * person's own information (`own_information`): the gateway answers it from cited sources only, with no model, and no
+   * skill text is sent. It is also kept out of the context of later questions that are not.
+   */
+  ownInformation?: true;
 }
 
 /** What a message remembers about an attachment; the bytes are stored apart, in `files`. */
@@ -52,6 +60,8 @@ export interface Thread {
   pinned?: boolean;
   /** The project this chat belongs to, when it belongs to one. */
   projectId?: string;
+  /** The skills turned on for this chat (their ids). Off unless the person turns them on, chat by chat. */
+  skills?: string[];
 }
 
 /** A named group of chats. Kept on this device like the chats are. */
@@ -73,6 +83,25 @@ export interface Artifact {
   savedAt: number;
 }
 
+/**
+ * One Agent Skill (agentskills.io), as a self-contained record: the SKILL.md text itself (the source of truth; name and
+ * description are read from it, chat/skill.ts) and what Shamwari needs to know about it. Nothing else refers into it, so it
+ * can move to the person's Bundu Cell later without being reshaped (docs/chat-app.md).
+ */
+export interface SkillRecord {
+  id: string;
+  /** Written in Lite by the person, published by Shamwari, or imported from a SKILL.md file. */
+  source: 'personal' | 'platform' | 'plugin';
+  /**
+   * Personal skills are `personal`; platform skills `platform`; an imported one is chosen at import (default `personal`).
+   * A personal-scope skill never leaves the device, and a question asked with one on is personal scope (Rule 1).
+   */
+  scope: 'personal' | 'platform';
+  skillMd: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface Store {
   /** Let go of the database connection (a store that is no longer used). */
   close?(): void;
@@ -92,6 +121,10 @@ export interface Store {
   removeFile(id: string): Promise<void>;
   /** Every attachment of one chat (when the chat is deleted). */
   removeFilesOf(threadId: string): Promise<void>;
+  /** The person's own skills (personal and imported). Not touched by `clear`: deleting chats does not delete skills. */
+  skills(): Promise<SkillRecord[]>;
+  putSkill(skill: SkillRecord): Promise<void>;
+  removeSkill(id: string): Promise<void>;
 }
 
 export const newId = (): string =>
@@ -109,6 +142,7 @@ export function memoryStore(): Store {
   const projects = new Map<string, Project>();
   const artifacts = new Map<string, Artifact>();
   const files = new Map<string, StoredFile>();
+  const skills = new Map<string, SkillRecord>();
   return {
     list: async () => [...threads.values()].sort((a, b) => b.updatedAt - a.updatedAt),
     put: async (t) => void threads.set(t.id, structuredClone(t)),
@@ -132,6 +166,9 @@ export function memoryStore(): Store {
     removeFilesOf: async (threadId) => {
       for (const [id, f] of files) if (f.threadId === threadId) files.delete(id);
     },
+    skills: async () => [...skills.values()].sort((a, b) => b.updatedAt - a.updatedAt),
+    putSkill: async (k) => void skills.set(k.id, structuredClone(k)),
+    removeSkill: async (id) => void skills.delete(id),
   };
 }
 
@@ -142,6 +179,7 @@ const TABLE = 'threads';
 const PROJECTS = 'projects';
 const ARTIFACTS = 'artifacts';
 const FILES = 'files';
+const SKILLS = 'skills';
 
 const wrap = <T>(req: IDBRequest<T>): Promise<T> =>
   new Promise((ok, no) => {
@@ -153,10 +191,10 @@ export async function openStore(userKey: string | null = null): Promise<Store> {
   if (typeof indexedDB === 'undefined') return memoryStore();
   try {
     const db = await new Promise<IDBDatabase>((ok, no) => {
-      const open = indexedDB.open(dbName(userKey), 3);
+      const open = indexedDB.open(dbName(userKey), 4);
       open.onupgradeneeded = () => {
-        // Version 2 adds projects and artifacts, version 3 the files (attachments); what is already there is kept as it is.
-        for (const name of [TABLE, PROJECTS, ARTIFACTS, FILES]) {
+        // Version 2 adds projects and artifacts, version 3 the files (attachments), version 4 the skills; what is already there is kept as it is.
+        for (const name of [TABLE, PROJECTS, ARTIFACTS, FILES, SKILLS]) {
           if (!open.result.objectStoreNames.contains(name)) open.result.createObjectStore(name, { keyPath: 'id' });
         }
       };
@@ -200,6 +238,10 @@ export async function openStore(userKey: string | null = null): Promise<Store> {
           t.oncomplete = () => ok();
           t.onerror = () => no(t.error);
         }),
+      skills: async () =>
+        ((await wrap(tx(SKILLS, 'readonly').getAll())) as SkillRecord[]).sort((a, b) => b.updatedAt - a.updatedAt),
+      putSkill: async (k) => void (await wrap(tx(SKILLS, 'readwrite').put(k))),
+      removeSkill: async (id) => void (await wrap(tx(SKILLS, 'readwrite').delete(id))),
     };
   } catch {
     return memoryStore();
@@ -262,6 +304,9 @@ export async function openSwitchableStore(initialKey: string | null): Promise<Sw
     getFile: delegate('getFile'),
     removeFile: delegate('removeFile'),
     removeFilesOf: delegate('removeFilesOf'),
+    skills: delegate('skills'),
+    putSkill: delegate('putSkill'),
+    removeSkill: delegate('removeSkill'),
     async switchTo(next, adopt = false) {
       if (next === key) return;
       const from = current;
@@ -274,9 +319,14 @@ export async function openSwitchableStore(initialKey: string | null): Promise<Sw
         for (const p of await from.projects()) await to.putProject(p);
         for (const a of await from.artifacts()) await to.putArtifact(a);
         for (const f of await from.files()) await to.putFile(f);
+        for (const k of await from.skills()) await to.putSkill(k);
         markAdopted();
       }
-      if (key === null && adopted()) await from.clear().catch(() => undefined);
+      if (key === null && adopted()) {
+        await from.clear().catch(() => undefined);
+        // The unowned store's skills moved with its chats: nothing of them is left for the next person.
+        for (const k of await from.skills().catch(() => [] as SkillRecord[])) await from.removeSkill(k.id).catch(() => undefined);
+      }
       generation += 1;
       current = to;
       key = next;

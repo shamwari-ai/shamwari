@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 // The service worker must never answer a sign-in request from its cache or a "shell": sign-in is a server round trip. The
 // sign-in is at the ROOT now (/auth/*, /callback) and the old /lite/ addresses live on for a release. This runs the real
 // generated worker's fetch handler against each address.
-const sw = join(__dirname, '../../dist-app/lite/sw.js');
+const sw = join(__dirname, '../../dist-app/chat/sw.js');
 const built = (() => {
   try {
     return statSync(sw).isFile();
@@ -50,7 +50,7 @@ describe.skipIf(!built)('the built service worker leaves every sign-in address t
   });
 
   it('but the app shell and its files still are (the check can tell them apart)', () => {
-    expect(handled('/lite/')).toBe(true);
-    expect(handled('/lite/_astro/anything.js', 'cors')).toBe(true);
+    expect(handled('/chat/')).toBe(true);
+    expect(handled('/chat/_astro/anything.js', 'cors')).toBe(true);
   });
 });

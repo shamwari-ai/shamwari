@@ -109,7 +109,7 @@ describe('probe', () => {
     const r = await probe(fakeEnv(), 'standard');
     expect(r.results.find((x) => x.path === 'gateway')?.served).toBe('workers-ai/@cf/zai-org/glm-5.3');
     expect(r.results.find((x) => x.path === 'workers-ai')?.served).toBe(
-      'workers-ai/@cf/zai-org/glm-5.3-flash',
+      'workers-ai/@cf/zai-org/glm-5.3',
     );
   });
 

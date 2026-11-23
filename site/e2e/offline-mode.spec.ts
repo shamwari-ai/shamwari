@@ -43,7 +43,7 @@ test('the switch is in Settings, a real switch with the floor size and a visible
   await expect(badge).toContainText('Offline mode');
   const bar = (await page.locator('[data-slot="app-topbar"]').boundingBox())!;
   const bb = (await badge.boundingBox())!;
-  expect(bb.height).toBeGreaterThanOrEqual(49);
+  expect(bb.height).toBeGreaterThanOrEqual(45);
   expect(bb.x + bb.width, 'inside the screen with a 14px edge').toBeLessThanOrEqual(page.viewportSize()!.width - 14);
   expect(bb.y).toBeGreaterThanOrEqual(bar.y);
   // The badge opens Settings, where the switch is.

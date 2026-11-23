@@ -143,7 +143,7 @@ describe('the route matches the Worker it fronts', () => {
     const fallback = rate?.outputs.fallback?.elementId;
     const target = elements.find((e) => e.id === fallback);
     expect(target?.properties?.provider).toBe('workers-ai');
-    expect(target?.properties?.model).toBe('@cf/zai-org/glm-5.3-flash');
+    expect(target?.properties?.model).toBe('@cf/zai-org/glm-5.3');
   });
 });
 

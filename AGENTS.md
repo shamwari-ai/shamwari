@@ -32,17 +32,17 @@ Each rule has tests. Read them before touching the files they cover.
 
 ## Layout
 
-| Path         | What                                                        | Stack                          |
-| ------------ | ----------------------------------------------------------- | ------------------------------ |
-| `gateway/`   | the edge API: scope gate, routing, Ground retrieval, sink   | TypeScript, Cloudflare Workers |
-| `core/`      | authoritative scope checks, Ground, auth, sink writes       | Python 3.11, FastAPI           |
-| `site/`      | shamwari.ai landing page and the Lite chat app (`app-src/`) | Astro                          |
-| `chat/`      | LibreChat config, its guard, and the `/chat` proxy Worker   | Node                           |
-| `mobile/`    | the mobile app                                              | Expo / React Native            |
-| `docs-site/` | stale mirror; pages moved to `shamwari-ai/docs`             | Astro                          |
-| `db/`        | reference SQL and Mongo setup (not run by Core)             | SQL, JS                        |
-| `scripts/`   | `e2e.sh` (Worker against real Core) and generators          | bash                           |
-| `docs/`      | design notes, runbooks, decisions                           | Markdown                       |
+| Path            | What                                                      | Stack                          |
+| --------------- | --------------------------------------------------------- | ------------------------------ |
+| `gateway/`      | the edge API: scope gate, routing, Ground retrieval, sink | TypeScript, Cloudflare Workers |
+| `core/`         | authoritative scope checks, Ground, auth, sink writes     | Python 3.11, FastAPI           |
+| `site/`         | shamwari.ai landing page and the chat app at `/chat/`     | Astro                          |
+| `mobile/`       | the mobile app                                            | Expo / React Native            |
+| `docs-site/`    | stale mirror; pages moved to `shamwari-ai/docs`           | Astro                          |
+| `db/`           | reference SQL and Mongo setup (not run by Core)           | SQL, JS                        |
+| `scripts/`      | `e2e.sh` (Worker against real Core) and generators        | bash                           |
+| `docs/`         | design notes, runbooks, decisions                         | Markdown                       |
+| `integrations/` | entries prepared for outside catalogs (models.dev)        | TOML, SVG                      |
 
 ## Build and test
 
@@ -65,11 +65,8 @@ PYTHON=python bash scripts/e2e.sh
 
 # site/  landing page
 npm ci && npm run build && npm run check && npm run test:site
-# site/  Lite chat app
+# site/  the chat app (shamwari.ai/chat/)
 npm run build:app && npm run check:app && npm run test:app && npm run e2e
-
-# chat/librechat/ and chat/proxy/
-npm ci && npm test
 
 # mobile/
 npm ci && npm run typecheck && npm test
@@ -85,9 +82,10 @@ PR-title lint and the gitleaks secret scan, all in CI.
 ## Branches
 
 - **`staging` is the integration branch.** Open pull requests against it.
-- `main` is released from `staging` automatically: when CI is green on a push to
-  `staging`, `release-to-main.yml` opens or updates one release PR to `main`.
-  Do not open feature PRs against `main`.
+- `main` is released from `staging` automatically: the organisation's
+  `bundu-release` app opens one release PR to `main` with auto-merge on, and it
+  merges with a merge commit, so `staging` stays part of `main`'s history. Do
+  not open feature PRs against `main`, and never squash a release PR.
 - A push to `main` deploys (`deploy.yml`); `staging` pushes get a patch version
   tag (`staging-version.yml`).
 - CI runs on pull requests to `main`, `staging` and `claude/**`, so a stacked PR

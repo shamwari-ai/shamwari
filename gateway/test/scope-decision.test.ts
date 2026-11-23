@@ -49,8 +49,8 @@ interface Wire {
   embed: { scope: null }[];
   /** Every request to Core's /ground/search, parsed. */
   core: Record<string, any>[];
-  /** Every completion request to the AI Gateway: the scope in its metadata. */
-  completions: { scope: string | undefined }[];
+  /** Every completion request to the AI Gateway: the scope in its metadata, and the system prompt it carried. */
+  completions: { scope: string | undefined; system?: string }[];
   sink: SinkMessage[];
 }
 
@@ -109,7 +109,13 @@ function setup(
       return Response.json(answer);
     }
     const meta = JSON.parse(String((init?.headers as Record<string, string>)['cf-aig-metadata'] ?? '{}'));
-    wire.completions.push({ scope: meta.scope });
+    let system: string | undefined;
+    try {
+      system = (JSON.parse(String(init?.body)) as { messages?: { role: string; content: string }[] }).messages?.find((m) => m.role === 'system')?.content;
+    } catch {
+      /* not a JSON body: no prompt to record */
+    }
+    wire.completions.push({ scope: meta.scope, system });
     return opts.inferenceFails
       ? new Response('down', { status: 503 })
       : Response.json({ choices: [{ message: { content: 'generated' } }], usage: {} });
@@ -557,5 +563,136 @@ describe('a personal-looking question is personal scope (owner decision, shamwar
     );
     expect(wire.completions).toHaveLength(0);
     expect(wire.embed).toHaveLength(0);
+  });
+});
+
+// Agent Skills in the Lite chat (site/src/chat/skill.ts, gateway/src/skills.ts). A personal-scope skill never
+// leaves the device: the client sends `own_information: true`, and the request must take exactly the
+// personal path a flagged question takes. A platform-scope skill travels beside the constant prompt.
+describe('skills: a personal-scope skill makes the request personal scope (Rule 1)', () => {
+  const SKILL = { name: 'short-answers', description: 'Keep answers short for a small screen.', instructions: 'Answer in three sentences or fewer.' };
+
+  it('own_information: true on a plain question: no embedding, no completion, only the cited passage', async () => {
+    const { env, wire } = setup();
+    const res = await worker.fetch(chat(PLAIN_Q, { own_information: true }), env, ctx);
+    expect(res.status).toBe(200);
+    const j = (await res.json()) as any;
+    expect(providerCalls(wire)).toBe(0);
+    expect(wire.core).toHaveLength(1);
+    expect(wire.core[0]).not.toHaveProperty('embedding');
+    // Core is told, so its own check (edge embedding refused) applies too.
+    expect(wire.core[0]!.needs_own_information).toBe(true);
+    expect(j.shamwari.inference_path).toBe('extractive');
+    expect(j.shamwari.answered_without_own_information).toBe(true);
+    expect(j.shamwari.citations.length).toBeGreaterThan(0);
+    for (const s of scopesSeen(wire)) expect(CLOUD_SAFE.has(s)).toBe(true);
+  });
+
+  it('it can only add the flag: own_information: false does not clear a question the rules flag', async () => {
+    const { env, wire } = setup();
+    const j = (await (await worker.fetch(chat(PERSONAL_Q, { own_information: false }), env, ctx)).json()) as any;
+    expect(providerCalls(wire)).toBe(0);
+    expect(j.shamwari.inference_path).toBe('extractive');
+  });
+
+  it('an explicit personal scope is still the 409, with or without the flag, and nothing is called', async () => {
+    const { env, wire } = setup({ scopes: ['personal', 'community', 'platform'] });
+    const res = await worker.fetch(chat(PLAIN_Q, { scope: 'personal', own_information: true, skills: [SKILL] }), env, ctx);
+    expect(res.status).toBe(409);
+    expect(providerCalls(wire) + wire.core.length + wire.sink.length).toBe(0);
+  });
+
+  it('holds for every mode and key grant', async () => {
+    for (const scopes of [undefined, ['platform'], ['community'], ['personal', 'community', 'platform']]) {
+      for (const mode of [undefined, 'extractive']) {
+        const { env, wire } = setup({ scopes });
+        await worker.fetch(chat(PLAIN_Q, { own_information: true, mode }), env, ctx);
+        expect(providerCalls(wire), `${scopes} ${mode}`).toBe(0);
+      }
+    }
+  });
+
+  it('with Ground unreachable it is the retryable 503, never a model answer', async () => {
+    const { env, wire } = setup({ coreStatus: 503 });
+    const res = await worker.fetch(chat(PLAIN_Q, { own_information: true }), env, ctx);
+    expect(res.status).toBe(503);
+    expect(providerCalls(wire)).toBe(0);
+  });
+
+  it('resolveScope: the flag sets withoutOwnInformation and changes nothing else', () => {
+    const env = { MIND_AVAILABLE: 'false' } as Env;
+    const base = { messages: [{ role: 'user' as const, content: PLAIN_Q }], requested: undefined, grants: ['platform'] as Scope[], env, capability: 'cloud_inference' as const };
+    expect(resolveScope(base)).toMatchObject({ scope: 'platform', destination: 'cloud', withoutOwnInformation: false });
+    expect(resolveScope({ ...base, ownInformation: true })).toMatchObject({ scope: 'platform', destination: 'cloud', withoutOwnInformation: true });
+    expect(() => resolveScope({ ...base, requested: 'personal', ownInformation: false })).toThrow(ScopeRefusal);
+  });
+});
+
+describe('skills: a platform-scope skill goes beside the constant prompt', () => {
+  const SKILL = { name: 'short-answers', description: 'Keep answers short for a small screen.', instructions: 'Answer in three sentences or fewer.' };
+
+  it('a plain question with a platform skill is answered by a model, with the skill after the base prompt', async () => {
+    const { env, wire } = setup();
+    const res = await worker.fetch(chat(PLAIN_Q, { skills: [SKILL] }), env, ctx);
+    expect(res.status).toBe(200);
+    expect(wire.completions).toHaveLength(1);
+    const system = wire.completions[0]!.system ?? '';
+    expect(system.startsWith('The assistant in this conversation is Shamwari')).toBe(true); // the constant prompt first, unchanged
+    expect(system).toContain('--- SHAMWARI GROUND CONTEXT ---');
+    expect(system).toContain('--- SKILLS TURNED ON FOR THIS CONVERSATION ---');
+    expect(system).toContain('[short-answers] Keep answers short for a small screen.\nAnswer in three sentences or fewer.');
+    expect(system.indexOf('SKILLS TURNED ON')).toBeGreaterThan(system.indexOf('END CONTEXT'));
+    expect(system).not.toMatch(/you are shamwari/i); // the AI Gateway guard's blocked phrasing (prompt-wording.test.ts)
+  });
+
+  it('without skills the prompt is exactly what it was', async () => {
+    const a = setup();
+    await worker.fetch(chat(PLAIN_Q), a.env, ctx);
+    const b = setup();
+    await worker.fetch(chat(PLAIN_Q, { skills: [] }), b.env, ctx);
+    expect(b.wire.completions[0]!.system).toBe(a.wire.completions[0]!.system);
+    expect(a.wire.completions[0]!.system).not.toContain('SKILLS');
+  });
+
+  it('a skill whose own words look personal makes the request personal scope: the client is not taken at its word', async () => {
+    for (const skill of [
+      { ...SKILL, instructions: 'Use my farm size of 4 hectares.' },
+      { ...SKILL, description: 'Answers about our co-operative.' },
+      { ...SKILL, name: 'wangu' },
+    ]) {
+      const { env, wire } = setup();
+      const j = (await (await worker.fetch(chat(PLAIN_Q, { skills: [skill] }), env, ctx)).json()) as any;
+      expect(providerCalls(wire), JSON.stringify(skill)).toBe(0);
+      expect(j.shamwari.inference_path).toBe('extractive');
+      expect(wire.core[0]!.needs_own_information).toBe(true);
+    }
+  });
+
+  it('malformed skills, too many, or a non-boolean flag are a 400 before Core or any provider is called', async () => {
+    const bad: Record<string, unknown>[] = [
+      { skills: 'short-answers' },
+      { skills: [{ name: 'a' }] },
+      { skills: [{ ...SKILL, name: '' }] },
+      { skills: [{ ...SKILL, name: 'a'.repeat(65) }] },
+      { skills: [{ ...SKILL, description: 'd'.repeat(1025) }] },
+      { skills: [{ ...SKILL, instructions: 'i'.repeat(12_001) }] },
+      { skills: [SKILL, SKILL, SKILL, SKILL] },
+      { own_information: 'yes' },
+    ];
+    for (const extra of bad) {
+      const { env, wire } = setup();
+      const res = await worker.fetch(chat(PLAIN_Q, extra), env, ctx);
+      expect(res.status, JSON.stringify(extra).slice(0, 60)).toBe(400);
+      expect(providerCalls(wire) + wire.core.length).toBe(0);
+    }
+  });
+
+  it('the retrieval endpoint ignores skills it does not use, and still honours the flag', async () => {
+    const a = setup();
+    expect((await worker.fetch(post('/v1/ground/context', { messages: [{ role: 'user', content: PLAIN_Q }], skills: 'nonsense' }), a.env, ctx)).status).toBe(200);
+    const b = setup();
+    await worker.fetch(post('/v1/ground/context', { messages: [{ role: 'user', content: PLAIN_Q }], own_information: true }), b.env, ctx);
+    expect(b.wire.embed).toHaveLength(0);
+    expect(b.wire.core[0]).not.toHaveProperty('embedding');
   });
 });

@@ -69,7 +69,7 @@ const OPEN_WEIGHT: ReadonlySet<string> = new Set<string>([
  * `platform.usageEvents` could not tell you which model answered when both
  * providers were down — and left nothing for the allowlist above to key on.
  */
-export const WORKERS_AI_FALLBACK_MODEL = '@cf/zai-org/glm-5.3-flash';
+export const WORKERS_AI_FALLBACK_MODEL = '@cf/zai-org/glm-5.3';
 
 /** Normalised so casing or padding from a provider header cannot miss. */
 function key(provider: string, model: string): string {
