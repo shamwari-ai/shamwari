@@ -91,11 +91,24 @@ export type AskErrorKind =
   | 'bad_request' // 400
   | 'unknown';
 
+/** One step's reason for failing, as the gateway reports it (gateway/src/failure.ts), cleaned there and again here. */
+export interface FailureReason {
+  /** ai-gateway, workers-ai, core or worker: which step said it. */
+  step: string;
+  status: number | null;
+  code: string | null;
+  message: string;
+}
+
 export interface AskError {
   kind: AskErrorKind;
   status: number | null;
   retryAfterSec: number | null;
   upgradeUrl: string | null;
+  /** Why, from the gateway: shown in the app so a failure is never only "having trouble". Empty when it gave none. */
+  reasons?: FailureReason[];
+  /** The gateway's id for this request: what finds it in the logs. */
+  requestId?: string | null;
 }
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: AskError };

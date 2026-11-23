@@ -953,6 +953,28 @@ main:focus,
 .msg.error {
   border-color: var(--destructive-text);
 }
+/* What went wrong, step by step, and the request id (renderWhy): quiet, small, always shown. */
+.why {
+  margin-block-start: var(--gap-floor);
+  font-size: var(--fs-small);
+  color: var(--quiet);
+}
+.why-title {
+  font-weight: 600;
+}
+.why-list {
+  margin: 0;
+  padding-inline-start: 1.1em;
+  overflow-wrap: anywhere;
+}
+.why-step {
+  font-weight: 600;
+}
+.why-id code {
+  font-family: var(--mono);
+  user-select: all;
+  overflow-wrap: anywhere;
+}
 .msg :is(.refusal, .error) h2,
 .msg.refusal h2 {
   font-size: var(--fs-small);

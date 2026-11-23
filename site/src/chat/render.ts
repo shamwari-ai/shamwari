@@ -1,6 +1,6 @@
 import type { Strings } from './strings';
 import type { AttachmentMeta, StoredMessage } from './store';
-import type { Answer, AskErrorKind, Citation, Language, Scope } from './types';
+import type { Answer, AskErrorKind, Citation, FailureReason, Language, Scope } from './types';
 
 /**
  * Everything here builds DOM with createElement and textContent, never
@@ -294,7 +294,7 @@ export function updateUser(el: HTMLElement, m: StoredMessage, s: Strings, queue?
   // Say the real reason: a brief outage is not "no connection", and the person
   // should hear that the question is kept and will be tried again.
   const why = m.hint === 'unavailable' ? s.errors.unavailable : m.hint === 'busy' ? s.errors.busy : s.offlineQueued;
-  const extra = h('div', { class: 'queue-extra' }, h('p', { class: 'note', role: 'status' }, why));
+  const extra = h('div', { class: 'queue-extra' }, h('p', { class: 'note', role: 'status' }, why), renderWhy(m.why?.reasons, m.why?.requestId, s));
   if (queue) {
     const now = h('button', { type: 'button', class: 'btn' }, s.sendNow);
     const drop = h('button', { type: 'button', class: 'btn' }, s.discard);
@@ -359,6 +359,26 @@ export function renderScopeRefusal(id: string, s: Strings, actions: ErrorActions
   );
 }
 
+/**
+ * What the gateway said went wrong, step by step, and the request id that finds it in the logs. Shown, not hidden:
+ * a failure that only says "having trouble" sent the owner digging through Cloudflare for what the app already knew.
+ */
+export function renderWhy(reasons: FailureReason[] | undefined, requestId: string | null | undefined, s: Strings): HTMLElement | null {
+  if (!reasons?.length && !requestId) return null;
+  const steps = s.failureSteps as Record<string, string>;
+  const items = (reasons ?? []).map((r) => {
+    const tag = [r.status, r.code].filter((x) => x !== null && x !== undefined && x !== '').join(' · ');
+    return h('li', {}, h('span', { class: 'why-step' }, steps[r.step] ?? r.step), tag ? ` (${tag})` : '', `: ${r.message}`);
+  });
+  return h(
+    'div',
+    { class: 'why' },
+    items.length ? h('p', { class: 'why-title' }, s.whatWentWrong) : null,
+    items.length ? h('ul', { class: 'why-list' }, ...items) : null,
+    requestId ? h('p', { class: 'why-id' }, `${s.requestId}: `, h('code', {}, requestId)) : null,
+  );
+}
+
 export function renderError(
   id: string,
   e: NonNullable<StoredMessage['error']>,
@@ -375,6 +395,7 @@ export function renderError(
       h('p', { class: 'who' }, s.shamwari),
       h('p', { class: 'text' }, s.errors[e.kind as keyof Strings['errors']] ?? s.errors.unknown),
       e.retryAfterSec ? h('p', { class: 'note' }, `${s.retryIn} ${e.retryAfterSec} ${s.seconds}.`) : null,
+      renderWhy(e.reasons, e.requestId, s),
     ),
   );
   if (e.upgradeUrl && (e.kind === 'payment_required' || e.kind === 'rate_limited')) {

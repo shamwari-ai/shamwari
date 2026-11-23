@@ -1,4 +1,4 @@
-import type { Answer, AskError, ChatRequest, ChatResponse, Citation, Result } from './types';
+import type { Answer, AskError, ChatRequest, ChatResponse, Citation, FailureReason, Result } from './types';
 
 export interface ClientConfig {
   /** e.g. https://api.shamwari.ai — no trailing slash needed. */
@@ -98,7 +98,41 @@ export function parseAnswer(body: unknown): Answer | null {
   };
 }
 
+const REASONS_MAX = 5;
+const REASON_CHARS = 200;
+
+/**
+ * The gateway's reasons for a failure (gateway/src/failure.ts). Cleaned there; bounded again here so a
+ * misbehaving server cannot fill the screen. Anything that is not the expected shape is dropped.
+ */
+export function parseReasons(v: unknown): FailureReason[] {
+  if (!Array.isArray(v)) return [];
+  return v.slice(0, REASONS_MAX).flatMap((r) => {
+    const o = asObject(r);
+    const message = str(o.message);
+    if (!message) return [];
+    const code = typeof o.code === 'number' ? String(o.code) : str(o.code);
+    return [
+      {
+        step: (str(o.step) ?? 'gateway').slice(0, 40),
+        status: typeof o.status === 'number' && Number.isFinite(o.status) ? o.status : null,
+        code: code ? code.slice(0, 40) : null,
+        message: message.length > REASON_CHARS ? `${message.slice(0, REASON_CHARS - 1)}…` : message,
+      },
+    ];
+  });
+}
+
 function classify(status: number, body: unknown, headers: Headers): Result<never> {
+  const r = classifyKind(status, body, headers);
+  if (r.ok) return r;
+  const o = asObject(body);
+  const reasons = parseReasons(o.reasons);
+  const requestId = str(o.request_id);
+  return reasons.length || requestId ? { ok: false, error: { ...r.error, reasons, requestId: requestId?.slice(0, 64) ?? null } } : r;
+}
+
+function classifyKind(status: number, body: unknown, headers: Headers): Result<never> {
   const o = asObject(body);
   const code = str(o.error);
   const retry = Number(headers.get('Retry-After'));

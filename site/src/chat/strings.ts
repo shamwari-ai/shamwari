@@ -235,6 +235,9 @@ export const en = {
   upgrade: 'Add credit',
   retryIn: 'Try again in',
   seconds: 'seconds',
+  whatWentWrong: 'What went wrong',
+  requestId: 'Request ID',
+  failureSteps: { 'ai-gateway': 'AI Gateway', 'workers-ai': 'Workers AI', core: 'Core', worker: 'Shamwari API', gateway: 'Shamwari API' },
 } as const;
 
 type Widen<T> = T extends string ? string : { [K in keyof T]: Widen<T[K]> };

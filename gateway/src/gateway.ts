@@ -2,7 +2,8 @@ import type { Env, Message, LicenseClass, Scope, Tier } from "./types";
 import type { Target } from "./router";
 import { DEFAULT_MAX_OUTPUT_TOKENS } from "./router";
 import { resolveLicenseClass, WORKERS_AI_FALLBACK_MODEL } from "./provenance";
-import { providerScope } from "./scope";
+import { providerScope, ScopeRefusal } from "./scope";
+import { fromBody, fromError, InferenceFailed, type StepFailure } from "./failure";
 
 export interface InferenceResult {
   text: string;
@@ -114,6 +115,8 @@ export async function viaGateway(
   meta: RequestMetadata,
   skipCache = false,
   maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
+  /** Where the reason goes when this step fails, so it can reach the app (failure.ts). */
+  failures?: StepFailure[],
 ): Promise<InferenceResult | null> {
   // RULE 1, where the call is made. Outside the try: a refusal is a bug in a
   // caller, and must not be swallowed as "the gateway is unavailable".
@@ -145,11 +148,16 @@ export async function viaGateway(
       // rung engages, and so a blank is never stored as a teacher output.
       if (out.text.trim()) return out;
       console.warn("gateway returned no text");
+      failures?.push({ step: "ai-gateway", status: res.status, message: "the model returned no text" });
     } else {
-      console.warn("gateway", res.status);
+      // Keep what AI Gateway said, not just its status: "424" alone hid a guardrail block for days.
+      const why = fromBody("ai-gateway", res.status, await res.text().catch(() => ""));
+      console.warn("gateway", res.status, why.code ?? "", why.message);
+      failures?.push(why);
     }
   } catch (e) {
     console.warn("gateway threw", String(e));
+    failures?.push(fromError("ai-gateway", e));
   }
   return null;
 }
@@ -245,10 +253,17 @@ export async function infer(
   meta: RequestMetadata,
   maxTokens = DEFAULT_MAX_OUTPUT_TOKENS,
 ): Promise<InferenceResult> {
-  return (
-    (await viaGateway(env, target, messages, meta, false, maxTokens)) ??
-    (await viaWorkersAI(env, target, messages, meta.scope, maxTokens))
-  );
+  const failures: StepFailure[] = [];
+  const first = await viaGateway(env, target, messages, meta, false, maxTokens, failures);
+  if (first) return first;
+  try {
+    return await viaWorkersAI(env, target, messages, meta.scope, maxTokens);
+  } catch (e) {
+    // A Rule 1 refusal is a bug in a caller and must surface as itself, never as "unavailable".
+    if (e instanceof ScopeRefusal) throw e;
+    failures.push(fromError("workers-ai", e));
+    throw new InferenceFailed(failures);
+  }
 }
 
 async function parse(

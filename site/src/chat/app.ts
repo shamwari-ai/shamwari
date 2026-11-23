@@ -915,6 +915,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
         th.messages.splice(th.messages.indexOf(m) + 1, 0, reply);
         delete m.attempts;
         delete m.hint;
+        delete m.why;
         if (shown()) {
           mount(m);
           place(reply.id, renderAnswer(reply, res.value, strings(), lang, () => void saveAnswer(reply)), m.id);
@@ -932,19 +933,24 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
           // say so and stop retrying quietly forever.
           m.attempts = 0;
           m.status = 'failed';
-          m.error = { kind: res.error.kind, retryAfterSec: res.error.retryAfterSec, upgradeUrl: null };
+          m.error = { kind: res.error.kind, retryAfterSec: res.error.retryAfterSec, upgradeUrl: null, reasons: res.error.reasons, requestId: res.error.requestId };
+          delete m.why;
         } else {
           // Not an error: the answer did not arrive, so the question waits and
           // is sent again by itself. Nothing is lost and the person is told so.
           m.status = 'queued';
           m.hint = res.error.kind as 'offline' | 'unavailable' | 'busy';
+          // Say what the gateway said is wrong while it waits, not only that it is waiting.
+          if (res.error.reasons?.length) m.why = { reasons: res.error.reasons, requestId: res.error.requestId ?? null };
+          else delete m.why;
           scheduleRetry();
         }
         if (shown()) mount(m);
       } else {
-        const { kind, retryAfterSec, upgradeUrl } = res.error;
+        const { kind, retryAfterSec, upgradeUrl, reasons, requestId } = res.error;
         m.status = 'failed';
-        m.error = { kind, retryAfterSec, upgradeUrl };
+        m.error = { kind, retryAfterSec, upgradeUrl, reasons, requestId };
+        delete m.why;
         if (shown()) mount(m);
         if (kind === 'unauthorized') {
           // Only the gateway's own 401, repeated after one silent renewal, ends a
