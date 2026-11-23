@@ -131,7 +131,7 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
       {/* The account row: it opens Settings (language, offline mode, delete history, install, the disclaimer, the API, the version). */}
       <div class="side-foot">
         <nav class="side-nav" aria-label={en.settings} data-i18n-attr="aria-label:settings">
-          <button type="button" id="open-settings" class="side-row" aria-haspopup="dialog"><Icon name="sliders" class="side-icon" /><span data-i18n="settings">{en.settings}</span></button>
+          <button type="button" id="open-settings" class="side-row side-account" aria-haspopup="dialog"><span class="avatar" aria-hidden="true"><Icon name="user" class="side-icon" /></span><span data-i18n="settings">{en.settings}</span><Icon name="chevrons-up-down" class="side-icon side-gear" /></button>
         </nav>
       </div>
     </div>
