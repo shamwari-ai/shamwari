@@ -86,7 +86,7 @@ async function post(
       messages,
       temperature: 0.3,
       max_tokens: maxTokens,
-      // The route's model (glm-5.3-flash) is a reasoning model that cannot switch thinking off. At the default
+      // The route's models (GLM-5.3; GLM-5.3-Flash until its 2026-11-20 retirement) are reasoning models that cannot switch thinking off. At the default
       // effort a real question spent all 2048 tokens thinking and came back with no text (checked live,
       // 2026-11-12); at "low" it answers in about 300 tokens. The weather Worker does the same.
       reasoning_effort: REASONING_EFFORT,

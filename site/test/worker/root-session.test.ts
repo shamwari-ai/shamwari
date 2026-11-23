@@ -22,7 +22,7 @@ const { default: worker } = await import('../../worker/index');
 const at = (cookie?: string, headers: Record<string, string> = {}) =>
   new Request('https://shamwari.ai/', { headers: { ...(cookie ? { Cookie: cookie } : {}), ...headers } });
 const ctx = { waitUntil: () => {} };
-const env = { CHAT_LIVE: 'true' };
+const env = {};
 const FAST = { ECT: '4g', Downlink: '10', RTT: '30' };
 
 describe('the root and the session', () => {
@@ -44,23 +44,23 @@ describe('the root and the session', () => {
     expect(cleared.some((c) => c.includes('Path=/lite/;') && c.includes('Max-Age=0'))).toBe(true);
   });
 
-  it('a signed-in visitor at the root is sent to the app: the main chat on a fast link, the light chat otherwise', async () => {
+  it('a signed-in visitor at the root is sent to the chat at /chat/, whatever the connection', async () => {
     result = { status: 'valid', accessToken: 'a', sid: 's' };
     expect((await worker.fetch(at(`${SESSION_COOKIE}=ok`, FAST), env, ctx)).headers.get('Location')).toBe('/chat/');
-    expect((await worker.fetch(at(`${SESSION_COOKIE}=ok`, { ...FAST, 'Save-Data': 'on' }), env, ctx)).headers.get('Location')).toBe('/lite/');
-    expect((await worker.fetch(at(`${SESSION_COOKIE}=ok`), { CHAT_LIVE: 'false' }, ctx)).headers.get('Location')).toBe('/lite/');
+    expect((await worker.fetch(at(`${SESSION_COOKIE}=ok`, { ...FAST, 'Save-Data': 'on' }), env, ctx)).headers.get('Location')).toBe('/chat/');
+    expect((await worker.fetch(at(`${SESSION_COOKIE}=ok`), env, ctx)).headers.get('Location')).toBe('/chat/');
   });
 
   it('an expired access token is still a session (it is renewed by /auth/token), so the visitor goes to the app', async () => {
     result = { status: 'expired', sid: 's' };
-    expect((await worker.fetch(at(`${SESSION_COOKIE}=ok`), env, ctx)).headers.get('Location')).toBe('/lite/');
+    expect((await worker.fetch(at(`${SESSION_COOKIE}=ok`), env, ctx)).headers.get('Location')).toBe('/chat/');
   });
 
   it('when the session cannot be checked the visitor is sent on to the app, whose own gate fails closed; the cookie is left alone', async () => {
     for (const r of [{ status: 'unavailable' } as CheckResult, new Error('workos down')]) {
       result = r;
       const res = await worker.fetch(at(`${SESSION_COOKIE}=ok`), env, ctx);
-      expect(res.headers.get('Location')).toBe('/lite/');
+      expect(res.headers.get('Location')).toBe('/chat/');
       expect(res.headers.get('Set-Cookie')).toBeNull();
     }
   });

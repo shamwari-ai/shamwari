@@ -1,0 +1,31 @@
+{
+  "name": "Shamwari Chat",
+  "short_name": "Shamwari",
+  "description": "Ask in Shona, Ndebele or English about farming, weather, news and places, and get the answer with its source.",
+  "id": "/chat/",
+  "start_url": "/chat/",
+  "scope": "/chat/",
+  "display": "standalone",
+  "background_color": "#f3f3f1",
+  "theme_color": "#f3f3f1",
+  "icons": [
+    {
+      "src": "/chat/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/chat/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/chat/icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
