@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GROUND_COOLDOWN_MS,
+  GROUND_REFUSED_KEY_COOLDOWN_MS,
   GROUND_TIMEOUT_MS,
   GroundStoreError,
   groundSearch,
@@ -103,6 +104,19 @@ describe('Ground in Mongo: a refusal is the API answering, an outage is skipped 
     expect(e).toBeInstanceOf(GroundStoreError);
     expect(e.status).toBe(409);
     expect(e.code).toBe('edge_embedding_forbidden');
+    expect(groundStoreDown()).toBe(false);
+  });
+
+  it('a refused key (401/403) skips the API for minutes, so no question waits on a call that cannot succeed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const fetch = vi.fn(async () => Response.json({ detail: 'Invalid or expired token' }, { status: 401 }));
+    vi.stubGlobal('fetch', fetch);
+    await expect(groundSearch(env(), q)).rejects.toMatchObject({ status: 401 });
+    await expect(groundSearch(env(), q)).rejects.toMatchObject({ status: 503 });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(Date.now() + GROUND_COOLDOWN_MS + 1);
+    expect(groundStoreDown()).toBe(true);
+    vi.setSystemTime(Date.now() + GROUND_REFUSED_KEY_COOLDOWN_MS);
     expect(groundStoreDown()).toBe(false);
   });
 
