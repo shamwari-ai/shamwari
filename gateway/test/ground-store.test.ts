@@ -14,8 +14,7 @@ import type { Env } from '../src/types';
 const env = (over: Partial<Env> = {}) =>
   ({
     NYUCHI_API_URL: 'https://api.example.com/',
-    NYUCHI_SHAMWARI_CLIENT_ID: 'nyk_test',
-    NYUCHI_SHAMWARI_CLIENT_SECRET: { get: async () => 'nys_test' },
+    NYUCHI_SHAMWARI_API_KEY: { get: async () => 'nyk_test.secret' },
     CORE_URL: 'https://core.invalid',
     SHAMWARI_CORE_TOKEN: 't',
     GROUND_TOP_K: '6',
@@ -61,8 +60,7 @@ describe('Ground in Mongo through the Nyuchi API: the call', () => {
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe('https://api.example.com/v1/shamwari/ground/search');
     const headers = init.headers as Record<string, string>;
-    expect(headers['X-Client-Id']).toBe('nyk_test');
-    expect(headers['X-Client-Secret']).toBe('nys_test');
+    expect(headers['X-API-Key']).toBe('nyk_test.secret');
     expect(JSON.parse(String(init.body))).toEqual({
       query: 'What does section 56 say?',
       embedding: [0.5, 0.25],
@@ -94,8 +92,7 @@ describe('Ground in Mongo through the Nyuchi API: the call', () => {
   it("is used only when it is configured; otherwise Ground is asked of Core, as before", () => {
     expect(groundStoreConfigured(env())).toBe(true);
     expect(groundStoreConfigured(env({ NYUCHI_API_URL: undefined }))).toBe(false);
-    expect(groundStoreConfigured(env({ NYUCHI_SHAMWARI_CLIENT_ID: undefined }))).toBe(false);
-    expect(groundStoreConfigured(env({ NYUCHI_SHAMWARI_CLIENT_SECRET: undefined }))).toBe(false);
+    expect(groundStoreConfigured(env({ NYUCHI_SHAMWARI_API_KEY: undefined }))).toBe(false);
   });
 });
 

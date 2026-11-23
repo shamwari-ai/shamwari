@@ -1,5 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { OWN_SITE_TIMEOUT_MS, ownSiteDown, OWN_SITES, parseHits, plain, resetOwnSiteBreakers, searchOwnSites, terms } from '../src/own-sites';
+import {
+  bestSections,
+  fullTextSections,
+  OWN_SITE_MIN_SIMILARITY,
+  OWN_SITE_TIMEOUT_MS,
+  ownSiteDown,
+  OWN_SITES,
+  parseHits,
+  parseNumbered,
+  plain,
+  rankOwnSites,
+  resetOwnSiteBreakers,
+  searchOwnSites,
+  terms,
+} from '../src/own-sites';
+import type { McpSite, OwnSite } from '../src/own-sites';
 import { ground } from '../src/ground';
 import type { Env } from '../src/types';
 
@@ -27,6 +42,9 @@ const env = (over: Partial<Env> = {}) =>
     ...over,
   }) as unknown as Env;
 
+const TRAVEL = OWN_SITES[0] as McpSite;
+const ONE: readonly OwnSite[] = [TRAVEL];
+
 const cloud = { scope: 'platform', destination: 'cloud', grants: ['platform'], withoutOwnInformation: false } as never;
 
 beforeEach(() => resetOwnSiteBreakers());
@@ -46,38 +64,83 @@ describe('reading our own sites', () => {
     expect(plain('<Card title="Hwange">\nBig park\n</Card>')).toBe('Hwange\n\nBig park');
   });
 
-  it('keeps only passages that share a word with the question (the site always returns something)', async () => {
+  it('without a question vector, keeps only passages that share a word with the question', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => sse([HIT, OFF_TOPIC])));
-    const out = await searchOwnSites('When does Victoria Falls have the most water?');
+    const q = 'When does Victoria Falls have the most water?';
+    const out = await rankOwnSites(q, await searchOwnSites(q, ONE), null, async () => []);
     expect(out.map((c) => c.title)).toEqual(['When is the best time to visit Zimbabwe?']);
     expect(out[0]!).toMatchObject({ authority: 'Zimbabwe Travel Information', scope: 'platform', source_url: expect.stringMatching(/^https:\/\//) });
     expect(terms('hello there')).toEqual(new Set(['hello']));
+    expect(terms('colours')).toEqual(terms('color'));
+    expect(terms('categories')).toEqual(terms('category'));
+  });
+
+  it('with a question vector, ranks every passage by meaning and keeps only those above the bar', async () => {
+    const mk = (title: string) => ({ content: 'x', heading: null, title, authority: 'a', resource_type: 'web page', source_url: null, effective_from: null, scope: 'platform' });
+    const chunks = [mk('weak'), mk('best'), mk('good')];
+    const vec = (s: number) => [s, Math.sqrt(1 - s * s)];
+    const out = await rankOwnSites('q', chunks, [1, 0], async () => [vec(0.4), vec(0.75), vec(OWN_SITE_MIN_SIMILARITY + 0.01)]);
+    expect(out.map((c) => c.title)).toEqual(['best', 'good']);
+  });
+
+  it('falls back to matching words if the ranking call fails', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const c = { content: 'Victoria Falls water', heading: null, title: 't', authority: 'a', resource_type: 'web page', source_url: null, effective_from: null, scope: 'platform' };
+    const out = await rankOwnSites('Victoria Falls', [c], [1, 0], async () => { throw new Error('down'); });
+    expect(out).toHaveLength(1);
+  });
+
+  it("reads Nyuchi Docs' numbered layout", () => {
+    const t = '1. API overview\n   https://docs.nyuchi.com/api/overview/\n   [Skip to content](#%5Ftop)\n\n# API overview\n\nThe Nyuchi API is one gateway.\n\n2. Identity\n   https://docs.nyuchi.com/identity/\n   How Nyuchi signs people in.';
+    const hits = parseNumbered([t]);
+    expect(hits.map((h) => [h.title, h.link])).toEqual([
+      ['API overview', 'https://docs.nyuchi.com/api/overview/'],
+      ['Identity', 'https://docs.nyuchi.com/identity/'],
+    ]);
+    expect(hits[0]!.content).toContain('The Nyuchi API is one gateway.');
+    expect(hits[0]!.content).not.toContain('Skip to content');
+  });
+
+  it('splits an llms-full.txt into sections with links, and picks the ones sharing words with the question', () => {
+    const full = [
+      '# Bundu Docs — full text', '', '---', '',
+      '# Brand System', '', 'Source: https://docs.bundu.org/bundu/brand/overview/', '',
+      'Brand guidelines for every Bundu product, five minerals in all of them.', '',
+      '## The Five African Minerals', '', 'Our colour palette is drawn from the mineral wealth of Africa and each colour has meaning.', '',
+      '# Engineering overview', '', 'Source: https://docs.bundu.org/bundu/engineering/overview/', '',
+      'How we build software across the foundation, with the same rules for every repository we own.',
+    ].join('\n');
+    const sections = fullTextSections(full);
+    expect(sections.map((h) => h.title)).toEqual(['Brand System', 'Brand System — The Five African Minerals', 'Engineering overview']);
+    expect(sections[1]!.link).toBe('https://docs.bundu.org/bundu/brand/overview/');
+    expect(bestSections(sections, 'What colour palette do the minerals give?').map((h) => h.title)[0]).toBe('Brand System — The Five African Minerals');
+    expect(bestSections(sections, 'hi')).toEqual([]);
   });
 
   it('asks the site its own search tool, with the question', async () => {
     const fetch = vi.fn(async () => sse([HIT]));
     vi.stubGlobal('fetch', fetch);
-    await searchOwnSites('Victoria Falls water');
+    await searchOwnSites('Victoria Falls water', ONE);
     const [url, init] = fetch.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe(OWN_SITES[0]!.mcp);
-    expect(JSON.parse(String(init.body))).toMatchObject({ method: 'tools/call', params: { name: OWN_SITES[0]!.tool, arguments: { query: 'Victoria Falls water' } } });
+    expect(url).toBe(TRAVEL.mcp);
+    expect(JSON.parse(String(init.body))).toMatchObject({ method: 'tools/call', params: { name: TRAVEL.tool, arguments: { query: 'Victoria Falls water' } } });
   });
 
   it('a failing site adds nothing, never throws, and is skipped for a while', async () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const fetch = vi.fn(async () => new Response('down', { status: 502 }));
     vi.stubGlobal('fetch', fetch);
-    expect(await searchOwnSites('Victoria Falls')).toEqual([]);
-    expect(ownSiteDown(OWN_SITES[0]!)).toBe(true);
-    expect(await searchOwnSites('Victoria Falls')).toEqual([]);
+    expect(await searchOwnSites('Victoria Falls', ONE)).toEqual([]);
+    expect(ownSiteDown(TRAVEL)).toBe(true);
+    expect(await searchOwnSites('Victoria Falls', ONE)).toEqual([]);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(OWN_SITE_TIMEOUT_MS).toBeLessThanOrEqual(1500);
   });
 
   it('a slow site misses this answer only: the breaker stays shut', async () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((r) => setTimeout(() => r(sse([HIT])), 200))));
-    expect(await searchOwnSites('Victoria Falls', OWN_SITES, 20)).toEqual([]);
-    expect(ownSiteDown(OWN_SITES[0]!)).toBe(false);
+    expect(await searchOwnSites('Victoria Falls', ONE, 20)).toEqual([]);
+    expect(ownSiteDown(TRAVEL)).toBe(false);
   });
 });
 

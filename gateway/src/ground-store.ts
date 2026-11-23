@@ -5,7 +5,8 @@ import type { Env, GroundChunk } from './types';
  *
  * The passages live in `shamwari.knowledgeBase` (Atlas vector and text search indexes, bge-m3, 1024 numbers).
  * The gateway holds no database login: it calls `POST /v1/shamwari/ground/search` on the Nyuchi API with
- * Shamwari's service key (an internal key scoped `shamwari:service`), and the API runs the hybrid search. The API
+ * Shamwari's service key (an internal key scoped `shamwari:service`), sent whole as `X-API-Key: <id>.<secret>`
+ * from the Secrets Store, and the API runs the hybrid search. The API
  * makes the Rule 1 checks again before it reads anything (personal scope to the cloud, an embedded mind query),
  * and answers in the shape Core did, so `ground()` treats both the same.
  *
@@ -26,9 +27,8 @@ export function resetGroundStoreBreaker(): void {
   downUntil = 0;
 }
 
-/** Ground in Mongo is used when the API, the client id and the secret are all configured; otherwise Core. */
-export const groundStoreConfigured = (env: Env): boolean =>
-  Boolean(env.NYUCHI_API_URL && env.NYUCHI_SHAMWARI_CLIENT_ID && env.NYUCHI_SHAMWARI_CLIENT_SECRET);
+/** Ground in Mongo is used when the API and the key are both configured; otherwise Core. */
+export const groundStoreConfigured = (env: Env): boolean => Boolean(env.NYUCHI_API_URL && env.NYUCHI_SHAMWARI_API_KEY);
 
 export interface GroundQuery {
   query: string;
@@ -65,14 +65,10 @@ export async function groundSearch(env: Env, q: GroundQuery): Promise<GroundAnsw
   let res: Response;
   try {
     // Read at request time from the Secrets Store; a failed read is an outage like any other.
-    const secret = await env.NYUCHI_SHAMWARI_CLIENT_SECRET!.get();
+    const key = await env.NYUCHI_SHAMWARI_API_KEY!.get();
     res = await fetch(`${base}/v1/shamwari/ground/search`, {
       method: 'POST',
-      headers: {
-        'X-Client-Id': String(env.NYUCHI_SHAMWARI_CLIENT_ID),
-        'X-Client-Secret': secret,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'X-API-Key': key, 'Content-Type': 'application/json' },
       // Only the fields the API accepts.
       body: JSON.stringify({
         query: q.query,

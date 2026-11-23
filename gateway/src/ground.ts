@@ -1,7 +1,7 @@
 import type { Env, GroundChunk, Message } from './types';
 import { core } from './core';
 import { groundSearch, groundStoreConfigured } from './ground-store';
-import { searchOwnSites } from './own-sites';
+import { rankOwnSites, searchOwnSites } from './own-sites';
 import { providerScope, ScopeRefusal } from './scope';
 import type { ScopeResolution } from './scope';
 
@@ -157,8 +157,14 @@ export async function ground(
     unavailable = true;
   }
 
-  // Ground first (vetted, held passages), then what our own sites say now.
-  chunks = [...chunks, ...(await ownSites)];
+  // Ground first (vetted, held passages), then what our own sites say now, ranked against the question by
+  // meaning with the same embedding model (the same gate applies: ownSites is empty unless the cloud may see it).
+  const fromSites = await rankOwnSites(lastUser.content, await ownSites, embedding, async (texts) => {
+    providerScope(decision);
+    const out = (await env.AI.run(env.EMBEDDING_MODEL as never, { text: texts } as never)) as { data?: number[][] };
+    return out.data ?? [];
+  });
+  chunks = [...chunks, ...fromSites];
 
   if (chunks.length === 0) {
     return { chunks: [], systemPrompt: BASE, hit: false, unavailable, coreNeedsOwnInformation: coreNeeds };

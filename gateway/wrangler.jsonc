@@ -41,10 +41,11 @@
       "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
       "secret_name": "NYUCHI_AI_GATEWAY_TOKEN",
     },
-    // Ground in Mongo (src/ground-store.ts) needs Shamwari's service key on the Nyuchi API. Once it is minted
-    // (internal, scopes `shamwari` and `shamwari:service`) and its secret is in the Secrets Store as
-    // SHAMWARI_NYUCHI_CLIENT_SECRET, bind it here as NYUCHI_SHAMWARI_CLIENT_SECRET and set
-    // NYUCHI_SHAMWARI_CLIENT_ID below. Until then Ground is asked of Core.
+    // Ground in Mongo (src/ground-store.ts) needs Shamwari's service key on the Nyuchi API, held whole as
+    // `<client id>.<secret>` in the Secrets Store as SHAMWARI_NYUCHI_API_KEY. Once that secret exists, add:
+    //   { "binding": "NYUCHI_SHAMWARI_API_KEY", "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+    //     "secret_name": "SHAMWARI_NYUCHI_API_KEY" }
+    // Until then Ground is asked of Core.
   ],
 
   // Weekly degradation probe. Exercises all three inference paths and writes
@@ -82,7 +83,8 @@
     "CORE_URL": "https://shamwari-core.fly.dev",
     // Ground in Mongo through the Nyuchi API (src/ground-store.ts); used once the service key is bound above.
     "NYUCHI_API_URL": "https://api.nyuchi.com",
-    // Our own sites read live beside Ground (src/own-sites.ts): travel-info.co.zw today. Nothing is copied.
+    // Our own sites read live beside Ground (src/own-sites.ts): travel-info, Nyuchi, Shamwari, Mzizi, SiafuDB,
+    // Open NTL and Bundu docs. Nothing is copied.
     "OWN_SITES": "on",
     "EMBEDDING_MODEL": "@cf/baai/bge-m3",
     "GROUND_TOP_K": "6",
