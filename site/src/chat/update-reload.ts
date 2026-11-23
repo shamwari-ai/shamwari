@@ -19,6 +19,8 @@ export interface ReloadDeps {
   storage: Pick<Storage, 'getItem' | 'setItem'>;
   whenIdle: (fn: () => void) => void;
   setTimeout: (fn: () => void, ms: number) => void;
+  /** Called once a new release has taken over and its reload is scheduled: the page can say so and offer it now. */
+  onReady?: () => void;
 }
 
 /** Returns the handler for the service worker container's `controllerchange`. */
@@ -40,6 +42,7 @@ export function reloadOnTakeover(hadController: boolean, deps: ReloadDeps): () =
       /* storage blocked: the once-per-page flag below still holds */
     }
     scheduled = true;
+    deps.onReady?.();
     const wait = Math.min(RELOAD_GUARD_MS, RELOAD_GUARD_MS - (deps.now() - last)); // a clock set back never waits longer than the guard
     const go = () =>
       deps.whenIdle(() => {
@@ -55,10 +58,27 @@ export function reloadOnTakeover(hadController: boolean, deps: ReloadDeps): () =
   };
 }
 
-export const UPDATE_CHECK_EVERY_MS = 60 * 60 * 1000;
+/** Every 10 minutes: sw.js is a few KB, fetched no-cache, so a check is cheap and a release reaches an open tab soon. */
+export const UPDATE_CHECK_EVERY_MS = 10 * 60 * 1000;
+
+export type UpdateCheck = 'latest' | 'updating' | 'failed';
 
 /**
- * Ask for a newer worker now, whenever the tab comes back to the front, and every hour. The browser fetches sw.js
+ * The person asked "is there a newer version?". `latest`: the browser fetched sw.js and nothing changed. `updating`: a
+ * newer worker is installing or waiting; it takes over by itself (sw.js skipWaiting) and the page reloads. `failed`:
+ * offline, or the check could not reach the server.
+ */
+export async function checkForUpdate(reg: Pick<ServiceWorkerRegistration, 'update' | 'installing' | 'waiting'>): Promise<UpdateCheck> {
+  try {
+    await reg.update();
+  } catch {
+    return 'failed';
+  }
+  return reg.installing || reg.waiting ? 'updating' : 'latest';
+}
+
+/**
+ * Ask for a newer worker now, whenever the tab comes back to the front, and every 10 minutes. The browser fetches sw.js
  * itself (served no-cache, and registered with updateViaCache: 'none'), so a check is never answered from a stale copy.
  */
 export function startUpdateChecks(

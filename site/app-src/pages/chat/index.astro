@@ -200,6 +200,11 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
           <form id="composer" class="composer" autocomplete="off">
             {/* Status chips, at the top of the box: offline, offline mode, and which skills are on in this chat. */}
             <div class="status-chips">
+              {/* A new release has taken over; the page reloads by itself once nothing is being sent or written (main.ts). */}
+              <div id="update-note" class="status-chip" role="status" hidden>
+                <span data-i18n="updateReady">{en.updateReady}</span>
+                <button type="button" id="update-now" class="btn link" data-i18n="reloadNow">{en.reloadNow}</button>
+              </div>
               <div id="offline-mode-note" class="status-chip" role="status" hidden>
                 <span data-i18n="offlineModeNote">{en.offlineModeNote}</span>
                 <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><Icon name="close" class="i chip-x-i" /></button>
@@ -290,6 +295,14 @@ const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
         <a class="side-row" href="/chat/disclaimer/"><span data-i18n="disclaimerLink">{en.disclaimerLink}</span></a>
         <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener"><span data-i18n="useApi">Use the API</span><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span></a>
         <p class="version-line" data-current-version-line hidden><span data-i18n="version">Version</span> <span data-current-version></span></p>
+        {/* Shown once the service worker is registered (main.ts); without one there is nothing to update. */}
+        <button type="button" id="check-update" class="btn" hidden data-i18n="checkUpdates">{en.checkUpdates}</button>
+        <p class="note" role="status">
+          <span data-update-status="checking" hidden data-i18n="checkingUpdates">{en.checkingUpdates}</span>
+          <span data-update-status="latest" hidden data-i18n="upToDate">{en.upToDate}</span>
+          <span data-update-status="updating" hidden data-i18n="updating">{en.updating}</span>
+          <span data-update-status="failed" hidden data-i18n="updateFailed">{en.updateFailed}</span>
+        </p>
       </section>
     </div>
   </dialog>

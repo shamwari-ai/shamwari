@@ -2,7 +2,7 @@ import { startApp } from './app';
 import { LANGUAGES } from './strings';
 import { authModeOf } from './auth-mode';
 import { whenIdle } from './busy';
-import { reloadOnTakeover, startUpdateChecks } from './update-reload';
+import { checkForUpdate, reloadOnTakeover, startUpdateChecks } from './update-reload';
 import { applyTheme, savedTheme } from './theme';
 
 // A theme chosen in the command menu, before anything is drawn.
@@ -43,9 +43,26 @@ if ('serviceWorker' in navigator) {
   // when nothing is being sent or written. There is no "waiting" worker to offer any more.
   navigator.serviceWorker.addEventListener(
     'controllerchange',
-    reloadOnTakeover(!!navigator.serviceWorker.controller, { reload: () => location.reload(), now: Date.now, storage: sessionStorage, whenIdle, setTimeout: (fn, ms) => void setTimeout(fn, ms) }),
+    reloadOnTakeover(!!navigator.serviceWorker.controller, {
+      reload: () => location.reload(),
+      now: Date.now,
+      storage: sessionStorage,
+      whenIdle,
+      setTimeout: (fn, ms) => void setTimeout(fn, ms),
+      // The new release is in charge; the page reloads as soon as nothing is being sent or written. Say so, and let the
+      // person reload now (their own act; a draft in the box is theirs to keep or lose).
+      onReady: () => {
+        const note = document.getElementById('update-note');
+        if (note) note.hidden = false;
+      },
+    }),
   );
-  // The release this page is running ("v0.0.74"), shown at the foot of the drawer, so a person can tell which they have.
+  document.getElementById('update-now')?.addEventListener('click', () => location.reload());
+  // "Check for updates" in Settings: the answer is one of the status lines under it, in the page's language.
+  const showUpdateStatus = (which: string) => {
+    for (const el of document.querySelectorAll<HTMLElement>('[data-update-status]')) el.hidden = el.dataset.updateStatus !== which;
+  };
+  // The release this page is running ("v0.3.1 · 1a2b3c4d"), shown in Settings, so a person can tell which they have.
   const showCurrent = (worker: ServiceWorker | null | undefined) => {
     if (!worker) return;
     const ch = new MessageChannel();
@@ -61,6 +78,18 @@ if ('serviceWorker' in navigator) {
       .then((reg) => {
         showCurrent(navigator.serviceWorker.controller ?? reg.active);
         startUpdateChecks(reg, { document, setInterval: (fn, ms) => setInterval(fn, ms) });
+        const button = document.getElementById('check-update') as HTMLButtonElement | null;
+        if (button) {
+          button.hidden = false;
+          button.addEventListener('click', () => {
+            button.disabled = true;
+            showUpdateStatus('checking');
+            void checkForUpdate(reg).then((result) => {
+              showUpdateStatus(result);
+              button.disabled = false;
+            });
+          });
+        }
       })
       .catch(() => {
         /* no service worker (private mode, old WebView): the app still works online */
