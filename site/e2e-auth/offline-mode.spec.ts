@@ -6,7 +6,7 @@ import { expect, test } from '@playwright/test';
 test.use({ baseURL: 'http://127.0.0.1:4324' });
 
 test('with offline mode on, the page loads from the hint of a past sign-in and makes no session request', async ({ page, context }) => {
-  await context.addCookies([{ name: 'stub_session', value: '1', url: 'http://127.0.0.1:4324/lite/' }]); // what the gate emulation asks for
+  await context.addCookies([{ name: 'stub_session', value: '1', url: 'http://127.0.0.1:4324/chat/' }]); // what the gate emulation asks for
   await page.addInitScript(() => {
     localStorage.setItem('shamwari.mukoko.hint', '1');
     localStorage.setItem('shamwari.offlineMode', '1');
@@ -24,7 +24,7 @@ test('with offline mode on, the page loads from the hint of a past sign-in and m
     const path = new URL(r.url()).pathname;
     if (path.startsWith('/auth/')) toWorker.push(path);
   });
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-ready="true"]');
   await page.waitForSelector('html[data-auth-ready="true"]');
   await expect(page.locator('#q')).toBeVisible();

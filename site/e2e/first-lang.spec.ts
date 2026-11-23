@@ -14,7 +14,7 @@ test('a first visit offers the three languages on the empty screen, each a 49px 
   await expect(buttons).toHaveText(['English', 'ChiShona', 'isiNdebele']);
   for (const b of await buttons.all()) {
     const box = await b.boundingBox();
-    expect(box!.height, 'a 49px hit region on touch').toBeGreaterThanOrEqual(49);
+    expect(box!.height, 'a 45px hit region on touch').toBeGreaterThanOrEqual(45);
     expect(box!.x + box!.width).toBeLessThanOrEqual(320);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);

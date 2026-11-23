@@ -20,6 +20,10 @@ export interface ChatRequest {
   model?: ModelAlias;
   /** r1 = chat app, r2 = Lite PWA (docs/tiered-access-design.md). */
   reach?: 'r1' | 'r2';
+  /** A personal-scope skill is on: the gateway treats the question as personal scope (gateway/src/skills.ts). */
+  own_information?: boolean;
+  /** Platform-scope skills on in this chat. Never a personal-scope one: those stay on the device. */
+  skills?: { name: string; description: string; instructions: string }[];
 }
 
 /** One Ground source behind an answer (gateway `citationsOf`). */
