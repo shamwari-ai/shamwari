@@ -3,6 +3,7 @@
 //
 //   Sovereignty attaches to Mind + Ground only. Never to Cloud.
 //   Say "open weights", not "open source model".
+//   Shamwari is open-weight AI, AI with open weights: never "sovereign AI" (owner, 2026-11-23).
 //   "We train Shamwari Mind. We route Shamwari Cloud." (never "we built our own model")
 
 // A sentence that ties Cloud to sovereignty or residency is a problem unless it
@@ -39,6 +40,9 @@ export function findClaimProblems(text) {
     if (/(we (built|trained|made|created) our own (model|llm)|our own (foundation )?model)/i.test(s) && !/\b(not|never|no)\b/i.test(s)) {
       problems.push(`claims we built our own model; we train Mind and route Cloud: "${s.slice(0, 140)}"`);
     }
+    if (/sovereign (ai|a\.i\.|llm|model|companion)|sovereign artificial intelligence/i.test(s) && !/\b(not|never|isn't|is not)\b/i.test(s)) {
+      problems.push(`says "sovereign AI"; Shamwari is open-weight AI, AI with open weights: "${s.slice(0, 140)}"`);
+    }
     if (/sovereign cloud/i.test(s) && !DENIAL.some((d) => d.test(s))) {
       problems.push(`"sovereign cloud" is a claim Cloud cannot make: "${s.slice(0, 140)}"`);
     }
@@ -59,6 +63,8 @@ export function selfTest() {
     'Cloud isn\'t the only option, and your data stays in Africa.',
     'Shamwari is a noteworthy open source model for Africa.',
     'Nothing beats our open source model.',
+    'Shamwari is a sovereign AI companion.',
+    'Sovereign AI, built in Zimbabwe.',
   ];
   const good = [
     'Sovereignty applies to Mind and Ground. It does not apply to Cloud.',
@@ -66,6 +72,8 @@ export function selfTest() {
     'Say open weights, not open source model.',
     'We train Shamwari Mind. We route Shamwari Cloud.',
     'Personal data never goes to Cloud.',
+    'Shamwari is AI with open weights.',
+    'Shamwari is not sovereign AI; it is open-weight AI.',
   ];
   const failures = [];
   for (const t of bad) if (!findClaimProblems(t).length) failures.push(`should have failed: ${t}`);

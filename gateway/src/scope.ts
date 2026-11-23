@@ -5,8 +5,8 @@ import { conversationNeedsOwnInformation } from './personal';
  * THE LOAD-BEARING RULE
  *
  * Personal-layer content never reaches a third-party inference provider.
- * Not Z.ai, not Claude, not anyone. That is what makes "sovereign AI
- * companion" a technical fact rather than a marketing line.
+ * Not Z.ai, not Claude, not anyone. That is what makes "your own information
+ * never leaves" a technical fact rather than a marketing line.
  *
  * Enforced twice on purpose. Here, so the request fails fast without
  * burning a Core round trip. And again in Core's resolve_scope, which is
