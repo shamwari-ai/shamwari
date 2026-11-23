@@ -49,15 +49,28 @@ if ('serviceWorker' in navigator) {
       storage: sessionStorage,
       whenIdle,
       setTimeout: (fn, ms) => void setTimeout(fn, ms),
-      // The new release is in charge; the page reloads as soon as nothing is being sent or written. Say so, and let the
-      // person reload now (their own act; a draft in the box is theirs to keep or lose).
+      // The new release is in charge. In view: say so and wait for "Update now". In the background: it applies by
+      // itself once nothing is being sent or written, so the person comes back to the new version.
       onReady: () => {
         const note = document.getElementById('update-note');
         if (note) note.hidden = false;
       },
+      visible: () => document.visibilityState === 'visible',
+      onHidden: (fn) => {
+        const hidden = () => {
+          if (document.visibilityState !== 'hidden') return;
+          document.removeEventListener('visibilitychange', hidden);
+          fn();
+        };
+        document.addEventListener('visibilitychange', hidden);
+      },
     }),
   );
   document.getElementById('update-now')?.addEventListener('click', () => location.reload());
+  document.getElementById('update-later')?.addEventListener('click', () => {
+    const note = document.getElementById('update-note');
+    if (note) note.hidden = true;
+  });
   // "Check for updates" in Settings: the answer is one of the status lines under it, in the page's language.
   const showUpdateStatus = (which: string) => {
     for (const el of document.querySelectorAll<HTMLElement>('[data-update-status]')) el.hidden = el.dataset.updateStatus !== which;

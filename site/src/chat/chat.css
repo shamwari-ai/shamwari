@@ -1838,3 +1838,51 @@ html[data-offline-mode] .mode-chip {
   inline-size: 0.875rem;
   block-size: 0.875rem;
 }
+
+/* "A new version is available", as Mzizi's toast: a card with the 14px corner, a border, a large shadow and small body
+   text, at the bottom (above the prompt box), centred on a phone and at the right from 40rem. It stays until answered. */
+.update-toast {
+  position: absolute;
+  inset-inline: var(--page-inset);
+  bottom: calc(100% + var(--gap-floor));
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-floor) var(--inset-floor);
+  max-inline-size: 24rem;
+  margin-inline: auto;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: var(--fs-small);
+  box-shadow: 0 10px 15px -3px color-mix(in oklab, var(--foreground) 10%, transparent), 0 4px 6px -4px color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.update-toast[hidden] {
+  display: none;
+}
+.update-actions {
+  display: flex;
+  gap: var(--gap-floor);
+  margin-inline-start: auto;
+}
+@media (min-width: 40rem) {
+  .update-toast {
+    inset-inline-start: auto;
+    margin-inline: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .update-toast:not([hidden]) {
+    animation: rise 0.2s ease-out;
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 0.5rem;
+  }
+}

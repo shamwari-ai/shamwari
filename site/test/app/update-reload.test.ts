@@ -189,3 +189,30 @@ describe('the person can see an update coming and ask for one', () => {
     expect(await checkForUpdate(reg('none', true) as never)).toBe('failed');
   });
 });
+
+describe('in view, the update waits for the person; in the background it applies by itself', () => {
+  beforeEach(() => resetBusy());
+
+  it('shows the popup and does not reload while the page is in view, then reloads when it goes to the background', () => {
+    const reload = vi.fn();
+    const onReady = vi.fn();
+    let hidden: (() => void) | undefined;
+    const handler = reloadOnTakeover(true, {
+      reload, now: () => 1_000_000, storage: store(), whenIdle, setTimeout: () => undefined, onReady,
+      visible: () => true,
+      onHidden: (fn) => void (hidden = fn),
+    });
+    handler();
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled();
+    hidden!();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('in the background already: reloads at once', () => {
+    const reload = vi.fn();
+    const handler = reloadOnTakeover(true, { reload, now: () => 1_000_000, storage: store(), whenIdle, setTimeout: () => undefined, visible: () => false, onHidden: () => undefined });
+    handler();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+});

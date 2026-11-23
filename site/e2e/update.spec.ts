@@ -16,7 +16,32 @@ test('Settings shows this build\'s version and "Check for updates" says it is th
   await expect(page.locator('[data-update-status="failed"]')).toBeHidden();
 });
 
-test('the "new version is ready" note is hidden until a new release takes over', async ({ page }) => {
+test('when a new release takes over, a popup says so with Update now and Later, and nothing reloads under the person', async ({ page }) => {
   await openChat(page);
-  await expect(page.locator('#update-note')).toBeHidden();
+  const toast = page.locator('#update-note');
+  await expect(toast).toBeHidden();
+  // What the browser does when a new release's worker takes over this page (sw.js: skipWaiting + clients.claim).
+  await page.evaluate(() => {
+    (window as unknown as { stay: boolean }).stay = true;
+    navigator.serviceWorker.dispatchEvent(new Event('controllerchange'));
+  });
+  await expect(toast).toBeVisible();
+  await expect(toast).toContainText('A new version of Shamwari is available.');
+  await expect(toast.getByRole('button', { name: 'Update now' })).toBeVisible();
+  // In view, it waits for the person: the page has not reloaded.
+  await page.waitForTimeout(500);
+  expect(await page.evaluate(() => (window as unknown as { stay?: boolean }).stay)).toBe(true);
+  await toast.getByRole('button', { name: 'Later' }).click();
+  await expect(toast).toBeHidden();
+});
+
+test('"Update now" reloads the page', async ({ page }) => {
+  await openChat(page);
+  await page.evaluate(() => {
+    (window as unknown as { stay: boolean }).stay = true;
+    navigator.serviceWorker.dispatchEvent(new Event('controllerchange'));
+  });
+  await page.locator('#update-now').click();
+  await page.waitForSelector('html[data-ready="true"]');
+  expect(await page.evaluate(() => (window as unknown as { stay?: boolean }).stay)).toBeUndefined();
 });

@@ -19,8 +19,14 @@ export interface ReloadDeps {
   storage: Pick<Storage, 'getItem' | 'setItem'>;
   whenIdle: (fn: () => void) => void;
   setTimeout: (fn: () => void, ms: number) => void;
-  /** Called once a new release has taken over and its reload is scheduled: the page can say so and offer it now. */
+  /** Called once a new release has taken over: the page shows "a new version is available" and offers it now. */
   onReady?: () => void;
+  /**
+   * While the page is in view the reload waits for the person (their "Update now", or the page going to the
+   * background), so nothing they are looking at changes under them. Without these two the reload is automatic.
+   */
+  visible?: () => boolean;
+  onHidden?: (fn: () => void) => void;
 }
 
 /** Returns the handler for the service worker container's `controllerchange`. */
@@ -53,8 +59,12 @@ export function reloadOnTakeover(hadController: boolean, deps: ReloadDeps): () =
         }
         deps.reload();
       });
-    if (wait > 0) deps.setTimeout(go, wait);
-    else go();
+    const start = () => {
+      if (wait > 0) deps.setTimeout(go, wait);
+      else go();
+    };
+    if (deps.visible?.() && deps.onHidden) deps.onHidden(start);
+    else start();
   };
 }
 
