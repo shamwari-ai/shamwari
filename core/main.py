@@ -296,7 +296,7 @@ async def ground_search(body: GroundQuery) -> dict[str, Any]:
 async def guardrails(surface: str = "shamwari") -> dict[str, Any]:
     """Active rules for a surface. The one copy lives at /v1/ai/guardrails."""
     if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,39}", surface):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "bad surface")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "bad surface")
     try:
         rules = await api.guardrails(surface)
     except DataApiRefusal as e:
@@ -414,7 +414,7 @@ async def sink_bulk(body: BulkWrite) -> dict[str, Any]:
 @app.get("/rollup", dependencies=[Depends(require_token)])
 async def rollup(owner_entity_id: str, billing_period: str) -> dict[str, Any]:
     if not re.fullmatch(_ID, owner_entity_id) or not re.fullmatch(_PERIOD, billing_period):
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "bad owner or billing period")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "bad owner or billing period")
     try:
         r = await api.usage_rollup(owner_entity_id, billing_period)
     except DataApiRefusal as e:
