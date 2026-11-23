@@ -1,8 +1,10 @@
-# Dependabot opens its PRs against staging: changes go to staging and are
-# released to main by the automatic release PR, never merged straight into
-# main. Version updates wait 7 days after a release (cooldown), since a
-# just-published package is the likeliest to be malicious or broken; the
-# cooldown does not delay security updates.
+# Dependabot opens its PRs against main, the only integration branch (staging
+# was retired). To keep the number of open PRs small, each ecosystem's updates
+# come grouped: one PR for every minor and patch bump, and one for the majors,
+# which need deliberate work (see #353). Version updates wait 7 days after a
+# release (cooldown), since a just-published package is the likeliest to be
+# malicious or broken; the cooldown does not delay security updates, and
+# security updates are not grouped, so each one arrives on its own.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -11,29 +13,49 @@ updates:
       - /gateway
       - /mobile
       - /site
-    target-branch: staging
+    target-branch: main
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
     groups:
-      astro:
-        patterns:
-          - "astro"
-          - "@astrojs/*"
+      npm-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+      npm-major:
+        applies-to: version-updates
+        update-types:
+          - major
 
   - package-ecosystem: pip
     directory: /core
-    target-branch: staging
+    target-branch: main
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      pip-minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+      pip-major:
+        applies-to: version-updates
+        update-types:
+          - major
 
   - package-ecosystem: github-actions
     directory: /
-    target-branch: staging
+    target-branch: main
     schedule:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      actions:
+        applies-to: version-updates
+        patterns:
+          - "*"
