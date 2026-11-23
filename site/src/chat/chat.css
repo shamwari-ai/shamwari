@@ -13,17 +13,21 @@
   --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
   /* Quiet text that still reaches the floor's 7:1: the page text mixed 80% into its background. */
   --quiet: color-mix(in oklab, var(--foreground) 80%, var(--background));
-  /* Fills are opaque, so text on them is measured against what is really drawn. */
-  --fill: color-mix(in oklab, var(--foreground) 7%, var(--background));
-  --fill-on: color-mix(in oklab, var(--foreground) 12%, var(--background));
-  --tint: color-mix(in oklab, var(--foreground) 6%, var(--background));
+  /* Surfaces come from Mzizi's ladder, not mixes of our own: the page is the base step (--background), panels (the
+     sidebar) the surface step, a hover the container step, a selected row the overlay step. Opaque, so text on them is
+     measured against what is really drawn. */
+  --fill: var(--container);
+  --fill-on: var(--overlay);
+  --tint: var(--container);
   --line: var(--border);
   /* The dim behind a slide-over or a dialog: the same in both themes, so a dark page dims rather than greys. */
   --scrim: rgb(0 0 0 / 0.45);
   /* A control's size: the floor's hit region on touch (45px), the density size (33px) only with a mouse and nothing coarse,
      the same test Mzizi's own density layer uses, so a touch laptop or a tablet with a mouse keeps the touch size. */
   --ctl: var(--target-floor);
-  --box: 8px;
+  /* Radii are Mzizi's scale: 7px controls and rows, 12px menus and chips of content, 14px cards and dialogs, 17px the
+     prompt box. */
+  --box: var(--radius-lg);
   --page-inset: max(var(--inset-floor), env(safe-area-inset-left), env(safe-area-inset-right));
   /* One sidebar width, as the slide-over on a phone and as the column from 64rem, so crossing 64rem does not jump. */
   --side-w: 17.5rem;
@@ -184,7 +188,7 @@ svg {
 }
 /* The suggested prompts and the first-run languages are Mzizi's pills; nothing else is. */
 .btn.chip {
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   color: var(--quiet);
 }
 .btn.chip:hover {
@@ -243,7 +247,7 @@ input[type='checkbox'] {
 .kbd {
   padding: 0 0.3em;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: var(--fs-small);
   line-height: 1.4;
   color: var(--quiet);
@@ -389,7 +393,7 @@ html[data-view='pending'] dialog {
   text-decoration: none;
 }
 .brand img {
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
 }
 .wordmark {
   font-family: var(--mono);
@@ -472,7 +476,7 @@ html[data-view='pending'] dialog {
   margin-inline-start: auto;
   padding: 0 0.4em;
   border: 1px solid var(--line);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-family: var(--mono);
   font-size: var(--fs-small);
   white-space: nowrap;
@@ -839,7 +843,7 @@ main:focus,
   align-self: flex-end;
   max-width: min(85%, 36rem);
   padding: var(--inset-floor);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--tint);
 }
 .msg.user .text {
@@ -1093,7 +1097,7 @@ summary > .cite-title {
 }
 .md code {
   padding-inline: 0.3em;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--fill);
 }
 .md pre,
@@ -1159,7 +1163,7 @@ summary > .cite-title {
   gap: var(--gap-floor);
   padding: var(--gap-floor);
   border: 1px solid var(--border-control);
-  border-radius: var(--box);
+  border-radius: var(--radius-xl);
   background: var(--card);
 }
 /* The box is the only edge, and its ring is the focus ring; the text area keeps a transparent outline for forced colours. */
@@ -1691,4 +1695,28 @@ html[data-offline-mode] .mode-chip {
   :root {
     --ctl: var(--size-control-sm);
   }
+}
+
+/* ---- surfaces: the sidebar is a panel on Mzizi's surface step, a step off the page ------------------------------------
+   Its rows hover on the container step and the open one sits on the overlay step, so the list reads as its own panel
+   against the page in both themes. Menus, the palette and dialogs are the popover surface with the 14px card radius. */
+[data-slot='app-sidebar'],
+.side-head,
+.side-foot {
+  background: var(--surface);
+}
+.row-more {
+  background: var(--surface);
+}
+:where(.menu, .slash-menu, .palette, .sheet, .settings-dialog, .settings-head) {
+  background: var(--popover);
+}
+
+/* The reading area sits on Mzizi's surface-muted step (a warm off-white in light, near-black in dark), so the sidebar panel,
+   the page and the prompt box read as three layers rather than one flat colour. The prompt box is a card raised off it. */
+[data-slot='app-main'] {
+  background: var(--surface-muted);
+}
+.composer {
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--foreground) 6%, transparent), 0 4px 16px color-mix(in oklab, var(--foreground) 6%, transparent);
 }

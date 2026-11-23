@@ -24,6 +24,7 @@ const colours = (page: Page) =>
       pageText: getComputedStyle(document.body).color,
       tokenBackground: resolve('--background'),
       tokenForeground: resolve('--foreground'),
+      tokenSurface: resolve('--surface'),
       drawerBg: bg('[data-slot="app-sidebar"]'),
       schemes: root.colorScheme,
     };
@@ -41,7 +42,9 @@ test('with a dark device the background and text tokens change, and the page, no
   for (const [name, c] of [['light', light], ['dark', dark]] as const) {
     expect(c.pageBg, `${name}: the page background is the background token`).toBe(c.tokenBackground);
     expect(c.pageText, `${name}: the page text is the foreground token`).toBe(c.tokenForeground);
-    expect(c.drawerBg, `${name}: the drawer is drawn in the background token`).toBe(c.tokenBackground);
+    // The drawer is a panel on Mzizi's surface step, one step off the page, so it reads as its own panel in both themes.
+    expect(c.drawerBg, `${name}: the drawer is drawn in the surface token`).toBe(c.tokenSurface);
+    expect(c.drawerBg, `${name}: the drawer differs from the page`).not.toBe(c.pageBg);
   }
   expect(dark.pageBg).not.toBe(light.pageBg);
   // A dark page is dark and its text is light, and the other way round: contrast is real, not just different.
