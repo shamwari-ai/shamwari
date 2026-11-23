@@ -150,9 +150,9 @@ test('reduced motion: nothing animates while waiting for an answer', async ({ pa
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await openChat(page);
   await ask(page, 'slow answer please');
-  const dots = page.locator('.pending .dots');
-  await expect(dots).toBeVisible();
-  expect(await dots.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+  const mark = page.locator('.pending .run-mark');
+  await expect(mark).toBeVisible();
+  expect(await mark.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
 });
 
 test('weak network: the answer still arrives and the slow hint appears', async ({ page }) => {

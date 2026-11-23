@@ -159,7 +159,7 @@ svg {
   min-width: var(--ctl);
   padding: 0 var(--inset-floor);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   background: transparent;
   color: var(--foreground);
   font-size: var(--fs-small);
@@ -197,6 +197,7 @@ svg {
 button:disabled {
   cursor: not-allowed;
 }
+/* Mzizi: inputs are pills, like buttons; a multi-line field keeps a box corner (below). */
 select,
 input:not([type='checkbox'], [type='radio'], [type='file']),
 .skill-form textarea {
@@ -204,11 +205,12 @@ input:not([type='checkbox'], [type='radio'], [type='file']),
   max-width: 100%;
   padding: 0 var(--inset-floor);
   border: 1px solid var(--border-control);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   background: var(--input);
 }
 .skill-form textarea {
   inline-size: 100%;
+  border-radius: var(--radius-lg);
   padding-block: var(--gap-floor);
   line-height: var(--leading-floor);
   resize: vertical;
@@ -233,7 +235,7 @@ input[type='checkbox'] {
   gap: var(--gap-floor);
   min-height: var(--ctl);
   min-width: var(--ctl);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   color: var(--quiet);
   font-size: var(--fs-small);
 }
@@ -476,7 +478,7 @@ html[data-view='pending'] dialog {
   margin-inline-start: auto;
   padding: 0 0.4em;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   font-family: var(--mono);
   font-size: var(--fs-small);
   white-space: nowrap;
@@ -503,14 +505,15 @@ summary.chats-title {
 summary.chats-title::-webkit-details-marker {
   display: none;
 }
-summary.chats-title::before {
-  content: '▾';
-  order: 2;
+/* Mzizi's chevron, not a text triangle: down when the group is open, right when it is folded. */
+.chats-chev {
+  inline-size: 1rem;
+  block-size: 1rem;
   margin-inline-start: auto;
-  font-size: var(--fs-small);
+  flex: none;
 }
-details:not([open]) > summary.chats-title::before {
-  content: '▸';
+details:not([open]) > summary .chats-chev {
+  rotate: -90deg;
 }
 .side-date-group {
   display: flex;
@@ -554,7 +557,7 @@ details:not([open]) > summary.chats-title::before {
   justify-content: center;
   min-height: var(--ctl);
   min-width: var(--ctl);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   color: var(--quiet);
 }
 .row-more:hover,
@@ -610,7 +613,7 @@ details:not([open]) > summary.chats-title::before {
   min-height: var(--ctl);
   min-width: var(--ctl);
   padding-inline: var(--gap-floor);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   color: var(--quiet);
   font-size: var(--fs-small);
 }
@@ -853,19 +856,92 @@ main:focus,
 .msg.pending .text {
   color: var(--quiet);
 }
-.dots {
+/* Mzizi's glyphs in the answers (render.ts `glyph`): drawn at the size of the words beside them, in their colour. */
+.gl {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: none;
+}
+/* The working line: the sparkle turns in the brand colour in front of what Shamwari is doing, then the seconds so far. */
+.run {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
+}
+.run-mark {
+  display: inline-flex;
+  color: var(--primary);
+}
+.run-time {
   font-family: var(--mono);
-  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .dots {
-    animation: pulse 1.2s ease-in-out infinite;
+  .run-mark {
+    animation: turn 2.4s linear infinite, pulse 1.2s ease-in-out infinite;
+  }
+}
+@keyframes turn {
+  to {
+    rotate: 1turn;
   }
 }
 @keyframes pulse {
   50% {
-    opacity: 0.35;
+    opacity: 0.45;
   }
+}
+/* How the answer was made: one quiet summary line with its icon in front (like a work log), the steps under it, each with
+   its own icon. A step's words are the floor's small size and muted; the icons line up in one column. */
+.steps {
+  font-size: var(--fs-small);
+  color: var(--quiet);
+}
+.steps summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-floor);
+  min-block-size: var(--ctl);
+  padding-inline-end: var(--gap-floor);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  list-style: none;
+}
+.steps summary::-webkit-details-marker {
+  display: none;
+}
+.steps .chev {
+  display: inline-flex;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .steps .chev {
+    transition: rotate 0.15s;
+  }
+}
+.steps[open] .chev {
+  rotate: 90deg;
+}
+.steps summary:hover {
+  color: var(--foreground);
+}
+.steps ol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+  margin: var(--gap-floor) 0 0;
+  padding: 0 0 0 calc(0.5rem - 1px);
+  border-inline-start: 1px solid var(--border);
+  list-style: none;
+}
+.steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gap-floor);
+  padding-inline-start: var(--gap-floor);
+  line-height: var(--leading-floor);
+}
+.steps li .gl {
+  margin-block-start: 0.2em;
 }
 /* Notices (the personal-scope explanation, an error): a rule at the left, not a box. */
 .msg.refusal,
@@ -908,7 +984,44 @@ main:focus,
 .msg-actions .btn {
   font-size: var(--fs-small);
 }
-/* Sources, as parts: one compact line each (› Source  the section  Open source), the detail one tap away. */
+/* Copy, Share, Save: icon-only squares with no border or fill at rest; the words are their accessible name and tooltip.
+   On touch each is a full 45px target (the floor is never lowered there); with a mouse they are drawn small (28px, over the
+   24px desktop floor), and under every answer but the latest they stay out of sight until the answer is hovered or focused. */
+.msg-actions {
+  gap: var(--gap-floor);
+}
+.btn.act {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--ctl);
+  block-size: var(--ctl);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+@media (hover: hover) {
+  .btn.act:hover {
+    background: var(--fill);
+  }
+}
+@media (min-width: 64rem) and (pointer: fine) and (hover: hover) and (not (any-pointer: coarse)) {
+  .btn.act {
+    inline-size: 1.75rem;
+    block-size: 1.75rem;
+    min-width: 1.75rem;
+    min-height: 1.75rem;
+  }
+  .msg.bot:not(:last-child) .msg-actions {
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .msg.bot:hover .msg-actions,
+  .msg.bot:focus-within .msg-actions {
+    opacity: 1;
+  }
+}
+/* Sources, as parts: one compact line each (a chevron, Source, the section, Open source), the detail one tap away. */
 .sources {
   display: flex;
   flex-direction: column;
@@ -950,13 +1063,12 @@ main:focus,
 .cite-more > summary::-webkit-details-marker {
   display: none;
 }
-.cite-more > summary::before {
-  content: '›';
-  font-family: var(--mono);
+.cite-more .chev {
+  display: inline-flex;
   color: var(--quiet);
 }
-.cite-more[open] > summary::before {
-  content: '⌄';
+.cite-more[open] .chev {
+  rotate: 90deg;
 }
 .cite-more > summary:hover {
   background: var(--fill);
@@ -1010,7 +1122,7 @@ summary > .cite-title {
   min-width: 0;
   padding-inline-start: var(--inset-floor);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   font-size: var(--fs-small);
 }
 .attach-name {
@@ -1026,7 +1138,7 @@ summary > .cite-title {
   min-width: var(--ctl);
   margin-inline-start: auto;
   padding-inline: var(--inset-floor);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   font-size: var(--fs-small);
   color: var(--quiet);
 }
@@ -1197,7 +1309,7 @@ summary > .cite-title {
   align-items: center;
   gap: var(--gap-floor);
   padding-inline-start: var(--inset-floor);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   background: var(--tint);
   color: var(--foreground);
   font-size: var(--fs-small);
@@ -1218,7 +1330,7 @@ summary > .cite-title {
   justify-content: center;
   min-height: var(--ctl);
   min-width: var(--ctl);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
 }
 .chip-x:hover {
   background: var(--fill);
@@ -1249,7 +1361,7 @@ summary > .cite-title {
   min-width: var(--ctl);
   padding-inline: var(--gap-floor);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   font-family: var(--mono);
   font-size: var(--fs-small);
   color: var(--quiet);
@@ -1513,7 +1625,7 @@ html[data-offline-mode] .mode-chip {
   inline-size: 100%;
   block-size: 100%;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   background: radial-gradient(circle at calc(var(--inset-floor) + 0.5rem) 50%, transparent 0 0.3rem, var(--foreground) 0.3rem 0.4rem, transparent 0.4rem) no-repeat;
   cursor: pointer;
 }
@@ -1719,4 +1831,58 @@ html[data-offline-mode] .mode-chip {
 }
 .composer {
   box-shadow: 0 1px 2px color-mix(in oklab, var(--foreground) 6%, transparent), 0 4px 16px color-mix(in oklab, var(--foreground) 6%, transparent);
+}
+
+/* The status chip's close: Mzizi's own X, at the chip's small size. */
+.chip-x .chip-x-i {
+  inline-size: 0.875rem;
+  block-size: 0.875rem;
+}
+
+/* "A new version is available", as Mzizi's toast: a card with the 14px corner, a border, a large shadow and small body
+   text, at the bottom (above the prompt box), centred on a phone and at the right from 40rem. It stays until answered. */
+.update-toast {
+  position: absolute;
+  inset-inline: var(--page-inset);
+  bottom: calc(100% + var(--gap-floor));
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-floor) var(--inset-floor);
+  max-inline-size: 24rem;
+  margin-inline: auto;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: var(--fs-small);
+  box-shadow: 0 10px 15px -3px color-mix(in oklab, var(--foreground) 10%, transparent), 0 4px 6px -4px color-mix(in oklab, var(--foreground) 10%, transparent);
+}
+.update-toast[hidden] {
+  display: none;
+}
+.update-actions {
+  display: flex;
+  gap: var(--gap-floor);
+  margin-inline-start: auto;
+}
+@media (min-width: 40rem) {
+  .update-toast {
+    inset-inline-start: auto;
+    margin-inline: 0;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .update-toast:not([hidden]) {
+    animation: rise 0.2s ease-out;
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    translate: 0 0.5rem;
+  }
 }

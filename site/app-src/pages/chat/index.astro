@@ -24,7 +24,6 @@ const authMode = authModeOf(import.meta.env.PUBLIC_CHAT_AUTH);
 // The Skills tab: Agent Skills read from and written as SKILL.md (chat/skill.ts), with a builder (chat/skills-ui.ts). On by
 // default; a build with PUBLIC_CHAT_SKILLS=false leaves it out, and Plugins goes back to a "Coming soon" row (chat/features.ts).
 const showSkills = skillsEnabled(import.meta.env.PUBLIC_CHAT_SKILLS);
-const x = '<path d="M6 6l12 12M18 6L6 18" />';
 ---
 <!doctype html>
 <html lang="en" class="app">
@@ -86,11 +85,11 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
       <div class="side-scroll">
         <div data-panel="chat">
           <details id="side-pinned" class="side-group" open hidden>
-            <summary class="chats-title"><span data-i18n="pinned">{en.pinned}</span></summary>
+            <summary class="chats-title"><span data-i18n="pinned">{en.pinned}</span><Icon name="chevron-down" class="chats-chev" /></summary>
             <ul id="pinned-list" class="side-list"></ul>
           </details>
           <details id="side-chats" class="side-group" open hidden>
-            <summary class="chats-title"><span data-i18n="recents">{en.recents}</span></summary>
+            <summary class="chats-title"><span data-i18n="recents">{en.recents}</span><Icon name="chevron-down" class="chats-chev" /></summary>
             <div id="history"><ul id="history-list" class="side-list"></ul></div>
           </details>
           <p id="chats-empty" class="side-empty" data-i18n="chatsEmpty">{en.chatsEmpty}</p>
@@ -139,7 +138,7 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
 
   <div data-slot="app-main">
     <header class="topbar" data-slot="app-topbar">
-      <button type="button" class="icon-btn menu-btn" popovertarget="chat-sidebar" aria-label={en.openChats}><Icon name="menu" class="i" /></button>
+      <button type="button" class="icon-btn menu-btn" popovertarget="chat-sidebar" aria-label={en.openChats}><Icon name="panel-left" class="i" /></button>
       <button type="button" id="side-toggle" class="icon-btn side-toggle" aria-pressed="false" aria-controls="chat-sidebar" aria-label={en.collapseChats} data-i18n-attr="aria-label:collapseChats"><Icon name="panel-left" class="i" /></button>
       <a href="/chat/" class="brand" aria-label="shamwari"><img src="/apple-touch-icon.png" alt="" width="20" height="20" /><span class="wordmark">shamwari</span></a>
       {/* The chat's title (the page's one heading) and a quiet subtitle; the whole block is one button that opens the chat's menu. */}
@@ -188,10 +187,23 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
         </section>
         <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
         <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>
+        {/* The icons the answers are drawn with (render.ts `glyph`): Mzizi's own glyphs, cloned at run time, so no SVG path is ever
+            written by hand in the script and none of it adds to the first-load JavaScript. */}
+        <template id="glyphs">{(['copy', 'upload', 'clipboard', 'check', 'list', 'search', 'shield', 'sparkles', 'book', 'sparkle', 'chevron-right'] as const).map((n) => <Icon name={n} class="gl" />)}</template>
       </div>
 
       {/* The prompt box, docked at the bottom. */}
       <div class="dock">
+        {/* "A new version is available": Mzizi's toast (a card at the bottom, centred on a phone, at the right from 40rem),
+            kept until the person answers. While the page is in view the update waits for them; in the background it
+            applies by itself (main.ts, update-reload.ts). */}
+        <div id="update-note" class="update-toast" role="status" hidden>
+          <p data-i18n="updateReady">{en.updateReady}</p>
+          <div class="update-actions">
+            <button type="button" id="update-later" class="btn link" data-i18n="updateLater">{en.updateLater}</button>
+            <button type="button" id="update-now" class="btn primary" data-i18n="reloadNow">{en.reloadNow}</button>
+          </div>
+        </div>
         <button type="button" id="jump-latest" class="jump-latest" hidden aria-label={en.jumpLatest} data-i18n-attr="aria-label:jumpLatest"><Icon name="arrow-right" class="i down" /></button>
         <section class="ask" aria-labelledby="ask-title">
           <h2 id="ask-title" class="sr-only" data-i18n="askRegion">Ask a question</h2>
@@ -200,12 +212,12 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
             <div class="status-chips">
               <div id="offline-mode-note" class="status-chip" role="status" hidden>
                 <span data-i18n="offlineModeNote">{en.offlineModeNote}</span>
-                <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" set:html={x} /></button>
+                <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><Icon name="close" class="i chip-x-i" /></button>
               </div>
               <div id="skills-note" class="status-chip skills-note" role="status" hidden><span id="skills-note-text"></span></div>
               <div id="offline" class="status-chip" role="status" hidden>
                 <span data-i18n="offlineBanner">{en.offlineBanner}</span>
-                <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" set:html={x} /></button>
+                <button type="button" class="chip-x" aria-label={en.close} data-i18n-attr="aria-label:close"><Icon name="close" class="i chip-x-i" /></button>
               </div>
             </div>
             <label class="sr-only" for="q" data-i18n="placeholder">Ask a question</label>
@@ -288,6 +300,14 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
         <a class="side-row" href="/chat/disclaimer/"><span data-i18n="disclaimerLink">{en.disclaimerLink}</span></a>
         <a class="side-row" href="https://platform.nyuchi.com" target="_blank" rel="noopener"><span data-i18n="useApi">Use the API</span><span class="sr-only" data-i18n="opensNewTab">(opens in a new tab)</span></a>
         <p class="version-line" data-current-version-line hidden><span data-i18n="version">Version</span> <span data-current-version></span></p>
+        {/* Shown once the service worker is registered (main.ts); without one there is nothing to update. */}
+        <button type="button" id="check-update" class="btn" hidden data-i18n="checkUpdates">{en.checkUpdates}</button>
+        <p class="note" role="status">
+          <span data-update-status="checking" hidden data-i18n="checkingUpdates">{en.checkingUpdates}</span>
+          <span data-update-status="latest" hidden data-i18n="upToDate">{en.upToDate}</span>
+          <span data-update-status="updating" hidden data-i18n="updating">{en.updating}</span>
+          <span data-update-status="failed" hidden data-i18n="updateFailed">{en.updateFailed}</span>
+        </p>
       </section>
     </div>
   </dialog>

@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { ask, openChat } from './helpers';
 
-// Messages: plain text with no markdown marks, no chat bubbles, small text, small "thinking", and text (not icon) actions.
+// Messages: plain text with no markdown marks, no chat bubbles, small text, a small working line, and icon-only actions whose words are
+// their accessible name and tooltip.
 
 test('an answer written in markdown is drawn formatted, with none of its marks left in view (see markdown.spec.ts)', async ({ page }) => {
   await openChat(page);
@@ -89,7 +90,7 @@ test('the thinking text is as small as the floor allows, and muted', async ({ pa
   expect(st.colour, 'quieter than the messages').not.toBe(body);
 });
 
-test('Copy, Share and Save are text buttons, never icons; Share only where the browser can share, and it sends plain words', async ({ page, context }) => {
+test('Copy, Share and Save are icon-only, borderless and unfilled, named by their words; Share only where the browser can share, and it sends plain words', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.addInitScript(() => {
     (window as unknown as { shared: unknown[] }).shared = [];
@@ -99,7 +100,25 @@ test('Copy, Share and Save are text buttons, never icons; Share only where the b
   await ask(page, 'Show markdown please');
   const row = page.locator('article.msg.bot:not(.pending) .msg-actions');
   await expect(row.getByRole('button')).toHaveText(['Copy answer', 'Share answer', 'Save answer']);
-  await expect(row.locator('svg, img')).toHaveCount(0);
+  // Only Mzizi's glyph is drawn; the words are the accessible name (visually hidden) and the tooltip. No border, no fill at rest.
+  for (const [i, [icon, name]] of [['copy', 'Copy answer'], ['upload', 'Share answer'], ['clipboard', 'Save answer']].entries()) {
+    const b = row.getByRole('button').nth(i);
+    await expect(b).toHaveAccessibleName(name!);
+    await expect(b).toHaveAttribute('title', name!);
+    await expect(b.locator('svg')).toHaveCount(1);
+    await expect(b.locator('svg')).toHaveAttribute('data-icon', icon!);
+    await expect(b.locator('svg')).toHaveAttribute('aria-hidden', 'true');
+    const st = await b.evaluate((el) => {
+      const c = getComputedStyle(el);
+      const words = el.querySelector('span')!.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      return { bg: c.backgroundColor, border: c.borderTopWidth, words: words.width * words.height, w: r.width, h: r.height };
+    });
+    expect(st.words, `${name}: its words are not drawn`).toBeLessThanOrEqual(1);
+    expect(st.border).toBe('0px');
+    expect(st.bg, 'no fill at rest').toBe('rgba(0, 0, 0, 0)');
+    expect(st.w, 'a square: no room kept for words').toBeLessThanOrEqual(st.h + 0.5);
+  }
   await row.getByRole('button', { name: 'Share answer' }).click();
   const shared = (await page.evaluate(() => (window as unknown as { shared: { text: string }[] }).shared))[0]!;
   expect(shared.text).toContain('Section 49 says you have the right to personal liberty.');
@@ -109,6 +128,13 @@ test('Copy, Share and Save are text buttons, never icons; Share only where the b
   await row.getByRole('button', { name: 'Copy answer' }).click();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).not.toMatch(/\*\*|##|`/);
+  // Copied: a tick and the word, then back to Copy.
+  const copy = row.getByRole('button').first();
+  await expect(copy).toHaveText('Copied');
+  await expect(copy).toHaveAttribute('title', 'Copied');
+  await expect(copy.locator('svg')).toHaveAttribute('data-icon', 'check');
+  await expect(copy).toHaveText('Copy answer', { timeout: 3000 });
+  await expect(copy.locator('svg')).toHaveAttribute('data-icon', 'copy');
 });
 
 test('without a share sheet in the browser, Share is not shown', async ({ page }) => {

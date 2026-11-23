@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { isBusy, resetBusy, setBusy, whenIdle } from '../../src/chat/busy';
-import { RELOAD_GUARD_MS, RELOAD_KEY, UPDATE_CHECK_EVERY_MS, reloadOnTakeover, startUpdateChecks } from '../../src/chat/update-reload';
+import { RELOAD_GUARD_MS, RELOAD_KEY, UPDATE_CHECK_EVERY_MS, checkForUpdate, reloadOnTakeover, startUpdateChecks } from '../../src/chat/update-reload';
 
 const store = (initial: Record<string, string> = {}) => {
   const m = new Map(Object.entries(initial));
@@ -145,7 +145,7 @@ describe('forced update: the page asks for a newer worker', () => {
     expect(update).toHaveBeenCalledTimes(2);
     expect(timers).toHaveLength(1);
     expect(timers[0]!.ms).toBe(UPDATE_CHECK_EVERY_MS);
-    expect(UPDATE_CHECK_EVERY_MS).toBe(3_600_000);
+    expect(UPDATE_CHECK_EVERY_MS).toBe(600_000);
     timers[0]!.fn();
     expect(update).toHaveBeenCalledTimes(3);
   });
@@ -155,5 +155,64 @@ describe('forced update: the page asks for a newer worker', () => {
     const doc = { visibilityState: 'visible', addEventListener: () => {} } as unknown as Document;
     expect(() => startUpdateChecks({ update }, { document: doc, setInterval: () => {} })).not.toThrow();
     await Promise.resolve();
+  });
+});
+
+describe('the person can see an update coming and ask for one', () => {
+  beforeEach(() => resetBusy());
+
+  it('says a new version is ready as soon as it takes over, even while a draft holds the reload back', () => {
+    const reload = vi.fn();
+    const onReady = vi.fn();
+    const handler = reloadOnTakeover(true, { reload, now: () => 1_000_000, storage: store(), whenIdle, setTimeout: () => undefined, onReady });
+    setBusy('draft', true);
+    handler();
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled(); // the draft is not thrown away behind the person's back
+    setBusy('draft', false);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Check for updates": latest when nothing new was found, updating when a newer worker is installing or waiting, failed offline', async () => {
+    const reg = (found: 'none' | 'installing' | 'waiting', fails = false) => ({
+      installing: null as unknown,
+      waiting: null as unknown,
+      update() {
+        if (fails) return Promise.reject(new TypeError('offline'));
+        if (found !== 'none') this[found] = {};
+        return Promise.resolve();
+      },
+    });
+    expect(await checkForUpdate(reg('none') as never)).toBe('latest');
+    expect(await checkForUpdate(reg('installing') as never)).toBe('updating');
+    expect(await checkForUpdate(reg('waiting') as never)).toBe('updating');
+    expect(await checkForUpdate(reg('none', true) as never)).toBe('failed');
+  });
+});
+
+describe('in view, the update waits for the person; in the background it applies by itself', () => {
+  beforeEach(() => resetBusy());
+
+  it('shows the popup and does not reload while the page is in view, then reloads when it goes to the background', () => {
+    const reload = vi.fn();
+    const onReady = vi.fn();
+    let hidden: (() => void) | undefined;
+    const handler = reloadOnTakeover(true, {
+      reload, now: () => 1_000_000, storage: store(), whenIdle, setTimeout: () => undefined, onReady,
+      visible: () => true,
+      onHidden: (fn) => void (hidden = fn),
+    });
+    handler();
+    expect(onReady).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled();
+    hidden!();
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('in the background already: reloads at once', () => {
+    const reload = vi.fn();
+    const handler = reloadOnTakeover(true, { reload, now: () => 1_000_000, storage: store(), whenIdle, setTimeout: () => undefined, visible: () => false, onHidden: () => undefined });
+    handler();
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });
