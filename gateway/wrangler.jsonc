@@ -82,6 +82,8 @@
     "CORE_URL": "https://shamwari-core.fly.dev",
     // Ground in Mongo through the Nyuchi API (src/ground-store.ts); used once the service key is bound above.
     "NYUCHI_API_URL": "https://api.nyuchi.com",
+    // Our own sites read live beside Ground (src/own-sites.ts): travel-info.co.zw today. Nothing is copied.
+    "OWN_SITES": "on",
     "EMBEDDING_MODEL": "@cf/baai/bge-m3",
     "GROUND_TOP_K": "6",
     "AUTH_CACHE_TTL": "60",
