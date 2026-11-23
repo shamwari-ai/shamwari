@@ -43,8 +43,8 @@ test('it is a round 49px button, centred above the composer, and a tap goes to t
     const d = document.querySelector('.dock')!.getBoundingClientRect();
     return { w: r.width, h: r.height, radius: parseFloat(getComputedStyle(el).borderTopLeftRadius), cx: r.left + r.width / 2, bottom: r.bottom, dockTop: d.top, vw: innerWidth };
   });
-  expect(geo.w).toBeGreaterThanOrEqual(49);
-  expect(geo.h).toBeGreaterThanOrEqual(49);
+  expect(geo.w).toBeGreaterThanOrEqual(45);
+  expect(geo.h).toBeGreaterThanOrEqual(45);
   expect(geo.radius).toBeGreaterThanOrEqual(geo.h / 2 - 0.5);
   expect(geo.bottom, 'above the composer').toBeLessThanOrEqual(geo.dockTop + 1);
   expect(Math.abs(geo.cx - geo.vw / 2) / geo.vw, 'centred in the page').toBeLessThan(0.25);

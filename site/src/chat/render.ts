@@ -146,7 +146,7 @@ export function renderAnswer(
       : null;
   share?.addEventListener('click', () => {
     const from = a.citations.map((c) => (c.heading ? `${c.heading}, ${c.title}` : c.title)).join('\n');
-    const text = [words, from, `${location.origin}/lite/`].filter(Boolean).join('\n\n');
+    const text = [words, from, `${location.origin}/chat/`].filter(Boolean).join('\n\n');
     void navigator.share({ title: s.shamwari, text }).catch((e: unknown) => {
       // Closing the share sheet is not an error. Anything else (no share target, blocked): the words go to the clipboard instead.
       if ((e as { name?: string })?.name !== 'AbortError') void navigator.clipboard?.writeText(text).catch(() => undefined);
@@ -209,6 +209,8 @@ export function renderUser(m: StoredMessage, s: Strings, queue?: QueueActions, f
     h('p', { class: 'who' }, s.you),
     h('p', { class: 'text' }, m.text),
     renderAttachments(m, s, files),
+    // The skills it was asked with, as a part line: a personal one means cited sources only, and nothing went to a model.
+    m.ownInformation ? h('p', { class: 'part' }, s.skillsOnPersonal) : m.skills?.length ? h('p', { class: 'part' }, s.skillsOn.replace('{n}', String(m.skills.length))) : null,
   );
   updateUser(el, m, s, queue);
   return el;

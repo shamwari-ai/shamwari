@@ -149,7 +149,7 @@ describe('provenance follows the model that actually served', () => {
     const r = await infer(env, targets(env).standard, messages, meta);
     expect(r.path).toBe('workers-ai');
     expect(r.provider).toBe('workers-ai');
-    expect(r.model).toBe('@cf/zai-org/glm-5.3-flash');
+    expect(r.model).toBe('@cf/zai-org/glm-5.3');
     expect(r.model).not.toBe('fallback');
     expect(r.licenseClass).toBe('open_weight');
     expect(r.substituted).toBe(true);
