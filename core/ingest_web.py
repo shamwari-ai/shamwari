@@ -1,38 +1,41 @@
 """
-Load a website's full-text export into Ground on Supabase (db/supabase/03-ground-pgvector.sql).
+Load a website's full-text export into Ground (MongoDB `shamwari.knowledgeBase`) through the Nyuchi API.
 
     python ingest_web.py --source "Zimbabwe Travel Information (travel-info.co.zw)" \
-        --file ./travel-info-llms-full.txt --slug travel-info-co-zw --authority "Zimbabwe Travel Information" \
-        --resource-type "travel guide" [--dry-run] [--replace]
+        --file ./travel-info-llms-full.txt --slug travel-info-co-zw \
+        --dataset zw-travel-v1 [--dry-run] [--replace]
 
 The file is an `llms-full.txt` export: pages that each start with `# Title` and a `Source: <url>` line. Each
-page is split at its `##`/`###` headings into passages of at most MAX_WORDS words, cited as "Page — Section".
-Legal and admin pages (terms, privacy, cookies, changelog, contact) are skipped.
+page is split at its `##`/`###` headings into passages of at most MAX_WORDS words. Legal and admin pages
+(terms, privacy, cookies, changelog, contact) are skipped.
 
-Same licence gate as ingest_ground.py: the source must exist in public.corpus_sources with is_approved and
-ground_eligible, or nothing is written. Nothing is fetched here: the operator supplies the file.
+Each page goes to `POST /v1/shamwari/ground/ingest` as one document (source slug `<slug>.<page>`), so a
+citation reads "<page title> — <section>". The API does the rest, so this script holds no database or
+Workers AI credential: it refuses a source that is not approved and Ground-eligible in `corpus_sources`,
+stamps the licence class from the source, embeds every passage with bge-m3, and writes to Mongo all or
+nothing. Nothing is fetched here: the operator supplies the file.
 
-Credentials, read only when not --dry-run, and never printed:
-  CF_ACCOUNT_ID, CF_API_TOKEN (or CLOUDFLARE_TOKEN)  Workers AI, for the bge-m3 embeddings (1024 dims)
-  SUPABASE_URL, SUPABASE_SECRET_KEY                   ground_ingest (service role). Where a network proxy adds
-                                                      the key to requests, SUPABASE_SECRET_KEY may be a placeholder.
+Credential, read only when not --dry-run, and never printed:
+  NYUCHI_TOKEN   a signed-in person's token (WorkOS permission `data:admin`), sent as a bearer token. Where
+                 a network proxy adds it to requests, it may be a placeholder.
 """
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
 import re
 import sys
-import urllib.parse
+import time
+import urllib.error
 import urllib.request
 
 MAX_WORDS = 450
-CHUNKER = "llms-full-sections-v1"
-EMBED_MODEL = "@cf/baai/bge-m3"
-EMBED_BATCH = 50
-WRITE_BATCH = 40
+API = "https://api.nyuchi.com"
+#: The ingest route allows 12 requests a minute per caller.
+PAUSE_SECONDS = 5.5
 SKIP_PATHS = ("terms-of-service", "privacy-policy", "cookie-policy", "changelog", "contact")
 
 
@@ -118,111 +121,87 @@ def split_words(text: str, limit: int = MAX_WORDS) -> list[str]:
     return [p for p in parts if len(p.split()) >= 8]
 
 
-def chunks(text: str, slug: str, authority: str, resource_type: str) -> list[dict]:
-    rows: list[dict] = []
+def documents(text: str, slug: str) -> list[dict]:
+    """One ingest document per page: {source_slug, title, url, chunks: [{text, ordinal, heading}]}."""
+    out: list[dict] = []
     for page in pages(text):
         if any(p in page["url"] for p in SKIP_PATHS):
             continue
+        chunks: list[dict] = []
         for heading, body in sections(page):
-            for k, part in enumerate(split_words(body)):
-                head = heading or None
-                rows.append(
-                    {
-                        "slug": slug,
-                        "chunk_index": len(rows),
-                        "title": page["title"],
-                        "heading": head,
-                        "citation": f"{page['title']} — {head}" if head else page["title"],
-                        "authority": authority,
-                        "resource_type": resource_type,
-                        "source_url": page["url"],
-                        "language": "en",
-                        "scope": "platform",
-                        # The page title and section travel with the text, so a search on either finds it.
-                        "content": f"{page['title']}{' — ' + head if head else ''}\n\n{part}",
-                        "chunker": CHUNKER,
-                        "mind_eligible": False,
-                    }
-                )
-    return rows
+            for part in split_words(body):
+                # The page title and section travel with the text, so a search on either finds it.
+                text_ = f"{page['title']}{' — ' + heading if heading else ''}\n\n{part}"
+                chunks.append({"text": text_[:8000], "ordinal": len(chunks), "heading": heading})
+        if not chunks:
+            continue
+        path = re.sub(r"[^A-Za-z0-9._-]+", "-", page["url"].split("://", 1)[-1].split("/", 1)[-1].strip("/")) or "home"
+        out.append({"source_slug": f"{slug}.{path}"[:100].rstrip("-."), "title": page["title"][:500], "url": page["url"], "chunks": chunks[:500]})
+    return out
 
 
-def _post(url: str, headers: dict, body: object, timeout: int = 120) -> object:
-    req = urllib.request.Request(url, data=json.dumps(body).encode(), method="POST", headers={"Content-Type": "application/json", **headers})
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (fixed https hosts)
-        return json.loads(r.read() or b"null")
-
-
-def embed(texts: list[str]) -> list[list[float]]:
-    account = os.environ["CF_ACCOUNT_ID"]
-    token = os.environ.get("CF_API_TOKEN") or os.environ["CLOUDFLARE_TOKEN"]
-    out = _post(
-        f"https://api.cloudflare.com/client/v4/accounts/{account}/ai/run/{EMBED_MODEL}",
-        {"Authorization": f"Bearer {token}"},
-        {"text": texts},
+def ingest(doc: dict, a: argparse.Namespace) -> dict:
+    body = {
+        "source_name": a.source,
+        "source_slug": doc["source_slug"],
+        "title": doc["title"],
+        "effective_from": a.effective_from,
+        "dataset": a.dataset,
+        "licence_class": a.licence_class,
+        "chunks": doc["chunks"],
+    }
+    url = f"{a.api.rstrip('/')}/v1/shamwari/ground/ingest?replace={'true' if a.replace else 'false'}"
+    token = os.environ.get("NYUCHI_TOKEN", "proxy-injected")
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {token}"},
     )
-    vecs = out["result"]["data"]  # type: ignore[index]
-    if len(vecs) != len(texts) or any(len(v) != 1024 for v in vecs):
-        raise SystemExit("REFUSED: embeddings came back the wrong shape")
-    return vecs
-
-
-def supabase(path: str, body: object, method: str = "POST") -> object:
-    base = os.environ["SUPABASE_URL"].rstrip("/")
-    key = os.environ.get("SUPABASE_SECRET_KEY", "proxy-injected")
-    if method == "GET":
-        req = urllib.request.Request(f"{base}{path}", headers={"apikey": key})
-        with urllib.request.urlopen(req, timeout=60) as r:  # noqa: S310
-            return json.loads(r.read())
-    return _post(f"{base}{path}", {"apikey": key}, body)
-
-
-def licence_gate(source: str) -> dict:
-    q = urllib.parse.quote(source)
-    rows = supabase(f"/rest/v1/corpus_sources?select=name,license,is_approved,ground_eligible,mind_eligible&name=eq.{q}", None, "GET")
-    if not rows:
-        raise SystemExit(f"REFUSED: no corpus_sources row named {source!r}")
-    src = rows[0]  # type: ignore[index]
-    if not (src["is_approved"] and src["ground_eligible"]):
-        raise SystemExit(f"REFUSED: {source!r} is not approved and Ground-eligible ({src['license']})")
-    return src
+    try:
+        with urllib.request.urlopen(req, timeout=180) as r:  # noqa: S310 (fixed https host)
+            return json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        detail = e.read()[:500].decode("utf-8", "replace")
+        raise SystemExit(f"REFUSED: {doc['source_slug']}: HTTP {e.code} {detail}") from None
 
 
 def main(argv: list[str] | None = None) -> None:
-    p = argparse.ArgumentParser(description="Load an llms-full.txt export into Ground on Supabase")
+    p = argparse.ArgumentParser(description="Load an llms-full.txt export into Ground through the Nyuchi API")
     p.add_argument("--source", required=True, help="exact corpus_sources name")
     p.add_argument("--file", required=True)
-    p.add_argument("--slug", required=True)
-    p.add_argument("--authority", required=True)
-    p.add_argument("--resource-type", default="guide")
+    p.add_argument("--slug", required=True, help="prefix for each page's source slug")
+    p.add_argument("--dataset", required=True, help="datasets.name in the corpus registry")
+    p.add_argument("--licence-class", default="restricted", choices=["restricted", "open_weight"],
+                   help="must match the source: open_weight only if it is Mind-eligible")
+    p.add_argument("--effective-from", default=datetime.date.today().isoformat())
+    p.add_argument("--api", default=API)
+    p.add_argument("--only", type=int, default=0, help="load only the first N pages (a trial run)")
     p.add_argument("--dry-run", action="store_true")
-    p.add_argument("--replace", action="store_true", help="deactivate this slug's earlier passages first")
+    p.add_argument("--replace", action="store_true", help="retire each page's earlier passages")
     a = p.parse_args(argv)
 
     text = open(a.file, encoding="utf-8").read()
-    rows = chunks(text, a.slug, a.authority, a.resource_type)
-    words = [len(r["content"].split()) for r in rows]
-    print(f"{len(rows)} passages from {len(pages(text))} pages; words per passage: max {max(words)}, mean {sum(words) // len(words)}")
+    docs = documents(text, a.slug)
+    if a.only:
+        docs = docs[: a.only]
+    words = [len(c["text"].split()) for d in docs for c in d["chunks"]]
+    print(f"{len(words)} passages in {len(docs)} pages; words per passage: max {max(words)}, mean {sum(words) // len(words)}")
     print("sha256 of source:", hashlib.sha256(text.encode()).hexdigest()[:16])
     if a.dry_run:
-        for r in rows[:3]:
-            print("---", r["citation"], "|", r["source_url"]); print(r["content"][:300])
+        for d in docs[:3]:
+            print("---", d["source_slug"], "|", d["title"], "|", len(d["chunks"]), "passages")
+            print(d["chunks"][0]["text"][:300])
         return
 
-    src = licence_gate(a.source)
-    for r in rows:
-        r["mind_eligible"] = bool(src["mind_eligible"])
-    written = 0
-    for i in range(0, len(rows), EMBED_BATCH):
-        batch = rows[i : i + EMBED_BATCH]
-        for r, v in zip(batch, embed([r["content"] for r in batch])):
-            r["embedding"] = v
-        for j in range(0, len(batch), WRITE_BATCH):
-            part = batch[j : j + WRITE_BATCH]
-            n = supabase("/rest/v1/rpc/ground_ingest", {"p_rows": part, "p_replace": a.replace and written == 0})
-            written += int(n)  # type: ignore[arg-type]
-        print(f"  {written}/{len(rows)} written")
-    print(f"done: {written} passages for {a.slug!r} are live in ground.chunks")
+    total = 0
+    for i, d in enumerate(docs):
+        if i:
+            time.sleep(PAUSE_SECONDS)
+        out = ingest(d, a)
+        total += int(out.get("chunks", 0))
+        print(f"  {i + 1}/{len(docs)} {d['source_slug']}: {out.get('chunks')} passages")
+    print(f"done: {total} passages from {len(docs)} pages are live in Ground")
 
 
 if __name__ == "__main__":

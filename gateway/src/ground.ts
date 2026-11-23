@@ -113,13 +113,13 @@ export async function ground(
       destination,
       language,
       top_k: Number(env.GROUND_TOP_K),
-      // The store decides again from the same facts and may refuse (its own Rule 1 checks are
-      // authoritative; scope.ts is the fast path).
+      // Core decides again from the same facts and may refuse (its checks are authoritative;
+      // scope.ts is the fast path). The Nyuchi API takes neither field: groundSearch leaves them out.
       granted_scopes: decision.grants,
       needs_own_information: decision.withoutOwnInformation,
     };
-    // Supabase (pgvector) when configured; Core otherwise. Both answer in the same shape and both
-    // make the Rule 1 checks before they read anything.
+    // Mongo through the Nyuchi API when configured; Core otherwise. Both answer in the same shape and
+    // both make the Rule 1 checks again before they read anything (scope.ts is the fast path).
     const res = groundStoreConfigured(env)
       ? await groundSearch(env, body)
       : await core<{
