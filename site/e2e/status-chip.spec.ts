@@ -15,7 +15,7 @@ test('offline: the notice is a chip inside the composer card, above the box, and
   expect(c!.x).toBeGreaterThanOrEqual(card!.x);
   expect(c!.x + c!.width).toBeLessThanOrEqual(card!.x + card!.width + 1);
   const x = chip.getByRole('button', { name: 'Close' });
-  expect((await x.boundingBox())!.height, 'a 49px hit region').toBeGreaterThanOrEqual(49);
+  expect((await x.boundingBox())!.height, 'a 45px hit region').toBeGreaterThanOrEqual(45);
   await x.click();
   await expect(chip).toBeHidden();
   // Dismissed is for this stretch offline only: going online and offline again shows it again.

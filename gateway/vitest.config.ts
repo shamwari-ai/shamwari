@@ -9,5 +9,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts'],
+    // The Core breaker is state in the module (one isolate); every test starts with it closed.
+    setupFiles: ['test/setup.ts'],
   },
 });

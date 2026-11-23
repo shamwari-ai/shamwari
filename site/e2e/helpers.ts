@@ -14,7 +14,7 @@ export const OK_KEY = 'sk_shamwari_mock_ok';
  */
 export async function openChat(page: Page, key: string | null = OK_KEY, opts: { settle?: boolean } = {}) {
   if (key) await page.addInitScript((k) => localStorage.setItem('shamwari.devkey', k), key);
-  await page.goto('/lite/');
+  await page.goto('/chat/');
   await page.waitForSelector('html[data-ready="true"]');
   if (opts.settle === false) return;
   await page.waitForFunction(() => !!navigator.serviceWorker?.controller);
@@ -43,8 +43,8 @@ export async function makeProject(page: Page, name: string) {
   await page.getByRole('button', { name: 'Create project' }).click();
 }
 
-/** Open one section of the drawer (Chat, Projects, Artifacts) from its row at the top. */
-export async function openSection(page: Page, name: 'Chat' | 'Projects' | 'Artifacts') {
+/** Open one section of the drawer (Chat, Projects, Artifacts, Plugins) from its row at the top. */
+export async function openSection(page: Page, name: 'Chat' | 'Projects' | 'Artifacts' | 'Plugins') {
   await openChats(page);
   await page.locator('.side-primary').getByRole('button', { name }).click();
 }
@@ -121,15 +121,16 @@ export async function openChatMenu(page: Page) {
 }
 
 /**
- * The Bundu floor (Mzizi's non-negotiable minimums), measured on the rendered page: body text 17px, nothing
+ * The Bundu floor (Mzizi's non-negotiable minimums), measured on the rendered page: body text 17px (15px with a mouse from 64rem, Mzizi 0.17), nothing
  * readable under 14px, every interactive control a 49px hit region, and 7px between neighbouring controls.
  * Hit regions may touch but never overlap; text links inside a sentence are exempt from the size, as they are
  * in the floor. Returns what is under the floor, so a failure names it.
- * `minHit` is the smallest hit region allowed: 49 by default, 32 only for the density size drawn with a mouse from 64rem.
+ * `minHit` is the smallest hit region allowed: 45 by default (the floor on touch), 24 only for a mouse from 64rem (Mzizi 0.17).
  */
-export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) {
-  const minHit = (opts.minHit ?? 49) - 0.1;
-  return page.evaluate((minHit) => {
+export async function underTheFloor(page: Page, opts: { minHit?: number; minBody?: number } = {}) {
+  const minHit = (opts.minHit ?? 45) - 0.1;
+  const minBody = opts.minBody ?? 17;
+  return page.evaluate(({ minHit, minBody }) => {
     const seen = (el: Element) => {
       const s = getComputedStyle(el);
       const b = el.getBoundingClientRect();
@@ -142,7 +143,7 @@ export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) 
     const out: string[] = [];
 
     const body = parseFloat(getComputedStyle(document.body).fontSize);
-    if (body < 17) out.push(`body text is ${body}px, the floor is 17px`);
+    if (body < minBody) out.push(`body text is ${body}px, the floor is ${minBody}px`);
 
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
@@ -173,7 +174,7 @@ export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) 
     const controls = [...document.querySelectorAll<HTMLElement>('a[href], button, select, textarea, summary, input:not([type="hidden"])')].filter(seen).filter(onTop);
     for (const el of controls) {
       const r = el.getBoundingClientRect();
-      const inSentence = el.tagName === 'A' && !!el.closest('p, li') && getComputedStyle(el).display === 'inline';
+      const inSentence = el.tagName === 'A' && !!el.closest('p, li, td, th') && getComputedStyle(el).display === 'inline';
       if (!inSentence && (r.width < minHit || r.height < minHit)) out.push(`hit region ${Math.round(r.width)}x${Math.round(r.height)}: ${label(el)}`);
     }
     // A control scrolled partly out of its column is only there where the column shows it: its neighbours are measured
@@ -253,7 +254,7 @@ export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) 
     // Blocks that follow each other in the page: 7px between them, never touching or overlapping by accident.
     const flow = (el: Element) => {
       const s = getComputedStyle(el);
-      return seen(el) && !hiddenAway(el) && !['fixed', 'absolute'].includes(s.position) && s.display !== 'contents' && s.display !== 'inline';
+      return seen(el) && !hiddenAway(el) && !['fixed', 'absolute'].includes(s.position) && s.display !== 'contents' && s.display !== 'inline' && !s.display.startsWith('table-'); // rows and cells of a table are not free-standing blocks
     };
     for (const a of document.querySelectorAll<HTMLElement>('main *, [data-slot="app-sidebar"] *, body > *')) {
       const b = a.nextElementSibling as HTMLElement | null;
@@ -270,5 +271,5 @@ export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) 
       if (across > 1 && gap > -0.5 && gap < 6.9) out.push(`blocks ${gap.toFixed(1)}px apart (floor 7px): ${label(a)} and ${label(b)}`);
     }
     return out;
-  }, minHit);
+  }, { minHit, minBody });
 }

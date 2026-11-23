@@ -20,10 +20,11 @@ export { SessionRefresh } from './refresh-do';
 
 /**
  * Entry point of the `shamwari-app` Worker. It runs first for the root, for the sign-in routes at the root (/auth/*,
- * /callback), and for everything under /lite/ including the build output in /lite/_astro/
- * (`assets.run_worker_first`, app/wrangler.jsonc): the sign-in routes are answered here, and every other path is passed
- * through the gate (gate.ts), which serves the static asset only to someone with a session (or, for the short public
- * list, to anyone). Signed-out visitors at the root go straight to sign-in; signed-in ones are sent to the app.
+ * /callback), for everything under /chat/ including the build output in /chat/_astro/, and for the app's old address
+ * /lite/ (`assets.run_worker_first`, app/wrangler.jsonc): the sign-in routes are answered here, /lite/ is redirected to
+ * /chat/ (liteRedirect), and every other path is passed through the gate (gate.ts), which serves the static asset only
+ * to someone with a session (or, for the short public list, to anyone). Signed-out visitors at the root go straight to
+ * sign-in; signed-in ones are sent to the app.
  */
 interface Ctx {
   waitUntil(p: Promise<unknown>): void;
@@ -36,9 +37,35 @@ export interface AssetsBinding {
 export type Env = WorkerEnv & { ASSETS?: AssetsBinding };
 
 /** The sign-in paths: the root routes, and the old /lite/ ones kept for a release (redirected or answered in place).
- *  Besides these and the root, only /lite/* reaches this Worker on purpose: `assets.run_worker_first`.
- *  test/worker/root.test.ts fails if this and app/wrangler.jsonc disagree. */
+ *  Besides these and the root, only /chat and /lite (and everything under them) reach this Worker on purpose:
+ *  `assets.run_worker_first`. test/worker/root.test.ts fails if this and app/wrangler.jsonc disagree. */
 export const SESSION_PATHS = new Set([...AUTH_ROUTES, ...LEGACY_ROUTES]);
+
+/** The app's path, and its address until 2026-11-18. */
+export const APP_PREFIX = '/chat/';
+export const OLD_PREFIX = '/lite/';
+/** The old address of the service worker. It is served (the retiring worker, scripts/post-build.mjs), never redirected:
+ *  a browser refuses a redirected service worker script, so the old worker would stay in charge for good. */
+export const OLD_SW = '/lite/sw.js';
+
+/**
+ * The app moved from /lite/ to /chat/ (owner decision, 2026-11-18, docs/chat-app.md). For one release /lite and every path
+ * under /lite/ answer 301 to the same path under /chat/, with the query kept, EXCEPT the old sign-in addresses (session.ts
+ * keeps their own behaviour) and the old service worker (served as the retiring worker). Not cached (`no-store`), so a
+ * rollback of this Worker is not undone by a redirect a browser kept. null: not an old /lite/ address to redirect.
+ */
+export function liteRedirect(req: Request): Response | null {
+  const url = new URL(req.url);
+  const p = url.pathname;
+  if (p !== '/lite' && !p.startsWith(OLD_PREFIX)) return null;
+  if (p === OLD_SW || SESSION_PATHS.has(p)) return null;
+  // Built by concatenation onto /chat/, never resolved against a base, so the target is always under /chat/.
+  const rest = p === '/lite' ? '' : p.slice(OLD_PREFIX.length);
+  return new Response(null, {
+    status: 301,
+    headers: { Location: `${APP_PREFIX}${rest}${url.search}`, 'Cache-Control': 'no-store' },
+  });
+}
 
 function randomState(): string {
   const b = crypto.getRandomValues(new Uint8Array(32));
@@ -65,8 +92,7 @@ function portFor(env: Env): Promise<Port> {
  * (a fault, secrets unbound) the visitor is still sent on to the app: the app's own gate decides, and it fails closed.
  */
 async function root(req: Request, env: Env): Promise<Response> {
-  const live = env.CHAT_LIVE === 'true';
-  if (req.method !== 'GET' && req.method !== 'HEAD') return rootResponse(req, live); // 405
+  if (req.method !== 'GET' && req.method !== 'HEAD') return rootResponse(req); // 405
   const toSignIn = (clearCookies: boolean): Response => {
     const h = new Headers({ Location: AUTH_LOGIN, 'Cache-Control': 'no-store', Vary: 'Cookie' });
     if (clearCookies) for (const c of clearSessionCookies()) h.append('Set-Cookie', c);
@@ -80,7 +106,7 @@ async function root(req: Request, env: Env): Promise<Response> {
     // Could not tell (see above). Said in the logs, message only: never the request, cookies or tokens.
     console.error('root session check failed:', err instanceof Error ? err.message : 'unknown error');
   }
-  return rootResponse(req, live);
+  return rootResponse(req);
 }
 
 export default {
@@ -90,11 +116,21 @@ export default {
     // The old /lite/ sign-in addresses are redirects: no secrets, no WorkOS.
     const legacy = legacyRedirect(req);
     if (legacy) return legacy;
-    // Under /lite/ and not a sign-in route: the gate decides. Anything else that reached here is a
+    // The rest of the old /lite/ address goes to /chat/ (the old token route is answered below, as /auth/token).
+    const moved = liteRedirect(req);
+    if (moved) return moved;
+    // The retiring service worker for the old address: public, like the app's own sw.js, and never gated.
+    if (pathname === OLD_SW) {
+      if (req.method !== 'GET' && req.method !== 'HEAD') return new Response(null, { status: 405, headers: { Allow: 'GET, HEAD', 'Cache-Control': 'no-store' } });
+      return env.ASSETS ? env.ASSETS.fetch(req) : unavailable();
+    }
+    // `/chat` (no slash) goes to `/chat/`, with its query.
+    if (pathname === '/chat') {
+      return new Response(null, { status: 301, headers: { Location: `${APP_PREFIX}${new URL(req.url).search}`, 'Cache-Control': 'no-store' } });
+    }
+    // Under /chat/ and not a sign-in route: the gate decides. Anything else that reached here is a
     // path with no asset and no route: a plain 404, decided before sign-in is touched, so a missing page is
     // never answered with a 503 "unavailable" when the sign-in secrets are unbound.
-    // `/lite` (no slash) was a redirect to `/lite/` when static assets answered it; it still is.
-    if (pathname === '/lite') return Response.redirect(new URL('/lite/', req.url).toString(), 301);
     const session = SESSION_PATHS.has(pathname);
     const gated = isGated(pathname) && !session;
     if (!gated && !session) {
