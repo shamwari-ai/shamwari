@@ -438,6 +438,81 @@ instead of the OpenAI-shaped body. Every channel adapter reads this one shape.
 An unknown format is a 400 `invalid_format`. It is applied last, so the
 extractive rung and a replay agree with the inference rung.
 
+## Open Responses: `/v1/responses`
+
+`POST /v1/responses` speaks [Open Responses](https://www.openresponses.org),
+pinned to the dated specification **2026-04-24**
+(`src/specifications/2026-04-24.mdx` and `public/openapi/2026-04-24/openapi.json`
+in `openresponses/openresponses`; shamwari#291, "Model wire shape"). It is a
+translator, not a second chat path: `src/responses.ts` turns the request into a
+chat request and calls `/v1/chat/completions` in-process with the caller's own
+`Authorization`, as the channel adapters do. Auth, quota, the scope gate and the
+own-information rule (rule 1), provenance and training consent (rule 2),
+idempotency, metering and usage events and the Ground citations are therefore
+the chat endpoint's, unchanged. `test/responses.test.ts` sends the same question
+both ways and asserts the provider calls, Core calls and stored rows are the
+same.
+
+```bash
+curl localhost:8787/v1/responses \
+  -H "Authorization: Bearer sk_shamwari_..." -H "Content-Type: application/json" \
+  -d '{"model":"shamwari","input":"What does section 56 of the Constitution say?"}'
+```
+
+**Request.** `input` is a string (one user turn) or an array of `message` items:
+`user` content as a string or `input_text` parts (joined with a newline),
+`assistant` content as a string or `output_text` parts. `model` is passed to the
+router as on the chat endpoint. `metadata` (at most 16 string pairs) is checked
+and echoed, never stored. `truncation` (`auto` or `disabled`; nothing is
+truncated here), `tool_choice` `auto` or `none` with no tools, `store: false`,
+`stream: false`, `parallel_tool_calls`, `max_tool_calls`, `safety_identifier`
+and `prompt_cache_key` are accepted and echoed. Shamwari's own request fields
+`scope`, `reach` and `mode` are forwarded exactly as on the chat endpoint: an
+explicit `"scope": "personal"` is the same 409.
+
+**Response.** A `ResponseResource` with every field the 2026-04-24 schema
+requires: `id` (`resp_...`, derived from the chat request id, so an idempotent
+replay is the same id), `object: "response"`, `status`, `output` (one assistant
+`message` item with one `output_text` part), `usage` (input, output and total
+tokens), and the request's echoed settings. An answer cut off by the token
+budget is an `incomplete` item in an `incomplete` response, with
+`incomplete_details.reason: "max_output_tokens"` ("Items are state machines").
+The extractive rung answers in the same shape with `model:
+"shamwari-extractive"`.
+
+**Citations and provenance** ride in one optional `shamwari` object on the
+response, the same object the chat endpoint returns (`citations`, `scope`,
+`model_served`, `model_substituted`, `inference_path`,
+`answered_without_own_information`, `notice`, ...). This is the spec's
+"Extending existing schemas": optional, documented, and no core field changes
+meaning. `output_text.annotations` stays empty, because a `url_citation` needs a
+character span and a URL, and Ground citations have no span and not always a URL.
+
+**Refused, never silently dropped** (400, `invalid_request`,
+`code: "unsupported_parameter"` with the `param`): `stream: true` (the chat path
+does not stream; see "Not in this phase"), `background: true`,
+`previous_response_id` (the spec says a server MUST load it, and nothing is
+stored), `store: true`, `conversation`, any `tools`, a `tool_choice` of
+`required`, a named function or `allowed_tools` (the spec makes each a MUST the
+gateway cannot meet), `instructions` and `system` or `developer` messages
+(Ground sets the system prompt; the chat endpoint does not use a caller's
+either), `include`, a `text.format` other than `text`, `text.verbosity`,
+`reasoning`, `temperature`, `top_p`, `presence_penalty`, `frequency_penalty`,
+`max_output_tokens`, a non-zero `top_logprobs`, a `service_tier` other than
+`auto` or `default`, and the chat endpoint's `format`. Input items other than
+messages (`function_call_output`, `reasoning`, `item_reference`, vendor items)
+are `unsupported_input_type`; image, file and video parts are
+`unsupported_content_type`.
+
+**Errors** use the spec's shape, `{"error": {"type", "code", "message",
+"param"}}`, keeping the chat endpoint's status and code: 401 `invalid_api_key`,
+403 `scope_not_permitted_for_key`, 409 `scope_requires_local_inference`, 409
+`request_in_progress`, 422 `idempotency_key_reuse` (all `invalid_request`), 429
+`quota_exceeded` (`too_many_requests`), 503 `auth_unavailable` or
+`ground_unavailable` (`server_error`, with `Retry-After`), and 500
+`model_unavailable` (`model_error`) when no inference path answered and Ground
+had nothing. CORS is the chat endpoint's (`src/cors.ts`, `CORS_PATHS`).
+
 ## Channels: SMS and USSD
 
 `POST /v1/channels/sms` and `POST /v1/channels/ussd` take a message from an
@@ -498,6 +573,6 @@ When premium tier is added, `licenseClass` stays `restricted` in
 
 ## Not in this phase
 
-Streaming, semantic caching, premium tier, self-serve billing, Shamwari Mind,
+Streaming (on both `/v1/chat/completions` and `/v1/responses`), semantic caching, premium tier, self-serve billing, Shamwari Mind,
 `code.shamwari.ai` sandboxes. Meter usage now and invoice the first ten
 customers by hand — you want to be talking to them anyway.

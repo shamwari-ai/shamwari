@@ -8,8 +8,9 @@
  *    `*`, never `null`, and an origin is never reflected unless it is on the list.
  *    Unset means the Shamwari sites; set but empty means NO origins, so CORS can
  *    be switched off by configuration.
- *  - Only the chat endpoint is touched: it alone answers a preflight and it alone
- *    carries CORS headers on its responses. The ground, SMS and USSD endpoints and
+ *  - Only the chat endpoints (`/v1/chat/completions` and `/v1/responses`, which
+ *    runs the same chat path) are touched: they alone answer a preflight and carry
+ *    CORS headers on their responses. The ground, SMS and USSD endpoints and
  *    /health are exactly as before, so a page cannot read their responses.
  *  - No credentials: callers send a Bearer key in a header, not a cookie, so
  *    `Access-Control-Allow-Credentials` is never set.
@@ -38,7 +39,8 @@ const ALLOW_HEADERS = 'authorization, content-type, idempotency-key, x-shamwari-
  */
 const EXPOSE_HEADERS = 'Retry-After, Idempotent-Replayed';
 
-export const CORS_PATHS = new Set(['/v1/chat/completions']);
+/** The chat endpoint, and Open Responses, which is the same chat path in another wire shape. */
+export const CORS_PATHS = new Set(['/v1/chat/completions', '/v1/responses']);
 
 const normalise = (o: string): string => {
   // Strip trailing slashes with a linear scan; a /\/+$/ regex backtracks quadratically on a

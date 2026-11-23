@@ -16,6 +16,7 @@ import { extractiveAnswer, NO_SOURCE_MESSAGE } from './extractive';
 import { FORMATS, isFormat, toCompact } from './envelope';
 import type { Format } from './envelope';
 import { handleChannel } from './channels/channel';
+import { handleResponses } from './responses';
 import { sms } from './channels/sms';
 import { ussd } from './channels/ussd';
 import * as idem from './idempotency';
@@ -424,6 +425,11 @@ const worker = {
     }
     if (url.pathname === '/v1/channels/ussd' && req.method === 'POST') {
       return handleChannel(ussd, req, env, (r) => worker.fetch(r, env, ctx));
+    }
+    // Open Responses (src/responses.ts): a translator in front of the chat path below,
+    // called in-process like the channels, so every rule here applies to it unchanged.
+    if (url.pathname === '/v1/responses' && req.method === 'POST') {
+      return handleResponses(req, env, (r) => worker.fetch(r, env, ctx));
     }
     if (url.pathname !== '/v1/chat/completions' || req.method !== 'POST') {
       return json({ error: 'not_found' }, 404);
