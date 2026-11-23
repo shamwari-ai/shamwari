@@ -15,7 +15,7 @@
 # container's environment (src/opencode.ts, test/opencode.test.ts).
 FROM docker.io/cloudflare/sandbox:1.0.3@sha256:fc1740c3cba26461f0ab1771287c84018ab2cca43a70ebb823087c85d780aaec AS sandbox-tools
 
-FROM docker.io/library/node:24-trixie-slim@sha256:af02d57b57719b9657a45199a79264a9437940cd55b3c7b3fc99615654f124a0
+FROM docker.io/library/node:26-trixie-slim@sha256:e6bedef217677b276c591795e169840edd9096dbf13f29df8ef8d1856b8820bc
 
 # ripgrep: without it OpenCode tries to download rg from GitHub at run time.
 RUN apt-get update \
