@@ -5,7 +5,7 @@
  * (PUBLIC_CHAT_AUTH=developer-key) gets it. Anything else, unset or misspelled, is Mukoko: a default that fell the other
  * way once shipped a sign-in screen that said "Mukoko sign-in is coming soon" to everyone.
  *
- * One function decides it for both the build (app-src/pages/lite/index.astro writes it into the page) and the page
+ * One function decides it for both the build (app-src/pages/chat/index.astro writes it into the page) and the page
  * (chat/main.ts reads it back), so they cannot disagree. test/app/auth-mode.test.ts and `node check.mjs app` hold it.
  */
 export type AuthMode = 'mukoko' | 'developer-key';
