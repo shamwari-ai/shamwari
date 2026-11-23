@@ -96,7 +96,7 @@ memory in `fly logs` and `fly status` for the first week before shrinking it.
 
 **Automatic on release, through the platforms' own GitHub connections.** Owner decision,
 2026-11-13: production deploys do not use secrets held in GitHub. A push to `main` (the
-release PR that `release-to-main.yml` merges) is deployed by the two platforms themselves:
+release PR that the organisation's `bundu-release` app opens and merges) is deployed by the two platforms themselves:
 
 | What                  | Deployed by                     | Reads its configuration from       |
 | --------------------- | ------------------------------- | ---------------------------------- |

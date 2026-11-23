@@ -1,5 +1,5 @@
 // A static file server for dist-e2e/, standing in for Workers static assets
-// (directory index, correct content types, service workers allowed on /lite/).
+// (directory index, correct content types, service workers allowed on /chat/).
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
@@ -8,11 +8,11 @@ import { extname, join, normalize } from 'node:path';
 const port = Number(process.argv[2] ?? 4322);
 const root = new URL(`../${process.argv[3] ?? 'dist-e2e'}/`, import.meta.url).pathname;
 const stubAuth = process.argv.includes('--stub-auth');
-// --gate: stand in for the Worker's gate (worker/gate.ts). Everything under /lite/ except the short public list needs the
-// session cookie, and a REAL BROWSER decides whether the cookie is sent (its Path is /lite/), which is the point: a gated
-// file outside that path never loads.
+// --gate: stand in for the Worker's gate (worker/gate.ts). Everything under /chat/ except the short public list needs the
+// session cookie, and a REAL BROWSER decides whether the cookie is sent (its Path is /), which is the point: a gated
+// file outside the cookie's Path never loads.
 const gated = process.argv.includes('--gate');
-const PUBLIC = /^\/lite\/(disclaimer\/?|manifest\.webmanifest|sw\.js|icons\/[\w.-]+\.png|_astro\/[\w.-]+\.css)$/;
+const PUBLIC = /^\/chat\/(disclaimer\/?|manifest\.webmanifest|sw\.js|icons\/[\w.-]+\.png|_astro\/[\w.-]+\.css)$/;
 
 // A STAND-IN for the chat session Worker (docs/chat-signin.md), which is a design,
 // not code. It speaks only the three calls the page makes and keeps its state in
@@ -34,8 +34,8 @@ async function stubRoute(req, res, path) {
   }
   if (path === '/auth/login') {
     stub.session = true;
-    // Like the real Worker: the sign-in is at the root and the session cookie is Path=/ (shared by /lite/ and /chat/); it lands on the app.
-    res.writeHead(302, { Location: '/lite/', 'Set-Cookie': 'stub_session=1; Path=/; HttpOnly; SameSite=Lax' });
+    // Like the real Worker: the sign-in is at the root and the session cookie is Path=/; it lands on the app.
+    res.writeHead(302, { Location: '/chat/', 'Set-Cookie': 'stub_session=1; Path=/; HttpOnly; SameSite=Lax' });
     return res.end();
   }
   if (path === '/auth/token' || path === '/lite/auth/token') {
@@ -96,10 +96,32 @@ const headersFor = (p) => {
   return out;
 };
 
-// A test hook: each GET /__sw/bump makes /lite/sw.js a different file (a comment line is added), which is exactly what a
+// A test hook: each GET /__sw/bump makes /chat/sw.js a different file (a comment line is added), which is exactly what a
 // new release is to a browser, so a test can drive a real service worker update. The release is PER BROWSER CONTEXT: the count lives in a
 // cookie (swbump) that the bumping test's own context keeps and sends, so one test's release never reaches another test's page, whichever
 // spec files run side by side. (A server-wide counter reloaded unrelated pages in the middle of their tests.)
+// The stand-in for the old /lite/ app's worker (see the legacysw hook below). Its shell is made in the worker itself, since
+// the server no longer has a /lite/ page to cache; like the real one it registers /lite/sw.js, checks for an update on load
+// and reloads once when a new worker takes over (chat/update-reload.ts, without the idle and loop guards).
+const LEGACY_SW = `
+const CACHE = 'shamwari-chat-0ld000000000';
+const PAGE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>old</title></head><body><h1 id="old">The old /lite/ app</h1><script src="/lite/old.js"></script></body></html>';
+const JS = "navigator.serviceWorker.register('/lite/sw.js', { scope: '/lite/', updateViaCache: 'none' }).then((r) => r.update()).catch(() => {});" +
+  "navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());";
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(CACHE).then((c) => Promise.all([
+    c.put('/lite/', new Response(PAGE, { headers: { 'Content-Type': 'text/html' } })),
+    c.put('/lite/old.js', new Response(JS, { headers: { 'Content-Type': 'text/javascript' } })),
+  ])).then(() => self.skipWaiting()));
+});
+self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  if (!url.pathname.startsWith('/lite/') || url.pathname === '/lite/sw.js') return;
+  e.respondWith(caches.match(e.request.mode === 'navigate' ? '/lite/' : e.request).then((hit) => hit || fetch(e.request)));
+});
+`;
+
 const swBumpOf = (req) => Number(/(?:^|;\s*)swbump=(\d+)/.exec(req.headers.cookie ?? '')?.[1] ?? 0);
 
 createServer(async (req, res) => {
@@ -109,6 +131,21 @@ createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain', 'Cache-Control': 'no-store', 'Set-Cookie': `swbump=${next}; Path=/` });
     return res.end(String(next));
   }
+  // Like the Worker (worker/index.ts, liteRedirect): the app's old address /lite/ answers 301 to the same path under /chat/,
+  // query kept, except the old sign-in routes and the retiring service worker /lite/sw.js.
+  const rawPath = new URL(req.url, 'http://x').pathname;
+  if ((rawPath === '/lite' || rawPath.startsWith('/lite/')) && rawPath !== '/lite/sw.js' && !/^\/lite\/(auth\/(login|token|logout)|callback)$/.test(rawPath)) {
+    const q = new URL(req.url, 'http://x').search;
+    res.writeHead(301, { Location: `/chat/${rawPath === '/lite' ? '' : rawPath.slice('/lite/'.length)}${q}`, 'Cache-Control': 'no-store' });
+    return res.end();
+  }
+  // A test hook for the move from /lite/ (e2e/lite-move.spec.ts): a browser context that holds the cookie legacysw=1 is
+  // served, at /lite/sw.js, a stand-in for the OLD app's worker: it caches an old shell and answers every /lite/ navigation
+  // from it, as the real one did. Without the cookie /lite/sw.js is the build's own retiring worker.
+  if (path === '/lite/sw.js' && /(?:^|;\s*)legacysw=1/.test(req.headers.cookie ?? '')) {
+    res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-cache' });
+    return res.end(LEGACY_SW);
+  }
   const redirect = redirectFor(path);
   if (redirect) {
     res.writeHead(redirect.status, { Location: redirect.location });
@@ -117,9 +154,9 @@ createServer(async (req, res) => {
   if (stubAuth && (path.startsWith('/__stub/') || path.startsWith('/auth/') || path === '/lite/auth/token')) {
     if ((await stubRoute(req, res, path)) !== false) return;
   }
-  if (gated && (path.startsWith('/lite/') || path.startsWith('/_astro/')) && !PUBLIC.test(path)) {
+  if (gated && (path.startsWith('/chat/') || path.startsWith('/_astro/')) && !PUBLIC.test(path)) {
     if (!/(^|;\s*)stub_session=1/.test(req.headers.cookie ?? '')) {
-      const shell = path === '/lite/' || path === '/lite/index.html';
+      const shell = path === '/chat/' || path === '/chat/index.html';
       res.writeHead(shell ? 302 : 401, shell ? { Location: '/auth/login', 'Cache-Control': 'no-store' } : { 'Cache-Control': 'no-store' });
       return res.end();
     }
@@ -129,7 +166,7 @@ createServer(async (req, res) => {
     if ((await stat(file)).isDirectory()) file = join(file, 'index.html');
     let body = await readFile(file);
     const bump = swBumpOf(req);
-    if (path === '/lite/sw.js' && bump) body = Buffer.concat([body, Buffer.from(`\n// e2e bump ${bump}\n`)]);
+    if (path === '/chat/sw.js' && bump) body = Buffer.concat([body, Buffer.from(`\n// e2e bump ${bump}\n`)]);
     res.writeHead(200, { 'Content-Type': types[extname(file)] ?? 'application/octet-stream', ...headersFor(new URL(req.url, 'http://x').pathname) });
     res.end(body);
   } catch {

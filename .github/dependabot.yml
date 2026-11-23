@@ -7,8 +7,6 @@ version: 2
 updates:
   - package-ecosystem: npm
     directories:
-      - /chat/librechat
-      - /chat/proxy
       - /docs-site
       - /gateway
       - /mobile
