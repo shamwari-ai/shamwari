@@ -29,13 +29,25 @@ updates:
         applies-to: version-updates
         update-types:
           - major
+    # Held majors (owner, 2026-11-23). Minor and patch updates still arrive.
+    ignore:
+      # TypeScript 7: Astro's checker (@astrojs/check) only accepts 5 or 6, so
+      # site/ and docs-site/ cannot install it yet. gateway/ and mobile/ are
+      # already on 7 and keep getting its minors and patches.
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
+      # async-storage 3 changes native code. Over-the-air updates reach every
+      # installed build with the same app version, so it needs a new native
+      # build first (a cost the owner approves, #144).
+      - dependency-name: "@react-native-async-storage/async-storage"
+        update-types: ["version-update:semver-major"]
 
   # The factory image's base images are pinned by digest; this proposes the
   # updates. The OpenCode pin inside it is changed by hand, together with
   # factory/src/opencode.ts (its config shape follows the pinned release).
   - package-ecosystem: docker
     directory: /factory
-    target-branch: staging
+    target-branch: main
     schedule:
       interval: weekly
     cooldown:
