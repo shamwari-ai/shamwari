@@ -90,6 +90,10 @@ if ('serviceWorker' in navigator) {
       .register('/chat/sw.js', { scope: '/chat/', updateViaCache: 'none' })
       .then((reg) => {
         showCurrent(navigator.serviceWorker.controller ?? reg.active);
+        // On a first visit the worker is still installing when it registers, so there is no one to answer yet: ask again
+        // once it is ready, and after any takeover, so the version line is never left blank.
+        void navigator.serviceWorker.ready.then((ready) => showCurrent(ready.active));
+        navigator.serviceWorker.addEventListener('controllerchange', () => showCurrent(navigator.serviceWorker.controller));
         startUpdateChecks(reg, { document, setInterval: (fn, ms) => setInterval(fn, ms) });
         const button = document.getElementById('check-update') as HTMLButtonElement | null;
         if (button) {

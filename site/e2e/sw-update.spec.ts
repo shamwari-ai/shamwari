@@ -1,8 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { openChat } from './helpers';
 
-// Updates are forced: a new release's service worker takes over at once and the page reloads ONCE, not while something is
-// being written, and never in a loop. The e2e server turns /__sw/bump into "a new release" (it changes sw.js).
+// A new release's service worker takes over at once. While the page is in view it says so (the "new version" popup) and does
+// not reload under the person; once the page goes to the background (or they choose Update now) it reloads ONCE, not while
+// something is being written, and never in a loop. The e2e server turns /__sw/bump into "a new release" (it changes sw.js).
 
 // Each test waits through a real worker install, a takeover and a guard window: allow for a loaded CI machine.
 test.beforeEach(() => test.setTimeout(60_000));
@@ -25,7 +26,14 @@ const mark = (page: Page, name: string) => page.evaluate((n) => ((window as unkn
 const marked = (page: Page, name: string) =>
   page.evaluate((n) => !!(window as unknown as Record<string, boolean>)[n], name).catch(() => false);
 
-/** Publish a new release and ask for it, as the hourly check would. */
+/** The person switches away from the app: the page goes to the background, which is when a waiting update applies. */
+const background = (page: Page) =>
+  page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+
+/** Publish a new release and ask for it, as the periodic check would. */
 async function release(page: Page) {
   const base = new URL(page.url()).origin;
   expect((await page.request.get(`${base}/__sw/bump`)).ok()).toBe(true);
@@ -35,11 +43,15 @@ async function release(page: Page) {
   });
 }
 
-test('a new release takes over and the page reloads exactly once', async ({ page }) => {
+test('a new release shows the popup and waits while in view, then reloads exactly once in the background', async ({ page }) => {
   await openChat(page);
   await controlled(page);
   await mark(page, 'before');
   await release(page);
+  await expect(page.locator('#update-note')).toBeVisible({ timeout: 15_000 }); // the popup: a new version is available
+  await page.waitForTimeout(2000);
+  expect(await marked(page, 'before'), 'nothing reloads under the person while the page is in view').toBe(true);
+  await background(page);
   await expect.poll(() => marked(page, 'before'), { timeout: 15_000 }).toBe(false); // reloaded
   await expect(page.locator('#q')).toBeVisible();
   await controlled(page);
@@ -56,10 +68,14 @@ test('LOOP GUARD: a second release right after an update reload does not reload 
   await controlled(page);
   await mark(page, 'first');
   await release(page);
+  await expect(page.locator('#update-note')).toBeVisible({ timeout: 15_000 });
+  await background(page);
   await expect.poll(() => marked(page, 'first'), { timeout: 15_000 }).toBe(false);
   await controlled(page);
   await mark(page, 'second');
   await release(page); // another takeover inside the guard window
+  await expect(page.locator('#update-note')).toBeVisible({ timeout: 15_000 });
+  await background(page);
   await page.waitForTimeout(4000);
   expect(await marked(page, 'second'), 'the page stayed put').toBe(true);
 });
@@ -70,6 +86,8 @@ test('NEVER MID-DRAFT: a release waits while there is text in the question box, 
   await page.locator('#q').fill('a question I am still writing');
   await mark(page, 'draft');
   await release(page);
+  await expect(page.locator('#update-note')).toBeVisible({ timeout: 15_000 });
+  await background(page); // even in the background, a draft holds the reload back
   await page.waitForTimeout(4000); // plenty of time for the takeover
   expect(await marked(page, 'draft'), 'not reloaded while writing').toBe(true);
   await expect(page.locator('#q')).toHaveValue('a question I am still writing');
@@ -83,10 +101,22 @@ test('a question sent while a release is waiting is not lost: it is on the devic
   await page.locator('#q').fill('Is everyone equal under the law?');
   await mark(page, 'sending');
   await release(page);
+  await expect(page.locator('#update-note')).toBeVisible({ timeout: 15_000 });
+  await background(page);
   await page.waitForTimeout(3000); // the takeover has happened; the reload is waiting for the box to be empty
   expect(await marked(page, 'sending')).toBe(true);
   await page.locator('#q').press('Enter'); // clears the box AND starts the ask: the page must not reload in between
   await expect.poll(() => marked(page, 'sending'), { timeout: 20_000 }).toBe(false); // reloaded, once the answer has settled
   await expect(page.locator('#log')).toContainText('Is everyone equal under the law?'); // kept on the device
   await expect(page.locator('.cite-link').first()).toBeVisible(); // and so is its answer, with its citation
+});
+
+test('"Update now" in the popup reloads at once, onto the new release', async ({ page }) => {
+  await openChat(page);
+  await controlled(page);
+  await mark(page, 'now');
+  await release(page);
+  await page.locator('#update-now').click({ timeout: 15_000 });
+  await expect.poll(() => marked(page, 'now'), { timeout: 15_000 }).toBe(false);
+  await expect(page.locator('#q')).toBeVisible();
 });
