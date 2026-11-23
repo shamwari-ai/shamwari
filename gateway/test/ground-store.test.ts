@@ -118,6 +118,15 @@ describe('Ground in Mongo: a refusal is the API answering, an outage is skipped 
     expect(groundStoreDown()).toBe(false);
   });
 
+  it('a key that cannot be read (the secret not created yet) is an outage, never a crash, and makes no call', async () => {
+    const fetch = vi.fn();
+    vi.stubGlobal('fetch', fetch);
+    const e = await groundSearch(env({ NYUCHI_SHAMWARI_API_KEY: { get: async () => { throw new Error('secret not found'); } } } as never), q).catch((x) => x);
+    expect(e).toBeInstanceOf(GroundStoreError);
+    expect(e.status).toBe(503);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('a network failure or the time limit counts as down, and the limit is short (routing never waits on it)', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new DOMException('The operation timed out.', 'TimeoutError'); }));
     await expect(groundSearch(env(), q)).rejects.toMatchObject({ status: 503 });
