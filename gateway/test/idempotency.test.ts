@@ -218,9 +218,9 @@ describe('Idempotency-Key', () => {
 
   it('a failed attempt is not an answer: the retry runs', async () => {
     const { env, counts } = setup({ inferenceFails: true, chunks: [] });
-    expect((await worker.fetch(ask({}, 'boom'), env, ctx)).status).toBe(500);
+    expect((await worker.fetch(ask({}, 'boom'), env, ctx)).status).toBe(503);
     await settle();
-    expect((await worker.fetch(ask({}, 'boom'), env, ctx)).status).toBe(500);
+    expect((await worker.fetch(ask({}, 'boom'), env, ctx)).status).toBe(503);
     expect(counts.inference).toBeGreaterThanOrEqual(2);
   });
 
