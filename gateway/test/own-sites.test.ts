@@ -126,7 +126,7 @@ describe('reading our own sites', () => {
       'The minerals palette carries the brand across every product we make for the foundation.',
     ].join('\n');
     vi.stubGlobal('fetch', vi.fn(async () => new Response(full)));
-    const bundu = OWN_SITES.find((x) => x.kind === 'llms-full')!;
+    const bundu = { kind: 'llms-full', name: 'Bundu Docs', url: 'https://docs.bundu.org/llms-full.txt', skip: ['https://docs.bundu.org/mzizi/'] } as const;
     const out = await searchOwnSites('minerals palette', [bundu]);
     expect(out.map((c) => c.source_url)).toEqual(['https://docs.bundu.org/bundu/brand/overview/']);
   });
