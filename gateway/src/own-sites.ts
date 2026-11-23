@@ -44,9 +44,9 @@ export const OWN_SITES: readonly OwnSite[] = [
   { kind: 'mcp', name: 'Mzizi', mcp: 'https://docs.mzizi.dev/mcp', tool: 'search_mzizi', format: 'titled' },
   { kind: 'mcp', name: 'SiafuDB', mcp: 'https://siafudb.org/mcp', tool: 'search_siafu_db', format: 'titled' },
   { kind: 'mcp', name: 'Open Neural Transfer Layer', mcp: 'https://openntl.org/mcp', tool: 'search_neural_transfer_layer', format: 'titled' },
-  // Bundu Docs' /mzizi/ pages are an old copy of docs.mzizi.dev (they still say "Five African Minerals"; Mzizi,
-  // the source, says seven). Mzizi is read from Mzizi (owner, 2026-11-23: "Mzizi is correct").
-  { kind: 'llms-full', name: 'Bundu Docs', url: 'https://docs.bundu.org/llms-full.txt', skip: ['https://docs.bundu.org/mzizi/'] },
+  // Bundu Docs no longer carries a copy of the Mzizi docs (bundu-labs/bundu-docs#53): its old /mzizi/ pages
+  // redirect to docs.mzizi.dev, and Mzizi is read from Mzizi. `skip` stays for any future copy.
+  { kind: 'llms-full', name: 'Bundu Docs', url: 'https://docs.bundu.org/llms-full.txt' },
 ];
 
 const siteId = (site: OwnSite) => (site.kind === 'mcp' ? site.mcp : site.url);
