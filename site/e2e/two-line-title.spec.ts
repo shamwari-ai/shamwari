@@ -32,7 +32,7 @@ for (const width of [320, 360, 1280]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     // One tappable target: the title block. The subtitle is not a button or a link.
     const hit = page.locator('#chat-title-hit');
-    expect((await hit.boundingBox())!.height, 'a 49px hit region').toBeGreaterThanOrEqual(49);
+    expect((await hit.boundingBox())!.height, 'a 45px hit region').toBeGreaterThanOrEqual(45);
     expect(await sub.evaluate((el) => !!el.closest('button, a') || !!el.querySelector('button, a'))).toBe(false);
     await hit.click();
     await expect(page.locator('#chat-tools')).toBeVisible();

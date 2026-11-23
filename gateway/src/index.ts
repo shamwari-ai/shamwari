@@ -1,5 +1,7 @@
 import type { Env, Message, SinkMessage, AuthContext, GroundChunk } from './types';
 import { authenticate } from './auth';
+import type { AuthResult } from './auth';
+import { modelList } from './models';
 import { keyService, permittedScopes, usageMeter } from './keys';
 import { estimateCostUsd, PRICE_TABLE_VERSION } from './pricing';
 import { resolveScope, ScopeRefusal } from './scope';
@@ -21,6 +23,8 @@ import { drain } from './sink';
 import { detectLanguage } from './lang';
 import { probe, healthDoc } from './probe';
 import { preflight, withCors } from './cors';
+import { parseSkills, SKILLS_MAX, skillsNeedOwnInformation, withSkills } from './skills';
+import type { AppliedSkill } from './skills';
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body, null, 2), {
@@ -118,6 +122,28 @@ interface ChatBody {
   reach?: string;
   /** `compact` asks for the compact envelope (src/envelope.ts). */
   format?: string;
+  /**
+   * `true`: the request carries the person's own information (a personal-scope skill is on in the
+   * Lite chat). It is treated as personal scope, exactly as a question personal.ts flags is.
+   */
+  own_information?: unknown;
+  /** Platform-scope Agent Skills turned on for this conversation (src/skills.ts). */
+  skills?: unknown;
+}
+
+/** The response for a failed authentication, the same on every authenticated endpoint. */
+function authFailure(authed: Exclude<AuthResult, { ok: true }>): Response {
+  // 'unavailable' is a 503, not a 401: the caller's key may be fine, and a
+  // client that drops a good key on a 401 would turn our outage into theirs.
+  if (authed.reason === 'unavailable') {
+    return json({ error: 'auth_unavailable' }, 503, { 'Retry-After': '5' });
+  }
+  // A real sign-in that is not provisioned for Shamwari. Not a 401: the client would send the
+  // person back to sign in and hand them a new token with the same gap.
+  if (authed.reason === 'forbidden') {
+    return json({ error: 'not_provisioned', reason: authed.detail }, 403);
+  }
+  return json({ error: 'invalid_api_key' }, 401);
 }
 
 /**
@@ -138,24 +164,14 @@ async function admit(
       body: ChatBody;
       messages: Message[];
       decision: ScopeResolution;
+      /** Valid skills from the body; null when `skills` was sent but malformed (the chat endpoint answers 400). */
+      skills: AppliedSkill[] | null;
       /** Only meaningful with `deferQuota`: the 429, or null when there is quota left. */
       quota: () => Promise<Response | null>;
     }
 > {
   const authed = await authenticate(req, env);
-  if (!authed.ok) {
-    // 'unavailable' is a 503, not a 401: the caller's key may be fine, and a
-    // client that drops a good key on a 401 would turn our outage into theirs.
-    if (authed.reason === 'unavailable') {
-      return { ok: false, response: json({ error: 'auth_unavailable' }, 503, { 'Retry-After': '5' }) };
-    }
-    // A real sign-in that is not provisioned for Shamwari. Not a 401: the client would send the
-    // person back to sign in and hand them a new token with the same gap.
-    if (authed.reason === 'forbidden') {
-      return { ok: false, response: json({ error: 'not_provisioned', reason: authed.detail }, 403) };
-    }
-    return { ok: false, response: json({ error: 'invalid_api_key' }, 401) };
-  }
+  if (!authed.ok) return { ok: false, response: authFailure(authed) };
   const auth = authed.auth;
   const quota = async (): Promise<Response | null> =>
     (await overQuota(env, auth))
@@ -192,12 +208,16 @@ async function admit(
   try {
     // The sovereignty gate first, so an explicit personal request bound for Cloud is
     // still the 409 that says why. Then the key: a key may only hold the scopes it holds.
+    // A personal-scope skill is never sent: the client says `own_information: true` instead. A skill
+    // that was sent is checked with the same personal rules as the question (skills.ts).
+    const skills = parseSkills(body.skills);
     const decision = resolveScope({
       messages,
       requested: body.scope,
       grants: permittedScopes(auth),
       env,
       capability,
+      ownInformation: body.own_information === true || skillsNeedOwnInformation(skills ?? []),
     });
     if (!permittedScopes(auth).includes(decision.scope)) {
       return {
@@ -213,7 +233,7 @@ async function admit(
         ),
       };
     }
-    return { ok: true, auth, body, messages, decision, quota };
+    return { ok: true, auth, body, messages, decision, skills, quota };
   } catch (e) {
     if (e instanceof ScopeRefusal) return { ok: false, response: json(e.toPayload(), 409) };
     throw e;
@@ -389,6 +409,13 @@ const worker = {
         mind: env.MIND_AVAILABLE === 'true',
       });
     }
+    // The model ids a caller may name (src/models.ts). Authenticated like the rest
+    // of /v1, but not metered and not quota-checked: listing costs nothing to serve.
+    if (url.pathname === '/v1/models' && req.method === 'GET') {
+      const authed = await authenticate(req, env);
+      if (!authed.ok) return authFailure(authed);
+      return json(modelList(env));
+    }
     if (url.pathname === '/v1/ground/context' && req.method === 'POST') {
       return groundContext(req, env, ctx);
     }
@@ -404,7 +431,16 @@ const worker = {
 
     const a = await admit(req, env, 'cloud_inference', true);
     if (!a.ok) return a.response;
-    const { auth, body, messages, decision, quota } = a;
+    const { auth, body, messages, decision, skills, quota } = a;
+
+    // Skills and the own-information flag are read only here: /v1/ground/context generates nothing
+    // and must not start refusing fields it has always ignored.
+    if (skills === null) {
+      return json({ error: 'invalid_skills', max: SKILLS_MAX, hint: 'skills is a list of {name, description, instructions}' }, 400);
+    }
+    if (body.own_information !== undefined && typeof body.own_information !== 'boolean') {
+      return json({ error: 'invalid_own_information', allowed: [true, false] }, 400);
+    }
 
     // Only this endpoint has modes. /v1/ground/context shares admit() and must
     // not start refusing a field it has always ignored.
@@ -481,7 +517,9 @@ const worker = {
           env,
           target,
           [
-            { role: 'system', content: g.systemPrompt },
+            // Skills sit beside the constant prompt, never in place of it. Only reached when the
+            // request is not personal scope (the branch above returned the cited passage).
+            { role: 'system', content: withSkills(g.systemPrompt, skills) },
             ...messages.filter((m) => m.role !== 'system'),
           ],
           {
@@ -496,8 +534,18 @@ const worker = {
       } catch (e) {
         // Every inference path failed. With a Ground hit there is still a cited
         // answer to give; without one there is nothing honest to say, so the
-        // failure stands.
-        if (!g.hit) throw e;
+        // failure stands, as a 503 the caller can retry (with when), not a 500:
+        // nothing is wrong with the request, the models are just not answering.
+        if (!g.hit) {
+          console.error('inference unavailable and no Ground passage to give', String(e));
+          return new Response(
+            JSON.stringify({ error: 'inference_unavailable', retry: true }, null, 2),
+            {
+              status: 503,
+              headers: { 'Content-Type': 'application/json', 'Retry-After': '15' },
+            },
+          );
+        }
         console.error('inference unavailable, answering from Ground', String(e));
         return extractiveResponse(ctx, env, { ...rung, degraded: true });
       }

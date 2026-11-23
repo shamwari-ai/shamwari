@@ -71,9 +71,26 @@ export function renderCitation(c: Citation, s: Strings, lang: Language): HTMLEle
 }
 
 /**
- * An answer is shown as plain text: no markdown marks. A model often writes **bold**, # headings, `code`, > quotes and
- * [links](url); on this page they would show as stray symbols, so they are taken out and only the words stay. Line breaks
- * and paragraphs are kept; list items start with a plain dash.
+ * The formatted-answer drawing (markdown.ts, about 2.5 KB gzipped) is a part of its own, loaded the first time an answer
+ * is shown, so the first load stays inside its budget. It is precached for offline. Until it is here (or if it cannot be
+ * loaded) an answer is drawn as its plain words.
+ */
+let markdown: typeof import('./markdown') | undefined;
+export const markdownReady = (): boolean => !!markdown;
+export function loadMarkdown(): Promise<void> {
+  return import('./markdown').then(
+    (m) => {
+      markdown = m;
+    },
+    () => undefined,
+  );
+}
+
+/**
+ * The answer's words with no markdown marks, for Copy, Share and Save: a clipboard and a WhatsApp message get plain words, not
+ * stray symbols. (What is drawn on the page is the formatted answer, from markdown.ts.) A model often writes **bold**,
+ * # headings, `code`, > quotes and [links](url); here they are taken out and only the words stay. Line breaks and paragraphs
+ * are kept; list items start with a plain dash.
  */
 export function plainText(raw: string): string {
   // No lookbehind anywhere: older phones' browsers cannot parse it, and a parse error here would stop the whole chat from loading.
@@ -129,7 +146,7 @@ export function renderAnswer(
       : null;
   share?.addEventListener('click', () => {
     const from = a.citations.map((c) => (c.heading ? `${c.heading}, ${c.title}` : c.title)).join('\n');
-    const text = [words, from, `${location.origin}/lite/`].filter(Boolean).join('\n\n');
+    const text = [words, from, `${location.origin}/chat/`].filter(Boolean).join('\n\n');
     void navigator.share({ title: s.shamwari, text }).catch((e: unknown) => {
       // Closing the share sheet is not an error. Anything else (no share target, blocked): the words go to the clipboard instead.
       if ((e as { name?: string })?.name !== 'AbortError') void navigator.clipboard?.writeText(text).catch(() => undefined);
@@ -139,7 +156,7 @@ export function renderAnswer(
     'article',
     { class: 'msg bot', 'data-id': m.id, 'aria-label': s.shamwari },
     h('p', { class: 'who' }, s.shamwari),
-    h('p', { class: 'text' }, words),
+    markdown ? markdown.renderMarkdown(a.text, { code: s.codeBlock, table: s.tableBox }) : h('p', { class: 'text' }, words),
     a.degraded ? h('p', { class: 'note' }, s.closestSource) : null,
     a.citations.length
       ? h(
@@ -192,6 +209,8 @@ export function renderUser(m: StoredMessage, s: Strings, queue?: QueueActions, f
     h('p', { class: 'who' }, s.you),
     h('p', { class: 'text' }, m.text),
     renderAttachments(m, s, files),
+    // The skills it was asked with, as a part line: a personal one means cited sources only, and nothing went to a model.
+    m.ownInformation ? h('p', { class: 'part' }, s.skillsOnPersonal) : m.skills?.length ? h('p', { class: 'part' }, s.skillsOn.replace('{n}', String(m.skills.length))) : null,
   );
   updateUser(el, m, s, queue);
   return el;

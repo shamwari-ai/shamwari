@@ -40,17 +40,24 @@ jobs:
           code() { curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$@"; }
           check() {
             local failed=0
-            lite=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 https://shamwari.ai/lite/)
-            case "$lite" in
+            app=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 https://shamwari.ai/chat/)
+            case "$app" in
               "302 https://shamwari.ai/auth/login"*) ;;
-              *) fail "/lite/ unauthenticated: got '$lite', want 302 to /auth/login" ;;
+              *) fail "/chat/ unauthenticated: got '$app', want 302 to /auth/login" ;;
             esac
-            for p in /lite/disclaimer/ /lite/manifest.webmanifest /lite/sw.js; do
+            # The old address /lite/ redirects to /chat/ for a release (docs/chat-app.md); its retiring
+            # service worker is still served, so an old installed worker can be replaced.
+            old=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 'https://shamwari.ai/lite/?smoke=1')
+            case "$old" in
+              "301 https://shamwari.ai/chat/?smoke=1") ;;
+              *) fail "/lite/: got '$old', want 301 to /chat/?smoke=1" ;;
+            esac
+            for p in /chat/disclaimer/ /chat/manifest.webmanifest /chat/sw.js /lite/sw.js; do
               c=$(code "https://shamwari.ai$p"); [ "$c" = 200 ] || fail "$p: got $c, want 200"
             done
             # A script asset needs a session: take one named in the public service worker.
-            js=$(curl -s --max-time 20 https://shamwari.ai/lite/sw.js | grep -o '/lite/_astro/[A-Za-z0-9._-]*\.js' | head -1)
-            if [ -z "$js" ]; then fail "no /lite/_astro script named in sw.js"
+            js=$(curl -s --max-time 20 https://shamwari.ai/chat/sw.js | grep -o '/chat/_astro/[A-Za-z0-9._-]*\.js' | head -1)
+            if [ -z "$js" ]; then fail "no /chat/_astro script named in sw.js"
             else
               c=$(code "https://shamwari.ai$js")
               [ "$c" = 401 ] || fail "$js without a session: got $c, want 401"

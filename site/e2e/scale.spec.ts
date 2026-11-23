@@ -22,7 +22,8 @@ for (const pointer of ['touch', 'mouse'] as const) {
 
           expect(await page.evaluate(() => document.documentElement.scrollWidth), 'the page does not scroll sideways').toBeLessThanOrEqual(width);
           // The density size (32px) is allowed only with a mouse from 64rem; everywhere else the hit region is 49px.
-          const floor = { minHit: wide && pointer === 'mouse' ? 32 : 49 };
+          const dense = wide && pointer === 'mouse'; // Mzizi 0.17's density: a 24px hit region and 15px body text
+          const floor = { minHit: dense ? 24 : 45, minBody: dense ? 15 : 17 };
           expect(await underTheFloor(page, floor), 'home').toEqual([]);
 
           // The measure: the messages, the home screen and the composer keep one centred column of at most 46rem on a big screen.
@@ -33,18 +34,18 @@ for (const pointer of ['touch', 'mouse'] as const) {
           }));
           for (const [name, w] of Object.entries(measure)) expect(w, `${name} column`).toBeLessThanOrEqual(46 * REM + 1);
 
-          // Control sizes follow the pointer and the width: a finger always gets the 49px hit region; a mouse gets the density
+          // Control sizes follow the pointer and the width: a finger always gets the 45px hit region; a mouse gets the density
           // size only from 64rem, and only for controls that follow the density layer.
           const plus = (await page.locator('#plus').boundingBox())!;
           if (wide && pointer === 'mouse') expect(plus.height, '#plus with a mouse on a desktop').toBeLessThan(40);
-          else expect(plus.height, '#plus is the 49px hit region').toBeGreaterThanOrEqual(49);
+          else expect(plus.height, '#plus is the 45px hit region').toBeGreaterThanOrEqual(45);
           const sizes = await page.evaluate(() =>
             [...document.querySelectorAll<HTMLElement>('.side-primary .side-row:not(.side-disabled), #side-new')]
               .filter((e) => e.offsetParent !== null)
               .map((e) => Math.round(e.getBoundingClientRect().height)),
           );
           if (wide && pointer === 'mouse') for (const h of sizes) expect(h, 'a drawer row with a mouse on a desktop').toBeLessThan(40);
-          else if (sizes.length) for (const h of sizes) expect(h, `a drawer row at ${width}px with ${pointer}`).toBeGreaterThanOrEqual(49);
+          else if (sizes.length) for (const h of sizes) expect(h, `a drawer row at ${width}px with ${pointer}`).toBeGreaterThanOrEqual(45);
 
           if (!wide) {
             await openChats(page);
@@ -84,7 +85,8 @@ for (const pointer of ['touch', 'mouse'] as const) {
         await openChat(page);
         await ask(page, 'Is everyone equal under the law?');
         await expect(page.locator('.cite-link').first()).toBeVisible();
-        const floor = { minHit: width >= 64 * REM && pointer === 'mouse' ? 32 : 49 };
+        const dense = width >= 64 * REM && pointer === 'mouse';
+        const floor = { minHit: dense ? 24 : 45, minBody: dense ? 15 : 17 };
         expect(await underTheFloor(page, floor), 'conversation').toEqual([]);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
         expect(await page.locator('#log').evaluate((el) => el.getBoundingClientRect().width), 'the messages column').toBeLessThanOrEqual(46 * REM + 1);
