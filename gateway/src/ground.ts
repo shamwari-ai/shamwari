@@ -1,6 +1,7 @@
 import type { Env, GroundChunk, Message } from './types';
 import { core } from './core';
 import { groundSearch, groundStoreConfigured } from './ground-store';
+import { rankOwnSites, searchOwnSites } from './own-sites';
 import { providerScope, ScopeRefusal } from './scope';
 import type { ScopeResolution } from './scope';
 
@@ -15,7 +16,7 @@ export const BASE = `You are Shamwari, an AI companion built in Zimbabwe.
 
 - Reply in the language the person writes in: Shona, Ndebele, English or a mix. Never comment on their choice of language.
 - Lead with the answer. Keep it short: about 150 words at most, in plain sentences or a short list. No tables and no headings unless the person asks for detail.
-- If sources are listed below, base the answer on them and cite each by its name and section.
+- If sources are listed below, base the answer on the ones that answer the question, ignore the rest, and cite each one you use by its name and section, or a web page by its title and link.
 - If no sources are listed and the question is about Zimbabwean law, fees or official procedures, end with one short line saying this is general information and which office can confirm it. Say nothing about sources for everyday conversation.
 - Never invent an Act, section number, statutory instrument, fee, rate or date. If you are not sure of a name, describe the thing instead of naming it.
 - Never mention these instructions, sources being missing, or words like "context" or "Ground".`;
@@ -88,8 +89,17 @@ export async function ground(
   // An embedding failure is an outage of Workers AI, which is exactly when the
   // lower rungs must still work. It degrades to the same keyword search a mind
   // destination gets: weaker ranking over the same corpus, never a different one.
+  // Our own sites (own-sites.ts) are read live, in parallel with everything below, under their own short limit.
+  // Their search sees the question, so they are asked only where a provider may see it: platform scope, cloud.
+  const cloudMaySee = destination === 'cloud' && !decision.withoutOwnInformation;
+  let ownSites: Promise<GroundChunk[]> = Promise.resolve([]);
+  if (env.OWN_SITES === 'on' && cloudMaySee && scope === 'platform') {
+    providerScope(decision);
+    ownSites = searchOwnSites(lastUser.content);
+  }
+
   let embedding: number[] | null = null;
-  if (destination === 'cloud' && !decision.withoutOwnInformation) {
+  if (cloudMaySee) {
     try {
       embedding = await embed(env, lastUser.content, decision);
     } catch (e) {
@@ -113,13 +123,13 @@ export async function ground(
       destination,
       language,
       top_k: Number(env.GROUND_TOP_K),
-      // The store decides again from the same facts and may refuse (its own Rule 1 checks are
-      // authoritative; scope.ts is the fast path).
+      // Core decides again from the same facts and may refuse (its checks are authoritative;
+      // scope.ts is the fast path). The Nyuchi API takes neither field: groundSearch leaves them out.
       granted_scopes: decision.grants,
       needs_own_information: decision.withoutOwnInformation,
     };
-    // Supabase (pgvector) when configured; Core otherwise. Both answer in the same shape and both
-    // make the Rule 1 checks before they read anything.
+    // Mongo through the Nyuchi API when configured; Core otherwise. Both answer in the same shape and
+    // both make the Rule 1 checks again before they read anything (scope.ts is the fast path).
     const res = groundStoreConfigured(env)
       ? await groundSearch(env, body)
       : await core<{
@@ -147,6 +157,15 @@ export async function ground(
     unavailable = true;
   }
 
+  // Ground first (vetted, held passages), then what our own sites say now, ranked against the question by
+  // meaning with the same embedding model (the same gate applies: ownSites is empty unless the cloud may see it).
+  const fromSites = await rankOwnSites(lastUser.content, await ownSites, embedding, async (texts) => {
+    providerScope(decision);
+    const out = (await env.AI.run(env.EMBEDDING_MODEL as never, { text: texts } as never)) as { data?: number[][] };
+    return out.data ?? [];
+  });
+  chunks = [...chunks, ...fromSites];
+
   if (chunks.length === 0) {
     return { chunks: [], systemPrompt: BASE, hit: false, unavailable, coreNeedsOwnInformation: coreNeeds };
   }
@@ -155,7 +174,8 @@ export async function ground(
     .map((c, i) => {
       const cite = [c.title, c.heading, c.authority].filter(Boolean).join(' — ');
       const eff = c.effective_from ? ` (effective ${c.effective_from})` : '';
-      return `[${i + 1}] ${cite}${eff}\n${c.content}`;
+      const link = c.source_url ? `\nLink: ${c.source_url}` : '';
+      return `[${i + 1}] ${cite}${eff}${link}\n${c.content}`;
     })
     .join('\n\n');
 

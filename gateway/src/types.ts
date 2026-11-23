@@ -12,10 +12,12 @@ export interface Env {
 
   CORE_URL: string;
   SHAMWARI_CORE_TOKEN: string;
-  /** Ground on Supabase (ground-store.ts). Unset: Ground is asked of Core, as before. */
-  SUPABASE_URL?: string;
-  /** Supabase's publishable key, from the Secrets Store: public by design, it can only run ground_search on platform passages. */
-  SUPABASE_PUBLISHABLE_KEY?: SecretsStoreSecret;
+  /** "on": our own sites are read live beside Ground (own-sites.ts). */
+  OWN_SITES?: string;
+  /** Ground in Mongo through the Nyuchi API (ground-store.ts). Either unset: Ground is asked of Core. */
+  NYUCHI_API_URL?: string;
+  /** Shamwari's service key on the Nyuchi API (internal, scoped `shamwari:service`), whole: `<client id>.<secret>`. */
+  NYUCHI_SHAMWARI_API_KEY?: SecretsStoreSecret;
 
   /** "true" moves key verification and metering to the Servers API. Off by default. */
   SERVERS_API_ENABLED?: string;
