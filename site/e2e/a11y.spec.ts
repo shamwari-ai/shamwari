@@ -12,6 +12,10 @@ test.beforeEach(async ({ page }) => {
 const scan = async (page: Page) =>
   (await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze()).violations;
 
+/** The open drawer alone: with it open the page behind is inert, so page-level rules (one main, one h1) cannot apply. */
+const scanDrawer = async (page: Page) =>
+  (await new AxeBuilder({ page }).include('#chat-sidebar').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice']).analyze()).violations;
+
 const summary = (v: Awaited<ReturnType<typeof scan>>) => v.map((x) => `${x.id}: ${x.nodes.map((n) => n.target.join(' ')).join(' | ')}`);
 
 for (const scheme of ['light', 'dark'] as const) {
@@ -41,6 +45,24 @@ for (const scheme of ['light', 'dark'] as const) {
       await openChat(page, null);
       await expect(page.locator('#auth')).toBeVisible();
       expect(summary(await scan(page))).toEqual([]);
+    });
+
+    test('the Skills tab, its builder with an error showing, and the personal-skill note have no violations', async ({ page }) => {
+      await openChat(page);
+      await openSection(page, 'Plugins');
+      await page.locator('#skill-new').click();
+      await page.getByLabel('Name', { exact: true }).fill('my-farm');
+      await page.getByLabel('Description', { exact: true }).fill('Facts about the farm.');
+      await page.getByRole('button', { name: 'Save skill' }).click();
+      await page.getByRole('switch', { name: 'On in this chat: my-farm' }).click();
+      expect(summary(await scanDrawer(page)), 'list').toEqual([]);
+      await page.locator('#skill-new').click();
+      await page.getByLabel('Name', { exact: true }).fill('Bad Name');
+      await expect(page.locator('#skill-name-err')).toBeVisible();
+      expect(summary(await scanDrawer(page)), 'builder with an error').toEqual([]);
+      await closeChats(page);
+      await expect(page.locator('#skills-note')).toBeVisible();
+      expect(summary(await scan(page)), 'the note above the question box').toEqual([]);
     });
 
     test('Shona (draft) with its review note has no violations', async ({ page }) => {
@@ -108,7 +130,7 @@ test('the drawer with a project, a pinned chat and a saved answer meets the Bund
   await page.locator('#project-list summary').click();
   expect(await underTheFloor(page), 'drawer with a project open').toEqual([]);
   // Every other section of the drawer is held to the same floor.
-  for (const name of ['Chat', 'Artifacts'] as const) {
+  for (const name of ['Chat', 'Artifacts', 'Plugins'] as const) {
     await openSection(page, name);
     expect(await underTheFloor(page), `drawer: ${name}`).toEqual([]);
   }
@@ -153,7 +175,7 @@ for (const [name, width, height] of [['320px phone', 320, 568], ['390px phone', 
     expect(await underTheFloor(page), `${name}: a long word and its answer`).toEqual([]);
     if (width < 1024) {
       // Every section of the drawer is held to the floor, not just the one it opens on.
-      for (const section of ['Chat', 'Projects', 'Artifacts'] as const) {
+      for (const section of ['Chat', 'Projects', 'Artifacts', 'Plugins'] as const) {
         await openSection(page, section);
         expect(await underTheFloor(page), `${name}: drawer, ${section}`).toEqual([]);
       }
@@ -182,7 +204,7 @@ for (const [name, width, height] of [['320px phone', 320, 568], ['360px phone', 
     await openChat(page);
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize), 'the 200% really applies').toBe('32px');
     expect(await underTheFloor(page), `${name} at 200%: home`).toEqual([]);
-    for (const section of ['Chat', 'Projects', 'Artifacts'] as const) {
+    for (const section of ['Chat', 'Projects', 'Artifacts', 'Plugins'] as const) {
       await openSection(page, section);
       expect(await underTheFloor(page), `${name} at 200%: drawer, ${section}`).toEqual([]);
     }
@@ -213,7 +235,7 @@ test('the floor holds in dark: the home screen, every drawer section and Setting
   await page.emulateMedia({ colorScheme: 'dark' });
   await openChat(page);
   expect(await underTheFloor(page), 'dark: home').toEqual([]);
-  for (const section of ['Chat', 'Projects', 'Artifacts'] as const) {
+  for (const section of ['Chat', 'Projects', 'Artifacts', 'Plugins'] as const) {
     await openSection(page, section);
     expect(await underTheFloor(page), `dark: drawer, ${section}`).toEqual([]);
   }

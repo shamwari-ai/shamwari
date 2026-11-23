@@ -50,7 +50,7 @@ export const STATUS: StatusItem[] = [
   {
     state: 'building',
     title: 'Shamwari Chat',
-    body: 'Ask in English, Shona or Ndebele and get the answer with the section it came from. The Shona and Ndebele wording is still a draft that native speakers have not yet reviewed. An early test version of the lightweight app, which installs from the browser and is built for slow connections, is online at shamwari.ai/lite, apart from this marketing site. It does not answer real questions yet: the service behind it is not deployed and sign-in is not switched on. Sign-in will use your Mukoko Account. The main chat will live at shamwari.ai/chat.',
+    body: 'Ask in English, Shona or Ndebele and get the answer with the section it came from. The Shona and Ndebele wording is still a draft that native speakers have not yet reviewed. An early test version of the chat, which installs from the browser and is built for slow connections, is online at shamwari.ai/chat, apart from this marketing site. It does not answer real questions yet: the service behind it is not deployed and sign-in is not switched on. Sign-in will use your Mukoko Account.',
     issues: [83],
   },
   {

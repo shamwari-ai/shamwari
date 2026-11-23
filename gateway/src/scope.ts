@@ -107,6 +107,12 @@ export function resolveScope(input: {
   grants: readonly Scope[];
   env: Env;
   capability: Capability;
+  /**
+   * The caller says this request carries the person's own information (a personal-scope skill is
+   * on in the Lite chat: skills.ts). It can only add the personal flag, never take it away: the
+   * gateway's own rules still run on the messages, and an explicit personal scope is unchanged.
+   */
+  ownInformation?: boolean;
 }): ScopeResolution {
   const { messages, requested, grants, env, capability } = input;
 
@@ -126,7 +132,7 @@ export function resolveScope(input: {
     scope,
     destination: 'cloud',
     grants,
-    withoutOwnInformation: conversationNeedsOwnInformation(messages),
+    withoutOwnInformation: input.ownInformation === true || conversationNeedsOwnInformation(messages),
   };
 }
 

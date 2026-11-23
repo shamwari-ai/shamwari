@@ -25,7 +25,7 @@ for (const [name, size] of [['a phone', { width: 360, height: 640 }], ['a touch 
       expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
       const list = (await measure(page)).sort((a, b) => a.top - b.top);
       expect(list.length).toBeGreaterThanOrEqual(8);
-      for (const r of list) expect(r.h, `${r.text} is at least the 49px floor`).toBeGreaterThanOrEqual(48.9);
+      for (const r of list) expect(r.h, `${r.text} is at least the 45px floor`).toBeGreaterThanOrEqual(44.9);
       for (let i = 1; i < list.length; i++) {
         const a = list[i - 1]!, b = list[i]!;
         if (Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1) {

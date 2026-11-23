@@ -138,6 +138,6 @@ test('the browser bar takes the page colour in each scheme (theme-color has a li
     const bg = toHex(await page.evaluate(() => getComputedStyle(document.body).backgroundColor));
     expect(metas.find((m) => m.media === `(prefers-color-scheme: ${scheme})`)?.content, `${scheme} theme-color equals the page background`).toBe(bg);
   }
-  const manifest = await (await page.request.get('/lite/manifest.webmanifest')).json();
+  const manifest = await (await page.request.get('/chat/manifest.webmanifest')).json();
   expect(manifest.theme_color).toBe(metas.find((m) => m.media?.includes('light'))?.content);
 });

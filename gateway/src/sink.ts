@@ -72,6 +72,9 @@ export async function drain(batch: MessageBatch<SinkMessage>, env: Env): Promise
 type Parked = { entry: Entry; status: number; error: string };
 
 /** Stores what it can, acknowledging as it goes; collects permanently refused documents. */
+/** How long one /sink/bulk write may take before the batch is given back to the queue. */
+export const SINK_TIMEOUT_MS = 15_000;
+
 async function send(database: string, entries: Entry[], env: Env, parked: Parked[]): Promise<void> {
   if (entries.length === 0) return;
   const collections: Record<string, Record<string, unknown>[]> = {};
@@ -84,6 +87,9 @@ async function send(database: string, entries: Entry[], env: Env, parked: Parked
       Authorization: `Bearer ${env.SHAMWARI_CORE_TOKEN}`,
     },
     body: JSON.stringify({ database, collections }),
+    // A Core that accepts the connection and never answers must not hold the queue consumer: cut
+    // off, the batch throws and the queue tries it again later, as for a 5xx.
+    signal: AbortSignal.timeout(SINK_TIMEOUT_MS),
   });
 
   if (res.ok) {
