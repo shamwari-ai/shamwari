@@ -7,7 +7,9 @@ import { openAccount, openChat } from './helpers';
 test('Settings shows this build\'s version and "Check for updates" says it is the latest', async ({ page }) => {
   await openChat(page);
   await openAccount(page);
-  await expect(page.locator('[data-current-version]')).toHaveText(/^v\d+\.\d+\.\d+ · [0-9a-f]{8}$/);
+  // "v0.4.0 · 1a2b3c4d" for a released build, "v0.4.0+ · 1a2b3c4d" for one newer than the last release, or the fingerprint
+  // alone where no release could be found (scripts/release-version.mjs). Never a made-up number.
+  await expect(page.locator('[data-current-version]')).toHaveText(/^(v\d+\.\d+\.\d+\+? · )?[0-9a-f]{8}$/);
   const check = page.locator('#check-update');
   await expect(check).toBeVisible();
   await check.click();
