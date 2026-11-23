@@ -117,6 +117,20 @@ describe('reading our own sites', () => {
     expect(bestSections(sections, 'hi')).toEqual([]);
   });
 
+  it("leaves out a full-text site's copy of another of our sites (Bundu Docs' /mzizi/ pages)", async () => {
+    const full = [
+      '# Bundu Docs — full text', '',
+      '# Design tokens', '', 'Source: https://docs.bundu.org/mzizi/foundations/tokens/', '',
+      'The Five African Minerals palette for every product, in five colours that each carry meaning.', '',
+      '# Brand System', '', 'Source: https://docs.bundu.org/bundu/brand/overview/', '',
+      'The minerals palette carries the brand across every product we make for the foundation.',
+    ].join('\n');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(full)));
+    const bundu = OWN_SITES.find((x) => x.kind === 'llms-full')!;
+    const out = await searchOwnSites('minerals palette', [bundu]);
+    expect(out.map((c) => c.source_url)).toEqual(['https://docs.bundu.org/bundu/brand/overview/']);
+  });
+
   it('asks the site its own search tool, with the question', async () => {
     const fetch = vi.fn(async () => sse([HIT]));
     vi.stubGlobal('fetch', fetch);

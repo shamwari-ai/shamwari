@@ -30,6 +30,8 @@ export interface FullTextSite {
   kind: 'llms-full';
   name: string;
   url: string;
+  /** Pages under these links are left out: a copy of another site of ours, which is read from its source. */
+  skip?: readonly string[];
 }
 
 export type OwnSite = McpSite | FullTextSite;
@@ -42,7 +44,9 @@ export const OWN_SITES: readonly OwnSite[] = [
   { kind: 'mcp', name: 'Mzizi', mcp: 'https://docs.mzizi.dev/mcp', tool: 'search_mzizi', format: 'titled' },
   { kind: 'mcp', name: 'SiafuDB', mcp: 'https://siafudb.org/mcp', tool: 'search_siafu_db', format: 'titled' },
   { kind: 'mcp', name: 'Open Neural Transfer Layer', mcp: 'https://openntl.org/mcp', tool: 'search_neural_transfer_layer', format: 'titled' },
-  { kind: 'llms-full', name: 'Bundu Docs', url: 'https://docs.bundu.org/llms-full.txt' },
+  // Bundu Docs' /mzizi/ pages are an old copy of docs.mzizi.dev (they still say "Five African Minerals"; Mzizi,
+  // the source, says seven). Mzizi is read from Mzizi (owner, 2026-11-23: "Mzizi is correct").
+  { kind: 'llms-full', name: 'Bundu Docs', url: 'https://docs.bundu.org/llms-full.txt', skip: ['https://docs.bundu.org/mzizi/'] },
 ];
 
 const siteId = (site: OwnSite) => (site.kind === 'mcp' ? site.mcp : site.url);
@@ -208,8 +212,10 @@ async function fetchHits(site: OwnSite, query: string): Promise<Hit[]> {
       if (!res.ok) throw new Error(`http_${res.status}`);
       return fullTextSections(await res.text());
     });
+    const skip = site.skip ?? [];
+    const own = sections.filter((h) => !skip.some((prefix) => h.link?.startsWith(prefix)));
     // More candidates than a search site gives: the ranking by meaning picks among them.
-    return bestSections(sections, query, OWN_SITE_FULL_TEXT_CANDIDATES);
+    return bestSections(own, query, OWN_SITE_FULL_TEXT_CANDIDATES);
   }
   return cached(cacheKey(site, query), async () => {
     const res = await fetch(site.mcp, {
