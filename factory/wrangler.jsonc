@@ -1,0 +1,52 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "shamwari-factory",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-01",
+  // @cloudflare/sandbox's Files reads errno names through node:os.
+  "compatibility_flags": ["nodejs_compat"],
+  // Query strings are redacted: /callback carries the OAuth code and state.
+  "observability": { "enabled": true, "redact_query_string": true },
+
+  // Shamwari Factory: OpenCode in a per-person container (README.md, docs/factory.md).
+  //
+  // NOTHING HERE IS LIVE. Deliberately NOT in this file, each an owner step with a named yes:
+  //  - `routes`: attaching the factory hostname (planned: factory.shamwari.ai) at the root.
+  //    test/config.test.ts fails if a route, a custom domain, or workers.dev / preview URLs
+  //    appear here.
+  //  - the WorkOS bindings (WORKOS_CLIENT_ID, WORKOS_REDIRECT_URI, and the WORKOS_API_KEY and
+  //    COOKIE_PASSWORD secrets). Until they are bound every path but a sign-in route answers 503
+  //    and no container is ever started.
+  // Defining the image is fine: `wrangler deploy` is what would build and push it, and nobody
+  // runs that from here.
+  "workers_dev": false,
+  "preview_urls": false,
+
+  "vars": {
+    // Public: the gateway OpenCode is allowed to call, and nothing else (src/egress.ts).
+    "GATEWAY_ORIGIN": "https://api.shamwari.ai",
+  },
+
+  // One container per FactoryWorkspace Durable Object, started by the object itself.
+  "containers": [
+    {
+      "class_name": "FactoryWorkspace",
+      "name": "shamwari-factory-workspace",
+      "scheduling_policy": "durable_object",
+      "images": { "factory": { "dockerfile": "./Dockerfile" } },
+    },
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "FACTORY_WORKSPACE", "class_name": "FactoryWorkspace" },
+      {
+        "name": "FACTORY_SESSION_REFRESH",
+        "class_name": "FactorySessionRefresh",
+      },
+    ],
+  },
+  "exports": {
+    "FactoryWorkspace": { "type": "durable-object", "storage": "sqlite" },
+    "FactorySessionRefresh": { "type": "durable-object", "storage": "sqlite" },
+  },
+}
