@@ -2,7 +2,7 @@
 # gateway. `shamwari-standard` is the alias the gateway pins to its standard
 # tier (gateway/routing-policy.json); the tier's model is STANDARD_MODEL =
 # @cf/zai-org/glm-5.3 (gateway/wrangler.jsonc), listed by GET /v1/models.
-# Source: https://github.com/shamwari-ai/shamwari/tree/staging/gateway
+# Source: https://github.com/shamwari-ai/shamwari/tree/main/gateway
 # Tools: the gateway does not forward `tools` or `tool_choice`.
 # Reasoning: always on; the gateway sends reasoning_effort = low and ignores
 # the caller's, so there is no caller control.

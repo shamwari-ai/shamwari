@@ -111,9 +111,9 @@ a release does **not** deploy those two; they stay on the break-glass commands.
 What this changes, so nobody is surprised:
 
 - **A deploy is not gated on CI.** Both platforms deploy a push to `main` as soon as it
-  lands. `main` only moves through the release PR, which opens after CI is green on the
-  staging head and has the required checks on it, so a red commit does not normally
-  reach `main`; but the platforms do not check.
+  lands. `main` only moves through the merge queue, which re-runs the required checks on
+  the merged result, so a red commit does not normally reach `main`; but the
+  platforms do not check.
 - **No post-deploy check is part of the deploy.** `smoke-production.yml` runs on every
   push to `main` (retrying while the deploys land) and every 30 minutes, and now also
   checks `https://api.shamwari.ai/health` and `https://shamwari-core.fly.dev/health` for
@@ -314,7 +314,7 @@ the order. Two things that bite:
   first, then set the secret.
 - `CORE_URL` is a plain variable in `gateway/wrangler.jsonc`, currently
   `https://core.shamwari.ai`. Change it to `https://shamwari-core.fly.dev` (a PR to
-  `staging`, the owner's merge) and redeploy.
+  `main`, the owner's merge) and redeploy.
 
 ```bash
 cd gateway
@@ -347,9 +347,9 @@ A bad release is not rolled back by anything automatic: the platforms deploy wha
 `main` holds, and the break-glass workflow only reports a failed health check (the new
 version is live; its error names the commands). A person rolls back with the commands
 below. They are deliberately not automated: CI cannot test them, and a wrong automatic
-rollback is worse than a red job. Then fix forward on `staging`; the next release deploys
+rollback is worse than a red job. Then fix forward on `main`; the next merge deploys
 the fix. If the platform keeps redeploying a bad `main`, disconnect it or revert on
-`staging` first.
+`main` first.
 
 Code (Core):
 
