@@ -1,0 +1,11 @@
+# Shamwari is an AI companion with open weights, built in Zimbabwe. Its gateway
+# is OpenAI-compatible (Chat Completions) and grounds answers in cited
+# Zimbabwean sources. Every model it serves is open weight.
+# API: https://api.shamwari.ai/v1 (POST /chat/completions, GET /models)
+# Source: https://github.com/shamwari-ai/shamwari/tree/staging/gateway
+name = "Shamwari"
+npm = "@ai-sdk/openai-compatible"
+opencodeai = "@opencode/ai/providers/openai-compatible"
+env = ["SHAMWARI_API_KEY"]
+api = "https://api.shamwari.ai/v1"
+doc = "https://docs.shamwari.ai/opencode"

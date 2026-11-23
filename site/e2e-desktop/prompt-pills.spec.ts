@@ -11,7 +11,7 @@ test('on a desktop the suggested prompts are drawn at the density size with 7px 
     }),
   );
   for (const b of boxes) {
-    expect(b.h, 'drawn at the density size, not the 49px touch size').toBeGreaterThanOrEqual(32);
+    expect(b.h, 'drawn at the density size, not the 45px touch size').toBeGreaterThanOrEqual(32);
     expect(b.h).toBeLessThan(40);
   }
   for (let i = 1; i < boxes.length; i++) {

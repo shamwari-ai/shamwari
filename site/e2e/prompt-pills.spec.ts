@@ -40,7 +40,7 @@ for (const scheme of ['light', 'dark'] as const) {
 test('a tap on a pill fills the box and never sends, and never overwrites a draft', async ({ page }) => {
   await openChat(page);
   await page.getByRole('group', { name: 'Suggested prompts' }).getByRole('button').first().click();
-  await expect(page.locator('#q')).toHaveValue(/Constitution/);
+  await expect(page.locator('#q')).toHaveValue(/plant maize/);
   await expect(page.locator('article.msg')).toHaveCount(0);
 });
 
@@ -48,5 +48,5 @@ test('a pill tapped over a draft keeps the draft and adds the prompt after it', 
   await openChat(page);
   await page.locator('#q').fill('my own words');
   await page.getByRole('group', { name: 'Suggested prompts' }).getByRole('button').first().click();
-  await expect(page.locator('#q')).toHaveValue(/^my own words\n.*Constitution/s);
+  await expect(page.locator('#q')).toHaveValue(/^my own words\n.*plant maize/s);
 });

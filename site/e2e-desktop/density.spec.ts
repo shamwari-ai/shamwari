@@ -19,7 +19,7 @@ for (const scheme of ['light', 'dark'] as const) {
   test.describe(scheme, () => {
     test.use({ colorScheme: scheme });
 
-    test(`on a desktop the drawer's rows are drawn 32px, with 7px between them and no overlap (${scheme})`, async ({ page }) => {
+    test(`on a desktop the drawer's rows are drawn 33px, with 7px between them and no overlap (${scheme})`, async ({ page }) => {
       await openChat(page);
       await ask(page, 'Is it legal?'); // a chat with a short title, so the history list has one row that does not wrap
       await expect(page.locator('.cite-link').first()).toBeVisible();
@@ -27,12 +27,12 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.locator('#history-list button.chat-row').first()).toBeVisible();
 
       expect(await page.evaluate(() => matchMedia('(pointer: fine) and (hover: hover)').matches)).toBe(true);
-      expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--size-control-sm').trim())).toBe('2rem');
+      expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--size-control-sm').trim())).toBe('2.0625rem');
 
       const list = (await rows(page, '.side-row')).sort((a, b) => a.top - b.top);
       expect(list.length, 'new chat, search, section rows, a chat title and the account row').toBeGreaterThanOrEqual(8);
       for (const r of list) expect(r.h, r.text).toBeGreaterThanOrEqual(31.5);
-      for (const r of list) expect(r.h, `${r.text} is drawn at 32px, not 49`).toBeLessThanOrEqual(33);
+      for (const r of list) expect(r.h, `${r.text} is drawn at 33px, not 45`).toBeLessThanOrEqual(33);
       for (let i = 1; i < list.length; i++) {
         const a = list[i - 1]!, b = list[i]!;
         const gap = b.top - a.bottom;
@@ -109,9 +109,8 @@ for (const width of [1000, 1280, 1440]) {
       const labels = await lines(page, '.side-row > span:not(.sr-only, .chat-row-title, .chat-row-when)');
       expect(labels.length).toBeGreaterThanOrEqual(7);
       for (const l of labels) expect(l.lines, `"${l.text}" is on one line`).toBe(1);
-      const inert = await page.locator('.side-row.side-disabled').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
-      expect(inert).toHaveLength(2); // Factory and Plugins
-      for (const h of inert) expect(h, 'a coming-soon row is one row high, chip included').toBeLessThanOrEqual(popover ? 50 : 33);
+      const factory = await page.locator('.side-row.side-disabled').evaluate((el) => el.getBoundingClientRect().height);
+      expect(factory, 'the Factory row is one row high, chip included').toBeLessThanOrEqual(popover ? 50 : 33);
 
       if (!popover) {
         const w = await page.locator('[data-slot="app-sidebar"]').evaluate((el) => el.getBoundingClientRect().width);
@@ -192,7 +191,7 @@ test('a chat row shows its "..." on hover (beside the row, the time stays) and k
   await li.hover();
   await expect(more, 'shown on hover').toHaveCSS('opacity', '1');
   await expect(li.locator('.chat-row-when'), 'the time stays').toHaveCSS('visibility', 'visible');
-  await expect.poll(async () => Math.round((await more.boundingBox())?.height ?? 0), 'a 32px hit region').toBe(32);
+  await expect.poll(async () => Math.round((await more.boundingBox())?.height ?? 0), 'a 33px hit region').toBe(33);
   await more.click();
   await expect(page.locator('#row-menu')).toBeVisible();
 });

@@ -6,6 +6,8 @@ import { readStoredUser, rememberUser, subjectOf, userKeyOf } from './user';
 import { applyStrings, currentLanguage, hasSavedLanguage, saveLanguage } from './i18n';
 import {
   h,
+  loadMarkdown,
+  markdownReady,
   plainText,
   renderAnswer,
   renderError,
@@ -19,6 +21,7 @@ import { newId, openSwitchableStore, titleOf, type Artifact, type Project, type 
 import { LANGUAGES, isLanguage, loadStrings } from './strings';
 import type { AskErrorKind, ChatMessage, Scope } from './types';
 import { setBusy } from './busy';
+import { applyTheme } from './theme';
 import type { AuthMode } from './auth-mode';
 
 /**
@@ -257,6 +260,47 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     }
   };
 
+  // ---- skills on in this chat (chat/skills.ts; the Skills tab is chat/skills-ui.ts, loaded with the Plugins section) ----
+  let skillsUi: { refresh(): void } | null = null;
+  /** The quiet line above the question box: which skills are on here, and what a personal one means for the answer. */
+  /** The mode chip in the prompt box says what kind of question this chat asks; it never chooses one (see GENERAL). */
+  let personalOn = false;
+  const syncMode = () => {
+    const s = strings();
+    const mode = offlineMode ? 'offline' : personalOn ? 'personal' : 'general';
+    document.documentElement.dataset.mode = mode;
+    $('#mode-text').textContent = mode === 'offline' ? s.offlineMode : mode === 'personal' ? s.skillPersonal : s.skillGeneral;
+  };
+  const syncSkills = () => {
+    skillsUi?.refresh();
+    const note = $('#skills-note');
+    const th = thread;
+    const ids = th.skills ?? [];
+    if (!ids.length) {
+      note.hidden = true;
+      personalOn = false;
+      syncMode();
+      return;
+    }
+    void import('./skills')
+      .then((k) => k.skillsForAsk(store, ids))
+      .catch(() => ({ skills: [] as string[], ownInformation: true }))
+      .then((on) => {
+        if (th !== thread) return; // another chat is open now
+        const s = strings();
+        note.hidden = !on.ownInformation && !on.skills.length;
+        personalOn = on.ownInformation;
+        syncMode();
+        $('#skills-note-text').textContent = on.ownInformation ? s.skillsOnPersonal : s.skillsOn.replace('{n}', String(on.skills.length));
+      });
+  };
+  const setSkillsOn = async (ids: string[]) => {
+    if (ids.length) thread.skills = ids;
+    else delete thread.skills;
+    if (thread.messages.length) await save(thread); // a chat with no question yet is kept in memory until it has one
+    syncSkills();
+  };
+
   const rebuild = () => {
     // Off while rebuilding: replacing the whole thread must not be read aloud again.
     log.setAttribute('aria-live', 'off');
@@ -265,6 +309,12 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     thread.messages.forEach(mount);
     log.setAttribute('aria-live', 'polite');
     syncEmpty();
+    // Stored answers are drawn formatted by a part loaded on first use. Until it is here they show as plain words, and
+    // once it is, the thread is drawn again (with the log not live, so nothing is read out twice).
+    if (!markdownReady() && thread.messages.some((x) => x.role === 'assistant' && x.answer)) {
+      void loadMarkdown().then(() => markdownReady() && rebuild());
+    }
+    syncSkills();
   };
 
   /** Close the chats drawer (a popover below 64rem) and the account menu: after an action they must not stay over the page. */
@@ -362,8 +412,20 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     });
     if (name === 'plugins' && !pluginsLoaded) {
       pluginsLoaded = true;
-      // Loaded on first use: the chat's first load does not carry the tabs.
-      void import('./plugins').then((m) => m.initPlugins(document)).catch(() => (pluginsLoaded = false));
+      // Loaded on first use: the chat's first load does not carry the tabs or the skill builder.
+      void Promise.all([import('./plugins'), import('./skills-ui')])
+        .then(([p, k]) => {
+          p.initPlugins(document);
+          skillsUi = k.initSkills(document, {
+            store,
+            strings,
+            onInChat: () => thread.skills ?? [],
+            setOnInChat: setSkillsOn,
+            say: (text) => ($('#toast').textContent = text),
+            newId,
+          });
+        })
+        .catch(() => (pluginsLoaded = false));
     }
   };
   document.querySelectorAll<HTMLElement>('[data-section]').forEach((b) => b.addEventListener('click', () => showSection(b.dataset.section as Section)));
@@ -718,8 +780,13 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   // ---- asking --------------------------------------------------------------
   const contextFor = (th: Thread, target: StoredMessage): ChatMessage[] => {
     const out: ChatMessage[] = [];
+    // A question asked with a personal skill on is personal scope, and so is its answer: neither travels as context with a
+    // question that is not (Rule 1). With one that is, nothing goes to a model anyway.
+    let personal = false;
     for (const m of th.messages) {
       if (m === target) break;
+      if (m.role === 'user') personal = !!m.ownInformation && !target.ownInformation;
+      if (personal) continue;
       if (m.role === 'assistant') out.push({ role: 'assistant', content: m.text });
       else if (!m.error && m.status !== 'queued' && m.status !== 'local') out.push({ role: 'user', content: m.text });
     }
@@ -792,10 +859,20 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
         }, SLOW_AFTER_MS);
       }
 
-      let res = await client.ask(
-        { messages: contextFor(th, m), scope: m.scope === 'community' ? 'community' : GENERAL },
-        { idempotencyKey: key, signal: stopper.signal },
-      );
+      // The question's skills (chat/skills.ts). A personal one: the flag alone, and no skill text. Platform ones: read now, so
+      // an edited skill goes as it is now. If they cannot be read, the question waits like one that did not arrive, rather
+      // than going without them.
+      const withSkills = m.ownInformation
+        ? { own_information: true }
+        : m.skills?.length
+          ? await import('./skills').then((k) => k.requestFields(store, m.skills!)).catch(() => null)
+          : {};
+      let res: Awaited<ReturnType<typeof client.ask>> = withSkills
+        ? await client.ask(
+            { messages: contextFor(th, m), scope: m.scope === 'community' ? 'community' : GENERAL, ...withSkills },
+            { idempotencyKey: key, signal: stopper.signal },
+          )
+        : { ok: false, error: { kind: 'offline', status: null, retryAfterSec: null, upgradeUrl: null } };
       // No credential could be obtained (the renewal failed on the network, say) for
       // someone who IS signed in: that is "the answer did not arrive", and the
       // question waits. It is not "signed out", and must not end their session.
@@ -804,6 +881,9 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
       }
       pending?.remove();
       nodes.delete(`${m.id}:pending`);
+      // The answer is drawn formatted, by a part loaded on first use (markdown.ts): have it before the answer is added to
+      // the log, so the answer is added once, already formatted, and read out once. A failed load shows plain words.
+      if (res.ok) await loadMarkdown();
       // Delete history ran while this was in flight: the thread it belongs to is
       // gone, and writing it back would bring the deleted conversation back.
       if (startedIn !== epoch) return;
@@ -940,6 +1020,14 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     setBusy('ask', true);
     try {
       const m: StoredMessage = { id: newId(), role: 'user', text: clean, at: Date.now(), scope: GENERAL, status: 'sent' };
+      // The skills on in this chat go with the question, and with every retry of it. A personal one makes it personal scope;
+      // if the skills cannot be read it is personal too (chat/skills.ts: it fails closed).
+      if (thread.skills?.length) {
+        const ids = thread.skills;
+        const on = await import('./skills').then((k) => k.skillsForAsk(store, ids)).catch(() => ({ skills: [] as string[], ownInformation: true }));
+        if (on.skills.length && !on.ownInformation) m.skills = on.skills;
+        if (on.ownInformation) m.ownInformation = true;
+      }
       // Files and voice notes are written to this device with the question and go no further: only `clean` is ever sent.
       const added = attach.take();
       if (added.length) {
@@ -1078,7 +1166,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   });
   const mukokoBtn = $<HTMLButtonElement>('#mukoko-signin');
   if (auth.kind === 'mukoko') {
-    // The session Worker sends a failed sign-in back here as /lite/?signin=failed. Say so kindly, and
+    // The session Worker sends a failed sign-in back here as /chat/?signin=failed. Say so kindly, and
     // drop the parameter so a reload does not say it again.
     const params = new URLSearchParams(location.search);
     if (params.get('signin') === 'failed') {
@@ -1134,6 +1222,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
   };
   input.addEventListener('input', autosize);
   input.addEventListener('keydown', (e) => {
+    if (commands?.onSlashKey(commandHost, e)) return; // the "/" menu has Up, Down, Enter and Escape while it is open
     // Enter sends; Shift+Enter is a new line. Composition (IME) Enter must not send.
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
@@ -1292,6 +1381,20 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     void renderHistory();
   });
 
+  // A round button above the composer takes the messages back to the end while they are scrolled up.
+  const jump = $<HTMLButtonElement>('#jump-latest');
+  const threadEl = $('#thread');
+  const syncJump = () => {
+    jump.hidden = threadEl.scrollHeight - threadEl.scrollTop - threadEl.clientHeight <= 64;
+  };
+  threadEl.addEventListener('scroll', syncJump, { passive: true });
+  new MutationObserver(syncJump).observe(log, { childList: true, subtree: true });
+  addEventListener('resize', syncJump);
+  jump.addEventListener('click', () => {
+    threadEl.scrollTo({ top: threadEl.scrollHeight });
+    threadEl.focus({ preventScroll: true }); // the button is about to hide: keep keyboard focus in the page
+  });
+
   // The X on a status chip hides that chip until its state changes again (going offline once more shows it again).
   document.querySelectorAll<HTMLButtonElement>('.chip-x').forEach((b) => b.addEventListener('click', () => (b.closest<HTMLElement>('.status-chip')!.hidden = true)));
 
@@ -1318,6 +1421,7 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     $('#offline-mode-note').hidden = !offlineMode;
     $('#offline-badge').hidden = !offlineMode; // the top bar says so only while it is on
     document.documentElement.toggleAttribute('data-offline-mode', offlineMode);
+    syncMode();
   };
   offlineSwitch.addEventListener('click', () => {
     offlineMode = !offlineMode;
@@ -1339,6 +1443,66 @@ export async function startApp(opts: { apiBase: string; authMode?: AuthMode }): 
     syncOfflineMode();
     rebuild(); // each kept question shows the state that matches the mode
     void renderHistory();
+  });
+
+  // ---- the session list as a column (from 64rem): hidden and shown from the top bar, remembered on this device ------------
+  const SIDE_KEY = 'shamwari.side';
+  const sideToggle = $('#side-toggle');
+  const setSide = (closed: boolean) => {
+    if (closed) document.documentElement.dataset.side = 'closed';
+    else delete document.documentElement.dataset.side;
+    sideToggle.setAttribute('aria-pressed', String(closed));
+  };
+  try {
+    setSide(localStorage.getItem(SIDE_KEY) === 'closed');
+  } catch {
+    /* no storage: the list starts shown */
+  }
+  sideToggle.addEventListener('click', () => {
+    const closed = document.documentElement.dataset.side !== 'closed';
+    setSide(closed);
+    try {
+      localStorage.setItem(SIDE_KEY, closed ? 'closed' : 'open');
+    } catch {
+      /* the choice holds for this visit only */
+    }
+  });
+
+  // ---- the command menu (chat/commands.ts, loaded on first use): Ctrl/Cmd+K, the top bar's button, the mode chip and "/" ----
+  const commandHost = {
+    strings,
+    thread: () => thread,
+    store,
+    skillsOn: () => thread.skills ?? [],
+    setSkillsOn,
+    offlineMode: () => offlineMode,
+    openSection: (name: Section) => {
+      showSection(name);
+      if (!matchMedia('(min-width: 64rem)').matches) (drawer as HTMLElement & { showPopover(): void } | null)?.showPopover();
+      else if (document.documentElement.dataset.side === 'closed') sideToggle.click();
+    },
+    setLanguage: (code: string) => {
+      langSelect.value = code;
+      langGroup.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+    setTheme: (theme: 'dark' | 'light' | null) => applyTheme(theme, true),
+    say: (text: string) => ($('#toast').textContent = text),
+    input,
+  };
+  let commands: typeof import('./commands') | null = null;
+  const loadCommands = async () => (commands ??= await import('./commands'));
+  const palette = (only?: 'skills') => void loadCommands().then((c) => c.openPalette(commandHost, only));
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k' && document.documentElement.dataset.view === 'app') {
+      e.preventDefault();
+      palette();
+    }
+  });
+  $('#open-palette').addEventListener('click', () => palette());
+  $('#mode-chip').addEventListener('click', () => palette('skills'));
+  if (/Mac|iPhone|iPad/.test(navigator.platform)) $('#open-palette .kbd').textContent = '⌘K';
+  input.addEventListener('input', () => {
+    if (input.value.startsWith('/') || commands) void loadCommands().then((c) => c.onSlashInput(commandHost));
   });
 
   // ---- go ------------------------------------------------------------------

@@ -1,73 +1,60 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import worker, { SESSION_PATHS } from '../../worker/index';
+import worker, { OLD_SW, SESSION_PATHS, liteRedirect } from '../../worker/index';
 import { GATED_PREFIXES } from '../../worker/gate';
 import { AUTH_ROUTES, LEGACY_ROUTES, SESSION_COOKIE } from '../../worker/session';
-import { CHAT, LITE, chooseDestination, rootResponse } from '../../worker/root';
+import { CHAT, rootResponse } from '../../worker/root';
 
-const get = (headers: Record<string, string> = {}, cf?: { clientTcpRtt?: number }) => {
-  const r = new Request('https://shamwari.ai/', { headers });
-  if (cf) Object.defineProperty(r, 'cf', { value: cf });
-  return r;
-};
-
-describe('the root before the main chat is live', () => {
-  it('sends everyone to the light chat, however good the connection', () => {
-    expect(chooseDestination(get({ ECT: '4g', Downlink: '10', RTT: '20' }), false)).toBe(LITE);
-    expect(chooseDestination(get(), false)).toBe(LITE);
-  });
-});
-
-describe('the root once the main chat is live', () => {
-  it('sends a fast connection to the main chat', () => {
-    expect(chooseDestination(get({ ECT: '4g', Downlink: '9.8', RTT: '50' }), true)).toBe(CHAT);
-  });
-
-  it('sends data saver, slow classes, a thin pipe or a long round trip to the light chat', () => {
-    expect(chooseDestination(get({ 'Save-Data': 'on', ECT: '4g', Downlink: '10', RTT: '20' }), true)).toBe(LITE);
-    for (const ect of ['slow-2g', '2g', '3g']) expect(chooseDestination(get({ ECT: ect, Downlink: '10', RTT: '20' }), true)).toBe(LITE);
-    expect(chooseDestination(get({ ECT: '4g', Downlink: '4.2', RTT: '60' }), true)).toBe(LITE);
-    expect(chooseDestination(get({ ECT: '4g', Downlink: '10', RTT: '180' }), true)).toBe(LITE);
-  });
-
-  it('puts the threshold just under the 10 Mbps cap Chromium reports', () => {
-    expect(chooseDestination(get({ ECT: '4g', Downlink: '8', RTT: '40' }), true)).toBe(CHAT);
-    expect(chooseDestination(get({ ECT: '4g', Downlink: '7.9', RTT: '40' }), true)).toBe(LITE);
-  });
-
-  it('does not take a partial hint set as proof of speed, but still uses what is slow in it', () => {
-    expect(chooseDestination(get({ Downlink: '10' }), true)).toBe(LITE); // no ECT, nothing else known
-    expect(chooseDestination(get({ ECT: '4g' }), true)).toBe(LITE); // no downlink
-    expect(chooseDestination(get({ ECT: '4g', Downlink: 'fast' }), true)).toBe(LITE); // not a number
-    expect(chooseDestination(get({ ECT: '3g' }, { clientTcpRtt: 20 }), true)).toBe(LITE); // slow beats the measurement
-    // A partial set falls through to Cloudflare's measurement instead of being a dead end.
-    expect(chooseDestination(get({ ECT: '4g' }, { clientTcpRtt: 40 }), true)).toBe(CHAT);
-  });
-
-  it('falls back to Cloudflare’s round trip measurement when the browser sends no hints', () => {
-    expect(chooseDestination(get({}, { clientTcpRtt: 40 }), true)).toBe(CHAT);
-    expect(chooseDestination(get({}, { clientTcpRtt: 400 }), true)).toBe(LITE);
-  });
-
-  it('does not read a zero round trip (HTTP/3 has no TCP handshake) as very fast', () => {
-    expect(chooseDestination(get({}, { clientTcpRtt: 0 }), true)).toBe(LITE);
-    expect(chooseDestination(get({}, { clientTcpRtt: Number.NaN }), true)).toBe(LITE);
-  });
-
-  it('sends a visitor it knows nothing about to the light chat', () => {
-    expect(chooseDestination(get(), true)).toBe(LITE);
-  });
-});
+const get = (headers: Record<string, string> = {}) => new Request('https://shamwari.ai/', { headers });
 
 describe('the root answer', () => {
-  it('is a 302 that is never cached and asks the browser for its connection hints', () => {
-    const res = rootResponse(get({ ECT: '4g', Downlink: '10', RTT: '50' }), true);
-    expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe(CHAT);
-    expect(res.headers.get('Cache-Control')).toBe('no-store');
-    expect(res.headers.get('Vary')).toBe('Save-Data, ECT, Downlink, RTT, Cookie');
-    expect(res.headers.get('Accept-CH')).toBe('ECT, Downlink, RTT');
-    expect(res.headers.get('Critical-CH')).toBe('ECT, Downlink, RTT');
+  it('is a 302 to the chat at /chat/ that is never cached, whatever the connection', () => {
+    expect(CHAT).toBe('/chat/');
+    const variants: Record<string, string>[] = [{}, { ECT: '2g', 'Save-Data': 'on' }, { ECT: '4g', Downlink: '10', RTT: '20' }];
+    for (const headers of variants) {
+      const res = rootResponse(get(headers));
+      expect(res.status).toBe(302);
+      expect(res.headers.get('Location')).toBe(CHAT);
+      expect(res.headers.get('Cache-Control')).toBe('no-store');
+      expect(res.headers.get('Vary')).toBe('Cookie');
+    }
+  });
+});
+
+describe('the old /lite/ address, for one release', () => {
+  const at = (path: string, method = 'GET') => new Request(`https://shamwari.ai${path}`, { method });
+
+  it('/lite and every path under /lite/ answer 301 to the same path under /chat/, query kept, not cached', () => {
+    for (const [from, to] of [
+      ['/lite', '/chat/'],
+      ['/lite/', '/chat/'],
+      ['/lite/?signin=failed', '/chat/?signin=failed'],
+      ['/lite/disclaimer/', '/chat/disclaimer/'],
+      ['/lite/manifest.webmanifest', '/chat/manifest.webmanifest'],
+      ['/lite/icons/icon-192.png', '/chat/icons/icon-192.png'],
+      ['/lite/_astro/index.Abc123.js?v=2', '/chat/_astro/index.Abc123.js?v=2'],
+      ['/lite/anything/deeper?a=1&b=2', '/chat/anything/deeper?a=1&b=2'],
+      ['/lite?x=1', '/chat/?x=1'],
+    ] as const) {
+      const res = liteRedirect(at(from))!;
+      expect(res, from).not.toBeNull();
+      expect(res.status, from).toBe(301);
+      expect(res.headers.get('Location'), from).toBe(to);
+      expect(res.headers.get('Cache-Control'), from).toBe('no-store');
+    }
+  });
+
+  it('a target is always under /chat/, never another host', () => {
+    for (const from of ['/lite//evil.example/x', '/lite/%2F%2Fevil.example', '/lite/..%2F..%2Fx']) {
+      const loc = liteRedirect(at(from))!.headers.get('Location')!;
+      expect(loc.startsWith('/chat/'), from).toBe(true);
+      expect(new URL(loc, 'https://shamwari.ai').origin, from).toBe('https://shamwari.ai');
+    }
+  });
+
+  it('leaves the old sign-in routes and the retiring service worker alone, and everything that is not /lite', () => {
+    for (const p of [...LEGACY_ROUTES, OLD_SW]) expect(liteRedirect(at(p)), p).toBeNull();
+    for (const p of ['/', '/chat/', '/liteness', '/lite.html', '/auth/login', '/callback']) expect(liteRedirect(at(p)), p).toBeNull();
   });
 });
 
@@ -90,19 +77,18 @@ describe('the Worker', () => {
   it('sends a visitor with a session cookie to the app; if the session cannot be checked it still goes on (the app gate fails closed)', async () => {
     const res = await worker.fetch(withCookie(), {}, ctx);
     expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toBe(LITE);
+    expect(res.headers.get('Location')).toBe(CHAT);
   });
 
-  it('only CHAT_LIVE="true" turns the main chat on', async () => {
-    const fast = { ECT: '4g', Downlink: '10', RTT: '30' };
-    expect((await worker.fetch(withCookie(fast), { CHAT_LIVE: 'true' }, ctx)).headers.get('Location')).toBe(CHAT);
-    for (const v of [undefined, 'false', 'TRUE', '1', '']) {
-      expect((await worker.fetch(withCookie(fast), { CHAT_LIVE: v }, ctx)).headers.get('Location'), String(v)).toBe(LITE);
+  it('redirects the old /lite/ address through the Worker, before sign-in is touched (no secrets bound here)', async () => {
+    for (const [path, to] of [['/lite', '/chat/'], ['/lite/', '/chat/'], ['/lite/disclaimer/?x=1', '/chat/disclaimer/?x=1']] as const) {
+      const res = await worker.fetch(new Request(`https://shamwari.ai${path}`), {}, ctx);
+      expect([res.status, res.headers.get('Location')], path).toEqual([301, to]);
     }
   });
 
   it('answers a path with no asset and no route with a plain 404, never a 503 from sign-in', async () => {
-    for (const path of ['/chat/', '/chat', '/nope', '/liteness', '/astro/x.js', '/auth/other', '/callbacks']) {
+    for (const path of ['/nope', '/liteness', '/chatter', '/astro/x.js', '/auth/other', '/callbacks']) {
       for (const method of ['GET', 'HEAD', 'POST']) {
         const res = await worker.fetch(new Request(`https://shamwari.ai${path}`, { method }), {}, ctx);
         expect(res.status, `${method} ${path}`).toBe(404);
@@ -135,7 +121,7 @@ describe('the Worker', () => {
     expect(token.headers.get('Location')).toBeNull();
   });
 
-  it('keeps its list of Worker-only paths in step with app/wrangler.jsonc, and no sign-in route lives under /lite/', () => {
+  it('keeps its list of Worker-only paths in step with app/wrangler.jsonc, and no sign-in route lives under /lite/ or /chat/', () => {
     // The same comment-line and trailing-comma stripping check.mjs uses: the file is JSONC.
     const text = readFileSync(new URL('../../app/wrangler.jsonc', import.meta.url), 'utf8')
       .split('\n')
@@ -144,17 +130,21 @@ describe('the Worker', () => {
       .replace(/,(\s*[}\]])/g, '$1');
     const config = JSON.parse(text);
     const assets = config.assets;
-    // The Worker is the gate: it runs first for the root, the sign-in routes at the root, and the whole of /lite/ (the
-    // build output and the old /lite/ sign-in addresses), and reads the static files through the ASSETS binding.
-    expect(assets.run_worker_first).toEqual(['/', '/auth/*', '/callback', '/lite/*']);
+    // The Worker is the gate: it runs first for the root, the sign-in routes at the root, the whole of /chat/ (the app and
+    // its build output) and the old /lite/ address (its redirect, the old sign-in addresses and the retiring sw.js), and
+    // reads the static files through the ASSETS binding.
+    expect(assets.run_worker_first).toEqual(['/', '/auth/*', '/callback', '/chat', '/chat/*', '/lite', '/lite/*']);
     expect(assets.binding).toBe('ASSETS');
     // Every path the Worker answers as sign-in is one the platform sends to it.
     const matches = (pattern: string, path: string) => (pattern.endsWith('*') ? path.startsWith(pattern.slice(0, -1)) : path === pattern);
     for (const p of SESSION_PATHS) expect(assets.run_worker_first.some((g: string) => matches(g, p)), p).toBe(true);
     // Every gated prefix is one the platform sends to the Worker first; otherwise its files would be served ungated.
     for (const prefix of GATED_PREFIXES) expect(assets.run_worker_first.some((g: string) => matches(g, `${prefix}x`)), prefix).toBe(true);
-    // The new sign-in is at the root: a route moved back under /lite/ fails here.
-    for (const r of AUTH_ROUTES) expect(r.startsWith('/lite/'), r).toBe(false);
+    // The new sign-in is at the root: a route moved under /lite/ or /chat/ fails here.
+    for (const r of AUTH_ROUTES) expect(r.startsWith('/lite/') || r.startsWith('/chat/'), r).toBe(false);
+    expect(GATED_PREFIXES).toEqual(['/chat/']);
+    // The root switch for a second chat is gone with that chat.
+    expect(config.vars.CHAT_LIVE).toBeUndefined();
     for (const r of LEGACY_ROUTES) expect(r.startsWith('/lite/'), r).toBe(true);
     // The redirect URI WorkOS sends people back to is the root callback.
     expect(config.vars.WORKOS_REDIRECT_URI).toBe('https://shamwari.ai/callback');
@@ -163,7 +153,7 @@ describe('the Worker', () => {
   it('answers HEAD like GET, and refuses other methods without reaching sign-in', async () => {
     const head = await worker.fetch(new Request('https://shamwari.ai/', { method: 'HEAD', headers: { Cookie: `${SESSION_COOKIE}=sealed` } }), {}, ctx);
     expect(head.status).toBe(302);
-    expect(head.headers.get('Location')).toBe(LITE);
+    expect(head.headers.get('Location')).toBe(CHAT);
     for (const method of ['POST', 'PUT', 'DELETE', 'OPTIONS']) {
       const res = await worker.fetch(new Request('https://shamwari.ai/', { method }), {}, ctx);
       expect(res.status, method).toBe(405);
