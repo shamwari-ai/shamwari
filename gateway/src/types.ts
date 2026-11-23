@@ -14,10 +14,8 @@ export interface Env {
   SHAMWARI_CORE_TOKEN: string;
   /** "on": our own sites are read live beside Ground (own-sites.ts). */
   OWN_SITES?: string;
-  /** Ground in Mongo through the Nyuchi API (ground-store.ts). Either unset: Ground is asked of Core. */
+  /** Ground in Mongo through the Nyuchi API (ground-store.ts), called with the signed-in person's own session. */
   NYUCHI_API_URL?: string;
-  /** Shamwari's service key on the Nyuchi API (internal, scoped `shamwari:service`), whole: `<client id>.<secret>`. */
-  NYUCHI_SHAMWARI_API_KEY?: SecretsStoreSecret;
 
   /** "true" moves key verification and metering to the Servers API. Off by default. */
   SERVERS_API_ENABLED?: string;

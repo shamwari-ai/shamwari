@@ -1,6 +1,6 @@
 import type { Env, AuthContext } from './types';
 import { keyService } from './keys';
-import { looksLikeJwt, verifyWorkosToken } from './workos';
+import { looksLikeJwt, verifyWorkosToken, WORKOS_KEY_TYPE } from './workos';
 
 async function sha256(raw: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
@@ -61,4 +61,16 @@ export async function authenticate(req: Request, env: Env): Promise<AuthResult> 
     await remember('invalid');
   }
   return { ok: false, reason: outcome.status };
+}
+
+/**
+ * The signed-in person's own WorkOS access token, already verified by authenticate(), for this request only.
+ * It is passed to the Nyuchi API so the API acts with that person's own base access (owner, 2026-11-23: access
+ * is through the person's WorkOS session, not a single service key). Undefined for an API key: no person is
+ * behind it. Never cached, logged, stored or sent anywhere but the Nyuchi API.
+ */
+export function personSessionToken(req: Request, auth: AuthContext): string | undefined {
+  if (auth.keyType !== WORKOS_KEY_TYPE) return undefined;
+  const header = req.headers.get('Authorization') ?? '';
+  return header.startsWith('Bearer ') ? header.slice(7).trim() || undefined : undefined;
 }
