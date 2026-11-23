@@ -2,7 +2,7 @@
 // request when it opened "You are Shamwari" and used the old "must be verified" sentence. Keep both out,
 // and keep the reasoning budget low so the reasoning model has tokens left to answer.
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { ground } from "../src/ground";
+import { BASE, ground } from "../src/ground";
 import { viaGateway, viaWorkersAI } from "../src/gateway";
 import { targets } from "../src/router";
 import type { Env, Message } from "../src/types";
@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 describe("system prompt wording", () => {
-  it("avoids the phrasings the AI Gateway guard blocks", async () => {
+  it("speaks to the model as Shamwari directly (the guard that needed a workaround is off)", async () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
     const e = env(async () => {
       throw new Error("down");
@@ -39,10 +39,32 @@ describe("system prompt wording", () => {
       { scope: "platform", destination: "workers-ai" } as never,
       null,
     );
-    expect(r.systemPrompt).toMatch(/Shamwari/);
-    expect(r.systemPrompt).not.toMatch(/^You are Shamwari/);
-    expect(r.systemPrompt).not.toMatch(/must be verified/);
+    expect(r.systemPrompt).toMatch(/^You are Shamwari/);
   });
+
+  // What the model is told shapes what people read. Each line below is something a real answer did before
+  // the 2026-11-23 rewrite: repeat our internal word for sources back to a person, open every reply with a
+  // disclaimer, or run to tables and headings on a phone.
+  it("never hands the model our internal vocabulary to repeat back to people", () => {
+    const told = BASE.split("\n").filter((l) => !/^- Never mention/.test(l)).join("\n");
+    expect(told).not.toMatch(/\bGround\b/);
+    expect(told).not.toMatch(/\bcontext\b/i);
+  });
+
+  it("asks for short answers fit for a small screen, without tables or headings", () => {
+    expect(BASE).toMatch(/about 150 words at most/);
+    expect(BASE).toMatch(/No tables and no headings/);
+  });
+
+  it("keeps the disclaimer to law, fees and procedures, at the end, never for everyday talk", () => {
+    expect(BASE).toMatch(/end with one short line/);
+    expect(BASE).toMatch(/Say nothing about sources for everyday conversation/);
+  });
+
+  it("still forbids invented law: Acts, sections, instruments, fees, rates, dates", () => {
+    expect(BASE).toMatch(/Never invent an Act, section number, statutory instrument, fee, rate or date/);
+  });
+
 });
 
 describe("reasoning budget", () => {

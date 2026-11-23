@@ -637,12 +637,11 @@ describe('skills: a platform-scope skill goes beside the constant prompt', () =>
     expect(res.status).toBe(200);
     expect(wire.completions).toHaveLength(1);
     const system = wire.completions[0]!.system ?? '';
-    expect(system.startsWith('The assistant in this conversation is Shamwari')).toBe(true); // the constant prompt first, unchanged
-    expect(system).toContain('--- SHAMWARI GROUND CONTEXT ---');
+    expect(system.startsWith('You are Shamwari')).toBe(true); // the constant prompt first, unchanged
+    expect(system).toContain('--- SOURCES ---');
     expect(system).toContain('--- SKILLS TURNED ON FOR THIS CONVERSATION ---');
     expect(system).toContain('[short-answers] Keep answers short for a small screen.\nAnswer in three sentences or fewer.');
-    expect(system.indexOf('SKILLS TURNED ON')).toBeGreaterThan(system.indexOf('END CONTEXT'));
-    expect(system).not.toMatch(/you are shamwari/i); // the AI Gateway guard's blocked phrasing (prompt-wording.test.ts)
+    expect(system.indexOf('SKILLS TURNED ON')).toBeGreaterThan(system.indexOf('END SOURCES'));
   });
 
   it('without skills the prompt is exactly what it was', async () => {
