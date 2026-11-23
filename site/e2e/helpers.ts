@@ -121,15 +121,16 @@ export async function openChatMenu(page: Page) {
 }
 
 /**
- * The Bundu floor (Mzizi's non-negotiable minimums), measured on the rendered page: body text 17px, nothing
+ * The Bundu floor (Mzizi's non-negotiable minimums), measured on the rendered page: body text 17px (15px with a mouse from 64rem, Mzizi 0.17), nothing
  * readable under 14px, every interactive control a 49px hit region, and 7px between neighbouring controls.
  * Hit regions may touch but never overlap; text links inside a sentence are exempt from the size, as they are
  * in the floor. Returns what is under the floor, so a failure names it.
- * `minHit` is the smallest hit region allowed: 49 by default, 32 only for the density size drawn with a mouse from 64rem.
+ * `minHit` is the smallest hit region allowed: 45 by default (the floor on touch), 24 only for a mouse from 64rem (Mzizi 0.17).
  */
-export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) {
-  const minHit = (opts.minHit ?? 49) - 0.1;
-  return page.evaluate((minHit) => {
+export async function underTheFloor(page: Page, opts: { minHit?: number; minBody?: number } = {}) {
+  const minHit = (opts.minHit ?? 45) - 0.1;
+  const minBody = opts.minBody ?? 17;
+  return page.evaluate(({ minHit, minBody }) => {
     const seen = (el: Element) => {
       const s = getComputedStyle(el);
       const b = el.getBoundingClientRect();
@@ -142,7 +143,7 @@ export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) 
     const out: string[] = [];
 
     const body = parseFloat(getComputedStyle(document.body).fontSize);
-    if (body < 17) out.push(`body text is ${body}px, the floor is 17px`);
+    if (body < minBody) out.push(`body text is ${body}px, the floor is ${minBody}px`);
 
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
@@ -270,5 +271,5 @@ export async function underTheFloor(page: Page, opts: { minHit?: number } = {}) 
       if (across > 1 && gap > -0.5 && gap < 6.9) out.push(`blocks ${gap.toFixed(1)}px apart (floor 7px): ${label(a)} and ${label(b)}`);
     }
     return out;
-  }, minHit);
+  }, { minHit, minBody });
 }

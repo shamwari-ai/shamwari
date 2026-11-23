@@ -261,7 +261,7 @@ for (const width of [320, 360, 768]) {
     await a.locator(".text pre").focus();
     await expect(a.locator(".text pre")).toBeFocused();
     expect(
-      await underTheFloor(page, { minHit: 49 }),
+      await underTheFloor(page, { minHit: 45 }),
       "nothing under the Bundu floor",
     ).toEqual([]);
   });

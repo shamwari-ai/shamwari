@@ -20,7 +20,9 @@
   --line: var(--border);
   /* The dim behind a slide-over or a dialog: the same in both themes, so a dark page dims rather than greys. */
   --scrim: rgb(0 0 0 / 0.45);
-  --ctl: var(--size-control-sm);
+  /* A control's size: the floor's hit region on touch (45px), the density size (33px) only with a mouse and nothing coarse,
+     the same test Mzizi's own density layer uses, so a touch laptop or a tablet with a mouse keeps the touch size. */
+  --ctl: var(--target-floor);
   --box: 8px;
   --page-inset: max(var(--inset-floor), env(safe-area-inset-left), env(safe-area-inset-right));
   /* One sidebar width, as the slide-over on a phone and as the column from 64rem, so crossing 64rem does not jump. */
@@ -1682,5 +1684,11 @@ html[data-offline-mode] .mode-chip {
   }
   html[data-side='closed'] .side-scroll {
     display: none;
+  }
+}
+
+@media (min-width: 64rem) and (pointer: fine) and (hover: hover) and (not (any-pointer: coarse)) {
+  :root {
+    --ctl: var(--size-control-sm);
   }
 }
