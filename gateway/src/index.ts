@@ -26,6 +26,7 @@ import { probe, healthDoc } from './probe';
 import { preflight, withCors } from './cors';
 import { parseSkills, SKILLS_MAX, skillsNeedOwnInformation, withSkills } from './skills';
 import type { AppliedSkill } from './skills';
+import { fromError, InferenceFailed, publicReasons } from './failure';
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify(body, null, 2), {
@@ -483,7 +484,16 @@ const worker = {
         // second may be said to a person as a fact about the corpus.
         if (g.unavailable) {
           return new Response(
-            JSON.stringify({ error: 'ground_unavailable', retry: true }, null, 2),
+            JSON.stringify(
+              {
+                error: 'ground_unavailable',
+                retry: true,
+                request_id: requestId,
+                reasons: [{ step: 'core', message: 'Core could not be reached, so the cited passage could not be fetched' }],
+              },
+              null,
+              2,
+            ),
             {
               status: 503,
               headers: { 'Content-Type': 'application/json', 'Retry-After': '30' },
@@ -543,9 +553,12 @@ const worker = {
         // failure stands, as a 503 the caller can retry (with when), not a 500:
         // nothing is wrong with the request, the models are just not answering.
         if (!g.hit) {
-          console.error('inference unavailable and no Ground passage to give', String(e));
+          // Say WHY, all the way to the app: each step's reason (cleaned, failure.ts) and the request id
+          // that finds this in the logs. A bare "unavailable" hid an AI Gateway guardrail block for days.
+          const reasons = publicReasons(e instanceof InferenceFailed ? e.failures : [fromError('worker', e)]);
+          console.error('inference unavailable and no Ground passage to give', requestId, JSON.stringify(reasons));
           return new Response(
-            JSON.stringify({ error: 'inference_unavailable', retry: true }, null, 2),
+            JSON.stringify({ error: 'inference_unavailable', retry: true, request_id: requestId, reasons }, null, 2),
             {
               status: 503,
               headers: { 'Content-Type': 'application/json', 'Retry-After': '15' },
@@ -860,7 +873,7 @@ export default {
       res = await worker.fetch(req, env, ctx);
     } catch (e) {
       console.error('unhandled error', String(e));
-      res = json({ error: 'internal_error' }, 500);
+      res = json({ error: 'internal_error', reasons: publicReasons([fromError('worker', e)]) }, 500);
     }
     return withCors(req, env, res);
   },

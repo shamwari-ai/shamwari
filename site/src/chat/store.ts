@@ -22,7 +22,9 @@ export interface StoredMessage {
   /** Delivery attempts that got no answer while the browser said it was online. */
   attempts?: number;
   /** user messages whose ask failed: why, so a reload still shows it. */
-  error?: Pick<AskError, 'kind' | 'retryAfterSec' | 'upgradeUrl'>;
+  error?: Pick<AskError, 'kind' | 'retryAfterSec' | 'upgradeUrl' | 'reasons' | 'requestId'>;
+  /** While a queued question waits on an outage: what the gateway last said was wrong, and its request id. */
+  why?: Pick<AskError, 'reasons' | 'requestId'>;
   /** Files and voice notes the person added. Kept on this device only: never sent anywhere (the bytes are in `files`). */
   attachments?: AttachmentMeta[];
   /** Platform-scope skills that were on when this was asked (their ids): sent with it, and with every retry of it. */

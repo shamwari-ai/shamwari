@@ -412,7 +412,14 @@ async function translateError(res: Response): Promise<Response> {
   // Every inference path failed with nothing from Ground: the chat path says so as a retryable 503
   // (inference_unavailable, with Retry-After). In the spec's shape that is a model_error.
   if (code === 'inference_unavailable') {
-    return errorResponse(res.status, 'model_unavailable', 'No model could answer this request. Retry later.', null, headers, 'model_error');
+    // The spec's error has no field for a list, so the reasons go in the message, already cleaned by the chat path.
+    const reasons = Array.isArray(payload.reasons) ? (payload.reasons as { step?: unknown; status?: unknown; message?: unknown }[]) : [];
+    const why = reasons
+      .map((r) => `${String(r.step ?? 'step')}${typeof r.status === 'number' ? ` ${r.status}` : ''}: ${String(r.message ?? '')}`)
+      .join('; ');
+    const id = typeof payload.request_id === 'string' ? ` (request ${payload.request_id})` : '';
+    const message = `No model could answer this request${why ? `: ${why}` : ''}${id}. Retry later.`;
+    return errorResponse(res.status, 'model_unavailable', message, null, headers, 'model_error');
   }
   return errorResponse(res.status, code, message, params[code] ?? null, headers);
 }

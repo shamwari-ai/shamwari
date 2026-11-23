@@ -195,7 +195,16 @@ describe('when every inference path fails', () => {
     const res = await worker.fetch(ask({}), env, ctx);
     expect(res.status).toBe(503);
     expect(res.headers.get('Retry-After')).toBe('15');
-    expect(await res.json()).toEqual({ error: 'inference_unavailable', retry: true });
+    const body = (await res.json()) as { error: string; retry: boolean; request_id: string; reasons: unknown[] };
+    expect(body.error).toBe('inference_unavailable');
+    expect(body.retry).toBe(true);
+    // WHY travels with it, step by step, so the app can show it (an AI Gateway block once hid behind
+    // a bare "unavailable" for days), with the request id that finds the logs.
+    expect(body.request_id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(body.reasons).toEqual([
+      { step: 'ai-gateway', status: 503, message: 'down' },
+      { step: 'workers-ai', message: 'workers ai down' },
+    ]);
   });
 });
 

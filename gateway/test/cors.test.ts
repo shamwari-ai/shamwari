@@ -130,7 +130,8 @@ describe('scope of the change', () => {
     );
     expect(res.status).toBe(500);
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe(SITE);
-    expect(await res.json()).toEqual({ error: 'internal_error' });
+    // The cause travels too, cleaned (failure.ts), so a person sees what broke, not just that something did.
+    expect(await res.json()).toEqual({ error: 'internal_error', reasons: [{ step: 'worker', message: 'kv down' }] });
   });
 
   it('keeps status, body and headers when it adds CORS, and always varies on Origin', async () => {

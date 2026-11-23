@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { createMock } from '../../chat-mock/server.mjs';
-import { createClient, parseAnswer, parseCitations, safeUrl } from '../../src/chat/client';
+import { createClient, parseAnswer, parseCitations, parseReasons, safeUrl } from '../../src/chat/client';
 
 let server: Server;
 let base = '';
@@ -264,3 +264,35 @@ describe('a 401 and the silent renewal', () => {
   });
 });
 
+
+describe('why it failed reaches the app (gateway/src/failure.ts)', () => {
+  it("an unavailable answer carries the gateway's reasons and request id, step by step", async () => {
+    const r = await withKey('sk_shamwari_mock_ok').ask(q('this one is blocked'));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.kind).toBe('unavailable');
+    expect(r.error.status).toBe(503);
+    expect(r.error.retryAfterSec).toBe(15);
+    expect(r.error.requestId).toBe('7a9ee814-3ff5-4bdf-95bc-2339047fabe6');
+    expect(r.error.reasons).toEqual([
+      { step: 'ai-gateway', status: 424, code: '2016', message: 'Prompt blocked due to security configurations' },
+      { step: 'workers-ai', status: null, code: null, message: 'workers ai returned no text' },
+    ]);
+  });
+
+  it('an error with no reasons stays as it was: no empty list, no id', async () => {
+    const r = await withKey('sk_shamwari_mock_429').ask(q('hello'));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.reasons).toBeUndefined();
+    expect(r.error.requestId).toBeUndefined();
+  });
+
+  it('keeps only well-formed reasons, at most five, each bounded', () => {
+    const many = Array.from({ length: 8 }, (_, i) => ({ step: 'ai-gateway', status: 500 + i, message: `m${i}` }));
+    expect(parseReasons(many)).toHaveLength(5);
+    expect(parseReasons([{ step: 'x' }, null, 'text', { message: 'kept' }])).toEqual([{ step: 'gateway', status: null, code: null, message: 'kept' }]);
+    expect(parseReasons([{ step: 'core', message: 'y'.repeat(500) }])[0]!.message.length).toBe(200);
+    expect(parseReasons('not a list')).toEqual([]);
+  });
+});

@@ -231,4 +231,7 @@ export const nd: Strings = {
   upgrade: 'Engeza imali',
   retryIn: 'Zama futhi emva kwe',
   seconds: 'amasekhondi',
+  whatWentWrong: 'Okungahambanga kuhle',
+  requestId: 'I-ID yesicelo',
+  failureSteps: { 'ai-gateway': 'AI Gateway', 'workers-ai': 'Workers AI', core: 'Core', worker: 'Shamwari API', gateway: 'Shamwari API' },
 };

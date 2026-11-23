@@ -231,4 +231,7 @@ export const sn: Strings = {
   upgrade: 'Wedzera mari',
   retryIn: 'Edza zvakare mushure me',
   seconds: 'masekonzi',
+  whatWentWrong: 'Chakakanganisa',
+  requestId: 'ID yechikumbiro',
+  failureSteps: { 'ai-gateway': 'AI Gateway', 'workers-ai': 'Workers AI', core: 'Core', worker: 'Shamwari API', gateway: 'Shamwari API' },
 };

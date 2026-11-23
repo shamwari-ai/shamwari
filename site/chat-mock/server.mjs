@@ -16,6 +16,8 @@
 //   a question containing "slow"    -> answers after 3 s
 //   a question containing "hang"    -> answers after 60 s (a test stops it)
 //   a question containing "nosource"-> an answer with no citations
+//   a question containing "blocked" -> 503 inference_unavailable WITH the gateway's reasons and request id,
+//                                      the shape gateway/src/failure.ts gives (an AI Gateway guardrail block)
 import { createServer } from 'node:http';
 
 export const FIXTURES = [
@@ -162,6 +164,22 @@ export function createMock() {
     if (idem && replays.has(idem)) return send(res, 200, replays.get(idem));
 
     const q = String(body.messages.at(-1)?.content ?? '');
+    if (/\bblocked\b/i.test(q)) {
+      return send(
+        res,
+        503,
+        {
+          error: 'inference_unavailable',
+          retry: true,
+          request_id: '7a9ee814-3ff5-4bdf-95bc-2339047fabe6',
+          reasons: [
+            { step: 'ai-gateway', status: 424, code: 2016, message: 'Prompt blocked due to security configurations' },
+            { step: 'workers-ai', message: 'workers ai returned no text' },
+          ],
+        },
+        { 'Retry-After': '15' },
+      );
+    }
     if (/slow/i.test(q)) await new Promise((r) => setTimeout(r, 3000));
     if (/\bhang\b/i.test(q)) {
       // Never answers in time; a test stops it. The wait ends when the caller goes away, so it does not hold the server open.
