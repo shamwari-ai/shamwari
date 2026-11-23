@@ -41,6 +41,13 @@
       "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
       "secret_name": "NYUCHI_AI_GATEWAY_TOKEN",
     },
+    // Supabase's publishable key for Ground (src/ground-store.ts). Public by design: it can run
+    // ground_search on platform passages and nothing else. Held here, not as a plain var, all the same.
+    {
+      "binding": "SUPABASE_PUBLISHABLE_KEY",
+      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
+      "secret_name": "SHAMWARI_SUPABASE_PUBLISHABLE_KEY",
+    },
   ],
 
   // Weekly degradation probe. Exercises all three inference paths and writes
@@ -76,6 +83,9 @@
     // Core's Fly address (docs/core-fly-runbook.md, "Point the Worker at Core"). The
     // core.shamwari.ai name was never created; the Fly hostname needs no DNS of ours.
     "CORE_URL": "https://shamwari-core.fly.dev",
+    // Ground on Supabase with pgvector (db/supabase/03-ground-pgvector.sql, src/ground-store.ts), with the
+    // publishable key bound from the Secrets Store above. With both, Ground is not asked of Core.
+    "SUPABASE_URL": "https://hxjblxsheosjbjqgmlhx.supabase.co",
     "EMBEDDING_MODEL": "@cf/baai/bge-m3",
     "GROUND_TOP_K": "6",
     "AUTH_CACHE_TTL": "60",
