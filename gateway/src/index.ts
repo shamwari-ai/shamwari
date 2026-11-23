@@ -1,5 +1,5 @@
 import type { Env, Message, SinkMessage, AuthContext, GroundChunk } from './types';
-import { authenticate } from './auth';
+import { authenticate, personSessionToken } from './auth';
 import type { AuthResult } from './auth';
 import { modelList } from './models';
 import { keyService, permittedScopes, usageMeter } from './keys';
@@ -260,7 +260,7 @@ async function groundContext(req: Request, env: Env, ctx: ExecutionContext): Pro
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
   const language = lastUser ? detectLanguage(lastUser.content) : null;
 
-  const g = await ground(env, messages, auth.ownerEntityId, decision, language);
+  const g = await ground(env, messages, auth.ownerEntityId, decision, language, personSessionToken(req, auth));
   const latencyMs = Date.now() - started;
 
   // Metered, but no conversation document. The gateway never sees the
@@ -477,7 +477,7 @@ const worker = {
       const lastUser = [...messages].reverse().find((m) => m.role === 'user');
       const language = lastUser ? detectLanguage(lastUser.content) : null;
 
-      const g = await ground(env, messages, auth.ownerEntityId, decision, language);
+      const g = await ground(env, messages, auth.ownerEntityId, decision, language, personSessionToken(req, auth));
       const rung = { auth, decision, g, language, requestId, started, reach };
       if (body.mode === 'extractive') {
         // "Ground could not be asked" is not "Ground has nothing": only the

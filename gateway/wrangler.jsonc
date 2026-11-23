@@ -41,14 +41,6 @@
       "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
       "secret_name": "NYUCHI_AI_GATEWAY_TOKEN",
     },
-    // Ground in Mongo (src/ground-store.ts): Shamwari's service key on the Nyuchi API, held whole as
-    // `<client id>.<secret>` and sent as X-API-Key. Read at request time: until the secret exists, or if it
-    // cannot be read, Ground answers "unavailable" and the answer goes on without held sources.
-    {
-      "binding": "NYUCHI_SHAMWARI_API_KEY",
-      "store_id": "56f84bfa8a564c54a95dbf4f4b4281b4",
-      "secret_name": "SHAMWARI_NYUCHI_API_KEY",
-    },
   ],
 
   // Weekly degradation probe. Exercises all three inference paths and writes
@@ -84,7 +76,8 @@
     // Core's Fly address (docs/core-fly-runbook.md, "Point the Worker at Core"). The
     // core.shamwari.ai name was never created; the Fly hostname needs no DNS of ours.
     "CORE_URL": "https://shamwari-core.fly.dev",
-    // Ground in Mongo through the Nyuchi API (src/ground-store.ts), with the service key bound above.
+    // Ground in Mongo through the Nyuchi API (src/ground-store.ts), called with the signed-in person's own WorkOS
+    // session: no service key (owner, 2026-11-23).
     "NYUCHI_API_URL": "https://api.nyuchi.com",
     // Our own sites read live beside Ground (src/own-sites.ts): travel-info, Nyuchi, Shamwari, Mzizi, SiafuDB,
     // Open NTL and Bundu docs. Nothing is copied.

@@ -4,9 +4,10 @@ import type { Env, GroundChunk } from './types';
  * Ground in MongoDB, through the Nyuchi API (owner, 2026-11-23: "use mongodb for the store").
  *
  * The passages live in `shamwari.knowledgeBase` (Atlas vector and text search indexes, bge-m3, 1024 numbers).
- * The gateway holds no database login: it calls `POST /v1/shamwari/ground/search` on the Nyuchi API with
- * Shamwari's service key (an internal key scoped `shamwari:service`), sent whole as `X-API-Key: <id>.<secret>`
- * from the Secrets Store, and the API runs the hybrid search. The API
+ * The gateway holds no database login and no service key: it calls `POST /v1/shamwari/ground/search` on the
+ * Nyuchi API with the signed-in person's own WorkOS session token, so the API acts with that person's base access
+ * and takes the owner from the token (owner, 2026-11-23: no single key, no permission creep). A caller with an
+ * API key has no person behind it and gets no Mongo search; our own sites (own-sites.ts) still answer. The API
  * makes the Rule 1 checks again before it reads anything (personal scope to the cloud, an embedded mind query),
  * and answers in the shape Core did, so `ground()` treats both the same.
  *
@@ -18,8 +19,9 @@ import type { Env, GroundChunk } from './types';
 export const GROUND_TIMEOUT_MS = 1500;
 /** After a failure (no connection, the limit above, a 5xx), later searches skip the API for this long. */
 export const GROUND_COOLDOWN_MS = 30_000;
-/** A refused key (401/403) will not fix itself in seconds: skip the API for longer, so no question pays for
- * a call that cannot succeed. Replacing the key takes effect within this time. */
+/** A refused token (401/403) here means the API does not accept our people's sessions (not configured, or
+ * the first-party client not listed): the gateway verified the token first, so it is not this person's. That will
+ * not fix itself in seconds, so the API is skipped for longer and no question pays for a call that cannot succeed. */
 export const GROUND_REFUSED_KEY_COOLDOWN_MS = 5 * 60_000;
 let downUntil = 0;
 
@@ -30,8 +32,9 @@ export function resetGroundStoreBreaker(): void {
   downUntil = 0;
 }
 
-/** Ground in Mongo is used when the API and the key are both configured; otherwise Core. */
-export const groundStoreConfigured = (env: Env): boolean => Boolean(env.NYUCHI_API_URL && env.NYUCHI_SHAMWARI_API_KEY);
+/** Ground in Mongo is used when the API is configured and a signed-in person is asking; otherwise Core. */
+export const groundStoreConfigured = (env: Env, personToken?: string): boolean =>
+  Boolean(env.NYUCHI_API_URL && personToken);
 
 export interface GroundQuery {
   query: string;
@@ -61,17 +64,15 @@ export class GroundStoreError extends Error {
   }
 }
 
-export async function groundSearch(env: Env, q: GroundQuery): Promise<GroundAnswer> {
+export async function groundSearch(env: Env, q: GroundQuery, personToken: string): Promise<GroundAnswer> {
   if (groundStoreDown()) throw new GroundStoreError(503, 'ground_unavailable: skipped while the breaker is open');
   let base = String(env.NYUCHI_API_URL);
   while (base.endsWith('/')) base = base.slice(0, -1);
   let res: Response;
   try {
-    // Read at request time from the Secrets Store; a failed read is an outage like any other.
-    const key = await env.NYUCHI_SHAMWARI_API_KEY!.get();
     res = await fetch(`${base}/v1/shamwari/ground/search`, {
       method: 'POST',
-      headers: { 'X-API-Key': key, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${personToken}`, 'Content-Type': 'application/json' },
       // Only the fields the API accepts.
       body: JSON.stringify({
         query: q.query,
@@ -89,8 +90,8 @@ export async function groundSearch(env: Env, q: GroundQuery): Promise<GroundAnsw
     throw new GroundStoreError(503, `ground_unavailable: ${e instanceof Error ? e.name : 'error'}`);
   }
   if (!res.ok) {
-    // A 5xx is an outage. A 401/403 is our key refused (not set yet, revoked, missing a scope): every later
-    // search would fail the same way, so it is skipped for longer. Any other 4xx is the API answering (a Rule 1
+    // A 5xx is an outage. A 401/403 is our people's sessions refused (see above): every later search would fail
+    // the same way, so it is skipped for longer. Any other 4xx is the API answering (a Rule 1
     // refusal, a bad argument) and never opens the breaker.
     if (res.status >= 500) downUntil = Date.now() + GROUND_COOLDOWN_MS;
     else if (res.status === 401 || res.status === 403) downUntil = Date.now() + GROUND_REFUSED_KEY_COOLDOWN_MS;

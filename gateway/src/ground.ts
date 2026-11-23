@@ -57,6 +57,8 @@ export async function ground(
   ownerEntityId: string,
   decision: ScopeResolution,
   language: string | null,
+  /** The signed-in person's own WorkOS token, for Ground in Mongo through the Nyuchi API. None for an API key. */
+  personToken?: string,
 ): Promise<GroundResult> {
   const { scope, destination } = decision;
   const lastUser = [...messages].reverse().find((m) => m.role === 'user');
@@ -130,8 +132,8 @@ export async function ground(
     };
     // Mongo through the Nyuchi API when configured; Core otherwise. Both answer in the same shape and
     // both make the Rule 1 checks again before they read anything (scope.ts is the fast path).
-    const res = groundStoreConfigured(env)
-      ? await groundSearch(env, body)
+    const res = groundStoreConfigured(env, personToken)
+      ? await groundSearch(env, body, personToken!)
       : await core<{
           chunks: GroundChunk[];
           hit: boolean;
