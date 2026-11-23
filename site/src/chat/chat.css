@@ -25,6 +25,7 @@
   --page-inset: max(var(--inset-floor), env(safe-area-inset-left), env(safe-area-inset-right));
   /* One sidebar width, as the slide-over on a phone and as the column from 64rem, so crossing 64rem does not jump. */
   --side-w: 17.5rem;
+  --rail-w: 5rem; /* the sidebar collapsed to icons: 52px of room between the 14px page insets, enough for a 49px control */
   --col: 46rem;
 }
 
@@ -361,7 +362,6 @@ html[data-view='pending'] dialog {
     flex: none;
     width: var(--side-w);
   }
-  html[data-side='closed'] [data-slot='app-sidebar'],
   .menu-btn,
   .side-close,
   [data-slot='app-topbar'] .brand {
@@ -1607,5 +1607,80 @@ html[data-offline-mode] .mode-chip {
   .side-row[aria-current],
   .cmd-list [aria-selected='true'] {
     outline: 2px solid Highlight;
+  }
+}
+
+/* ---- the sidebar, after shadcn's sidebar-07 -------------------------------------------------------------------------
+   Collapses to an icon rail instead of vanishing (from 64rem; the top bar's panel button toggles it, and the choice is
+   remembered). The account row at the foot is a card: a round avatar, the label and a chevrons mark. The brand reads in the
+   page's proportional type, not monospace. In the rail every label stays in the page for screen readers and is only
+   drawn away, so each icon button keeps its name. */
+.side-head .wordmark {
+  font-family: inherit;
+  font-size: var(--fs-body, 1rem);
+  font-weight: 650;
+  letter-spacing: 0;
+}
+.side-account {
+  gap: var(--gap-floor);
+  padding-inline: var(--gap-floor);
+}
+.avatar {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.75rem;
+  block-size: 1.75rem;
+  border-radius: 50%;
+  background: var(--fill-on);
+  color: var(--foreground);
+}
+.side-account > span:not(.avatar) {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground);
+  font-weight: 500;
+}
+.side-gear {
+  margin-inline-start: auto;
+  flex: none;
+}
+@media (min-width: 64rem) {
+  html[data-side='closed'] [data-slot='app-sidebar'] {
+    width: var(--rail-w);
+  }
+  html[data-side='closed'] .side-head {
+    justify-content: center;
+    padding-inline: 0;
+  }
+  html[data-side='closed'] .chats {
+    align-items: center;
+  }
+  html[data-side='closed'] .side-list,
+  html[data-side='closed'] .side-primary .side-list {
+    align-items: center;
+  }
+  html[data-side='closed'] .side-row {
+    position: relative;
+    justify-content: center;
+    inline-size: var(--ctl);
+    padding: 0;
+  }
+  /* Drawn away, still in the page: each button keeps its accessible name. */
+  html[data-side='closed'] :is(.side-head .wordmark, .side-row > span:not(.avatar), .side-gear, .side-scroll, #side-filter-wrap, .chats-title) {
+    position: absolute;
+    inline-size: 1px;
+    block-size: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  html[data-side='closed'] .side-scroll {
+    display: none;
   }
 }
