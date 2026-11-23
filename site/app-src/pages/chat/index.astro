@@ -188,6 +188,9 @@ const x = '<path d="M6 6l12 12M18 6L6 18" />';
         </section>
         <div id="log" role="log" aria-live="polite" aria-relevant="additions"></div>
         <noscript>Shamwari Chat needs JavaScript to run. Your questions go only to the Shamwari API.</noscript>
+        {/* The icons the answers are drawn with (render.ts `glyph`): Mzizi's own glyphs, cloned at run time, so no SVG path is ever
+            written by hand in the script and none of it adds to the first-load JavaScript. */}
+        <template id="glyphs">{(['copy', 'upload', 'clipboard', 'check', 'list', 'search', 'shield', 'sparkles', 'book', 'sparkle', 'chevron-right'] as const).map((n) => <Icon name={n} class="gl" />)}</template>
       </div>
 
       {/* The prompt box, docked at the bottom. */}

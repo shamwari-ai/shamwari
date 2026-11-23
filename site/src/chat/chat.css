@@ -853,19 +853,92 @@ main:focus,
 .msg.pending .text {
   color: var(--quiet);
 }
-.dots {
+/* Mzizi's glyphs in the answers (render.ts `glyph`): drawn at the size of the words beside them, in their colour. */
+.gl {
+  inline-size: 1rem;
+  block-size: 1rem;
+  flex: none;
+}
+/* The working line: the sparkle turns in the brand colour in front of what Shamwari is doing, then the seconds so far. */
+.run {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-floor);
+}
+.run-mark {
+  display: inline-flex;
+  color: var(--primary);
+}
+.run-time {
   font-family: var(--mono);
-  letter-spacing: 0.1em;
+  font-variant-numeric: tabular-nums;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .dots {
-    animation: pulse 1.2s ease-in-out infinite;
+  .run-mark {
+    animation: turn 2.4s linear infinite, pulse 1.2s ease-in-out infinite;
+  }
+}
+@keyframes turn {
+  to {
+    rotate: 1turn;
   }
 }
 @keyframes pulse {
   50% {
-    opacity: 0.35;
+    opacity: 0.45;
   }
+}
+/* How the answer was made: one quiet summary line with its icon in front (like a work log), the steps under it, each with
+   its own icon. A step's words are the floor's small size and muted; the icons line up in one column. */
+.steps {
+  font-size: var(--fs-small);
+  color: var(--quiet);
+}
+.steps summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-floor);
+  min-block-size: var(--ctl);
+  padding-inline-end: var(--gap-floor);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  list-style: none;
+}
+.steps summary::-webkit-details-marker {
+  display: none;
+}
+.steps .chev {
+  display: inline-flex;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .steps .chev {
+    transition: rotate 0.15s;
+  }
+}
+.steps[open] .chev {
+  rotate: 90deg;
+}
+.steps summary:hover {
+  color: var(--foreground);
+}
+.steps ol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-floor);
+  margin: var(--gap-floor) 0 0;
+  padding: 0 0 0 calc(0.5rem - 1px);
+  border-inline-start: 1px solid var(--border);
+  list-style: none;
+}
+.steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gap-floor);
+  padding-inline-start: var(--gap-floor);
+  line-height: var(--leading-floor);
+}
+.steps li .gl {
+  margin-block-start: 0.2em;
 }
 /* Notices (the personal-scope explanation, an error): a rule at the left, not a box. */
 .msg.refusal,
@@ -907,6 +980,12 @@ main:focus,
 }
 .msg-actions .btn {
   font-size: var(--fs-small);
+}
+/* Copy, Share, Save: each icon in front of its words. */
+.btn.act {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-floor);
 }
 /* Sources, as parts: one compact line each (› Source  the section  Open source), the detail one tap away. */
 .sources {

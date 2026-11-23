@@ -24,6 +24,49 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   return el;
 }
 
+/**
+ * One of Mzizi's icons, cloned from the page's `<template id="glyphs">` (index.astro), decorative (the label beside it
+ * names the thing). No SVG path is written here, and none is in the first-load script. Null where the page has no
+ * template (unit tests), and the label stands alone.
+ */
+export function glyph(name: string): SVGElement | null {
+  const t = typeof document === 'undefined' ? null : document.getElementById('glyphs');
+  const svg = t instanceof HTMLTemplateElement ? t.content.querySelector(`[data-icon="${name}"]`) : null;
+  return svg ? (svg.cloneNode(true) as SVGElement) : null;
+}
+
+/** A quiet action under an answer: its icon in front, then its words. */
+function action(cls: string, icon: string, label: string): HTMLButtonElement {
+  return h('button', { type: 'button', class: `btn link act ${cls}` }, glyph(icon), h('span', {}, label));
+}
+
+/**
+ * How this answer was made, as a line with an icon in front of each step, folded under one summary like a work log:
+ * the kind of question, the sources searched and how many were found, and who wrote it (the model that actually
+ * served, as the gateway reported it) or that no model did. Every step is read from the gateway's own response;
+ * nothing is guessed. It opens by itself when no model wrote the answer, because that is the thing to know.
+ */
+export function renderSteps(a: Answer, s: Strings): HTMLElement {
+  const step = (icon: string, text: string) => h('li', {}, glyph(icon), h('span', {}, text));
+  const sourcesOnly = a.degraded || a.inferencePath === 'extractive';
+  return h(
+    'details',
+    { class: 'steps', open: sourcesOnly },
+    h('summary', {}, glyph('list'), h('span', {}, s.howAnswered), h('span', { class: 'chev', 'aria-hidden': 'true' }, glyph('chevron-right'))),
+    h(
+      'ol',
+      {},
+      step('shield', `${s.scopeLabel}: ${s.scope[a.scope]}`),
+      step('search', s.stepSearched.replace('{n}', String(a.citations.length))),
+      sourcesOnly
+        ? step('book', s.stepSourcesOnly)
+        : a.modelServed
+          ? step('sparkles', s.stepWritten.replace('{model}', a.modelServed))
+          : null,
+    ),
+  );
+}
+
 const LOCALES: Record<Language, string[]> = { en: ['en-GB'], sn: ['sn', 'en-GB'], nd: ['nd', 'en-GB'] };
 
 /** "22 May 2013". Falls back to the ISO date where the browser lacks the locale. */
@@ -122,28 +165,27 @@ export function renderAnswer(
   lang: Language,
   onSave?: () => void,
 ): HTMLElement {
-  const save = onSave ? h('button', { type: 'button', class: 'btn link save-answer' }, s.saveAnswer) : null;
+  const save = onSave ? action('save-answer', 'clipboard', s.saveAnswer) : null;
   save?.addEventListener('click', onSave!);
   // Copy: the answer's own words, to the clipboard. Where the browser has no clipboard the button is simply not offered.
   const words = plainText(a.text);
-  const copy = typeof navigator.clipboard?.writeText === 'function' ? h('button', { type: 'button', class: 'btn link copy-answer' }, s.copyAnswer) : null;
+  const copy = typeof navigator.clipboard?.writeText === 'function' ? action('copy-answer', 'copy', s.copyAnswer) : null;
+  // Copied: the icon turns to a tick and the words say so, then both go back.
+  const mark = (done: boolean) => copy?.replaceChildren(...[glyph(done ? 'check' : 'copy'), h('span', {}, done ? s.copied : s.copyAnswer)].filter((n): n is NonNullable<typeof n> => !!n));
   let copiedTimer: ReturnType<typeof setTimeout> | undefined;
   copy?.addEventListener('click', () => {
     void navigator.clipboard.writeText(words).then(
       () => {
-        copy.textContent = s.copied;
+        mark(true);
         clearTimeout(copiedTimer);
-        copiedTimer = setTimeout(() => (copy.textContent = s.copyAnswer), 1500);
+        copiedTimer = setTimeout(() => mark(false), 1500);
       },
       () => undefined,
     );
   });
   // Share: the answer and where it came from, through the phone's own share sheet (WhatsApp and the like). Only offered where the
-  // browser can share. Text, not an icon.
-  const share =
-    typeof navigator.share === 'function'
-      ? h('button', { type: 'button', class: 'btn link share-answer' }, s.shareAnswer)
-      : null;
+  // browser can share.
+  const share = typeof navigator.share === 'function' ? action('share-answer', 'upload', s.shareAnswer) : null;
   share?.addEventListener('click', () => {
     const from = a.citations.map((c) => (c.heading ? `${c.heading}, ${c.title}` : c.title)).join('\n');
     const text = [words, from, `${location.origin}/chat/`].filter(Boolean).join('\n\n');
@@ -156,6 +198,7 @@ export function renderAnswer(
     'article',
     { class: 'msg bot', 'data-id': m.id, 'aria-label': s.shamwari },
     h('p', { class: 'who' }, s.shamwari),
+    renderSteps(a, s),
     markdown ? markdown.renderMarkdown(a.text, { code: s.codeBlock, table: s.tableBox }) : h('p', { class: 'text' }, words),
     a.degraded ? h('p', { class: 'note' }, s.closestSource) : null,
     a.citations.length
@@ -166,7 +209,6 @@ export function renderAnswer(
           h('ul', {}, ...a.citations.map((c) => renderCitation(c, s, lang))),
         )
       : h('p', { class: 'note' }, s.noSources),
-    h('p', { class: 'meta' }, `${s.scopeLabel}: ${s.scope[a.scope]}`),
     copy || save || share ? h('div', { class: 'msg-actions' }, copy, share, save) : null,
   );
 }
@@ -254,8 +296,14 @@ export function updateUser(el: HTMLElement, m: StoredMessage, s: Strings, queue?
   el.append(extra);
 }
 
+/**
+ * The working line while an answer is on its way: Mzizi's sparkle turning in front of what Shamwari is doing, and how long
+ * it has been at it. The gateway answers in one piece, so this names the whole of what it does (look for the answer) and
+ * does not make up steps it cannot see; the steps are shown, from the response, once the answer is here (renderSteps).
+ */
 export function renderPending(id: string, s: Strings): HTMLElement {
-  return h(
+  const clock = h('span', { class: 'run-time', 'aria-hidden': 'true' });
+  const el = h(
     'article',
     { class: 'msg bot pending', 'data-id': `${id}:pending`, 'aria-label': s.shamwari },
     // The role sits on a div, not the article: an article may not carry it.
@@ -263,9 +311,17 @@ export function renderPending(id: string, s: Strings): HTMLElement {
       'div',
       { role: 'status' },
       h('p', { class: 'who' }, s.shamwari),
-      h('p', { class: 'text' }, s.thinking, h('span', { class: 'dots', 'aria-hidden': 'true' }, ' ●●●')),
+      h('p', { class: 'text run' }, h('span', { class: 'run-mark', 'aria-hidden': 'true' }, glyph('sparkle')), h('span', {}, s.thinking), clock),
     ),
   );
+  // The seconds it has been working, like a work log's timer. Hidden from screen readers: a live region that changed every
+  // second would talk over everything else. It stops by itself once the line is gone.
+  const started = Date.now();
+  const tick = setInterval(() => {
+    if (!el.isConnected) return clearInterval(tick);
+    clock.textContent = `· ${Math.floor((Date.now() - started) / 1000)}s`;
+  }, 1000);
+  return el;
 }
 
 const RETRYABLE: AskErrorKind[] = ['offline', 'unavailable', 'busy', 'rate_limited', 'unknown'];
