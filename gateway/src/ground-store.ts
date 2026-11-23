@@ -18,6 +18,9 @@ import type { Env, GroundChunk } from './types';
 export const GROUND_TIMEOUT_MS = 1500;
 /** After a failure (no connection, the limit above, a 5xx), later searches skip the API for this long. */
 export const GROUND_COOLDOWN_MS = 30_000;
+/** A refused key (401/403) will not fix itself in seconds: skip the API for longer, so no question pays for
+ * a call that cannot succeed. Replacing the key takes effect within this time. */
+export const GROUND_REFUSED_KEY_COOLDOWN_MS = 5 * 60_000;
 let downUntil = 0;
 
 export const groundStoreDown = (now = Date.now()): boolean => now < downUntil;
@@ -86,8 +89,11 @@ export async function groundSearch(env: Env, q: GroundQuery): Promise<GroundAnsw
     throw new GroundStoreError(503, `ground_unavailable: ${e instanceof Error ? e.name : 'error'}`);
   }
   if (!res.ok) {
-    // A 4xx is the API answering (a Rule 1 refusal, a bad argument, a refused key): it never opens the breaker.
+    // A 5xx is an outage. A 401/403 is our key refused (not set yet, revoked, missing a scope): every later
+    // search would fail the same way, so it is skipped for longer. Any other 4xx is the API answering (a Rule 1
+    // refusal, a bad argument) and never opens the breaker.
     if (res.status >= 500) downUntil = Date.now() + GROUND_COOLDOWN_MS;
+    else if (res.status === 401 || res.status === 403) downUntil = Date.now() + GROUND_REFUSED_KEY_COOLDOWN_MS;
     else downUntil = 0;
     let code = `http_${res.status}`;
     try {
