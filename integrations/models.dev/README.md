@@ -134,7 +134,7 @@ outside this repository.
 > - Model list: `GET https://api.shamwari.ai/v1/models` (needs a key)
 > - Pricing: TODO, link the published price page
 > - Gateway source (routing, limits, provenance):
->   <https://github.com/shamwari-ai/shamwari/tree/staging/gateway>
+>   <https://github.com/shamwari-ai/shamwari/tree/main/gateway>
 >
 > `bun validate` passes. `bun run v1:check` reports one added provider and
 > model and no change to any existing field.

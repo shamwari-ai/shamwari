@@ -60,8 +60,8 @@ adds. Each line is enforced by a test unless it says it is an owner step.
 - Approving a key-migration phase, minting a token, setting a secret, creating a
   database index, deploying or flipping `SERVERS_API_ENABLED` are the owner's, by
   name. Nothing in the repo does them.
-- Merging to `staging` goes through the merge queue with green CI and a clean
-  `/code-review`. Releasing `staging` to `main` is the owner's.
+- Merging to `main` (the only target) goes through the merge queue with green
+  CI and a clean `/code-review`. Merging is the owner's decision.
 
 ## What is not covered here
 

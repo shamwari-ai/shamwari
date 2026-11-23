@@ -209,22 +209,22 @@ needs a person and a registered redirect URI (`https://shamwari.ai/callback`).
 
 ## Automatic release to production (shamwari-ai/shamwari#201)
 
-Every merge to `staging` is released to `main` and production without a manual step. Only a major
-version is gated; it is never automatic.
+The repository is trunk-based: every pull request targets `main` and merges through the merge queue
+once CI is green. A merge to `main` reaches production without a manual step. Only a major version
+is gated; it is never automatic.
 
-1. A PR merges to `staging` through the queue.
-2. **Release PR:** the organisation's `bundu-release` GitHub App (installed across the
-   organisation; nothing to configure in this repository) opens or updates one PR from `staging`
-   to `main`, `Release: shamwari staging into main`, with auto-merge on. It merges with a merge
-   commit once the required checks pass, so `staging` stays an ancestor of `main` and the next
-   release merges without conflicts. Never squash a release PR: that drops the `staging` parent.
+1. A PR merges to `main` through the queue.
+2. **Release:** the organisation's `bundu-release` GitHub App (installed across the organisation;
+   nothing to configure in this repository) tags the merged commit `vX.Y.Z` and publishes the
+   GitHub release. Not every merge is a release. The chat app reads that tag at build time for the
+   version shown in Settings (`site/scripts/release-version.mjs`).
 3. **Main only:** the release moves `main`; the platforms (step 4) do the deploying.
 4. **Deploy:** when `main` updates, Workers Builds deploys `shamwari-site` (connected) and
    `shamwari-app` (once the owner connects it in the Cloudflare dashboard). The gateway Worker
    and Core deploy the same way, through their own platform connections (owner decision,
    2026-11-13, shamwari-ai/shamwari#266: no deploy secrets in GitHub): **Cloudflare Workers
    Builds for `shamwari-gateway`** and **Fly's GitHub deployment for `shamwari-core`**. Neither
-   is gated on CI; `main` only moves through the release PR, and step 5 checks both `/health`
+   is gated on CI; `main` only moves through the merge queue, and step 5 checks both `/health`
    addresses afterwards. The
    owner's one-time steps for both are in docs/core-fly-runbook.md, Deploy. Until they are
    done, the gateway and Core are deployed by hand
@@ -240,7 +240,7 @@ version is gated; it is never automatic.
 **Rollback:** for the gateway and Core, `npx wrangler rollback` in `gateway/` and `fly releases` / `fly deploy --image`
 (docs/core-fly-runbook.md, Rollback); nothing rolls back by itself. For the
 `shamwari-app` and `shamwari-site` Workers: Cloudflare dashboard, Workers & Pages, the Worker, Deployments, roll back to the
-previous version (a deploy keeps the previous version ids), then fix forward on `staging`.
+previous version (a deploy keeps the previous version ids), then fix forward on `main`.
 
 The repository's own `release-to-main.yml` (which needed the secrets `RELEASE_APP_ID` and
 `RELEASE_APP_PRIVATE_KEY`) is retired: the `bundu-release` app does that job for the whole

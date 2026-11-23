@@ -40,10 +40,10 @@ llama.rn / on-device Mind needs a development build, not Expo Go (backlog item 1
 
 EAS project `@nyuchi-web-services/shamwari`; its id is the committed default in `app.config.ts` (an
 identifier, not a secret) and `EAS_PROJECT_ID` overrides it. `.eas/workflows/publish-preview-update.yml`
-publishes every push to `staging` that touches `mobile/**` to the `preview` update branch. The workflow file
+publishes every push to `main` that touches `mobile/**` to the `preview` update branch. The workflow file
 validates against the project (checked with the Expo connector on 2026-11-02), but whether it actually runs
 depends on two dashboard settings that have **not** been checked: **Base directory = `mobile`** and the
-GitHub repo `shamwari-ai/shamwari` linked to the project. If a push to `staging` publishes nothing, check
+GitHub repo `shamwari-ai/shamwari` linked to the project. If a push to `main` publishes nothing, check
 those two first. Builds are separate and cost money: they need a usage budget first, and the cost is stated
 on issue #144 before any is run.
 

@@ -85,15 +85,15 @@ PR-title lint and the gitleaks secret scan, all in CI.
 
 ## Branches
 
-- **`staging` is the integration branch.** Open pull requests against it.
-- `main` is released from `staging` automatically: the organisation's
-  `bundu-release` app opens one release PR to `main` with auto-merge on, and it
-  merges with a merge commit, so `staging` stays part of `main`'s history. Do
-  not open feature PRs against `main`, and never squash a release PR.
-- A push to `main` deploys (`deploy.yml`); `staging` pushes get a patch version
-  tag (`staging-version.yml`).
-- CI runs on pull requests to `main`, `staging` and `claude/**`, so a stacked PR
-  targets the branch below it and still gets checks.
+- **Trunk-based: `main` is the only target.** Open every pull request against
+  `main`; it merges through the merge queue once CI is green. There is no
+  `staging` branch.
+- A push to `main` deploys: Workers Builds and Fly deploy what `main` holds
+  (`docs/domains-and-deploy.md`). The organisation's `bundu-release` app cuts
+  releases on `main`, tagging the merged commit `vX.Y.Z`; not every merge is a
+  release.
+- CI runs on pull requests to `main` and `claude/**`, so a stacked PR targets
+  the branch below it and still gets checks.
 
 ## Commits and pull requests
 
