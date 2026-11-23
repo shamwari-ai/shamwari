@@ -134,3 +134,20 @@ test('a chat in the list has its own "..." menu: pin, project, delete', async ({
   await expect(page.locator('#pinned-list')).not.toContainText('What does the');
   await expect(page.locator('article.msg.user')).toHaveCount(1); // the open chat is untouched
 });
+
+test('the shell is pinned to the device: the page itself never moves, only the lists scroll', async ({ page }) => {
+  await openChat(page);
+  await ask(page, 'What does the Constitution say about equality?');
+  await expect(page.locator('.cite').first()).toBeVisible();
+  // Safari on iOS lets a finger drag a page whose html and body only say overflow: hidden. A fixed body cannot be dragged.
+  const pinned = await page.evaluate(() => {
+    const body = getComputedStyle(document.body);
+    const html = getComputedStyle(document.documentElement);
+    window.scrollTo(400, 400);
+    return { position: body.position, overscroll: [html.overscrollBehaviorX, html.overscrollBehaviorY, body.overscrollBehaviorX, body.overscrollBehaviorY], x: window.scrollX, y: window.scrollY, wide: document.scrollingElement!.scrollWidth - document.documentElement.clientWidth };
+  });
+  expect(pinned.position).toBe('fixed');
+  expect(pinned.overscroll).toEqual(['none', 'none', 'none', 'none']);
+  expect({ x: pinned.x, y: pinned.y }).toEqual({ x: 0, y: 0 });
+  expect(pinned.wide).toBeLessThanOrEqual(0);
+});
