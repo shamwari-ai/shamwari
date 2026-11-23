@@ -534,8 +534,18 @@ const worker = {
       } catch (e) {
         // Every inference path failed. With a Ground hit there is still a cited
         // answer to give; without one there is nothing honest to say, so the
-        // failure stands.
-        if (!g.hit) throw e;
+        // failure stands, as a 503 the caller can retry (with when), not a 500:
+        // nothing is wrong with the request, the models are just not answering.
+        if (!g.hit) {
+          console.error('inference unavailable and no Ground passage to give', String(e));
+          return new Response(
+            JSON.stringify({ error: 'inference_unavailable', retry: true }, null, 2),
+            {
+              status: 503,
+              headers: { 'Content-Type': 'application/json', 'Retry-After': '15' },
+            },
+          );
+        }
         console.error('inference unavailable, answering from Ground', String(e));
         return extractiveResponse(ctx, env, { ...rung, degraded: true });
       }
