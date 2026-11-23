@@ -62,7 +62,8 @@ export class GroundStoreError extends Error {
 
 export async function groundSearch(env: Env, q: GroundQuery): Promise<GroundAnswer> {
   if (groundStoreDown()) throw new GroundStoreError(503, 'ground_unavailable: skipped while the breaker is open');
-  const base = String(env.SUPABASE_URL).replace(/\/+$/, '');
+  let base = String(env.SUPABASE_URL);
+  while (base.endsWith('/')) base = base.slice(0, -1);
   let res: Response;
   try {
     // Read at request time from the Secrets Store; a failed read is an outage like any other.

@@ -123,7 +123,7 @@ describe('Ground on Supabase: a refusal is the database answering, an outage is 
 describe('ground() with Supabase configured', () => {
   it('cites what Supabase found and never asks Core', async () => {
     const fetch = vi.fn(async (url: string) => {
-      if (url.startsWith('https://core.invalid')) throw new Error('Core must not be asked');
+      if (new URL(url).hostname === 'core.invalid') throw new Error('Core must not be asked');
       return Response.json({ scope: 'platform', hit: true, chunks: [SECTION_56], needs_own_information: false });
     });
     vi.stubGlobal('fetch', fetch);
@@ -132,7 +132,7 @@ describe('ground() with Supabase configured', () => {
     expect(r.unavailable).toBe(false);
     expect(r.systemPrompt).toContain('--- SOURCES ---');
     expect(r.systemPrompt).toContain('Section 56');
-    expect(fetch.mock.calls.every(([u]) => String(u).includes('supabase.co'))).toBe(true);
+    expect(fetch.mock.calls.every(([u]) => new URL(String(u)).hostname === 'db.example.supabase.co')).toBe(true);
   });
 
   it('a Supabase outage leaves the answer to go on without sources, said honestly (unavailable, not "nothing found")', async () => {
