@@ -159,7 +159,7 @@ svg {
   min-width: var(--ctl);
   padding: 0 var(--inset-floor);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   background: transparent;
   color: var(--foreground);
   font-size: var(--fs-small);
@@ -197,6 +197,7 @@ svg {
 button:disabled {
   cursor: not-allowed;
 }
+/* Mzizi: inputs are pills, like buttons; a multi-line field keeps a box corner (below). */
 select,
 input:not([type='checkbox'], [type='radio'], [type='file']),
 .skill-form textarea {
@@ -204,11 +205,12 @@ input:not([type='checkbox'], [type='radio'], [type='file']),
   max-width: 100%;
   padding: 0 var(--inset-floor);
   border: 1px solid var(--border-control);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   background: var(--input);
 }
 .skill-form textarea {
   inline-size: 100%;
+  border-radius: var(--radius-lg);
   padding-block: var(--gap-floor);
   line-height: var(--leading-floor);
   resize: vertical;
@@ -233,7 +235,7 @@ input[type='checkbox'] {
   gap: var(--gap-floor);
   min-height: var(--ctl);
   min-width: var(--ctl);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   color: var(--quiet);
   font-size: var(--fs-small);
 }
@@ -476,7 +478,7 @@ html[data-view='pending'] dialog {
   margin-inline-start: auto;
   padding: 0 0.4em;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   font-family: var(--mono);
   font-size: var(--fs-small);
   white-space: nowrap;
@@ -555,7 +557,7 @@ details:not([open]) > summary .chats-chev {
   justify-content: center;
   min-height: var(--ctl);
   min-width: var(--ctl);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   color: var(--quiet);
 }
 .row-more:hover,
@@ -611,7 +613,7 @@ details:not([open]) > summary .chats-chev {
   min-height: var(--ctl);
   min-width: var(--ctl);
   padding-inline: var(--gap-floor);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   color: var(--quiet);
   font-size: var(--fs-small);
 }
@@ -1120,7 +1122,7 @@ summary > .cite-title {
   min-width: 0;
   padding-inline-start: var(--inset-floor);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   font-size: var(--fs-small);
 }
 .attach-name {
@@ -1136,7 +1138,7 @@ summary > .cite-title {
   min-width: var(--ctl);
   margin-inline-start: auto;
   padding-inline: var(--inset-floor);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   font-size: var(--fs-small);
   color: var(--quiet);
 }
@@ -1307,7 +1309,7 @@ summary > .cite-title {
   align-items: center;
   gap: var(--gap-floor);
   padding-inline-start: var(--inset-floor);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   background: var(--tint);
   color: var(--foreground);
   font-size: var(--fs-small);
@@ -1328,7 +1330,7 @@ summary > .cite-title {
   justify-content: center;
   min-height: var(--ctl);
   min-width: var(--ctl);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
 }
 .chip-x:hover {
   background: var(--fill);
@@ -1359,7 +1361,7 @@ summary > .cite-title {
   min-width: var(--ctl);
   padding-inline: var(--gap-floor);
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   font-family: var(--mono);
   font-size: var(--fs-small);
   color: var(--quiet);
@@ -1623,7 +1625,7 @@ html[data-offline-mode] .mode-chip {
   inline-size: 100%;
   block-size: 100%;
   border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-full);
   background: radial-gradient(circle at calc(var(--inset-floor) + 0.5rem) 50%, transparent 0 0.3rem, var(--foreground) 0.3rem 0.4rem, transparent 0.4rem) no-repeat;
   cursor: pointer;
 }

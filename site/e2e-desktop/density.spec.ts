@@ -138,20 +138,25 @@ for (const width of [1000, 1280, 1440]) {
   }
 }
 
-test('no control is a marketing pill except the suggested prompts (Mzizi\'s pills) and Send: buttons use the small radius, the composer Mzizi\'s 17px radius', async ({ page }) => {
+test('Mzizi identity: buttons, badges, chips and inputs are pills; nav rows keep the 7px corner and the prompt box 17px', async ({ page }) => {
   await openChat(page);
-  const radii = await page.evaluate(() => {
-    const r = (sel: string) => {
-      const el = document.querySelector(sel);
-      return el ? parseFloat(getComputedStyle(el).borderTopLeftRadius) : null;
-    };
-    return { newChat: r('#side-new'), composer: r('.composer') };
-  });
-  // Mzizi's radius scale: 7px for controls and rows, 17px (--radius-xl) for the prompt box. Neither is a pill.
-  expect(radii.newChat, 'a row uses the 7px control radius').toBe(7);
-  expect(radii.composer, 'the prompt box uses the 17px radius').toBe(17);
-  // The suggested prompts are the one exception: pills, as Mzizi's suggested-prompts component draws them.
-  expect(await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.btn.chip')!).borderTopLeftRadius))).toBeGreaterThan(100);
+  const radius = (sel: string) =>
+    page.locator(sel).first().evaluate((el) => {
+      const c = getComputedStyle(el);
+      return { r: parseFloat(c.borderTopLeftRadius), h: el.getBoundingClientRect().height };
+    });
+  // "Buttons are always pill-shaped, and so are inputs, avatars and badges" (docs.mzizi.dev, foundations/tokens#radii).
+  for (const sel of ['#new-chat .bar-action', '.btn.chip', '#mode-chip', '.side-chip', '#side-toggle']) {
+    const { r, h } = await radius(sel);
+    expect(r, `${sel} is a pill`).toBeGreaterThanOrEqual(h / 2 - 0.5);
+  }
+  // Rows in the sidebar are nav rows, which Mzizi's sidebar draws with the small radius; the prompt box is a multi-line field.
+  expect((await radius('#side-new')).r, 'a nav row uses the 7px radius').toBe(7);
+  expect((await radius('.composer')).r, 'the prompt box uses the 17px radius').toBe(17);
+  // The answer's actions are pills too.
+  await ask(page, 'Is it legal?');
+  const act = await radius('article.msg.bot:not(.pending) .copy-answer');
+  expect(act.r, 'Copy is a pill').toBeGreaterThanOrEqual(act.h / 2 - 0.5);
 });
 
 test('hierarchy: New chat is a plain row, the round send button is the one filled control and is muted until there is text', async ({ page }) => {
