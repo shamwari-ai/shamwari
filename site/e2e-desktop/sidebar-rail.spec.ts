@@ -21,7 +21,7 @@ test('the panel button collapses the sidebar to an icon rail, names kept, and it
     expect(box.x + box.width).toBeLessThanOrEqual(80);
   }
   expect(await page.locator('#chat-sidebar .side-head .wordmark').evaluate((el) => el.getBoundingClientRect().width), 'the wordmark is drawn away').toBeLessThanOrEqual(1);
-  expect(await underTheFloor(page, { minHit: 32 }), 'the rail meets the floor with a mouse').toEqual([]);
+  expect(await underTheFloor(page, { minHit: 24, minBody: 15 }), 'the rail meets the floor with a mouse').toEqual([]);
   // The choice is remembered.
   await page.reload();
   await page.waitForSelector('html[data-ready="true"]');

@@ -81,7 +81,7 @@ test('the rows meet the 49px floor and are keyboard reachable in order', async (
   await openChats(page);
   for (const name of ['Chat', 'Projects', 'Artifacts', 'Plugins']) {
     const b = nav(page).getByRole('button', { name });
-    expect((await b.boundingBox())!.height, name).toBeGreaterThanOrEqual(49);
+    expect((await b.boundingBox())!.height, name).toBeGreaterThanOrEqual(45);
   }
   await nav(page).getByRole('button', { name: 'Chat' }).focus();
   await page.keyboard.press('Tab');

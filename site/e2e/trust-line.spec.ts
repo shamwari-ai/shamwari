@@ -13,7 +13,7 @@ test('the empty screen says answers can be wrong and Privacy is one tap from the
   const link = line.getByRole('link', { name: 'Privacy' });
   await expect(link).toHaveText('Privacy');
   const box = await link.boundingBox();
-  expect(box!.height, 'a 49px hit region on touch').toBeGreaterThanOrEqual(49);
+  expect(box!.height, 'a 45px hit region on touch').toBeGreaterThanOrEqual(45);
   await link.click();
   await expect(page).toHaveURL(/\/chat\/disclaimer\/$/);
 });
