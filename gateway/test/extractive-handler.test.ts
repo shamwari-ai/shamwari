@@ -190,10 +190,12 @@ describe('when every inference path fails', () => {
 
   it('has nothing honest to say without a Ground hit, so the failure stands', async () => {
     const { env } = setup({ inferenceFails: true, chunks: [] });
-    // The failure stands: a 500, not an invented answer. (It was an unhandled
-    // exception before the CORS wrapper turned it into a readable 500.)
+    // The failure stands: no invented answer. It is a 503 the caller may retry,
+    // with when, not a 500: nothing is wrong with the request.
     const res = await worker.fetch(ask({}), env, ctx);
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(503);
+    expect(res.headers.get('Retry-After')).toBe('15');
+    expect(await res.json()).toEqual({ error: 'inference_unavailable', retry: true });
   });
 });
 
@@ -381,5 +383,32 @@ describe('a key may only ask for the scopes it holds', () => {
   it('the default allows community and platform, so existing keys keep working', async () => {
     const { env } = setup();
     expect((await worker.fetch(ask({ scope: 'platform' }), env, ctx)).status).toBe(200);
+  });
+});
+
+describe('Core down: the AI does not stop', () => {
+  it('a general question is still answered by the model, ungrounded, and Core is tried once, not on every question', async () => {
+    const { env, calls } = setup({ coreDown: true });
+    for (let i = 0; i < 3; i++) {
+      const res = await worker.fetch(ask({}), env, ctx);
+      expect(res.status).toBe(200);
+      const j = (await res.json()) as any;
+      expect(j.choices[0].message.content).toBe('generated');
+      expect(j.shamwari.grounded).toBe(false);
+      expect(j.shamwari.citations).toHaveLength(0);
+    }
+    // The first question found Core down; the breaker skipped it for the next two.
+    expect(calls.ground).toBe(1);
+    expect(calls.inference).toBe(3);
+  });
+
+  it('RULE 1 holds with the breaker open: a question that needs the person\'s own information gets no model, only a 503', async () => {
+    const { env, calls } = setup({ coreDown: true });
+    await worker.fetch(ask({}), env, ctx); // opens the breaker
+    const before = calls.inference;
+    const res = await worker.fetch(ask({ own_information: true }), env, ctx);
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as any).error).toBe('ground_unavailable');
+    expect(calls.inference).toBe(before);
   });
 });
