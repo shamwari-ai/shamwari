@@ -1,5 +1,5 @@
 import { defineCollection } from 'astro:content';
-import { z } from 'astro:schema';
+import { z } from 'astro/zod';
 import { glob } from 'astro/loaders';
 
 // The nav order is data, not a hand-maintained list in the layout: adding a
