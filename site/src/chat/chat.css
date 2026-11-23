@@ -28,7 +28,8 @@
   /* Radii are Mzizi's scale: 7px controls and rows, 12px menus and chips of content, 14px cards and dialogs, 17px the
      prompt box. */
   --box: var(--radius-lg);
-  --page-inset: max(var(--inset-floor), env(safe-area-inset-left), env(safe-area-inset-right));
+  /* 20px, not the 14px floor: at the floor the words sat against the glass on a phone (owner, 2026-11-23). */
+  --page-inset: max(1.25rem, env(safe-area-inset-left), env(safe-area-inset-right));
   /* One sidebar width, as the slide-over on a phone and as the column from 64rem, so crossing 64rem does not jump. */
   --side-w: 17.5rem;
   --rail-w: 5rem; /* the sidebar collapsed to icons: 52px of room between the 14px page insets, enough for a 49px control */
@@ -833,10 +834,12 @@ main:focus,
   flex-direction: column;
   gap: var(--gap-floor);
   min-width: 0;
-  font-size: var(--fs-small);
+  font-size: var(--fs-body);
 }
+/* What is read is body size, the same as what is typed (17px on a phone, 15px with a mouse): at the small size the
+   answers were harder to read than the question box (owner, 2026-11-23). Statuses and notes stay small. */
 .msg .text {
-  font-size: var(--fs-small);
+  font-size: var(--fs-body);
   line-height: 1.6;
   white-space: pre-wrap;
   min-width: 0;
@@ -854,6 +857,7 @@ main:focus,
 }
 /* "Thinking" is a status: as small as the floor allows, muted, with quiet dots. */
 .msg.pending .text {
+  font-size: var(--fs-small);
   color: var(--quiet);
 }
 /* Mzizi's glyphs in the answers (render.ts `glyph`): drawn at the size of the words beside them, in their colour. */

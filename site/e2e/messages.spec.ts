@@ -35,14 +35,21 @@ test('the person\'s own message is a soft rounded bubble at the right; the answe
   expect(user.right, 'right-aligned').toBeLessThanOrEqual(1);
   expect(user.width, 'a short question hugs its words').toBeLessThan(user.logWidth);
   expect(user.weight, 'ordinary weight: the bubble sets it apart, not boldness').toBe(400);
-  expect(user.size).toBe('14px');
+  expect(user.size, 'what is read is body size, the same as the question box (17px on a phone)').toBe('17px');
   const bot = await read('article.msg.bot:not(.pending)');
   expect(bot.bg, 'the answer has no fill').toBe('rgba(0, 0, 0, 0)');
   expect(bot.radius, 'the answer is not rounded').toBe(0);
   expect(bot.border).toBe('0px');
   expect(bot.pad, 'the answer has no padding').toBe('0px');
-  expect(bot.size).toBe('14px');
+  expect(bot.size, 'the answer is body size, not the small size').toBe('17px');
   expect(bot.left, 'the answer starts at the left edge').toBeLessThanOrEqual(1);
+  // And that edge is not the glass: 20px from the screen on a phone, not the 14px floor (owner, 2026-11-23).
+  const fromScreen = await page.locator('article.msg.bot:not(.pending) .text').evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return { left: r.left, right: document.documentElement.clientWidth - r.right };
+  });
+  expect(fromScreen.left).toBeGreaterThanOrEqual(20);
+  expect(fromScreen.right).toBeGreaterThanOrEqual(20);
 });
 
 for (const scheme of ['light', 'dark'] as const) {
