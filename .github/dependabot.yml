@@ -31,9 +31,9 @@ updates:
           - major
     # Held majors (owner, 2026-11-23). Minor and patch updates still arrive.
     ignore:
-      # TypeScript 7: Astro's checker (@astrojs/check) only accepts 5 or 6, so
-      # site/ and docs-site/ cannot install it yet. gateway/ and mobile/ are
-      # already on 7 and keep getting its minors and patches.
+      # TypeScript 7: held until Astro and typescript-eslint support TS 7;
+      # remove then. All five packages stay on TypeScript 6.x and keep
+      # getting its minors and patches.
       - dependency-name: typescript
         update-types: ["version-update:semver-major"]
       # async-storage 3 changes native code. Over-the-air updates reach every
