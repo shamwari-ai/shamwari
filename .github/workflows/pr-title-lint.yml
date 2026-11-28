@@ -41,7 +41,7 @@ jobs:
             revert
             style
           requireScope: false
-          subjectPattern: ^(?![A-Z])[^.]+[^. ]$
+          subjectPattern: ^(?![A-Z]).*[^. ]$
           subjectPatternError: |
             PR title subject must start lowercase, use imperative mood,
             and not end with a period.
